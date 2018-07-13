@@ -19,7 +19,7 @@ ENUM DOORTYPE_XIM, DOORTYPE_AIM, DOORTYPE_SIM
 
 ENUM LOG_NONE=0, LOG_ERROR=1, LOG_WARN=2, LOG_DEBUG=3
 
-ENUM SCREEN_AWAIT, SCREEN_BBSTITLE, SCREEN_LOGON, SCREEN_JOIN, SCREEN_JOINCONF, SCREEN_JOINED, SCREEN_BULL, SCREEN_NODE_BULL, SCREEN_CONF_BULL, SCREEN_MENU, SCREEN_LOGOFF, SCREEN_DOWNLOAD, SCREEN_UPLOAD, SCREEN_NEWUSERPW, SCREEN_NONEWUSERS, SCREEN_NONEWATBAUD, SCREEN_GUESTLOGON, SCREEN_NOCALLERSATBAUD, SCREEN_LOCKOUT0, SCREEN_LOCKOUT1, SCREEN_PRIVATE, SCREEN_ONENODE, SCREEN_LOGON24, SCREEN_NOT_TIME
+ENUM SCREEN_AWAIT, SCREEN_BBSTITLE, SCREEN_LOGON, SCREEN_JOIN, SCREEN_JOINCONF, SCREEN_JOINED, SCREEN_BULL, SCREEN_NODE_BULL, SCREEN_CONF_BULL, SCREEN_MENU, SCREEN_LOGOFF, SCREEN_DOWNLOAD, SCREEN_UPLOAD, SCREEN_NEWUSERPW, SCREEN_NONEWUSERS, SCREEN_NONEWATBAUD, SCREEN_GUESTLOGON, SCREEN_NOCALLERSATBAUD, SCREEN_LOCKOUT0, SCREEN_LOCKOUT1, SCREEN_PRIVATE, SCREEN_ONENODE, SCREEN_LOGON24, SCREEN_NOT_TIME, SCREEN_FILEHELP
 
 ENUM LOGON_TYPE_LOGGED_OFF=0, LOGON_TYPE_SYSOP=1, LOGON_TYPE_LOCAL=2, LOGON_TYPE_REMOTE=3
 
@@ -41,6 +41,9 @@ ENUM ENV_IDLE=0,ENV_DOWNLOADING=1,ENV_UPLOADING=2,ENV_DOORS=3,ENV_MAIL=4,ENV_STA
       ENV_VIEWING=10,ENV_ACCOUNTSEQ=11,ENV_LOGOFF=12,ENV_SYSOP=13,ENV_SHELL=14,ENV_EMACS=15,ENV_JOIN=16,ENV_CHAT=17,ENV_NOTACTIVE=18,
        ENV_REQ_CHAT=19,ENV_CONNECT=20,ENV_LOGGINGON=21,ENV_AWAITCONNECT=22,ENV_SCANNING=23,ENV_SHUTDOWN=24,ENV_MULTICHAT=25,ENV_SUSPEND=26,ENV_RESERVE=27,
        ENV_ONLINEMSG=28
+
+
+CONST TWODIGITYEARSWITCHOVER=70
 
 CONST MAXNODES=32
 
@@ -130,7 +133,7 @@ CONST BIO_CTRL_INFO=3
 CONST AMISSLMASTER_MIN_VERSION=4
 CONST AMISSL_CURRENT_VERSION=6
 
-CONST TAG_DONE=0
+->CONST TAG_DONE=0
 
 CONST SSL_VERIFY_PEER=1
 CONST SSL_VERIFY_FAIL_IF_NO_PEER_CERT=2
@@ -201,8 +204,68 @@ CONST TOGGLES_CREDITBYKB=19
 
 stuff to do:
 
+'Voting Booth'
+'                  [34m*[0m--[33mVOTING TOPICS MENU[0m--[34m*[0m\b\n'
+'[0mVOTING IS NOT ESTABLISHED FOR THIS CONFERENCE\b\n\b\n'
+'[34m[[0m Q[34m] [33mQUIT[0m\b\n'
+'>: '
+'Vote/vote%02d.def'
+'[34m[[0m%2d[34m] [32mVOTED [35m'
+'[34m[[0m%2d[34m]       [35m'
+'[0m\b\n'
+'                 [34m*[0m--[33mVOTE MAINTENANCE[0m--[34m*[0m\b\n\b\n'
+'[34m[[0m 1[34m] [35mSHOW VOTING STATISTICS[0m\b\n'
+
+'[34m[[0m 2[34m] [35mSHOW TOPICS[0m\b\n'
+'[34m[[0m 3[34m] [35mCREATE VOTE TOPIC[0m\b\n'
+					
+'[34m[[0m 4[34m] [35mDELETE VOTE TOPIC[0m\b\n'
+'[34m[[0m 5[34m] [35mEDIT   VOTE TOPIC[0m\b\n'
+'[34m[[0m 6[34m] [35mVOTE[0m\b\n'
+
+'[34m[[0m 7[34m] [33mEXIT VOTE MAINTENANCE[0m\b\n'
+'>'
+'%sVote/uservote%d'
+'[33mTOPIC [34m[[0m'
+'[34m][0m\b\n\b\n'
+'%sVote/vote%02d.%02d.qst'
+'\b\nQUESTION #%02d\b\n'
+'%sVote/vote%02d.%02d.cnt'
+'[35mTOTAL VOTES FOR THIS QUESTION [0m= [33m%4.0f\b\n'
+'%sVote/vote%02d.%02d.%c.cnt'
+'%sVote/vote%02d.%02d.%c'
+'[34m[[0m%c[34m][0m %-40.40s [35mVOTES[33m:' [0m%4.0f, %3.0f%%\b\n'
+'[34m[[0m%c[34m][0m %-40.40s\b\n'
+'    %s\b\n'
+'\b\n[0mCHOICE >: '
+'%c\b\n'
+'vote%02d.%02d.%c.cnt'
+'%sVote/%s'
+'%f''%sVote/VoteLock'
+'[34mENTER TOPIC NUMBER TO DELETE [33m>:[0m '
+'[0mTHIS TOPIC DOES NOT EXIST\b\n'
+'[33mTOPIC DELETED[0m\b\n'
+'[34mENTER TOPIC NUMBER [33m([0m1-25[33m)[34m>:[0m '
+'[0mINVALID TOPIC\b\n'
+'[0mTOPIC ALREADY EXISTS\b\n'
+'[0m   ENTER OPTION\b\n'
+'[0m1. EDIT DESCRIPTION\b\n'
+'[0m2. EDIT QUESTION\b\n'
+'[0m3. EDIT ANSWER\b\n'
+'[0m4. EXIT\b\n'
+'[0m>'
+'%c'
+'%sVote'
+'[33mENTER TOPIC DESCRIPTION [0m[34mEDIT QUESTION NUMBER[0m > '
+'QUESTION DOES NOT EXIST\b\n'
+'[33mENTER QUESTION[0m\b\n'
+'[34mEDIT CHOICE [33m[[0mA-Z[33m][0m > '
+'CHOICE DOES NOT EXIST\b\n'
+'[0mANSWER [33m%c [0m] '
+
+
 any missing Door port commands
-    NODE_BAUDRATE,DT_LANGUAGE(set),MOD_TYPE,BYPASS_CSI_CHECK,SETOVERIDE,FULLEDIT, unknown commands 551,600-640
+    DT_LANGUAGE(set),MOD_TYPE,BYPASS_CSI_CHECK,SETOVERIDE,FULLEDIT (not implemented in /X3 or 4), unknown commands 551,600-640
 
 acp tooltypes
   CREDIT_BY_KBYTES  (TOGGLES_CREDITBYKB)
@@ -239,9 +302,6 @@ private command
 user.misc - unknown fields
 
 missing commands:
-   F - scan files
-   N - new files
-   Z - zippy search
    VO - conf voting
    ZOOM - zoom mail
 
@@ -278,21 +338,6 @@ F7 - chat toggle   - done
 f8 - toggle ser in - done
 f9 - toggle ser out - done
 F10 - kick   - done
-
-F - bbs:conf02/filehelp.txt unavailable
- Directories: (1-4), (A)ll, (U)pload, (Enter)=none?
-Scanning directory 1
-(Pause)...(f)lags, More(Y/n/ns)?
-
-N - Date as (mm-yy-yy) to search from (Enter)=03-27-96
-   Directories: (1-3), (A)ll, (U)pload,(Enter)=none?
-Scanning directory 1
-(Pause)...(f)lags, More(Y/n/ns)?
-
-Z - Enter string to search for:
-    Directories: (1-3), (A)ll, (U)pload, (Enter)=none?
-
-    Scanning directory 1
 */
 
 CONST MAX_SAYINGS=50
@@ -1162,7 +1207,7 @@ DEF tempUserKeys: PTR TO userKeys
 DEF tempUserMisc: PTR TO userMisc
 DEF flaglist[2048]:STRING
 DEF rFinal[3072]:STRING
-DEF onlineBaud
+DEF onlineBaud,onlineBaudR
 DEF idRate[15]:STRING
 DEF idDate[15]:STRING
 DEF idTime[15]:STRING
@@ -1632,7 +1677,7 @@ PROC initssl(createctx)
     RETURN FALSE
   ENDIF
 
-  tags:=NEW [amiSSL_ErrNoPtr,{errno},amiSSL_SocketBase,socketbase,TAG_DONE]
+  tags:=NEW [amiSSL_ErrNoPtr,{errno},amiSSL_SocketBase,socketbase,0]
   IF (InitAmiSSLA(tags) <> 0)
     END tags
 		WriteF('Couldn''t initialize AmiSSL!\n');
@@ -1677,7 +1722,7 @@ IF bio_err<>NIL
   ENDIF
 
 	IF (amisslbase)
-		CleanupAmiSSLA([TAG_DONE]);
+		CleanupAmiSSLA([0]);
 		CloseAmiSSL();
 		amisslbase:=NIL
 	ENDIF
@@ -2095,7 +2140,7 @@ PROC checkDoorMsg(mode)
    DEF subState: loggedOnState
    DEF debugstr[255]:STRING
 
-   debugLog(LOG_DEBUG,'doormsg')
+   ->debugLog(LOG_DEBUG,'doormsg')
    IF(inac) THEN RETURN
 
    IF resmp=FALSE THEN RETURN
@@ -2347,7 +2392,6 @@ ENDPROC FALSE
 PROC isupper(c)
 ENDPROC (c>="A") AND (c<="Z")
 
-
 ->returns system date converted to c time format
 PROC getSystemDate()
   DEF currDate: datestamp
@@ -2484,11 +2528,7 @@ PROC strCpy(dest: PTR TO CHAR, source: PTR TO CHAR, len)
   DEF c,endfound=FALSE
   DEF i
   IF len=ALL
-    i:=0
-    REPEAT
-      dest[i]:=c:=source[i]
-      i++
-    UNTIL c=0
+    AstrCopy(dest,source,ALL)
   ELSE
     FOR i:=0 TO len-1
       c:=source[i]
@@ -2695,7 +2735,7 @@ PROC checkCarrier()
 ENDPROC
 
 PROC checkInput()
-	checkIconifyMsg()
+  checkIconifyMsg()
   checkDoorMsg(0)
 ENDPROC ((checkCon() OR checkSer()))
 
@@ -2949,8 +2989,9 @@ ENDPROC
 
 PROC calcPasswordHash(pwd: PTR TO CHAR)
    DEF hash
-   hashdata:
-    [$0000,$0000,$7707,$3096,$EE0E,$612C,$9909,$51BA,$076D,$C419,$706A,$F48F,$E963,$A535,$9E64,$95A3,$0EDB,$8832,$79DC,$B8A4,$E0D5,$E91E,
+   DEF hashdata
+   
+   hashdata:=NEW[$0000,$0000,$7707,$3096,$EE0E,$612C,$9909,$51BA,$076D,$C419,$706A,$F48F,$E963,$A535,$9E64,$95A3,$0EDB,$8832,$79DC,$B8A4,$E0D5,$E91E,
      $97D2,$D988,$09B6,$4C2B,$7EB1,$7CBD,$E7B8,$2D07,$90BF,$1D91,$1DB7,$1064,$6AB0,$20F2,$F3B9,$7148,$84BE,$41DE,$1ADA,$D47D,$6DDD,$E4EB,
      $F4D4,$B551,$83D3,$85C7,$136C,$9856,$646B,$A8C0,$FD62,$F97A,$8A65,$C9EC,$1401,$5C4F,$6306,$6CD9,$FA0F,$3D63,$8D08,$0DF5,$3B6E,$20C8,
      $4C69,$105E,$D560,$41E4,$A267,$7172,$3C03,$E4D1,$4B04,$D447,$D20D,$85FD,$A50A,$B56B,$35B5,$A8FA,$42B2,$986C,$DBBB,$C9D6,$ACBC,$F940,
@@ -2978,6 +3019,7 @@ PROC calcPasswordHash(pwd: PTR TO CHAR)
    MOVE.L pwd,A0
    BSR sub_486F0
    MOVE.L D0,hash
+   END hashdata
    RETURN hash
 /*
 d1=51
@@ -3010,13 +3052,13 @@ sub_486F0:
 -> ---------------------------------------------------------------------------
 
 loc_48704:
-    MOVEQ #0,D5
+    MOVEQ #0,D1
 
 loc_48706:
     MOVE.B  (A0)+,D0
     TST.B D0
     BEQ.W loc_48712
-    ADDQ.B  #1,D5
+    ADDQ.B  #1,D1
     BRA.S loc_48706
 -> ---------------------------------------------------------------------------
 
@@ -3024,16 +3066,8 @@ loc_48712:
     MOVEA.L A3,A0
     MOVEA.L A0,A1
     MOVEA.L A0,A2
-    LEA hashdata(PC),A1
-find:
-    
-    TST.L (A1)
-    BEQ startfound
-    
-    LEA 2(A1),A1
-    BRA find
-    
-startfound:
+    MOVE.L hashdata,A1
+    MOVE.L D1,D5
 
     MOVEQ #0,D0
     MOVEQ #8,D2
@@ -3851,6 +3885,7 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
             IF((logonType>=LOGON_TYPE_REMOTE) AND (checkCarrier()=FALSE)) THEN msg.data:=-2 ELSE msg.data:=ch
         CASE SCREEN_ADDRESS 
             StringF(tempstring,'\z\h[8]',screen)
+            LowerStr(tempstring)
             strCpy(msg.string,tempstring,200)
         CASE BB_TASKPRI
           StringF(tempstring,'\c',cmds.taskPri)
@@ -3871,10 +3906,19 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
           ELSE
             temp:=pagedFlag
             pagedFlag:=Val(msg.string)
-            IF pagedFlag AND Not(temp) AND (checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_SYSOP_PAGE')) AND (StrLen(mailOptions.sysopEmail)>0)
-              StringF(tempstring,'\s: Ami-Express page notification',cmds.bbsName)
-              StringF(tempstring2,'This is a notification that you were paged by \s.',loggedOnUser.name)
-              sendMail(tempstring,tempstring2,FALSE,mailOptions.sysopEmail)
+
+            IF pagedFlag AND Not(temp)
+              IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_SYSOP_PAGE',tempstring))
+                filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+                processMci2(tempstring,tempstring2)
+                SystemTagList(tempstring2,filetags)
+                END filetags
+              ENDIF
+              IF(checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_SYSOP_PAGE')) AND (StrLen(mailOptions.sysopEmail)>0)
+                StringF(tempstring,'\s: Ami-Express page notification',cmds.bbsName)
+                StringF(tempstring2,'This is a notification that you were paged by \s.',loggedOnUser.name)
+                sendMail(tempstring,tempstring2,FALSE,mailOptions.sysopEmail)
+              ENDIF
             ENDIF
           ENDIF
         CASE DT_STAMP_LASTON
@@ -3951,7 +3995,8 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
           StringF(tempstring,'\d',onlineBaud)
           strCpy(msg.string,tempstring,10)
         CASE NODE_BAUDRATE
-          debugLog(LOG_WARN,'NODE_BAUDRATE not yet implemented')
+          StringF(tempstring,'\d',onlineBaudR)
+          strCpy(msg.string,tempstring,10)
         CASE NODE_DEVICE
           strCpy(msg.string,cmds.serDev,ALL)
         CASE NODE_UNIT
@@ -4979,6 +5024,156 @@ PROC processMciCmd(mcidata,len,pos)
    
 ENDPROC pos
 
+PROC processMciCmd2(mcidata,len,pos,outdata)
+  DEF cmd[100]:STRING
+  DEF num[4]:STRING
+  DEF tempstr[255]:STRING
+  DEF nval,nlen,t=0
+
+  IF (mcidata[pos]="~")
+  pos:=pos+1
+  
+  WHILE (EstrLen(num)<3) AND (pos<len) AND (mcidata[pos]>="0") AND (mcidata[pos]<="9") 
+    StrAdd(num,' ')
+    num[EstrLen(num)-1]:=mcidata[pos]
+    pos:=pos+1
+  ENDWHILE
+    
+  nval:=InStr(mcidata,' ',pos)
+  IF nval<0 THEN nval:=len
+  nlen:=InStr(mcidata,mciterminator,pos)
+  IF nlen<0 THEN nlen:=len ELSE t:=1
+  IF nval<nlen
+    nlen:=nval
+    t:=0
+  ENDIF
+  
+  MidStr(cmd,mcidata,pos,nlen-pos)
+  IF EstrLen(num)>0 THEN nlen:=Val(num) ELSE nlen:=-1
+      
+    IF (StrCmp(cmd,'',ALL))
+      pos:=pos+t
+    ELSEIF (StrCmp(cmd,'N',ALL))
+      pos:=pos+1+t
+      StrCopy(tempstr,loggedOnUser.name)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'UL',ALL))
+      pos:=pos+2+t
+      StrCopy(tempstr,loggedOnUser.location)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'P',ALL))
+      ->do nothing with password
+      pos:=pos+1+t    
+    ELSEIF (StrCmp(cmd,'#',ALL))
+      pos:=pos+1+t   
+      StrCopy(tempstr,loggedOnUser.phoneNumber)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'TC',ALL))
+      pos:=pos+2+t
+      StringF(tempstr,'\d',loggedOnUser.timesCalled AND $FFFF)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'LC',ALL))
+      pos:=pos+2+t
+      formatLongDateTime(loggedOnUser.timeLastOn,tempstr)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'M',ALL))
+      pos:=pos+1+t
+      StringF(tempstr,'\d',loggedOnUser.messagesPosted AND $FFFF)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'A',ALL))
+      pos:=pos+1+t
+      StringF(tempstr,'\d',loggedOnUser.secStatus)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'S',ALL))
+      pos:=pos+1+t
+      StringF(tempstr,'\d',loggedOnUser.slotNumber)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'CA',ALL))
+      pos:=pos+2+t
+      StrCopy(tempstr,loggedOnUser.conferenceAccess)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'BR',ALL))
+      pos:=pos+2+t
+      StringF(tempstr,'\d',onlineBaud)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'HW',ALL))
+      pos:=pos+2+t
+      StrCopy(tempstr,computerTypes[loggedOnUser.secBulletin])
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'TL',ALL))
+      pos:=pos+2+t
+      StringF(tempstr,'\d',Div(loggedOnUser.timeLimit,60))
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'TR',ALL))
+      pos:=pos+2+t
+      StringF(tempstr,'\d',Div(timeLimit,60))
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'UB',ALL))
+      pos:=pos+2+t
+      formatUnsignedLong(loggedOnUser.bytesUpload,tempstr)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'DB',ALL))
+      pos:=pos+2+t
+      formatUnsignedLong(loggedOnUser.bytesDownload,tempstr)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'FU',ALL))
+      pos:=pos+2+t
+      StringF(tempstr,'\d',loggedOnUser.uploads AND $FFFF)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'FD',ALL))
+      pos:=pos+2+t
+      StringF(tempstr,'\d',loggedOnUser.downloads AND $FFFF)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'BD',ALL))
+      pos:=pos+2+t
+      StringF(tempstr,'\d',loggedOnUser.dailyBytesLimit)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'LG',ALL))
+      pos:=pos+2+t
+      StringF(tempstr,'\d',node)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'IN',ALL))
+      pos:=pos+2+t
+      StrCopy(tempstr,loggedOnUserMisc.internetName)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'RN',ALL))
+      pos:=pos+2+t
+      StrCopy(tempstr,loggedOnUserMisc.realName)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'DK',2))
+      pos:=pos+2+t
+      MidStr(cmd,mcidata,pos,ALL)
+      StrCopy(mciterminator,cmd)
+      pos:=pos+StrLen(cmd)
+    ELSEIF (StrCmp(cmd,'OD',ALL))
+      pos:=pos+2+t
+      formatLongDate(logonTime,tempstr)
+      StrAdd(outdata,tempstr,nlen)
+    ELSEIF (StrCmp(cmd,'OT',ALL))
+      pos:=pos+2+t
+      formatLongTime(logonTime,tempstr)
+      StrAdd(outdata,tempstr,nlen)    
+    ELSEIF (StrCmp(cmd,'SC',ALL))
+      pos:=pos+2+t
+      StringF(tempstr,'\d',getCallerCount())
+      StrAdd(outdata,tempstr,nlen)    
+    ELSEIF (StrCmp(cmd,'CT',ALL))
+      pos:=pos+2+t
+      formatLongTime(logonTime,tempstr)
+      StrAdd(outdata,tempstr,nlen)    
+    ELSEIF (StrCmp(cmd,'DT',ALL))
+      pos:=pos+2+t
+      formatLongDate(getSystemTime(),tempstr)
+      StrAdd(outdata,tempstr,nlen)    
+    ELSE
+      ->unknown mci
+      StrAdd(outdata,'~')
+      StrAdd(outdata,num)
+    ENDIF
+  ENDIF
+   
+ENDPROC pos
+
 PROC processMci(mcidata)
   DEF pos=0,cmdpos,len
   
@@ -4996,6 +5191,29 @@ PROC processMci(mcidata)
       aePuts2(mcidata+pos,cmdpos-pos)
       pos:=pos+(cmdpos-pos)
       pos:=processMciCmd(mcidata,len,pos)
+    ENDIF
+  ENDWHILE
+ENDPROC
+
+PROC processMci2(mcidata,outdata)
+  DEF pos=0,cmdpos,len
+  
+  StrCopy(outdata,'')
+
+  len:=EstrLen(mcidata)
+  IF len=0
+    RETURN
+  ENDIF
+  
+  WHILE (pos>=0) AND (pos<len)
+    IF reqState<>REQ_STATE_NONE THEN RETURN
+    IF (cmdpos:=InStr(mcidata,'~',pos))<0
+      StrAdd(outdata, mcidata+pos)
+      pos:=EstrLen(mcidata) 
+    ELSE
+      StrAdd(outdata, mcidata+pos,cmdpos-pos)
+      pos:=pos+(cmdpos-pos)
+      pos:=processMciCmd2(mcidata,len,pos,outdata)
     ENDIF
   ENDWHILE
 ENDPROC
@@ -5437,6 +5655,9 @@ PROC displayScreen(screenType)
     CASE SCREEN_DOWNLOAD
       StringF(screencheck,'\s\s',confScreenDir,'DownloadMsg')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
+    CASE SCREEN_FILEHELP
+      StringF(screencheck,'\s\s',confScreenDir,'FileHelp')
+      IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
     CASE SCREEN_UPLOAD
       StringF(screencheck,'\s\s',confScreenDir,'UploadMsg')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
@@ -5787,7 +6008,8 @@ ENDPROC
 PROC checkIncomingCall()
   DEF rCount,input
   DEF string[255]:STRING
-  DEF stat,n
+  DEF tempstr[255]:STRING
+  DEF stat,n,isConnected=FALSE
    
     IF(sopt.trapDoor) THEN JUMP go
 
@@ -5820,19 +6042,27 @@ PROC checkIncomingCall()
       callerIDLog(1)
     ENDIF
 		/* OTHERWISE EQUAL, ANSWER AND SET BAUDS */
-go:
+go: 
 		statClearTime()
-	  ioFlags[IOFLAG_SER_OUT]:=1
+	  ->ioFlags[IOFLAG_SER_OUT]:=1
 /*(JOE)---- added this v*/
     IF(sopt.trapDoor=FALSE)
       StringF(string,'\s\b',cmds.mAnswer)
       serPuts(string)
       n:=0
+      input:=lineInput('','',80,40,string)  ->skip local echo of answer string
+      IF(input=RESULT_TIMEOUT) THEN JUMP timedout
       REPEAT
         input:=lineInput('','',80,40,string)
         IF(input=RESULT_TIMEOUT) THEN JUMP timedout
         n++
-      UNTIL((StrCmp(string,'CONNECT',7)) OR (n=5))
+        IF (StrCmp(string,'CONNECT',7))
+          isConnected:=TRUE
+        ELSE
+          StringF(tempstr,'\tINVALID	CONNECT	= \s',string)
+          callersLog(tempstr)
+        ENDIF
+      UNTIL((isConnected) OR (n=5))
     ELSE
       strCpy(string,trapConnect,ALL)
     ENDIF
@@ -5841,11 +6071,14 @@ go:
             ->//CutConnect(string)
 		  IF(input=RESULT_TIMEOUT) THEN JUMP timedout
     ENDIF
-          
+     
+    stripReturn(string)
     readToolType(TOOLTYPE_CONNECT,node,string,connectString)
     
     IF(StrCmp(string,'CONNECT',7))
       onlineBaud:=Val(string+7)
+      onlineBaudR:=cmds.openingBaud
+
       IF onlineBaud=0 THEN onlineBaud:=cmds.openingBaud
 
       ioFlags[IOFLAG_SER_OUT]:=-1
@@ -6054,6 +6287,7 @@ PROC processInputMessage(timeout, extsig = 0)
       IF (scropen) THEN expressToFront() ELSE openExpressScreen()
       ioFlags[IOFLAG_SCR_OUT]:=-1
       onlineBaud:=cmds.openingBaud
+      onlineBaudR:=cmds.openingBaud
       reqState:=REQ_STATE_SYSOPLOGON
     ENDIF
   
@@ -6065,6 +6299,7 @@ PROC processInputMessage(timeout, extsig = 0)
       IF (scropen) THEN expressToFront() ELSE openExpressScreen()
       ioFlags[IOFLAG_SCR_OUT]:=-1
       onlineBaud:=cmds.openingBaud
+      onlineBaudR:=cmds.openingBaud
       logonType:=LOGON_TYPE_LOCAL
       reqState:=REQ_STATE_LOGON
     ENDIF
@@ -6101,6 +6336,7 @@ PROC processInputMessage(timeout, extsig = 0)
       aePuts('[ p')
       sendCLS()
       onlineBaud:=cmds.openingBaud
+      onlineBaudR:=cmds.openingBaud
       timeLimit:=3600
       logonType:=LOGON_TYPE_LOCAL
       loggedOnUser:=NEW loggedOnUser
@@ -6131,6 +6367,7 @@ PROC processInputMessage(timeout, extsig = 0)
       aePuts('[ p')
       sendCLS()
       onlineBaud:=cmds.openingBaud
+      onlineBaudR:=cmds.openingBaud
       timeLimit:=3600
       logonType:=LOGON_TYPE_LOCAL
       loggedOnUser:=NEW loggedOnUser
@@ -6387,6 +6624,8 @@ PROC processLoggingOff()
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
   DEF i
+  DEF filetags
+
   pagedFlag:=FALSE
   chatFlag:=FALSE
   allowOLM:=TRUE
@@ -6451,6 +6690,13 @@ PROC processLoggingOff()
     addMsgPointers()
     masterSavePointers(loggedOnUser)
     saveAccount(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc,0,0) /* Reseave users account after logoff */
+
+    IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_LOGOFF',tempstr))
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+      processMci2(tempstr,tempstr2)
+      SystemTagList(tempstr2,filetags)
+      END filetags
+    ENDIF
 
     IF (checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_LOGOFF')) AND (StrLen(mailOptions.sysopEmail)>0)
       StringF(tempstr,'\s: Ami-Express logoff notification',cmds.bbsName)
@@ -8172,6 +8418,7 @@ PROC enterMSG(gfh)
   DEF tempStr2[255]:STRING
   DEF exit
   DEF stat
+  DEF filetags  
 
   aFlag:=0
   netmail:=0
@@ -8433,10 +8680,18 @@ skipAll:
      ENDIF
      UnLock(msgbaselock)
 
-    IF (tempUser.slotNumber=1) AND (checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_SYSOP_COMMENT')) AND (StrLen(mailOptions.sysopEmail)>0)
-      StringF(tempStr,'\s: Ami-Express sysop message notification',cmds.bbsName)
-      StringF(tempStr2,'This is a notification that \s has sent you a message.\n\nSubject: \s\n\n',mailHeader.fromName,mailHeader.subject)
-      sendMail(tempStr,tempStr2,TRUE, mailOptions.sysopEmail)
+    IF (tempUser.slotNumber=1)
+      IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_SYSOP_COMMENT',tempStr))
+        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+        processMci2(tempStr,tempStr2)
+        SystemTagList(tempStr2,filetags)
+        END filetags
+      ENDIF
+      IF (checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_SYSOP_COMMENT')) AND (StrLen(mailOptions.sysopEmail)>0)
+        StringF(tempStr,'\s: Ami-Express sysop message notification',cmds.bbsName)
+        StringF(tempStr2,'This is a notification that \s has sent you a message.\n\nSubject: \s\n\n',mailHeader.fromName,mailHeader.subject)
+        sendMail(tempStr,tempStr2,TRUE, mailOptions.sysopEmail)
+      ENDIF
     ENDIF
   
      IF(rzmsg)
@@ -10310,10 +10565,13 @@ PROC setEnvStat(statCode)
     singleNode.misc2[0]:=IF allowOLM THEN 0 ELSE 1
     ReleaseSemaphore(singleNode)
   ENDIF
-  
-  StringF(environ,'STATS@\d',node)
-  StringF(status,'\l\s[35]-\d[2]',loggedOnUser.name,statCode)
-  SetVar(environ,status,-1,LV_VAR OR GVF_GLOBAL_ONLY)
+
+   
+  IF loggedOnUser<>NIL
+    StringF(environ,'STATS@\d',node)
+    StringF(status,'\l\s[35]-\d[2]',loggedOnUser.name,statCode)
+    SetVar(environ,status,-1,LV_VAR OR GVF_GLOBAL_ONLY)
+  ENDIF
  
   sendMaster()
 ENDPROC 1
@@ -10666,12 +10924,17 @@ PROC pGoodbye()
   aePuts('\b\n')  
 ENDPROC RESULT_GOODBYE
 
+PROC xprfopenAsm()
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  xprfopen();
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
+
 PROC xprfopen()
   DEF fn,am,i,res,filemode,task: PTR TO tc
   DEF tempstr[255]:STRING
 ->(*xpr_fopen)(char *filename, char *accessmode)
 ->        D0                     A0              A1
-  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L A0,fn
   MOVE.L A1,am
 
@@ -10706,6 +10969,8 @@ PROC xprfopen()
       strCpy(skipdFiles+(numSkipd*32),FilePart(fn),31)
       numSkipd++
       res:=-1     ->return -1 which is not actually a file handle but xpr lib should see it as being a file that exists
+      StringF(tempstr,'xprfopen: oldfile dupe \s - mode - \s, res - \d',fn, am, res)
+      debugLog(LOG_DEBUG,tempstr)
       JUMP dupe 
     ENDIF
   ENDIF
@@ -10713,8 +10978,10 @@ PROC xprfopen()
   IF (zModemInfo.inProgress=ZMODEM_UPLOAD)
     FOR i:=numSkipd-1 TO 0 STEP -1
       ->if its a dupe file then we dont want to try and resume so return an error
-      IF strCmpi(skipdFiles+(i*32),FilePart(fn),31)
+      IF strCmpi(skipdFiles+(i*32),FilePart(fn),ALL)
         res:=0
+        StringF(tempstr,'xprfopen: readwrite dupe \s - mode - \s, res - \d',fn, am, res)
+        debugLog(LOG_DEBUG,tempstr)
         JUMP dupe 
       ENDIF
     ENDFOR
@@ -10729,15 +10996,19 @@ PROC xprfopen()
   StringF(tempstr,'xprfopen: \s - mode - \s, res - \d',fn, am, res)
   debugLog(LOG_DEBUG,tempstr)
 dupe:
-  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC res
+
+PROC xprfcloseAsm()
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  xprfclose()
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
 
 PROC xprfclose()
   DEF fp,res,task: PTR TO tc
   DEF tempstr[255]:STRING
 ->        (*xpr_fclose)(long filepointer)
 ->                      A0
-  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L A0,fp
 
   MOVE.L 4,A6
@@ -10751,15 +11022,18 @@ PROC xprfclose()
   StringF(tempstr,'xprfclose \d',fp)
   debugLog(LOG_DEBUG,tempstr)
   IF fp<>-1 THEN Close(fp)
-  MOVEM.L (A7)+,D1-D7/A0-A6
-
 ENDPROC FALSE
+
+PROC xprchkabortAsm()
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  xprchkabort()
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
 
 PROC xprchkabort()
   DEF winmsg:PTR TO intuimessage,res,task: PTR TO tc
+  DEF tempstr[255]:STRING
 
-  MOVEM.L D1-D7/A0-A6,-(A7)
-  
   MOVE.L 4,A6
   SUB.L A1,A1
   JSR -294(A6)  ->LVO FindTask
@@ -10777,19 +11051,24 @@ PROC xprchkabort()
     ENDIF
   ENDIF
   
-  ->debugLog(LOG_DEBUG,'xprchkabort, res=\d',res)
-
-  MOVEM.L (A7)+,D1-D7/A0-A6
+  ->StringF(tempstr,'xprchkabort, res=\d',res)
+  ->debugLog(LOG_DEBUG,tempstr)
 ENDPROC res
+
+PROC xprfreadAsm()
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  xprfread()
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
 
 PROC xprfread()
   DEF buf,bsize,bcount,fp,res,task: PTR TO tc
+  DEF tempstr[255]:STRING
 ->      long count = (*xpr_fread)(char *buffer, long size, long count,
 ->        -D0                        A0            D0         D1
 ->                                  long fileptr)
 ->                                  A1
 
-  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L A0,buf
   MOVE.L D0,bsize
   MOVE.L D1,bcount
@@ -10803,22 +11082,28 @@ PROC xprfread()
   res:=task.userdata
   MOVE.L res,A4
 
-  ->debugLog(LOG_DEBUG,'xprfread: \d bytes',bsize*bcount)
+  ->StringF(tempstr,'xprfread: \d bytes',bsize*bcount)
+  ->debugLog(LOG_DEBUG,tempstr)
 
   res:=Read(fp,buf,Mul(bsize,bcount))
 
   ->calculate number of items read
   res:=Div(res,bsize)
-  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC res
 
-PROC xprfwrite(buffer:LONG, size:LONG, count:LONG,fileptr: LONG)
+PROC xprfwriteAsm()
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  xprfwrite()
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
+
+PROC xprfwrite()
   DEF buf,bsize,bcount,fp,res,task: PTR TO tc
+  DEF tempstr[255]:STRING
 ->        long count = (*xpr_fwrite)(char *buffer, long size, long count,
 ->        D0                         A0            D0         D1
 ->                                  long fileptr)
 ->                                  A1
-  MOVEM.L D1-D7/A0-A6,-(A7)
 
   MOVE.L A0,buf
   MOVE.L D0,bsize
@@ -10833,22 +11118,28 @@ PROC xprfwrite(buffer:LONG, size:LONG, count:LONG,fileptr: LONG)
   res:=task.userdata
   MOVE.L res,A4
 
-  ->debugLog(LOG_DEBUG,'xprfwrite: \d bytes',Mul(bsize,bcount))
+  ->StringF(tempstr,'xprfwrite: \d bytes',Mul(bsize,bcount))
+  ->debugLog(LOG_DEBUG,tempstr)
 
   res:=Write(fp,buf,Mul(bsize,bcount))
   
   ->calculate number of items written
   res:=Div(res,bsize)
-  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC res
+
+PROC xprsreadAsm()
+  MOVEM.L D1-D7/A0-A6,-(A7)
+   xprsread()
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
 
 PROC xprsread()
   DEF buf,bsize,timeout,serialsig,i,signals,task: PTR TO tc,res,timersig,ch
+  DEF tempstr[255]:STRING
   DEF waiting,status
 ->        long count = (*xpr_sread)(char *buffer, long size, long timeout)
 ->        D0                        A0            D0         D1
 
-  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L A0,buf
   MOVE.L D0,bsize
   MOVE.L D1,timeout
@@ -10861,7 +11152,8 @@ PROC xprsread()
   res:=task.userdata
   MOVE.L res,A4
 
-  ->debugLog(LOG_DEBUG,'xprsread: \d bytes \d timeout',bsize,timeout)
+  ->StringF(tempstr,'xprsread: \d bytes \d timeout',bsize,timeout)
+  ->debugLog(LOG_DEBUG,tempstr)
 
     /* Valid size parameter? */
 
@@ -11049,16 +11341,21 @@ PROC xprsread()
   ENDIF
 
 sreaddone:
-  ->debugLog(LOG_DEBUG,'xprsread complete: \d bytes',i)
-
-  MOVEM.L (A7)+,D1-D7/A0-A6
+  ->StringF(tempstr,'xprsread complete: \d bytes',i)
+  ->debugLog(LOG_DEBUG,tempstr)
 ENDPROC i
+
+PROC xprswriteAsm()
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  xprswrite()
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
 
 PROC xprswrite()
   DEF buf,bsize,task:PTR TO tc,res
+  DEF tempstr[255]:STRING
 ->        long status = (*xpr_swrite)(char *buffer, long size)
 ->        D0                          A0            D0
-  MOVEM.L D1-D7/A0-A6,-(A7)
 
   MOVE.L A0,buf
   MOVE.L D0,bsize
@@ -11071,19 +11368,25 @@ PROC xprswrite()
   res:=task.userdata
   MOVE.L res,A4
 
-  ->debugLog(LOG_DEBUG,'xprswrite: \d bytes',bsize)
+  ->StringF(tempstr,'xprswrite: \d bytes',bsize)
+  ->debugLog(LOG_DEBUG,tempstr)
 
   serPuts(buf,bsize,TRUE)
-  MOVEM.L (A7)+,D1-D7/A0-A6
 
 ENDPROC FALSE
 
+PROC xprfseekAsm()
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  xprfseek()
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
+
 PROC xprfseek()
   DEF fp,offset,origin,task:PTR TO tc,res
+  DEF tempstr[255]:STRING
 ->       long status = (*xpr_fseek)(long fileptr, long offset, long origin)
 ->              D0                     A0            D0         D1
 
-  MOVEM.L D1-D7/A0-A6,-(A7)
 
   MOVE.L A0,fp
   MOVE.L D0,offset
@@ -11097,16 +11400,20 @@ PROC xprfseek()
   res:=task.userdata
   MOVE.L res,A4
 
-  ->debugLog(LOG_DEBUG,'xprfseek: \d offset',offset)
+  StringF(tempstr,'xprfseek: \d offset',offset)
+  debugLog(LOG_DEBUG,tempstr)
   
   Seek(fp,offset,origin)
-  MOVEM.L (A7)+,D1-D7/A0-A6
-
 ENDPROC FALSE
+
+PROC xprsflushAsm()
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  xprsflush()
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
 
 PROC xprsflush()
   DEF task:PTR TO tc,res
-  MOVEM.L D1-D7/A0-A6,-(A7)
 
   MOVE.L 4,A6
   SUB.L A1,A1
@@ -11116,18 +11423,21 @@ PROC xprsflush()
   res:=task.userdata
   MOVE.L res,A4
 
-  ->debugLog(LOG_DEBUG,'xprsflush')
-
-  MOVEM.L (A7)+,D1-D7/A0-A6
+  debugLog(LOG_DEBUG,'xprsflush')
 
 ENDPROC FALSE
+
+PROC xprupdateAsm()
+  MOVEM.L D0-D7/A0-A6,-(A7)
+  xprupdate()
+  MOVEM.L (A7)+,D0-D7/A0-A6
+ ENDPROC D0
 
 PROC xprupdate()
   DEF xpru: PTR TO xpr_update
   DEF task:PTR TO tc,updateTime
   DEF res,update=FALSE
   DEF outmsg[255]:STRING
-  MOVEM.L D0-D7/A0-A6,-(A7)
 
   MOVE.L A0,xpru
   MOVE.L 4,A6
@@ -11232,15 +11542,18 @@ PROC xprupdate()
 
     ENDIF
   ENDIF
+ ENDPROC
+
+PROC xprsetserialAsm()
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  xprsetserial()
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
  
-  MOVEM.L (A7)+,D0-D7/A0-A6
-
-ENDPROC
-
 PROC xprsetserial()
   DEF task:PTR TO tc,res,newstatus,oldstatus
+  DEF tempstr[255]:STRING
 
-  MOVEM.L D0-D7/A0-A6,-(A7)
   MOVE.L D0,newstatus
   MOVE.L 4,A6
   SUB.L A1,A1
@@ -11250,18 +11563,24 @@ PROC xprsetserial()
   res:=task.userdata
   MOVE.L res,A4
 
-  ->debugLog(LOG_DEBUG,'xprsetserial \d',newstatus)
+  StringF(tempstr,'xprsetserial \d',newstatus)
+  debugLog(LOG_DEBUG,tempstr)
   oldstatus:=newstatus
 
-  MOVEM.L (A7)+,D0-D7/A0-A6
 ENDPROC oldstatus
+
+PROC xprfinfoAsm()
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  xprfinfo()
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
 
 PROC xprfinfo()
   DEF task:PTR TO tc,i,res,fn,fitype,fp
+  DEF tempstr[255]:STRING
 ->long info = (*xpr_finfo)(char *filename, long typeofinfo)
 ->        D0                       A0              D0
 
-  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L A0,fn
   MOVE.L D0,fitype
 
@@ -11273,13 +11592,21 @@ PROC xprfinfo()
   res:=task.userdata
   MOVE.L res,A4
 
+  StringF(tempstr,'xprsfinfo - fitype \d \s',fitype,fn)
+  debugLog(LOG_DEBUG,tempstr)
+
   IF fitype=1
     ->file size
 
     FOR i:=numSkipd-1 TO 0 STEP -1
       ->if its a dupe file then we dont want to try and resume so return 2gb filesize
-      IF strCmpi(skipdFiles+(i*32),FilePart(fn),31)
-        debugLog(LOG_DEBUG,'xprsfinfo - dupe')
+
+      StringF(tempstr,'xprsfinfo - dupecheck \s \s - res \d',skipdFiles+(i*32),FilePart(fn),strCmpi(skipdFiles+(i*32),FilePart(fn),ALL))
+      debugLog(LOG_DEBUG,tempstr)
+
+      IF strCmpi(skipdFiles+(i*32),FilePart(fn),ALL)
+        StringF(tempstr,'xprsfinfo - dupe - \s',fn)
+        debugLog(LOG_DEBUG,tempstr)
         res:=$7fffffff
         JUMP dupe 
       ENDIF
@@ -11295,14 +11622,17 @@ PROC xprfinfo()
   ENDIF
 
   ->debugLog(LOG_DEBUG,'xprsfinfo')
-
-  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC res
+
+PROC xprunlinkAsm()
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  xprunlink()
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
 
 PROC xprunlink()
   DEF task:PTR TO tc,res,fn,tempstr[255]:STRING
 
-  MOVEM.L D0-D7/A0-A6,-(A7)
   MOVE.L A0,fn
   MOVE.L 4,A6
   SUB.L A1,A1
@@ -11312,7 +11642,8 @@ PROC xprunlink()
   res:=task.userdata
   MOVE.L res,A4
 
-  ->debugLog(LOG_DEBUG,'xprunlink \s',fn)
+  StringF(tempstr,'xprunlink \s',fn)
+  debugLog(LOG_DEBUG,tempstr)
 
   res:=0
   ->partial upload, move it as a partial upload rather than deleting it
@@ -11326,8 +11657,6 @@ PROC xprunlink()
     SetProtection(fn,FIBF_OTR_DELETE)
     IF DeleteFile(fn)=0 THEN res:=-1
   ENDIF
-
-  MOVEM.L (A7)+,D0-D7/A0-A6
 ENDPROC res
 
 PROC waitSerialRead()
@@ -11579,22 +11908,22 @@ PROC downloadFile(str: PTR TO CHAR)
   task.userdata:=result
 
   xprio.xpr_extension:=4
-  xprio.xpr_fopen:={xprfopen}
-  xprio.xpr_fclose:={xprfclose}
-  xprio.xpr_fread:={xprfread}
-  xprio.xpr_fwrite:={xprfwrite}
-  xprio.xpr_sread:={xprsread}
-  xprio.xpr_swrite:={xprswrite}
-  xprio.xpr_sflush:={xprsflush}
-  xprio.xpr_update:={xprupdate}
-  xprio.xpr_chkabort:={xprchkabort}
+  xprio.xpr_fopen:={xprfopenAsm}
+  xprio.xpr_fclose:={xprfcloseAsm}
+  xprio.xpr_fread:={xprfreadAsm}
+  xprio.xpr_fwrite:={xprfwriteAsm}
+  xprio.xpr_sread:={xprsreadAsm}
+  xprio.xpr_swrite:={xprswriteAsm}
+  xprio.xpr_sflush:={xprsflushAsm}
+  xprio.xpr_update:={xprupdateAsm}
+  xprio.xpr_chkabort:={xprchkabortAsm}
   xprio.xpr_chkmisc:=0 
   xprio.xpr_gets:=0
-  xprio.xpr_setserial:={xprsetserial}
+  xprio.xpr_setserial:={xprsetserialAsm}
   xprio.xpr_ffirst:=0
   xprio.xpr_fnext:=0
-  xprio.xpr_finfo:={xprfinfo}
-  xprio.xpr_fseek:={xprfseek}
+  xprio.xpr_finfo:={xprfinfoAsm}
+  xprio.xpr_fseek:={xprfseekAsm}
   xprio.xpr_data:=0
   xprio.xpr_options:=0
   xprio.xpr_unlink:={xprunlink}
@@ -11940,25 +12269,25 @@ PROC xprReceive(file)
   task.userdata:=result
 
   xprio.xpr_extension:=4
-  xprio.xpr_fopen:={xprfopen}
-  xprio.xpr_fclose:={xprfclose}
-  xprio.xpr_fread:={xprfread}
-  xprio.xpr_fwrite:={xprfwrite}
-  xprio.xpr_sread:={xprsread}
-  xprio.xpr_swrite:={xprswrite}
-  xprio.xpr_sflush:={xprsflush}
-  xprio.xpr_update:={xprupdate}
-  xprio.xpr_chkabort:={xprchkabort}
+  xprio.xpr_fopen:={xprfopenAsm}
+  xprio.xpr_fclose:={xprfcloseAsm}
+  xprio.xpr_fread:={xprfreadAsm}
+  xprio.xpr_fwrite:={xprfwriteAsm}
+  xprio.xpr_sread:={xprsreadAsm}
+  xprio.xpr_swrite:={xprswriteAsm}
+  xprio.xpr_sflush:={xprsflushAsm}
+  xprio.xpr_update:={xprupdateAsm}
+  xprio.xpr_chkabort:={xprchkabortAsm}
   xprio.xpr_chkmisc:=0 
   xprio.xpr_gets:=0
-  xprio.xpr_setserial:={xprsetserial}
+  xprio.xpr_setserial:={xprsetserialAsm}
   xprio.xpr_ffirst:=0
   xprio.xpr_fnext:=0
-  xprio.xpr_finfo:={xprfinfo}
-  xprio.xpr_fseek:={xprfseek}
+  xprio.xpr_finfo:={xprfinfoAsm}
+  xprio.xpr_fseek:={xprfseekAsm}
   xprio.xpr_data:=0
   xprio.xpr_options:=0
-  xprio.xpr_unlink:={xprunlink}
+  xprio.xpr_unlink:={xprunlinkAsm}
   xprio.xpr_squery:=0
   xprio.xpr_getptr:=0
 
@@ -12209,7 +12538,7 @@ PROC partUploadOK(option)
   StrAdd(path,'PartUpload/')
   IF(maxDirs=0) THEN RETURN RESULT_SUCCESS
   
-  IF(logonType<LOGON_TYPE_REMOTE) THEN RETURN RESULT_SUCCESS
+  IF(logonType=LOGON_TYPE_LOCAL) THEN RETURN RESULT_SUCCESS
  
   IF((fLock:=Lock(path,ACCESS_READ)))=FALSE
     StringF(str,'\b\nTell \s the bbs can''t access the \s dir\b\n',cmds.sysopName,path)
@@ -12759,7 +13088,7 @@ PROC resumeStuff(tfs,fsuploading)
   DEF string[256]:STRING,path[256]:STRING,ray2[256]:STRING,ray[256]:STRING,str[256]:STRING
   DEF fBlock:PTR TO fileinfoblock
   DEF fLock
-  DEF stat
+  DEF stat,removeAll=FALSE
  
   StrCopy(path,currentConfDir)
   StrAdd(path,'PartUpload/')
@@ -12789,7 +13118,11 @@ PROC resumeStuff(tfs,fsuploading)
     StrCopy(ray2,str)
     status:=getUN(str)  /* returns user number from end of file name */
     IF(status=loggedOnUser.slotNumber)
-      StringF(string,'Resume \s[12] [\d[6]] (Y/N)? ',str,fBlock.size)
+      IF removeAll
+        StringF(string,'Delete \s[12] [\d[6]] ',str,fBlock.size)
+      ELSE
+        StringF(string,'Resume \s[12] [\d[6]] (Y/N)? ',str,fBlock.size)
+      ENDIF
       aePuts(string)
       WHILE(TRUE)
         ch:=checkOnlineStatus()
@@ -12798,17 +13131,25 @@ PROC resumeStuff(tfs,fsuploading)
           IF(fLock) THEN UnLock(fLock) ->//(RTS) Lock held
           RETURN ch
         ENDIF
-        ch:=readChar(INPUT_TIMEOUT)
+        IF removeAll
+          ch:="N"
+        ELSE
+          ch:=readChar(INPUT_TIMEOUT)
+        ENDIF
         IF(ch=RESULT_TIMEOUT)
           FreeDosObject(DOS_FIB,fBlock)
           IF(fLock) THEN UnLock(fLock)  ->//(RTS) Lock held
           RETURN RESULT_NO_CARRIER
         ENDIF
         IF((ch="N") OR (ch="n"))
-          aePuts('No!   Delete (Y/N)? ')
+          IF removeAll=FALSE THEN aePuts('No!   Delete (Y/N/All)? ')
           purgeLine()
           WHILE (TRUE)
-              ch:=readChar(INPUT_TIMEOUT);
+              IF removeAll
+                ch:="Y"
+              ELSE  
+                ch:=readChar(INPUT_TIMEOUT);
+              ENDIF
               IF(ch=RESULT_TIMEOUT)
                 FreeDosObject(DOS_FIB,fBlock)
                 IF(fLock) THEN UnLock(fLock)  ->//(RTS) Lock held
@@ -12826,9 +13167,17 @@ PROC resumeStuff(tfs,fsuploading)
                 aePuts('No!\b\n')
                 JUMP dirCont
               ENDIF
+              IF ((ch="A") OR (ch="a"))
+                removeAll:=TRUE
+                ch:="Y"
+              ENDIF
               EXIT ((ch="Y") OR (ch="y"))
           ENDWHILE        /* end first forever */
-          aePuts('Yes.. Deleted!\b\n')
+          IF removeAll
+            aePuts('All.. Deleted!\b\n')          
+          ELSE
+            aePuts('Yes.. Deleted!\b\n')
+          ENDIF
           StrCopy(string,path)
           StrAdd(string,ray2)
           SetProtection(string,FIBF_OTR_DELETE)
@@ -13264,6 +13613,7 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   DEF protocol
   DEF foundDupe=0
   DEF mstat      /* check for carrier. trying to stop upload guru from parcial upload */
+  DEF filetags
  
    /* these two for testing asCII chars */
   DEF cnt1 = 0
@@ -13297,8 +13647,8 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   ENDIF
   
   IF(uLFType=0) 
-      status:=parseParams(params)
-      IF(status>1)
+      parseParams(params)
+      IF(ListLen(parsedParams)>0)
           StrCopy(string,params[0])
           setProtocol(string)
       ELSE
@@ -13374,6 +13724,8 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
       pcps:=zModemInfo.cps
   ENDIF
  
+  IF pcps>65535 THEN pcps:=65535
+
   IF (pcps > loggedOnUserKeys.upCPS)
      loggedOnUserKeys.upCPS:=pcps
   ENDIF
@@ -13389,6 +13741,18 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   IF(onlineNFiles>0)
     callersLog(str)
     udLog(str)
+    IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_UPLOAD',str))
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+      processMci2(str,string)
+      SystemTagList(string,filetags)
+      END filetags
+    ENDIF
+
+    IF (checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_UPLOAD')) AND (StrLen(mailOptions.sysopEmail)>0)
+      StringF(str,'\s: Ami-Express logoff notification',cmds.bbsName)
+      StringF(string,'This is a notification that \s from \s has logged off\n\n',loggedOnUser.name,loggedOnUser.location)
+      sendMail(str,string,TRUE, mailOptions.sysopEmail)
+    ENDIF
   ELSE
     callersLog('\tUpload Failed..')
     udLog('\tUpload Failed..')
@@ -13401,7 +13765,7 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
       aePuts('The file(s) :\b\n')
       x:=0
       WHILE(x<numSkipd)
-        StringF(str,'\t\t\s',skipdFiles+(x*32))
+        StringF(str,'\t\t\s\b\n',skipdFiles+(x*32))
         aePuts(str)
         StringF(str,'\tSkipped \s',skipdFiles+(x*32))
           callersLog(str)
@@ -14095,6 +14459,9 @@ sysopDL:
       pcps:=zModemInfo.cps
  ENDIF
 ->// (RTS) added dnload cps rate Fri Mar 27 13:13:29 1992
+
+ IF pcps>65535 THEN pcps:=65535
+
  IF(pcps > loggedOnUserKeys.dnCPS)
     loggedOnUserKeys.dnCPS:=pcps
         /* is this baud higher then max cps up ? */
@@ -14344,7 +14711,7 @@ ENDPROC Val(tempStr)
 
 PROC numberInput(n)
   DEF tempStr[20]:STRING
-  StringF(tempStr,'\d',n)
+  StringF(tempStr,'\d',n AND 65535)
   lineInput('',tempStr,5,INPUT_TIMEOUT,tempStr)
 ENDPROC Val(tempStr)
 
@@ -14599,11 +14966,11 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
  				ENDIF
       CASE "S"         /* zero upcps rate */
         aePuts('[12;47H')          /* offset by 11 */
- 			 	hoozer2.upCPS:=longNumberInput(hoozer2.upCPS)
+ 			 	hoozer2.upCPS:=numberInput(hoozer2.upCPS)
         flag:=0;
       CASE "T"         /* zero dncps rate */
         aePuts('[12;68H')          /* offset by 11 */
- 				hoozer2.dnCPS:=longNumberInput(hoozer2.dnCPS)
+ 				hoozer2.dnCPS:=numberInput(hoozer2.dnCPS)
         flag:=0
  			CASE "U" /* Time_Limit */
  				aePuts('[13;17H')
@@ -15640,7 +16007,7 @@ PROC displayAccount(who:LONG, hoozer:PTR TO user, hoozer2: PTR TO userKeys, hooz
   aePuts(tempStr)
 
   IF hoozer.newUser THEN StrCopy(tempStr2,'Yes') ELSE StrCopy(tempStr2,'No')
-  StringF(tempStr,'[8;36H[33mN> [32mNew_User ......[36m:[0m \s [33m#[32mCalls[36m: [0m\l\d[12]',tempStr2,hoozer.timesCalled AND $FFFF)
+  StringF(tempStr,'[8;36H[33mN> [32mNew_User ......[36m:[0m \s[3] [33m#[32mCalls[36m: [0m\l\d[12]',tempStr2,hoozer.timesCalled AND $FFFF)
   aePuts(tempStr)
  
   formatUnsignedLong(hoozer.bytesUpload,tempStr2)
@@ -15682,10 +16049,10 @@ PROC displayAccount(who:LONG, hoozer:PTR TO user, hoozer2: PTR TO userKeys, hooz
   StringF(tempStr,'[12;1H[33mR> [32mTime_Total[36m:[0m [36m[[0m\l\d[8][36m][0m mins    ',Div(hoozer.timeTotal,60))
   aePuts(tempStr)
 
-  StringF(tempStr,'[12;36H[33mS> [32mCps UP[36m:[0m \l\d[4] ',hoozer2.upCPS AND $FFFF)
+  StringF(tempStr,'[12;36H[33mS> [32mCps UP[36m:[0m \l\d[7] ',hoozer2.upCPS AND $FFFF)
   aePuts(tempStr)
   
-  StringF(tempStr,'[12;57H[33mT> [32mCps DN[36m:[0m \l\d[4] ',hoozer2.dnCPS AND $FFFF)
+  StringF(tempStr,'[12;57H[33mT> [32mCps DN[36m:[0m \l\d[7] ',hoozer2.dnCPS AND $FFFF)
   aePuts(tempStr)
 
   StringF(tempStr,'[13;1H[33mU> [32mTime_Limit[36m:[0m [36m[[0m\l\d[8][36m][0m mins    ',Div(hoozer.timeLimit,60))
@@ -15834,10 +16201,10 @@ PROC displayAccountInfo(who:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, h
   StringF(tempStr,'[12;17H\l\d[6]',Div(hoozer.timeTotal,60))
   aePuts(tempStr)
   
-  StringF(tempStr,'[12;39H[32mCps UP[36m:[0m \l\d[4] ',hoozer2.upCPS AND $FFFF)
+  StringF(tempStr,'[12;39H[32mCps UP[36m:[0m \l\d[7] ',hoozer2.upCPS AND $FFFF)
   aePuts(tempStr)
  
-  StringF(tempStr,'[12;60H[32mCps DN[36m:[0m \l\d[4] ',hoozer2.dnCPS AND $FFFF)
+  StringF(tempStr,'[12;60H[32mCps DN[36m:[0m \l\d[7] ',hoozer2.dnCPS AND $FFFF)
   aePuts(tempStr)
  
   StringF(tempStr,'[13;17H\l\d[6]',Div(hoozer.timeLimit,60))
@@ -16400,6 +16767,12 @@ PROC internalCommandFS()
   fileStatus(0)
 ENDPROC RESULT_SUCCESS
 
+PROC internalCommandF(params)
+  IF checkSecurity(ACS_FILE_LISTINGS)=FALSE THEN RETURN RESULT_NOT_ALLOWED
+  
+  setEnvStat(ENV_FILES) 
+ENDPROC displayFileList(params);
+
 PROC internalCommandG()
   DEF mystat
 
@@ -16501,10 +16874,17 @@ PROC internalCommandM()
   ansiColour:=Not(ansiColour)
 ENDPROC RESULT_SUCCESS
 
+PROC internalCommandN(params)
+  IF checkSecurity(ACS_FILE_LISTINGS)=FALSE THEN RETURN RESULT_NOT_ALLOWED
+  
+  setEnvStat(ENV_FILES) 
+ENDPROC myNewFiles(params)
+
 PROC internalCommandO()
   DEF result
   DEF string[255]:STRING
   DEF string2[255]:STRING
+  DEF filetags
 
   IF(pagesAllowed=0)
     setEnvStat(ENV_MAIL)
@@ -16521,8 +16901,17 @@ PROC internalCommandO()
 
   setEnvStat(ENV_REQ_CHAT)
   pagedFlag:=1
+  
+  IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_SYSOP_PAGE',string))
+    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+    processMci2(string,string2)
+    SystemTagList(string2,filetags)
+    END filetags
+  ENDIF
+  
   IF (checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_SYSOP_PAGE')) AND (StrLen(mailOptions.sysopEmail)>0)
     StringF(string,'\s: Ami-Express page notification',cmds.bbsName)
+    
     StringF(string2,'This is a notification that you were paged by \s.',loggedOnUser.name)
     sendMail(string,string2,FALSE,mailOptions.sysopEmail)
   ENDIF
@@ -17100,6 +17489,621 @@ PROC internalCommandX()
     ENDIF
 ENDPROC RESULT_SUCCESS
 
+PROC internalCommandZ(params)
+  DEF stat,fLLoop,mystat
+  DEF str[200]:STRING,ss[80]:STRING,ray[200]:STRING
+  DEF tempfile[256]:STRING
+  DEF fcopy = FALSE
+  DEF startDir,dirScan
+
+  IF((checkSecurity(ACS_ZIPPY_TEXT_SEARCH)))=FALSE THEN RETURN RESULT_NOT_ALLOWED
+
+  setEnvStat(ENV_FILES)
+  
+  lineCount:=0
+  nonStopDisplayFlag:=FALSE
+
+  aePuts('\b\n')
+  IF(maxDirs=0)
+ 	  myError(5); ->Sorry();
+ 	  RETURN RESULT_FAILURE
+ 	ENDIF
+
+  ->dupy:=0
+  parseParams(params)
+
+  IF(ListLen(parsedParams)>0)
+  	StrCopy(ss,parsedParams[0])
+    JUMP zSkip1
+  ENDIF
+ 
+  aePuts('Enter string to search for: ')
+  stat:=lineInput('','',78,INPUT_TIMEOUT,ss)
+  IF(stat<0) THEN RETURN RESULT_NO_CARRIER
+  IF(StrLen(ss)=0)
+    aePuts('\b\n')
+    RETURN RESULT_SUCCESS
+  ENDIF
+
+zSkip1:
+  UpperStr(ss)
+  
+  IF(ListLen(parsedParams)>1)
+ 		stat,startDir,dirScan:=getDirSpan(parsedParams[1])
+  ELSE
+    stat,startDir,dirScan:=getDirSpan('');      /* chg to "A' to search all dirs */
+  ENDIF
+ 
+  IF(stat=RESULT_FAILURE) THEN RETURN RESULT_SUCCESS
+ 
+  nonStopDisplayFlag:=paramsContains('NS')
+ 
+  IF(StrLen(ss)>0)
+ 
+ 	  fLLoop:=startDir
+ 	  WHILE(fLLoop<=dirScan)
+ 		  StrCopy(str,currentConfDir)   /* get BBS conf locale dir */
+ 		  IF(dirScan<>(-1))                /* add 'DIR' */
+ ->(RTS) buff copy
+        IF(fLLoop = maxDirs)    /* at upload dir */
+          StrAdd(str,'DIR')
+ 	     	  StringF(ray,'\d',fLLoop)
+ 		      StrAdd(str,ray)
+          StringF(ray,'Scanning directory \d\b\n',fLLoop)
+          aePuts(ray)
+           /*  sprintf(tempfile,"T:tdir.%d",Cmds->AcLvl[LVL_NODE_NUMBER]);
+             /* now copy to T: and use the T: */
+             if((FileCopy(str,tempfile))) {
+                  strcpy(str,tempfile);
+                  fcopy = TRUE;
+             }
+           */
+        ELSE
+ 			    StrAdd(str,'DIR')
+ 			    StringF(ray,'\d',fLLoop)      /* add dir Number */
+ 			    StrAdd(str,ray)               /* add path & name */
+ 			    StringF(ray,'Scanning directory \d\b\n',fLLoop)
+ 			    aePuts(ray)
+        ENDIF
+ 			  lineCount++
+ 	    ENDIF 
+ 			IF(dirScan=-1) 
+ 			  StrAdd(str,'hold/held')
+ 			  aePuts('Scanning directory HOLD\b\n')
+ 			ENDIF
+ 		  stat:=zippy(str,ss)
+ 		  IF(stat<0)
+ 			  aePuts('\b\n')
+        IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+ 			  RETURN stat
+ 			ENDIF
+           
+      fLLoop++
+ 		  ->if(DirScan!=-1) FLLoop+=1;
+ 		ENDWHILE
+ 	ENDIF
+  aePuts('\b\n')
+  IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+ENDPROC RESULT_SUCCESS
+
+->#define ln(x,y) current=myzip+(y*100)+x;
+
+PROC getDirSpan(pass:PTR TO CHAR)
+  DEF str[200]:STRING
+  DEF mystat
+  DEF dirScan=0,startDir=0
+
+  IF(StrLen(pass)=0)
+	  StringF(str,'Directories: (1-\d), (All), (Upload), (Enter)=none? ',maxDirs)
+ 	  aePuts(str)
+	  mystat:=lineInput('','',8,INPUT_TIMEOUT,str)
+	  IF(mystat<0) THEN RETURN RESULT_NO_CARRIER
+	  IF(StrLen(str)=0)
+		  aePuts('\b\n')
+		  RETURN RESULT_FAILURE,startDir,dirScan
+		ENDIF
+	ELSE
+	  StrCopy(str,pass)
+  ENDIF
+ 
+->  gnsflag=CheckForNS(str);             /* check for Non-Stop */
+
+  IF((str[0]="U") OR (str[0]="u"))   /* Scan only upload directory */
+	  dirScan:=maxDirs
+	  startDir:=dirScan
+	  JUMP mNCont
+ 	ENDIF
+  IF((str[0]="A") OR (str[0]="a"))                /* scan all dirs */
+	  dirScan:=maxDirs
+	  startDir:=1
+	  JUMP mNCont
+ 	ENDIF
+  IF((str[0]="L") OR (str[0]="l"))
+    dirScan:=0
+    startDir:=0
+	  JUMP mNCont
+  ENDIF
+  IF(((str[0]="H") OR (str[0]="h")) AND (loggedOnUser.secStatus>200)) 
+	  dirScan:=-1
+	  startDir:=-1
+	  JUMP mNCont
+	ENDIF
+  ->strcat(str," ");
+  dirScan:=Val(str)
+  ->sscanf(str,"%d",&DirScan);
+  IF((dirScan>maxDirs) OR (dirScan<1))
+	  aePuts('No such directory.\b\n\b\n')
+	  RETURN RESULT_FAILURE
+ 	ENDIF
+  startDir:=dirScan
+
+mNCont:
+->  nonStopDisplayFlag:=CheckForNS(str);
+ENDPROC RESULT_SUCCESS,startDir,dirScan
+
+PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
+  DEF fi;
+  DEF current:PTR TO CHAR
+  DEF image[258]:ARRAY OF CHAR
+  DEF found=0
+  DEF x=1
+  DEF gi1
+  DEF myzip
+  
+  myzip:=AllocMem(25600,MEMF_CLEAR OR MEMF_PUBLIC)
+  IF(myzip=FALSE) THEN RETURN RESULT_SUCCESS
+  
+  current:=myzip+257 ->ln(1,1);
+  UpperStr(search_string);
+
+  fi:=Open(fname,MODE_OLDFILE)
+  IF(fi<=0)
+    FreeMem(myzip,25600)
+    RETURN RESULT_SUCCESS
+  ENDIF
+
+  WHILE(Fgets(fi,image,252)<>NIL)
+    IF(checkInput())
+      gi1:=readChar(1)
+      SELECT gi1
+        CASE 23	/* ctrl-s */
+          gi1:=readChar(INPUT_TIMEOUT)
+          IF(gi1<0)
+            Close(fi);
+            FreeMem(myzip,25600)          
+            RETURN gi1
+          ENDIF
+        CASE 3	/*  ctrl-c */
+          Close(fi)
+          aePuts('**Break\b\n')
+          FreeMem(myzip,25600)
+          RETURN RESULT_FAILURE
+      ENDSELECT
+    ENDIF
+    stripReturn(image)
+    IF(image[0]<>" ")
+      current:=myzip+Shl(x,8)+1   ->ln(1,x)
+      current[0]:=0
+      IF(found)
+        found:=1
+        WHILE(1)
+          current:=myzip+Shl(found,8)+1    ->ln(1,found)
+          EXIT current[0]=0
+          aePuts(current)
+          aePuts('\b\n')
+          found++
+          gi1:=flagPause(1)
+          IF(gi1<0)
+            Close(fi)
+            FreeMem(myzip,25600)
+            RETURN gi1
+          ENDIF
+        ENDWHILE
+      ENDIF
+      found:=0
+      x:=1
+      current:=myzip+Shl(x,8)+1   ->ln(1,x)
+    ENDIF
+    strCpy(current,image,ALL)
+    UpperStr(image)
+    IF(InStr(image,search_string))>=0 THEN found:=1
+    x++;
+    current:=myzip+Shl(x,8)+1   ->ln(1,x); 
+  ENDWHILE
+    
+  current:=myzip+Shl(x,8)+1    ->ln(1,x)
+  current[0]:=0
+  IF(found)
+    found:=1
+    WHILE(1)
+      current:=myzip+Shl(found,8)+1   ->  ln(1,found)
+      EXIT current[0]=0
+      aePuts(current)
+      aePuts('\b\n')
+      found++
+      gi1:=flagPause(1)
+      IF(gi1<0)
+				Close(fi)
+        FreeMem(myzip,25600)
+				RETURN gi1
+      ENDIF
+    ENDWHILE
+  ENDIF
+   
+  Close(fi)
+  aePuts('\b\n')
+  FreeMem(myzip,25600)
+ENDPROC RESULT_SUCCESS
+
+PROC displayFileList(params)
+  DEF stat,stat2,fLLoop
+  DEF str[81]:STRING,ray[200]:STRING
+  DEF tempfile[256]:STRING
+  DEF fcopy = FALSE
+  DEF startDir,dirScan
+ 
+  nonStopDisplayFlag:=0
+  lineCount:=0
+ 
+  aePuts('\b\n')
+  IF(maxDirs=0) 
+ 	  myError(5); ->Sorry();
+ 	  RETURN RESULT_FAILURE
+ 	ENDIF
+ 
+  parseParams(params)
+  IF(ListLen(parsedParams)>0)
+ 		stat,startDir,dirScan:=getDirSpan(parsedParams[0])
+  ELSE
+    displayScreen(SCREEN_FILEHELP) ->IF(displayScreen(SCREEN_FILEHELP))=FALSE THEN unAvailNotice(GSTR3,GSTR1);
+ 	  stat,startDir,dirScan:=getDirSpan('')
+ 	ENDIF
+ 
+  IF(stat=RESULT_FAILURE) THEN RETURN RESULT_SUCCESS
+ 
+  nonStopDisplayFlag:=paramsContains('NS')
+ 
+  fLLoop:=startDir
+  WHILE(fLLoop<=dirScan)
+ 	  StrCopy(str,currentConfDir)
+ 	  IF(dirScan<>(-1))
+      IF(fLLoop = maxDirs)    /* at upload dir */
+        StrAdd(str,'DIR')
+ 	     	StringF(ray,'\d',fLLoop)
+ 		    StrAdd(str,ray)
+  		  StringF(ray,'Scanning directory \d\b\n',fLLoop)
+        aePuts(ray)
+ 
+        /* now copy to T: and use T: copy */
+        StringF(tempfile,'T:tdir.\d',node)
+        IF((fileCopy(str,tempfile)))
+          StrCopy(str,tempfile)
+          fcopy:=TRUE
+        ENDIF
+      ELSE
+  		  StrAdd(str,'DIR')
+ 	    	StringF(ray,'\d',fLLoop)
+ 		    StrAdd(str,ray)
+  		  StringF(ray,'Scanning directory \d\b\n',fLLoop)
+ 	    	aePuts(ray)
+      ENDIF
+ 		ELSE
+ 		  StrAdd(str,'hold/held')
+ 		  aePuts('Scanning directory HOLD\b\n')
+ 		ENDIF
+ 	  stat:=flagPause(1)
+ 	  IF(stat<0) 
+      IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+  	  RETURN stat
+    ENDIF
+    stat:=displayIt(str)
+    IF(fcopy)
+      DeleteFile(tempfile) ->(RTS)
+      fcopy:=FALSE
+    ENDIF
+    IF(stat=RESULT_FAILURE) THEN RETURN RESULT_SUCCESS
+  	IF(stat=RESULT_NO_CARRIER) THEN RETURN RESULT_NO_CARRIER
+ 	  IF(stat=RESULT_TIMEOUT) THEN RETURN stat
+    ->if(DirScan == MaxDirs)  return(stat);
+ 
+ 	  aePuts('\b\n')
+ 	  fLLoop++
+ 	ENDWHILE
+  IF(fcopy) THEN DeleteFile(tempfile);  ->(RTS)
+ENDPROC RESULT_SUCCESS
+
+PROC displayIt(fname: PTR TO CHAR)
+  DEF fp,res
+
+  fp:=Open(fname,MODE_OLDFILE)
+  IF(fp<=0)
+ 	  myError(4) ->(RTS) FileListError();
+ 	  RETURN RESULT_SUCCESS
+ 	ENDIF
+ 
+ /* We should check for the file in ram: if there, show it, if not, copy it */
+ 
+  res:=displayIt2(fp)
+  Close(fp)
+ENDPROC res
+
+PROC displayIt2(fp)
+  DEF moreStat,stat,color = 0
+  DEF str[200]:STRING
+
+  WHILE(Fgets(fp,str,180)<>NIL)
+   	str[181]:=0
+    SetStr(str,StrLen(str))
+ 	  IF(str[StrLen(str)-1]="\n")
+  		IF(nonStopDisplayFlag=FALSE) THEN	lineCount++
+ 	    StrAdd(str,'\b')
+ 		ENDIF
+ 
+    IF(color=1) THEN aePuts('[0m')
+    aePuts(str)
+ 
+ 	  IF(sCheckInput())	
+  		stat:=readChar(1)
+ 	    IF(stat<0) 
+        RETURN stat
+      ENDIF
+ 		  SELECT stat
+        CASE 23  /* Pause */
+          stat:=readChar(INPUT_TIMEOUT)
+          IF(stat<0)
+            RETURN RESULT_NO_CARRIER
+          ENDIF
+        CASE 3 /* ^C */
+          aePuts('**Break\b\n\b\n')
+          RETURN RESULT_FAILURE
+ 			ENDSELECT
+ 		ENDIF
+  	moreStat:=flagPause(0)
+ 	  IF(moreStat<0) 
+  		RETURN moreStat
+    ENDIF
+ 	ENDWHILE 
+ENDPROC RESULT_SUCCESS
+
+PROC myNewFiles(params)
+  DEF month,day,year
+  DEF tv,mystat,stat,comstat
+  DEF fLLoop
+  DEF tempfile[256]:STRING         ->(RTS) for buffer of upload dir
+  DEF c[256]:STRING
+  DEF str[200]:STRING,ray[200]:STRING
+  DEF fn[81]:STRING,sz[81]:STRING,dt[81]:STRING,cmt[81]:STRING
+  DEF mdt,ddt,ydt
+  DEF timeVar;
+  DEF fcopy = FALSE
+  DEF pchar: PTR TO CHAR
+  DEF startDir,dirScan
+  DEF fp1
+ 
+  nonStopDisplayFlag:=0
+  lineCount:=0
+ 
+  aePuts('\b\n')
+  IF(maxDirs=0)
+  	myError(5) -> Sorry();
+ 	  RETURN RESULT_FAILURE
+ 	ENDIF
+ 
+  timeVar:=loggedOnUser.newSinceDate
+  formatLongDate(timeVar,ray)
+  StrCopy(str,'')
+ 
+  parseParams(params)
+  IF(ListLen(parsedParams)>0)
+    pchar:=parsedParams[0]
+  	IF(pchar[0]="s") OR (pchar[0]="S")
+      StrCopy(str,ray)
+  	ELSE
+      StrCopy(str,parsedParams[0])
+    ENDIF
+ 	ENDIF
+
+  nonStopDisplayFlag:=paramsContains('NS')
+ 
+  WHILE(StrLen(str)<>8)
+  	comstat:=1
+ 	  StringF(str,'Date as (mm-dd-yy) to search from (Enter)=\s: ',ray)
+  	aePuts(str)
+ 	  mystat:=lineInput('','',8,INPUT_TIMEOUT,str)
+  	IF(mystat<0) THEN RETURN RESULT_NO_CARRIER
+ 	  IF(StrLen(str)=0) THEN StrCopy(str,ray)
+  	IF(StrLen(str)<>8) THEN aePuts('\b\n')
+ 	ENDWHILE
+  StringF(c,'\tDirectory Scan for (\s)\n',str)
+  callersLog(c)
+ 
+  str[2]:=" "
+  str[5]:=" "
+  month:=Val(str)
+  day:=Val(str+3)
+  year:=Val(str+6)
+
+  IF (year>TWODIGITYEARSWITCHOVER) THEN year:=1900+year ELSE year:=2000+year
+
+  ->sscanf(str,"%d %d %d",&month,&day,&year);
+ 
+  tv:=0
+
+  StrCopy(c,'')
+  IF(ListLen(parsedParams)>1)
+    StrCopy(c,parsedParams[1])
+  ENDIF
+  IF(ListLen(parsedParams)>2)
+  	StrAdd(c,' ')
+ 	  StrAdd(c,parsedParams[2]);
+  ENDIF
+  mystat,startDir,dirScan:=getDirSpan(c)
+  IF(mystat=RESULT_FAILURE) THEN RETURN RESULT_SUCCESS
+ 
+  nonStopDisplayFlag:=paramsContains('NS');
+ 
+  newSinceFlag:=1
+  fcopy:=FALSE
+ 
+  fLLoop:=startDir;
+  WHILE(fLLoop<=dirScan)
+  	StrCopy(str,currentConfDir)
+ 	  IF(dirScan<>(-1)) 
+ ->(RTS)   buffer upload dir
+      IF(fLLoop = maxDirs) 
+        StrAdd(str,'DIR')
+ 	     	StringF(ray,'\d',fLLoop)
+ 		    StrAdd(str,ray)
+  		  StringF(ray,'Scanning directory \d\b\n',fLLoop)
+        aePuts(ray)
+         
+        StringF(tempfile,'T:tdir.\d',node)
+             /* now copy to T: and use T: copy */
+        IF((fileCopy(str,tempfile)))
+          StrCopy(str,tempfile)
+          fcopy:=TRUE
+        ENDIF
+  		ELSE
+        StrAdd(str,'DIR')
+ 	     	StringF(ray,'\d',fLLoop)
+ 		    StrAdd(str,ray)
+  		  StringF(ray,'Scanning directory \d\b\n',fLLoop)
+ 	    	aePuts(ray)
+      ENDIF
+ 		ELSE
+      StrAdd(str,'hold/held')
+ 	    aePuts('Scanning directory HOLD\b\n')
+ 		ENDIF
+  	stat:=flagPause(1)
+ 	  IF(stat<0)
+      IF(fcopy) THEN DeleteFile(tempfile)
+      RETURN stat
+    ENDIF
+  	fp1:=Open(str,MODE_OLDFILE)
+ 	  IF(fp1<=0)
+  		aePuts('No Files are available.\b\n\b\n')
+      IF(fcopy) THEN DeleteFile(tempfile)
+ 	    RETURN RESULT_SUCCESS
+ 		ENDIF
+ 
+  	WHILE(Fgets(fp1,c,250)<>NIL) 
+  		c[250]:=0
+      SetStr(c,StrLen(c))
+ 	    IF((c[0]=" ") OR (c[0]=0) OR(c[0]="\n")) THEN JUMP fgetnext
+
+      parseParams(c)
+      IF(ListLen(parsedParams)>0) THEN StrCopy(fn,parsedParams[0])
+      IF(ListLen(parsedParams)>1) THEN StrCopy(sz,parsedParams[1])
+      IF(ListLen(parsedParams)>2) THEN StrCopy(dt,parsedParams[2])
+      IF(ListLen(parsedParams)>3) THEN StrCopy(cmt,parsedParams[3])
+  		->scanf(c,"%s %s %s %s",&fn,&sz,&dt,&cmt);
+
+ 	    IF((dt[0]<="9") AND (dt[0]>="0") AND (StrLen(dt)=8))
+  			IF(Not((dt[2]="-") AND (dt[5]="-") AND (dt[6]<="9") AND (dt[6]>="0")))
+  				StrCopy(sz,dt)
+ 	    		StrCopy(dt,cmt)
+ 				ENDIF
+ 			ELSE
+  			StrCopy(sz,dt)
+ 	    	StrCopy(dt,cmt)
+ 			ENDIF
+ 		  
+      dt[2]:=" "
+ 			dt[5]:=" "
+      mdt:=Val(dt)
+      ddt:=Val(dt+3)
+      ydt:=Val(dt+6)
+      IF (ydt>TWODIGITYEARSWITCHOVER) THEN ydt:=1900+ydt ELSE ydt:=2000+ydt
+      
+  		->sscanf(dt,"%d %d %d",&mdt,&ddt,&ydt);
+ 	    
+      IF(ydt>year)
+        tv:=1
+   		ELSE
+  			IF(ydt=year)
+  				IF(mdt>month)
+            tv:=1
+  				ELSEIF(mdt=month) 	
+  					IF(ddt>=day) THEN	tv:=1
+ 					ENDIF
+ 				ENDIF
+ 			ENDIF
+  		EXIT tv
+fgetnext:
+ 		ENDWHILE 
+ 
+  	IF(tv<>0)
+  		c[StrLen(c)-1]:=0
+ 	    aePuts(c)
+ 		  aePuts('\b\n')
+  		stat:=flagPause(1)
+ 	    IF(stat<0)
+ 		    Close(fp1)
+        IF(fcopy) THEN DeleteFile(tempfile)
+ 			  RETURN stat
+  		ENDIF
+ 
+ ->    	stat=DisplayIt();      /* Mikes unbuffered */
+      stat:=displayIt2(fp1)   /* my buffered dir code */
+     	Close(fp1)
+      tv:=0
+      IF(stat<0)
+        IF(fcopy) THEN DeleteFile(tempfile)
+        RETURN stat
+      ENDIF
+ 		ELSE
+      Close(fp1)
+    ENDIF
+    tv:=0
+  	fLLoop++
+ 	ENDWHILE
+  aePuts('\b\n')
+  nonStopDisplayFlag:=0
+  IF(fcopy) THEN DeleteFile(tempfile)
+ENDPROC RESULT_SUCCESS
+
+PROC flagPause(count)
+  DEF moreStat
+  DEF str[200]:STRING
+ 
+  IF(nonStopDisplayFlag=FALSE) THEN	lineCount:=lineCount+count
+ 
+  IF((nonStopDisplayFlag=FALSE) AND (lineCount>=(IF loggedOnUser.lineLength THEN loggedOnUser.lineLength ELSE 22)))
+  	lineCount:=0;
+    WHILE TRUE
+      aePuts('[32m([33mPause[32m)[34m...[32m([33mf[32m)[36mlags, More[32m([33mY[32m/[33mn[32m/[33mns[32m)[0m? ')
+      moreStat:=lineInput('','',190,INPUT_TIMEOUT,str)
+      IF(moreStat<0) THEN RETURN moreStat
+
+      EXIT (str[0]=0) OR (str[0]="y") OR (str[0]="Y")
+
+      IF(logonType>=LOGON_TYPE_REMOTE)
+        moreStat:=checkCarrier()
+        IF(moreStat=FALSE) THEN RETURN RESULT_NO_CARRIER
+      ENDIF
+      IF((str[0]="N") OR (str[0]="n"))
+        IF((str[1]="S") OR (str[1]="s")) 
+          nonStopDisplayFlag:=1
+          JUMP fpbrk
+        ELSE
+          aePuts('\b\n')
+          RETURN RESULT_FAILURE
+        ENDIF
+      ENDIF
+      IF((str[0]="F") OR (str[0]="f"))
+        IF(StrLen(str)>2) THEN moreStat:=flagFiles(str+2) ELSE moreStat:=flagFiles(NIL)
+        IF(moreStat<RESULT_FAILURE)	THEN RETURN moreStat
+          ->if(AnsiColor)
+          aePuts('[A[K')
+      ENDIF
+ 		ENDWHILE
+fpbrk:
+  	->if(AnsiColor)
+ 		aePuts('[1A[K')
+	ENDIF
+ENDPROC RESULT_SUCCESS
+
+
 PROC confScan()
   DEF mystat,conf
   DEF prompt=FALSE
@@ -17293,6 +18297,8 @@ PROC processInternalCommand(cmdcode,cmdparams,silentFail=FALSE)
     res:=internalCommandS()
   ELSEIF (StrCmp(cmdcode,'T'))
     res:=internalCommandT()
+  ELSEIF (StrCmp(cmdcode,'F'))
+    res:=internalCommandF(cmdparams)
   ELSEIF (StrCmp(cmdcode,'FS'))
     res:=internalCommandFS()
   ELSEIF (StrCmp(cmdcode,'G'))
@@ -17319,6 +18325,8 @@ PROC processInternalCommand(cmdcode,cmdparams,silentFail=FALSE)
     res:=internalCommandH(cmdparams)
   ELSEIF (StrCmp(cmdcode,'M'))
     res:=internalCommandM()
+  ELSEIF (StrCmp(cmdcode,'N'))
+    res:=internalCommandN(cmdparams)
   ELSEIF (StrCmp(cmdcode,'O'))
     res:=internalCommandO()
   ELSEIF (StrCmp(cmdcode,'OLM'))
@@ -17343,6 +18351,8 @@ PROC processInternalCommand(cmdcode,cmdparams,silentFail=FALSE)
     res:=internalCommandWHD()
   ELSEIF (StrCmp(cmdcode,'X'))
     res:=internalCommandX()
+  ELSEIF (StrCmp(cmdcode,'Z'))
+    res:=internalCommandZ(cmdparams)
   ELSEIF (StrCmp(cmdcode,'?'))
     res:=internalCommandQuestionMark()
   ELSEIF (StrCmp(cmdcode,'^'))
@@ -17379,6 +18389,8 @@ PROC processLoggedOnUser()
         StrCopy(securityFlags,'')
         statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
         IF(cmds.acLvl[LVL_SCREEN_TO_FRONT] AND scropen) THEN expressToFront()
+
+        newSinceFlag:=0
 
         currTime:=getSystemTime()
         currDay:=Div(currTime,86400)
@@ -17488,6 +18500,7 @@ PROC processSysopLogon()
     loggedOnUserMisc:=NEW loggedOnUserMisc
     -> load sysop user data
     loadAccount(1,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
+    masterLoadPointers(loggedOnUser)
     acsLevel:=findAcsLevel()
     logonType:=LOGON_TYPE_SYSOP
     displayUserToCallersLog(0)
@@ -17651,6 +18664,7 @@ PROC processLogon()
   DEF userNum
   DEF tries,stat
   DEF sysprompt[255]:STRING
+  DEF filetags
 
   state:=STATE_CONNECTING
   stateData:=0
@@ -17700,7 +18714,7 @@ PROC processLogon()
  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright (C)2018 Darren Coles\b\n',expressVer)
  aePuts(tempStr)
  aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
- StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,cmds.openingBaud)
+ StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
  aePuts(tempStr)
  ->strcpy(GSTR2,GetTheTime(Time_system))
  ->strcpy(GSTR3,GetTheDate(Time_system))
@@ -17859,6 +18873,8 @@ logonLoop:
       state:=STATE_LOGGING_OFF
       RETURN
     ENDIF
+ ELSE
+   displayUserToCallersLog(0)
  ENDIF
 
  validUser:=1
@@ -17894,7 +18910,8 @@ logonLoop:
 
  stat:=checkUserOnLine(loggedOnUser,1)
  IF(stat=FALSE)
-	    callersLog('User already on another node!')
+      StringF(tempStr,'User \s already on another node!',loggedOnUser.name)
+	    callersLog(tempStr)
       IF displayScreen(SCREEN_ONENODE)=FALSE THEN aePuts('You are already logged into another node!\b\n')
       END loggedOnUser
       loggedOnUser:=NIL
@@ -17912,6 +18929,13 @@ logonLoop:
   masterLoadPointers(loggedOnUser) 
 
   IF logonType>=LOGON_TYPE_REMOTE
+    IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_LOGON',tempStr))
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+      processMci2(tempStr,tempStr2)
+      SystemTagList(tempStr2,filetags)
+      END filetags
+    ENDIF
+
     IF (checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_LOGON')) AND (StrLen(mailOptions.sysopEmail)>0)
       StringF(tempStr,'\s: Ami-Express logon notification',cmds.bbsName)
       StringF(tempStr2,'This is a notification that \s from \s has logged on\n\n',loggedOnUser.name,loggedOnUser.location)
@@ -17920,9 +18944,7 @@ logonLoop:
   ENDIF
 
   statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
-
-  displayUserToCallersLog(0)
-  
+ 
   IF (quickFlag=FALSE)
     IF (displayScreen(SCREEN_LOGON)) THEN doPause()
   ENDIF
@@ -18032,6 +19054,7 @@ ENDPROC
 PROC newUserAccount(userName: PTR TO CHAR)
   DEF tempStr[100]:STRING,tempStr2[255]:STRING
   DEF stat,tries=0
+  DEF filetags
 
   IF StrLen(cmds.newUserPw)>0
     displayScreen(SCREEN_NEWUSERPW)
@@ -18047,7 +19070,7 @@ PROC newUserAccount(userName: PTR TO CHAR)
         IF(stat=FALSE) THEN RETURN RESULT_SLEEP_LOGOFF
       ENDIF
       
-      IF(strCmpi(tempStr,cmds.newUserPw,15)) THEN stat:=RESULT_SUCCESS ELSE stat:=RESULT_FAILURE
+      IF(strCmpi(tempStr,cmds.newUserPw,ALL)) THEN stat:=RESULT_SUCCESS ELSE stat:=RESULT_FAILURE
 
       IF(stat<>RESULT_SUCCESS)
         IF checkToolTypeExists(TOOLTYPE_NODE,node,'SHOWPWFAIL')
@@ -18099,6 +19122,13 @@ PROC newUserAccount(userName: PTR TO CHAR)
   statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
   clearMsgPointers()
   masterSavePointers(loggedOnUser)
+
+  IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_NEW_USER',tempStr2))
+    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+    processMci2(tempStr2,tempStr)
+    SystemTagList(tempStr,filetags)
+    END filetags
+  ENDIF
 
   IF (checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_NEW_USER')) AND (StrLen(mailOptions.sysopEmail)>0)
     StringF(tempStr,'\s: Ami-Express new user notification',cmds.bbsName)
@@ -18787,8 +19817,8 @@ PROC main() HANDLE
   DEF p : PTR TO CHAR
   DEF tempfh
    
-  StrCopy(expressVer,'v5.0.0-b4',ALL)
-  StrCopy(expressDate,'06-Jul-2018',ALL)
+  StrCopy(expressVer,'v5.0.0-b5',ALL)
+  StrCopy(expressDate,'13-Jul-2018',ALL)
 
   stripAnsi(0,0,1,0)
   
@@ -18927,8 +19957,9 @@ PROC main() HANDLE
   createResControl()
   createRexxPort()
 
-  IF readToolType(TOOLTYPE_NODE,node,'FIRSTCOMMAND',tempstr)
-    Execute(tempstr,NIL,NIL)
+  IF readToolType(TOOLTYPE_NODE,node,'FIRSTCOMMAND',tempstr)   
+    processMci2(tempstr,tempstr2)
+    Execute(tempstr2,NIL,NIL)
   ENDIF
   
   IF checkToolTypeExists(TOOLTYPE_NODE,node,'TELNETD')
@@ -18975,8 +20006,6 @@ PROC main() HANDLE
     strCpy(sopt.namePrompt,'Name',ALL)
   ENDIF
  
-  newSinceFlag:=0
-
   timeoutOverride:=readToolTypeInt(TOOLTYPE_NODE,node,'OVERRIDE_TIMEOUT')
 
   i:=readToolTypeInt(TOOLTYPE_NODE,node,'MAX_MSG_QUE')
@@ -19122,6 +20151,9 @@ PROC main() HANDLE
   ENDFOR
 
   computerEntries:=readToolTypeInt(TOOLTYPE_COMPUTERLIST,'','COMPUTER.NUM')
+
+  onlineBaud:=cmds.openingBaud
+  onlineBaudR:=cmds.openingBaud
 
   IF (computerEntries>0)
     computerTypes:=List(computerEntries)
