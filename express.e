@@ -502,7 +502,11 @@ CONST SENTBY=548
 CONST SETOVERIDE=549
 CONST FULLEDIT=550
 CONST SETMCIOFF=551
+
+CONST RETURNCOMMAND2=628
+
 /*
+
 undocumented host addresses:
 
 600 - get something unknown amixnet related ???
@@ -533,7 +537,7 @@ undocumented host addresses:
 625 - unknown related to 623 ???
 626 - get or set something related to messages.dat ???
 627 - call RelConf(CN)
-628 - not sure - something to do with mainmenu_li and servercmd ???
+628 - not sure - something to do with mainmenu_li and servercmd ??? used by aquascan to download - alternative version of RETURNCOMMAND
 631 - get or set unknown thing ???
 632 - check if file exists or is in playpens
 633 - extended LOAD_ACCOUNT (532) with filler3 / user misc 
@@ -2721,7 +2725,7 @@ PROC checkCarrier()
       IF((sopt.a2232<>0) AND (transfering=FALSE))
         IF((serialWriteIO.status<>0) AND (stat=FALSE))
           IF checkToolTypeExists(TOOLTYPE_NODE,node,'TRAP_SERIAL')
-            StringF(temp,'Serial Error \d\b\n',serialWriteIO.status)
+            StringF(temp,'Serial Error \d',serialWriteIO.status)
             errorLog(temp)
           ENDIF
           lineReset()
@@ -3639,6 +3643,8 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
            addFlagtoList(msg.string)
         CASE RETURNCOMMAND
           StrCopy(runOnExit,msg.string,200)
+        CASE RETURNCOMMAND2
+          StrCopy(runOnExit,msg.string,200)
         CASE DT_NAME
           IF (msg.data)
             strCpy(msg.string,loggedOnUser.name,31)
@@ -4441,13 +4447,27 @@ PROC saveMsgPointers(conf)
  -> Last_EMail=it->CB.LastEMail
 
  IF (lastMsgReadConf=0)
-    StringF(debug,'error putting last message read: value \d\n',lastMsgReadConf)
+    StringF(debug,'error putting last message read conf \d: value \d',lastMsgReadConf)
     errorLog(debug)
+    IF loggedOnUser<>NIL
+      StringF(debug,'user = \s',loggedOnUser.name)
+      errorLog(debug)
+    ELSE
+      StrCopy(debug,'user = nil')
+      errorLog(debug)
+    ENDIF
   ENDIF
     
  IF (lastNewReadConf=0)
-    StringF(debug,'error putting last message new: value \d\n',lastNewReadConf)
+    StringF(debug,'error putting last message new conf \d: value \d',lastNewReadConf)
     errorLog(debug)
+    IF loggedOnUser<>NIL
+      StringF(debug,'user = \s',loggedOnUser.name)
+      errorLog(debug)
+    ELSE
+      StrCopy(debug,'user = nil')
+      errorLog(debug)
+    ENDIF
  ENDIF
 
   cb.confYM:=lastMsgReadConf
@@ -18149,6 +18169,7 @@ PROC confScan()
 
             mystat:=partUploadOK(1)
             IF(mystat=RESULT_FAILURE)
+              currentConf:=conf
               setEnvStat(ENV_UPLOADING)
               IF(checkSecurity(ACS_UPLOAD))
                 uploadaFile(0,'URG','')
