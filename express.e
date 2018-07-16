@@ -6075,11 +6075,11 @@ go:
     stripReturn(string)
     readToolType(TOOLTYPE_CONNECT,node,string,connectString)
     
-    IF(StrCmp(string,'CONNECT',7))
-      onlineBaud:=Val(string+7)
+    IF(StrCmp(connectString,'CONNECT',7))
+      onlineBaud:=Val(connectString+7)
       onlineBaudR:=cmds.openingBaud
-
       IF onlineBaud=0 THEN onlineBaud:=cmds.openingBaud
+      IF StrLen(connectString)=7 THEN StringF(connectString,'CONNECT \d',onlineBaud)
 
       ioFlags[IOFLAG_SER_OUT]:=-1
       ioFlags[IOFLAG_SCR_OUT]:=-1
