@@ -451,8 +451,8 @@ CONST GETKEY=500
 CONST RAWARROW=501
 CONST CHAIN=502
 
-CONST DT_HOSTNAME=600
-CONST DT_HOSTIP=601
+CONST DT_HOSTNAME=700
+CONST DT_HOSTIP=701
 
 
 /****************** in progress ******************/
@@ -523,8 +523,8 @@ undocumented host addresses:
 607 - get/set something that isnt used anywhere else in the code
 608 - some kind of input routine ???
 609 - set IO_Flags[IOFLAG_SER_IN] and IO_Flags[IOFLAG_SER_OUT]
-610 - something to do with nextmail receive ???
-611 - something to do with nextmail send ???
+610 - something to do with netmail receive ???
+611 - something to do with netmail send ???
 612 - get MemConf address
 613 - set something - something to do with external programs accessing serial ???
 614 - check conf access
@@ -4463,7 +4463,7 @@ PROC saveMsgPointers(conf)
  -> Last_EMail=it->CB.LastEMail
 
  IF (lastMsgReadConf=0)
-    StringF(debug,'error putting last message read conf \d: value \d',lastMsgReadConf)
+    StringF(debug,'error putting last message read conf \d: value \d',conf,lastMsgReadConf)
     errorLog(debug)
     IF loggedOnUser<>NIL
       StringF(debug,'user = \s',loggedOnUser.name)
@@ -4475,7 +4475,7 @@ PROC saveMsgPointers(conf)
   ENDIF
     
  IF (lastNewReadConf=0)
-    StringF(debug,'error putting last message new conf \d: value \d',lastNewReadConf)
+    StringF(debug,'error putting last message new conf \d: value \d',conf,lastNewReadConf)
     errorLog(debug)
     IF loggedOnUser<>NIL
       StringF(debug,'user = \s',loggedOnUser.name)
@@ -6704,9 +6704,10 @@ PROC processLoggingOff()
     SetList(olmQueue,0)
   ENDIF
   
-  logoffLog('N')
 
   IF loggedOnUser<>NIL
+
+    logoffLog('N')
 
     IF tempAccessGranted
       loggedOnUser.secStatus:=tempAccess.accessLevel
@@ -7367,9 +7368,16 @@ ENDPROC stat
 
 PROC errorLog(stringout: PTR TO CHAR)
   DEF gfp1, xgstr1[20]:STRING, xgstr2[255]:STRING
+  DEF calltime
+  DEF datestr[20]:STRING
+  DEF timestr[20]:STRING
   DEF fname[100]:STRING
  
-  formatLongDateTime(getSystemTime(),xgstr1)
+  calltime:=getSystemTime()
+  formatLongDate(calltime,datestr)
+  formatLongTime(calltime,timestr)
+
+  StringF(xgstr1,'\s \s',datestr,timestr)
 
   StringF(fname,'\sNode\d/ErrorLog',cmds.bbsLoc,node)
 
@@ -7555,7 +7563,6 @@ PROC logoffLog(stat: PTR TO CHAR)
   calltime:=getSystemTime()
   formatLongDate(calltime,datestr)
   formatLongTime(calltime,timestr)
-
 
   IF stat[0]="N"
     StringF(tempstr,'\s (\s) \s Off Normally',datestr,timestr,loggedOnUser.name)
