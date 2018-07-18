@@ -17752,13 +17752,15 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
     ENDIF
     stripReturn(image)
     IF(image[0]<>" ")
-      current:=myzip+Shl(x,8)+1   ->ln(1,x)
-      current[0]:=0
+      IF (x<100)
+        current:=myzip+Shl(x,8)+1   ->ln(1,x)
+        current[0]:=0
+      ENDIF
       IF(found)
         found:=1
         WHILE(1)
           current:=myzip+Shl(found,8)+1    ->ln(1,found)
-          EXIT current[0]=0
+          EXIT (current[0]=0) OR (found>=99)
           aePuts(current)
           aePuts('\b\n')
           found++
@@ -17774,7 +17776,9 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
       x:=1
       current:=myzip+Shl(x,8)+1   ->ln(1,x)
     ENDIF
-    strCpy(current,image,ALL)
+    IF x<100
+      strCpy(current,image,ALL)
+    ENDIF
     UpperStr(image)
     IF(InStr(image,search_string))>=0 THEN found:=1
     x++;
