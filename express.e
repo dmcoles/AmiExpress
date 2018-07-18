@@ -451,6 +451,10 @@ CONST GETKEY=500
 CONST RAWARROW=501
 CONST CHAIN=502
 
+CONST DT_HOSTNAME=600
+CONST DT_HOSTIP=601
+
+
 /****************** in progress ******************/
 CONST NODE_DEVICE=503
 CONST NODE_UNIT=504
@@ -1094,6 +1098,7 @@ DEF my_struct:myst
 DEF sopt: startOption
 DEF mailOptions: mailConfig
 DEF node
+DEF ringCount
 DEF nodeScreenDir[255]:STRING
 DEF confScreenDir[255]:STRING
 DEF nodeWorkDir[255]:STRING
@@ -1217,6 +1222,8 @@ DEF idDate[15]:STRING
 DEF idTime[15]:STRING
 DEF idNmbr[41]:STRING
 DEF idName[41]:STRING
+DEF hostName[200]:STRING
+DEF hostIP[20]:STRING
 DEF onlineNFiles=0
 DEF donf=0
 DEF timeLimit
@@ -2129,7 +2136,12 @@ PROC resetSystem(yes)
       RETURN
     ENDIF
    purgeLine()
-   ioFlags[IOFLAG_SER_OUT]:=0
+ 
+  /*IF checkToolTypeExists(TOOLTYPE_NODE,node,'TELNETD')
+    serPuts('AT*C1\b')
+  ENDIF*/
+
+  ioFlags[IOFLAG_SER_OUT]:=0
 
   ENDIF
 ENDPROC
@@ -4156,6 +4168,10 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
         CASE PASSWORD_HASH
           formatUnsignedLong(calcPasswordHash(msg.string),tempstring)
           strCpy(msg.string,tempstring,20)
+        CASE DT_HOSTNAME
+          strCpy(msg.string,hostName,200)
+        CASE DT_HOSTIP
+          strCpy(msg.string,hostIP,20)
         DEFAULT
           StringF(tempstring,'currently not implemented msg request: \d',msgcmd)
           debugLog(LOG_WARN,tempstring)
@@ -6033,30 +6049,42 @@ PROC checkIncomingCall()
    
     IF(sopt.trapDoor) THEN JUMP go
 
-    rCount:=readToolTypeInt(TOOLTYPE_NODE,node,'RINGCOUNT')
-    IF rCount=-1 THEN rCount:=2
+    rCount:=ringCount
+  
+    IF (rCount=-1) THEN rCount:=2
     StringF(string,'ringcount: \d',rCount)
     debugLog(LOG_DEBUG,string)
-
-->rCount:=1
 
 	  ioFlags[IOFLAG_SER_IN]:=-1
 	  ioFlags[IOFLAG_SER_OUT]:=0
 
+    StrCopy(hostName,'')
+    StrCopy(hostIP,'')
+
     WHILE(rCount)
-		  lineInput('','',80,5,string)
+		  stat:=lineInput('','',80,5,string)
+      IF stat<>RESULT_SUCCESS THEN RETURN
       
       IF StrLen(string)>0
-        IF(stat:=stringCompare(string,cmds.mRing))=RESULT_FAILURE THEN RETURN
- 			  rCount--
+        IF InStr(string,'HOST NAME')>=0
+          IF (n:=InStr(string,'='))<>-1
+            StrCopy(hostName,TrimStr(string+n+1))
+          ENDIF
+        ENDIF
+        IF InStr(string,'HOST IP ADDR')>=0
+          IF (n:=InStr(string,'='))<>-1
+            StrCopy(hostIP,TrimStr(string+n+1))
+          ENDIF
+        ENDIF
+        IF(stringCompare(string,cmds.mRing))=RESULT_SUCCESS THEN rCount--
       ENDIF
     ENDWHILE
     IF(rCount) THEN RETURN
           
     IF(sopt.toggles[TOGGLES_CALLERID] OR sopt.toggles[TOGGLES_CALLERIDNAME])    
       lineInput('','',14,5,idRate)
-      lineInput('','',14,5,idDate)
       lineInput('','',14,5,idTime)
+      lineInput('','',14,5,idDate)
       lineInput('','',40,5,idNmbr)
       IF(sopt.toggles[TOGGLES_CALLERIDNAME]) THEN lineInput('','',40,5,idName)
       callerIDLog(1)
@@ -6083,6 +6111,7 @@ go:
           callersLog(tempstr)
         ENDIF
       UNTIL((isConnected) OR (n=5))
+      IF isConnected=FALSE THEN JUMP timedout
     ELSE
       strCpy(string,trapConnect,ALL)
     ENDIF
@@ -10587,11 +10616,13 @@ PROC setEnvStat(statCode)
   ENDIF
 
    
+  StringF(environ,'STATS@\d',node)
   IF loggedOnUser<>NIL
-    StringF(environ,'STATS@\d',node)
     StringF(status,'\l\s[35]-\d[2]',loggedOnUser.name,statCode)
-    SetVar(environ,status,-1,LV_VAR OR GVF_GLOBAL_ONLY)
+  ELSE
+    StringF(status,'\l\s[35]-\d[2]','',statCode)
   ENDIF
+  SetVar(environ,status,-1,LV_VAR OR GVF_GLOBAL_ONLY)
  
   sendMaster()
 ENDPROC 1
@@ -12074,6 +12105,10 @@ PROC displayUserToCallersLog(udonly)
   IF(udonly=FALSE)
     loggedOnUser.timesCalled:=loggedOnUser.timesCalled+1
     callersLog(tempStr)
+    IF checkToolTypeExists(TOOLTYPE_NODE,node,'LOG_HOST')
+      StringF(tempStr,'\tTelnet login address: \s (\s)',hostName,hostIP)
+      callersLog(tempStr)
+    ENDIF
   ELSE
     udLog(tempStr)
   ENDIF
@@ -14850,6 +14885,14 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
  					stat:=saveAccount(hoozer,hoozer2,hoozer3,0,0) /* Not forced */
  					IF(stat<>RESULT_SUCCESS) THEN aePuts('Can''t Save account\b\n')
  				ENDIF
+
+        IF logonType>=LOGON_TYPE_REMOTE
+          StringF(tempStr,'\tREMOTE Account Maintenance on Account \d',hoozer.slotNumber)
+        ELSE
+          StringF(tempStr,'\tLOCAL  Account Maintenance on Account \d',hoozer.slotNumber)
+        ENDIF
+        callersLog(tempStr)
+
  			CASE "9"                       /* RE-ACTIVATE */
  				aePuts('[JRe-Activate\b\n')
  				hoozer.slotNumber:=which
@@ -17934,7 +17977,7 @@ PROC myNewFiles(params)
  	  IF(StrLen(str)=0) THEN StrCopy(str,ray)
   	IF(StrLen(str)<>8) THEN aePuts('\b\n')
  	ENDWHILE
-  StringF(c,'\tDirectory Scan for (\s)\n',str)
+  StringF(c,'\tDirectory Scan for (\s)',str)
   callersLog(c)
  
   str[2]:=" "
@@ -18430,13 +18473,12 @@ PROC processLoggedOnUser()
           debugLog(LOG_WARN,string)
         ENDIF
 
-        updateTimeUsed()
-
         my_struct.sessiondbytes:= 0    /* DOwnloaded Bytes for this user, this session */
         logonTime:=getSystemTime()
         timeLimit:=loggedOnUser.timeTotal-loggedOnUser.timeUsed
         lastTimeUpdate:=logonTime
         bytesADL:=loggedOnUser.dailyBytesLimit
+        updateTimeUsed()
 
         pagesAllowed:=readToolTypeInt(TOOLTYPE_ACCESS,acsLevel,'ACS.MAX_PAGES')
         chatF:=0
@@ -19987,9 +20029,12 @@ PROC main() HANDLE
     Execute(tempstr2,NIL,NIL)
   ENDIF
   
+  ringCount:=readToolTypeInt(TOOLTYPE_NODE,node,'RINGCOUNT')
+
   IF checkToolTypeExists(TOOLTYPE_NODE,node,'TELNETD')
+    ringCount:=2;
     strCpy(cmds.mInit,'',ALL)
-    strCpy(cmds.mReset,'',ALL)
+    strCpy(cmds.mReset,'AT*C1\b',ALL)
     strCpy(cmds.mRing,'RING',ALL)
     strCpy(cmds.mAnswer,'ATA',ALL)
     strCpy(sopt.offHook,'',ALL)
@@ -20010,8 +20055,8 @@ PROC main() HANDLE
   ELSE
     intDoReset(sopt.offHook)
     Delay(60)
-    serPuts(cmds.mInit)
-    serPutChar("\b")
+    StringF(tempstr,'\s\b',cmds.mInit)
+    serPuts(tempstr)
     Delay(60)
   ENDIF
   purgeLine()
