@@ -1814,15 +1814,15 @@ PROC updateTimeUsed()
   DEF currDay,logonDay,currTime,time
   DEF tempstr[255]:STRING
   currTime:=getSystemTime()
-  currDay:=Div(currTime,86400)
-  logonDay:=Div(logonTime,86400)
+  currDay:=Div(currTime-21600,86400)
+  logonDay:=Div(logonTime-21600,86400)
   IF (currDay<>logonDay)
     loggedOnUser.timeTotal:=loggedOnUser.timeLimit
     loggedOnUser.dailyBytesDld:=0
     loggedOnUser.timeUsed:=0
     loggedOnUser.chatRemain:=loggedOnUser.chatLimit
 
-    logonTime:=Mul(currDay,86400)
+    logonTime:=Mul(currDay,86400)+21600
     StringF(tempstr,'timeused debug: new day reset,  currday \d, logonday \d, new logontime \d',currDay,logonDay,logonTime)
     debugLog(LOG_WARN,tempstr)
     lastTimeUpdate:=logonTime
@@ -18414,8 +18414,8 @@ PROC processLoggedOnUser()
         newSinceFlag:=0
 
         currTime:=getSystemTime()
-        currDay:=Div(currTime,86400)
-        lastDay:=Div(loggedOnUser.timeLastOn,86400)
+        currDay:=Div(currTime-21600,86400)
+        lastDay:=Div(loggedOnUser.timeLastOn-21600,86400)
         IF (lastDay<>currDay)
           StringF(string,'timeused debug: logon new day reset,  currday \d, lastday \d',currDay,lastDay)
           debugLog(LOG_WARN,string)
@@ -18429,7 +18429,9 @@ PROC processLoggedOnUser()
           StringF(string,'timeused debug: logon same day,  currday \d, lastday \d, timeused \d',currDay,lastDay,loggedOnUser.timeUsed)
           debugLog(LOG_WARN,string)
         ENDIF
-        
+
+        updateTimeUsed()
+
         my_struct.sessiondbytes:= 0    /* DOwnloaded Bytes for this user, this session */
         logonTime:=getSystemTime()
         timeLimit:=loggedOnUser.timeTotal-loggedOnUser.timeUsed
@@ -18440,7 +18442,7 @@ PROC processLoggedOnUser()
         chatF:=0
         currentConf:=0
         subState:=NEW subState
-        subState.subState:=SUBSTATE_DISPLAY_BULL
+        IF reqState<>REQ_STATE_LOGOFF THEN subState.subState:=SUBSTATE_DISPLAY_BULL ELSE subState.subState:=-1
         relogon:=FALSE
         nonStopDisplayFlag:=FALSE
         doorTimeout:=INPUT_TIMEOUT
@@ -18531,6 +18533,8 @@ PROC processSysopLogon()
     ximPort:=CONSOLE_PORT
     state:=STATE_LOGGEDON
     setEnvStat(ENV_LOGGINGON)
+    sendCLS()
+
     stateData:=0
 ENDPROC
 
