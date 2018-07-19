@@ -451,10 +451,6 @@ CONST GETKEY=500
 CONST RAWARROW=501
 CONST CHAIN=502
 
-CONST DT_HOSTNAME=700
-CONST DT_HOSTIP=701
-
-
 /****************** in progress ******************/
 CONST NODE_DEVICE=503
 CONST NODE_UNIT=504
@@ -507,10 +503,7 @@ CONST SETOVERIDE=549
 CONST FULLEDIT=550
 CONST SETMCIOFF=551
 
-CONST RETURNCOMMAND2=628
-
 /*
-
 undocumented host addresses:
 
 600 - get something unknown amixnet related ???
@@ -554,6 +547,14 @@ undocumented host addresses:
 */
 CONST CONF_ACCESS=614
 CONST PASSWORD_HASH=615
+CONST RETURNCOMMAND2=628
+
+/* New host commands for /X5 using range 700+ */
+
+CONST DT_HOSTNAME=700
+CONST DT_HOSTIP=701
+
+/* end of new /X 5 host commands */
 
 CONST DT_ADDBIT=1000
 CONST DT_REMBIT=1001
@@ -12112,7 +12113,7 @@ PROC displayUserToCallersLog(udonly)
   IF(udonly=FALSE)
     loggedOnUser.timesCalled:=loggedOnUser.timesCalled+1
     callersLog(tempStr)
-    IF checkToolTypeExists(TOOLTYPE_NODE,node,'LOG_HOST')
+    IF(logonType>=LOGON_TYPE_REMOTE) AND (checkToolTypeExists(TOOLTYPE_NODE,node,'LOG_HOST'))
       StringF(tempStr,'\tTelnet login address: \s (\s)',hostName,hostIP)
       callersLog(tempStr)
     ENDIF
