@@ -13659,6 +13659,124 @@ PROC sysopULStats(holdflag)
   Close(ff)
 ENDPROC
 
+PROC sysopUpload()
+  DEF tempstr[255]:STRING
+  DEF tempstr2[255]:STRING
+  DEF destpath[255]:STRING
+  DEF string[255]:STRING
+  DEF str[255]:STRING
+  DEF list[1024]:STRING
+  DEF stat,cnt
+  DEF space,space2
+  DEF path[255]:STRING
+  DEF status,x
+  
+  aePuts('\b\nDestination path for upload? ')
+  stat:=lineInput('','',250,INPUT_TIMEOUT,destpath)
+  IF((stat<0) OR (StrLen(destpath)=0))	
+    aePuts('\b\n')
+    RETURN
+  ENDIF
+
+  IF(findAssign(destpath))
+    aePuts('\b\nDevice not Mounted.\b\n')
+    aePuts('\b\n')
+    RETURN
+  ENDIF
+
+  space:=rFreeSpace(destpath)                /* check free space - now in kb instead of bytes */
+  IF(space=RESULT_FAILURE) THEN RETURN RESULT_SUCCESS
+ 
+  IF(StrLen(sopt.ramPen)>0) THEN StringF(path,'\s/',sopt.ramPen) ELSE StringF(path,'\sNode\d/Playpen/',cmds.bbsLoc,node)
+ 
+  space2:=rFreeSpace(path)
+ 
+  IF((space2)<2048)    /* Do we have 2 megs or free space ?? */
+    IF checkToolTypeExists(TOOLTYPE_NODE,node,'RAMWORK')=FALSE
+      myError(9)            /* no free space */
+      RETURN RESULT_SUCCESS
+    ENDIF
+  ENDIF
+
+  aePuts('\b\n')
+  formatSpaceValue(space,tempstr)
+  formatSpaceValue(space2,tempstr2)
+  StringF(string,'\s available for uploading.  \s at one time.\b\n',tempstr,tempstr2)   ->changed to indicate space in kb instead of bytes
+  aePuts(string)
+
+  onlineNFiles:=0
+  numSkipd:=0
+  dTBT:=0
+  tBT:=0
+  tTTM:=0
+  tTEFF:=0
+  tTCPS:=0
+  cnt:=0
+
+  displayUserToCallersLog(1)
+  zmodemReceive(path,1)     /* path of upload */
+
+  aePuts('\b\n\b\nFile Uploading Complete...\b\n')
+     
+  StringF(string,' \d file(s), \dk bytes, \d minute(s). \d second(s), \d cps, \d% efficiency.',onlineNFiles,Div(tBT,1024),Div(tTTM,60),Mod(tTTM,60),zModemInfo.cps,zModemInfo.eff)
+ 
+  aePuts(string)
+  aePuts('\b\n\b\n')
+
+  StrCopy(str,'\t')
+  StrAdd(str,string)
+ 
+  IF(onlineNFiles>0)
+    callersLog(str)
+    udLog(str)
+  ELSE
+    callersLog('\tUpload Failed..')
+    udLog('\tUpload Failed..')
+  ENDIF
+
+  IF(logonType>=LOGON_TYPE_REMOTE)
+    IF checkCarrier()=FALSE
+      cleanPlayPen()
+      RETURN RESULT_SUCCESS
+    ENDIF
+  ENDIF
+  
+  StrCopy(list,recFileNames)
+
+  FOR x:=0 TO StrLen(list)-1
+ 
+    IF(list[x]<>" ")
+        str[cnt]:=list[x]
+        cnt++
+    ELSE
+      SetStr(str,cnt)
+
+      IF(StrLen(sopt.ramPen)>0)
+        StringF(tempstr,'\s/\s',sopt.ramPen,str)
+      ELSE
+        StringF(tempstr,'\sNode\d/PLAYPEN/\s',cmds.bbsLoc,node,str)
+      ENDIF
+      StringF(tempstr2,'copying \s to \s\n',str,destpath)
+      aePuts(tempstr2)
+      StringF(tempstr2,'\s/\s',destpath,str)
+      
+      status:=0
+      WHILE((StrLen(FilePart(tempstr2))<35) AND (status=FALSE))
+        status:=Rename(tempstr,tempstr2)
+        IF(status=FALSE)
+          status:=fileCopy(tempstr,tempstr2)
+          IF(status=FALSE) THEN StrAdd(tempstr2,'_')
+          IF(status)
+            SetProtection(tempstr,FIBF_OTR_DELETE)
+            DeleteFile(tempstr) 
+          ENDIF
+        ENDIF
+      ENDWHILE
+    ENDIF
+  ENDFOR
+  cleanPlayPen()
+ENDPROC RESULT_SUCCESS
+
 PROC uploadaFile(uLFType,cmd,params)            -> JOE
   DEF fBlock: fileinfoblock
   DEF fLock
@@ -17214,6 +17332,13 @@ PROC internalCommandU(cmdcode,params)
   uploadaFile(0,cmdcode,params)
 ENDPROC RESULT_SUCCESS
 
+PROC internalCommandUS()
+  IF checkSecurity(ACS_SYSOP_COMMANDS)=FALSE THEN RETURN RESULT_NOT_ALLOWED
+  setEnvStat(ENV_UPLOADING)
+
+  sysopUpload()
+ENDPROC RESULT_SUCCESS
+
 PROC internalCommandV(cmdcode,params)
   IF checkSecurity(ACS_VIEW_A_FILE)=FALSE THEN RETURN RESULT_NOT_ALLOWED
 
@@ -18412,6 +18537,8 @@ PROC processInternalCommand(cmdcode,cmdparams,silentFail=FALSE)
     res:=internalCommandRL()
   ELSEIF (StrCmp(cmdcode,'U'))
     res:=internalCommandU(cmdcode,cmdparams)
+  ELSEIF (StrCmp(cmdcode,'US'))
+    res:=internalCommandUS()
   ELSEIF (StrCmp(cmdcode,'RZ'))
     res:=internalCommandRZ(cmdcode,cmdparams)
   ELSEIF (StrCmp(cmdcode,'V'))
