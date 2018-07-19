@@ -20108,7 +20108,7 @@ PROC main() HANDLE
 
   scomment:=List(my_struct.max_desclines)
   FOR i:=1 TO my_struct.max_desclines
-    msg:=String(100)
+    msg:=String(200)
     ListAdd(scomment,[msg])
   ENDFOR
 
