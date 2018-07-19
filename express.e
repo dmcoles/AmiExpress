@@ -4437,7 +4437,7 @@ PROC saveMsgPointers(conf)
   DEF cb: PTR TO confBase
   DEF debug[255]:STRING
 
-  IF(loggedOnUser.slotNumber<=0)
+  IF(loggedOnUser.slotNumber<=0) OR (conf=0)
     lastMsgReadConf:=0
     lastNewReadConf:=0
     RETURN
@@ -19068,6 +19068,13 @@ logonLoop:
  
  IF(loggedOnUser.slotNumber=0)
 	  aePuts('That account has been deleted.\b\n')
+    END loggedOnUser
+    loggedOnUser:=NIL
+    END loggedOnUserKeys
+    loggedOnUserKeys:=NIL
+    END loggedOnUserMisc
+    loggedOnUserMisc:=NIL
+
     state:=STATE_LOGGING_OFF
     RETURN
   ENDIF
@@ -19075,6 +19082,12 @@ logonLoop:
  IF logonType>=LOGON_TYPE_REMOTE
     stat:=checkPassword()
     IF stat<>RESULT_SUCCESS
+      END loggedOnUser
+      loggedOnUser:=NIL
+      END loggedOnUserKeys
+      loggedOnUserKeys:=NIL
+      END loggedOnUserMisc
+      loggedOnUserMisc:=NIL
       state:=STATE_LOGGING_OFF
       RETURN
     ENDIF
@@ -19088,26 +19101,17 @@ logonLoop:
 
  acsLevel:=findAcsLevel()
 
+ loggedOnUserKeys.baud:=onlineBaud
+ masterLoadPointers(loggedOnUser) 
+
  stat:=baudTime()
  IF(stat=FALSE)
-    END loggedOnUser
-    loggedOnUser:=NIL
-    END loggedOnUserKeys
-    loggedOnUserKeys:=NIL
-    END loggedOnUserMisc
-    loggedOnUserMisc:=NIL
     state:=STATE_LOGGING_OFF
     RETURN
   ENDIF
 
   IF (loggedOnUser.secStatus<=1)
     acsLevel:=loggedOnUser.secStatus
-    END loggedOnUser
-    loggedOnUser:=NIL
-    END loggedOnUserKeys
-    loggedOnUserKeys:=NIL
-    END loggedOnUserMisc
-    loggedOnUserMisc:=NIL
     IF (acsLevel=0) THEN displayScreen(SCREEN_LOCKOUT0) ELSE displayScreen(SCREEN_LOCKOUT1)
     state:=STATE_LOGGING_OFF
     RETURN
@@ -19118,20 +19122,10 @@ logonLoop:
       StringF(tempStr,'User \s already on another node!',loggedOnUser.name)
 	    callersLog(tempStr)
       IF displayScreen(SCREEN_ONENODE)=FALSE THEN aePuts('You are already logged into another node!\b\n')
-      END loggedOnUser
-      loggedOnUser:=NIL
-      END loggedOnUserKeys
-      loggedOnUserKeys:=NIL
-      END loggedOnUserMisc
-      loggedOnUserMisc:=NIL
-
       state:=STATE_LOGGING_OFF
       Delay(50)
 	    RETURN
  ENDIF
-
-  loggedOnUserKeys.baud:=onlineBaud
-  masterLoadPointers(loggedOnUser) 
 
   IF logonType>=LOGON_TYPE_REMOTE
     IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_LOGON',tempStr))
@@ -20022,8 +20016,8 @@ PROC main() HANDLE
   DEF p : PTR TO CHAR
   DEF tempfh
    
-  StrCopy(expressVer,'v5.0.0-b5',ALL)
-  StrCopy(expressDate,'13-Jul-2018',ALL)
+  StrCopy(expressVer,'v5.0.0-b6',ALL)
+  StrCopy(expressDate,'19-Jul-2018',ALL)
 
   stripAnsi(0,0,1,0)
   
