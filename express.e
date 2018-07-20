@@ -1171,6 +1171,7 @@ DEF confDBName[255]:STRING
 DEF captureFP = NIL
 DEF nofkeys=0
 DEF relogon=FALSE
+DEF lostCarrier=FALSE
 
 DEF doormsgcode=0
 DEF nonStopMail=FALSE
@@ -2748,7 +2749,12 @@ PROC checkCarrier()
     RETURN 1
   ENDIF
 
-  IF stat THEN RETURN FALSE ELSE RETURN TRUE
+  IF stat
+    lostCarrier:=TRUE
+    RETURN FALSE
+  ELSE
+    RETURN TRUE
+  ENDIF
 ENDPROC
 
 PROC checkInput()
@@ -6708,8 +6714,12 @@ PROC processLoggingOff()
 
   IF loggedOnUser<>NIL
 
-    logoffLog('N')
-
+    IF lostCarrier
+      logoffLog('Loss Carrier')
+    ELSE
+      logoffLog('N')
+    ENDIF
+      
     IF tempAccessGranted
       loggedOnUser.secStatus:=tempAccess.accessLevel
       loggedOnUser.secBoard:=tempAccess.ratioType
@@ -19162,6 +19172,7 @@ PROC processAwait()
     IF (stateData=0)
         ansiColour:=TRUE
         quickFlag:=FALSE
+        lostCarrier:=FALSE
         subState:=NEW subState
         subState.subState:=SUBSTATE_DISPLAY_AWAIT
         IF(sopt.trapDoor=FALSE) THEN resetSystem(1)
