@@ -23,7 +23,7 @@ ENUM SCREEN_AWAIT, SCREEN_BBSTITLE, SCREEN_LOGON, SCREEN_JOIN, SCREEN_JOINCONF, 
 
 ENUM LOGON_TYPE_LOGGED_OFF=0, LOGON_TYPE_SYSOP=1, LOGON_TYPE_LOCAL=2, LOGON_TYPE_REMOTE=3
 
-ENUM RESULT_FAILURE=-1, RESULT_SUCCESS=0, RESULT_NOT_ALLOWED=1, RESULT_ABORT=-2, RESULT_TIMEOUT=-3, RESULT_NO_CARRIER=-4, RESULT_GOODBYE=-5, RESULT_SLEEP_LOGOFF=-6, RESULT_STANDARD_LOGOFF=-7, RESULT_CONNECT=-8, RESULT_NOT_TESTED=2, RESULT_LCFILES=9,RESULT_PRIVATE=10, RESULT_SIGNALLED=11
+ENUM RESULT_FAILURE=-1, RESULT_SUCCESS=0, RESULT_NOT_ALLOWED=1, RESULT_ABORT=-2, RESULT_TIMEOUT=-3, RESULT_NO_CARRIER=-4, RESULT_GOODBYE=-5, RESULT_SLEEP_LOGOFF=-6, RESULT_STANDARD_LOGOFF=-7, RESULT_CONNECT=-8, RESULT_NOT_TESTED=2, RESULT_LCFILES=9,RESULT_PRIVATE=10, RESULT_SIGNALLED=11, RESULT_NOT_FOUND=12
 
 ENUM ERR_MEMORY,ERR_MEMORY2,ERR_MSGBASE,ERR_MEMORY3,ERR_FILELIST,ERR_NOFILES,ERR_FILEEXAMINE,ERR_WORKDIROPEN,ERR_LOCK,ERR_FREESPACE,ERR_SYMBOLS,ERR_FIB_MEMORY,ERR_NO_BULLS
 
@@ -2407,6 +2407,18 @@ PROC formatLongDateTime(cDateVal,outDateStr)
   ENDIF
 ENDPROC FALSE
 
+->returns a numeric value of the date suitable for comparing to other dates
+PROC getDateCompareVal(datestr:PTR TO CHAR)
+  DEF month,day,year
+
+  month:=Val(datestr)
+  day:=Val(datestr+3)
+  year:=Val(datestr+6)
+
+  IF (year>TWODIGITYEARSWITCHOVER) THEN year:=1900+year ELSE year:=2000+year
+  
+ENDPROC Mul(year,10000)+Mul(month,100)+day
+
 PROC isupper(c)
 ENDPROC (c>="A") AND (c<="Z")
 
@@ -2624,8 +2636,8 @@ PROC aePuts2(string,length)
   ENDIF
   
   IF (ansiColour=FALSE)
-    conPuts(str2,length)
-    serPuts(str2,length)
+    IF (ioFlags[IOFLAG_SCR_OUT]) THEN conPuts(str2,length)
+    IF (ioFlags[IOFLAG_SER_OUT]) THEN serPuts(str2,length)
   ELSE
     IF (ioFlags[IOFLAG_SCR_OUT]) 
       IF bitPlanes<3 THEN conPuts(str2) ELSE conPuts(string,length)
@@ -6711,6 +6723,12 @@ PROC processLoggingOff()
     SetList(olmQueue,0)
   ENDIF
   
+  FOR i:=0 TO ListLen(historyBuf)-1
+    DisposeLink(ListItem(historyBuf,i))
+  ENDFOR
+  SetList(historyBuf,0)
+  historyNum:=0
+  historyCycle:=0
 
   IF loggedOnUser<>NIL
 
@@ -12154,6 +12172,24 @@ PROC getFileSize(s: PTR TO CHAR)
   FreeDosObject(DOS_FIB,fBlock)
 ENDPROC fsize
 
+->gets the actual name of a file (eg. you pass it a filename and it finds the correct case for it, so you can preserve the case)
+PROC getFileName(s: PTR TO CHAR)
+  DEF fBlock: fileinfoblock
+  DEF fLock
+
+  IF((fLock:=Lock(s,ACCESS_READ)))=NIL
+    RETURN
+  ENDIF
+
+  IF((fBlock:=AllocDosObject(DOS_FIB,NIL)))=NIL
+    UnLock(fLock)
+    RETURN
+  ENDIF
+  IF(Examine(fLock,fBlock)) THEN StrCopy(s,fBlock.filename)
+  UnLock(fLock)
+  FreeDosObject(DOS_FIB,fBlock)
+ENDPROC
+
 PROC getFileComment(s: PTR TO CHAR,outString)
   DEF fBlock: fileinfoblock
   DEF fLock
@@ -12288,8 +12324,8 @@ PROC moveFile(filename,filesize)
     pathnum++
   ENDWHILE 
   IF(goodtogo=FALSE)
-    aePuts('WARNING!\b\nNO FREE SPACE on any path!  Moving to upload dir...')
-    errorLog('WARNING!NO FREE SPACE on any path!  Moving to upload dir...')
+    aePuts('WARNING!\b\nNO FREE SPACE on any path!  While moving to upload dir...')
+    errorLog('WARNING!NO FREE SPACE on any path!  While moving to upload dir...')
   ENDIF
 
   aePuts('FAILURE!!!  unable to move file!\b\n\b\n')
@@ -16676,7 +16712,7 @@ PROC internalCommand2(params)
 
   IF ListLen(parsedParams)>0
     n:=Val(parsedParams[0])
-    StringF(temp,'\sNode\d/Callerslog',cmds.bbsLoc,node)
+    StringF(temp,'\sNode\d/Callerslog',cmds.bbsLoc,n)
     displayCallersLog(temp,paramsContains('NS')) 
   ELSE
      loop:=0
@@ -16971,6 +17007,128 @@ PROC internalCommandF(params)
   
   setEnvStat(ENV_FILES) 
 ENDPROC displayFileList(params);
+
+PROC internalCommandFM(params)
+  DEF stat,fLLoop,mystat
+  DEF str[200]:STRING,ss[80]:STRING,ray[200]:STRING
+  DEF tempfile[256]:STRING
+  DEF fcopy = FALSE
+  DEF startDir,dirScan,action
+  DEF foundfile[12]:STRING
+  DEF foundDateStr[20]:STRING
+
+  IF checkSecurity(ACS_EDIT_FILES)=FALSE THEN RETURN RESULT_NOT_ALLOWED
+  
+  setEnvStat(ENV_FILES) 
+  
+  lineCount:=0
+  nonStopDisplayFlag:=FALSE
+
+  aePuts('\b\n')
+  IF(maxDirs=0)
+ 	  myError(5); ->Sorry();
+ 	  RETURN RESULT_FAILURE
+ 	ENDIF
+
+  parseParams(params)
+
+  IF(ListLen(parsedParams)>0)
+  	StrCopy(ss,parsedParams[0])
+    JUMP fmSkip1
+  ENDIF
+ 
+  aePuts('Enter filename to search for: ')
+  stat:=lineInput('','',78,INPUT_TIMEOUT,ss)
+  IF(stat<0) THEN RETURN RESULT_NO_CARRIER
+  IF(StrLen(ss)=0)
+    aePuts('\b\n')
+    RETURN RESULT_SUCCESS
+  ENDIF
+
+fmSkip1:
+  UpperStr(ss)
+  
+  aePuts('\b\n')
+
+  IF(ListLen(parsedParams)>1)
+ 		stat,startDir,dirScan:=getDirSpan(parsedParams[1])
+  ELSE
+    stat,startDir,dirScan:=getDirSpan('');      /* chg to "A' to search all dirs */
+  ENDIF
+ 
+  IF(stat=RESULT_FAILURE) THEN RETURN RESULT_SUCCESS
+ 
+  IF(StrLen(ss)>0)
+ 
+ 	  fLLoop:=startDir
+ 	  WHILE(fLLoop<=dirScan)
+ 		  StrCopy(str,currentConfDir)   /* get BBS conf locale dir */
+ 		  IF(dirScan<>(-1))                /* add 'DIR' */
+        aePuts('\b\n')
+ ->(RTS) buff copy
+        IF(fLLoop = maxDirs)    /* at upload dir */
+          StrAdd(str,'DIR')
+ 	     	  StringF(ray,'\d',fLLoop)
+ 		      StrAdd(str,ray)
+          StringF(ray,'Scanning directory \d\b\n',fLLoop)
+          aePuts(ray)
+           /*  sprintf(tempfile,"T:tdir.%d",Cmds->AcLvl[LVL_NODE_NUMBER]);
+             /* now copy to T: and use the T: */
+             if((FileCopy(str,tempfile))) {
+                  strcpy(str,tempfile);
+                  fcopy = TRUE;
+             }
+           */
+        ELSE
+ 			    StrAdd(str,'DIR')
+ 			    StringF(ray,'\d',fLLoop)      /* add dir Number */
+ 			    StrAdd(str,ray)               /* add path & name */
+ 			    StringF(ray,'Scanning directory \d\b\n',fLLoop)
+ 			    aePuts(ray)
+        ENDIF
+ 			  lineCount++
+ 	    ELSE
+ 			  StrAdd(str,'hold/held')
+ 			  aePuts('\b\nScanning directory HOLD\b\n')
+ 			ENDIF
+ 		  stat,action:=maintenanceFileSearch(dirScan=-1,str,ss,foundfile,foundDateStr)
+ 		  IF(stat<0)
+ 			  aePuts('\b\n')
+        IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+ 			  RETURN stat
+ 			ENDIF
+
+      IF (stat<>RESULT_NOT_FOUND)
+          aePuts('\b\n')
+          IF (action="D") OR (action="d")
+            maintenanceFileDelete(str,dirScan=-1,foundfile)
+            IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+            RETURN RESULT_SUCCESS
+          ELSEIF (action="M") OR (action="m")
+            maintenanceFileMove(str,dirScan=-1,foundfile,foundDateStr)
+            IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+            RETURN RESULT_SUCCESS
+          ELSEIF (action="V") OR (action="v")
+            IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+            IF dirScan=-1
+              aePuts('\b\nView option is not available for hold directory\b\n')
+            ELSE
+              internalCommandV('V',foundfile)
+            ENDIF
+            RETURN RESULT_SUCCESS
+          ELSEIF (action="q") OR (action="q")
+            IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+            RETURN RESULT_SUCCESS
+          ENDIF      
+      ENDIF
+           
+      fLLoop++
+ 		  ->if(DirScan!=-1) FLLoop+=1;
+ 		ENDWHILE
+ 	ENDIF
+  aePuts('\b\n')
+  IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+ENDPROC RESULT_SUCCESS
 
 PROC internalCommandG()
   DEF mystat
@@ -17800,7 +17958,11 @@ PROC getDirSpan(pass:PTR TO CHAR)
   DEF dirScan=0,startDir=0
 
   IF(StrLen(pass)=0)
-	  StringF(str,'Directories: (1-\d), (All), (Upload), (Enter)=none? ',maxDirs)
+    IF loggedOnUser.secStatus>200
+      StringF(str,'Directories: (1-\d), (A)ll, (U)pload, (H)old, (Enter)=none? ',maxDirs)
+    ELSE
+      StringF(str,'Directories: (1-\d), (A)ll, (U)pload, (Enter)=none? ',maxDirs)
+    ENDIF
  	  aePuts(str)
 	  mystat:=lineInput('','',8,INPUT_TIMEOUT,str)
 	  IF(mystat<0) THEN RETURN RESULT_NO_CARRIER
@@ -17846,6 +18008,475 @@ PROC getDirSpan(pass:PTR TO CHAR)
 mNCont:
 ->  nonStopDisplayFlag:=CheckForNS(str);
 ENDPROC RESULT_SUCCESS,startDir,dirScan
+
+PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR)
+  DEF oldDirName[255]:STRING
+  DEF fh1,fh2
+  DEF dirline[255]:STRING
+  DEF compareFname[255]:STRING
+  DEF padfname[255]:STRING
+  DEF path[255]:STRING
+  DEF found,drivenum
+
+    StrCopy(padfname,fname)
+    UpperStr(padfname)
+
+    ->pad fname to 12 charactesr
+    StrAdd(padfname,'            ')
+    SetStr(padfname,12)
+
+    StrCopy(path,dirname)
+    getFileName(path)      ->get the actual name for the file so we can preserve the casing
+    StringF(dirname,'\s\s',currentConfDir,path)
+
+    StrCopy(oldDirName,dirname)
+    StrAdd(oldDirName,'.old')
+
+    aePuts('\b\nRemoving from directory list, please wait..')
+
+    DeleteFile(oldDirName)
+
+    IF Rename(dirname,oldDirName) = FALSE
+      aePuts('\b\nError during operation, delete operation aborted.\b\n')
+      RETURN
+    ENDIF
+    
+    IF (fh1:=Open(dirname,MODE_NEWFILE))>0
+      IF (fh2:=Open(oldDirName,MODE_OLDFILE))>0
+        found:=0
+        WHILE(Fgets(fh2,dirline,255)<>NIL)
+          IF(dirline[0]<>" ")
+            StrCopy(compareFname,dirline,12)
+            UpperStr(compareFname)
+            IF(StrCmp(compareFname,padfname)) THEN found:=1 ELSE found:=0
+          ENDIF
+
+          IF found=0
+            Fputs(fh1,dirline)
+          ENDIF
+        ENDWHILE
+
+        Close(fh1)
+        Close(fh2)
+        DeleteFile(oldDirName)
+
+        IF srchold
+          aePuts('\b\nRemoving from hold folder, please wait..')
+          StringF(path,'\sHold/\s',currentConfDir,fname)
+          DeleteFile(path)
+        ELSE
+          aePuts('\b\nRemoving from download folder, please wait..')
+          drivenum:=1
+          StringF(path,'DLPATH.\d',drivenum++)
+          WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path))
+            StrAdd(path,fname)
+            DeleteFile(path)
+            StringF(path,'DLPATH.\d',drivenum++)
+          ENDWHILE
+        ENDIF
+        aePuts('\b\n\b\nDelete operation complete \b\n')
+
+      ELSE
+        Close(fh1)
+        DeleteFile(dirname)
+
+        ->put the old file back
+        Rename(oldDirName,dirname)
+        aePuts('\b\nError reading directory list, delete operation aborted.\b\n')
+      ENDIF
+    ELSE
+      ->put the old file back
+      Rename(oldDirName,dirname)
+      aePuts('\b\nError creating the new directory list, delete operation aborted.\b\n')
+    ENDIF
+
+ENDPROC
+
+PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr:PTR TO CHAR)
+  DEF oldDirName[255]:STRING
+  DEF oldDestDirName[255]:STRING
+  DEF fh1,fh2,fh3,fh4
+  DEF dirline[255]:STRING
+  DEF dirline2[255]:STRING
+  DEF tempstr[255]:STRING
+  DEF destFile[255]:STRING
+  DEF destDate[20]:STRING
+  DEF compareFname[255]:STRING
+  DEF padfname[255]:STRING
+  DEF path[255]:STRING
+  DEF found,drivenum
+  DEF destConfStr[255]:STRING
+  DEF destDirStr[255]:STRING
+  DEF d1,d2,brk,filemoved,status,n
+  DEF destConf,destDir,stat,maxConfDir
+
+  stat:=lineInput('\b\nConference Number to move to: ','',5,INPUT_TIMEOUT,destConfStr)
+  IF stat<>RESULT_SUCCESS THEN RETURN stat
+
+  IF StrLen(destConfStr)=0 THEN RETURN RESULT_SUCCESS
+  
+  datestr[2]:=" "
+  datestr[5]:=" "
+  d1:=getDateCompareVal(datestr)
+
+  destConf:=getInverse(Val(destConfStr))
+
+  IF destConf<1 THEN destConf:=1
+  IF destConf>cmds.numConf THEN destConf:=cmds.numConf
+  
+  IF(checkConfAccess(destConf)=FALSE)
+    aePuts('\b\nYou do not have access to the requested conference\b\n\b\n')
+    RETURN RESULT_FAILURE
+  ENDIF
+
+  StringF(tempstr,'\b\nYou have chosen conference: \s\b\n',getConfName(destConf))
+  aePuts(tempstr)
+
+  maxConfDir:=readToolTypeInt(TOOLTYPE_CONF,destConf,'NDIRS')
+
+  StringF(tempstr,'\b\nDirectory to move to: (1-\d), (A)uto, (Enter)=abort? ',maxConfDir)
+  aePuts(tempstr)
+  stat:=lineInput('','',5,INPUT_TIMEOUT,destDirStr)
+
+  IF stat<>RESULT_SUCCESS THEN RETURN stat
+
+  IF StrLen(destDirStr)=0 THEN RETURN RESULT_SUCCESS
+
+  IF (destDirStr[0]="A") OR (destDirStr[0]="a")
+    destDir:=-1
+    stat:=maxConfDir
+    WHILE (destDir=-1) AND (stat>0)
+      StringF(path,'\sDIR\d',getConfLocation(destConf),stat)
+      IF (fh1:=Open(path,MODE_OLDFILE))>0
+        Fgets(fh1,dirline,255)
+        parseParams(dirline)
+        FOR n:=2 TO 4
+          StrCopy(destDate,parsedParams[n])
+          IF (StrLen(destDate)=8) AND (destDate[2]="-") AND (destDate[5]="-")
+            destDate[2]:=" "
+            destDate[5]:=" "
+            d2:=getDateCompareVal(destDate)
+          ENDIF
+        ENDFOR
+        IF d1>=d2 THEN destDir:=stat
+
+        Close(fh1)
+      ENDIF
+      stat--
+    ENDWHILE
+    IF destDir=-1 THEN destDir:=1
+  ELSE
+    destDir:=Val(destDirStr)
+    IF (destDir<1) OR (destDir>maxConfDir) THEN RETURN RESULT_SUCCESS
+  ENDIF
+
+  StrCopy(padfname,fname)  
+  UpperStr(padfname)
+
+  ->pad fname to 12 charactesr
+  StrAdd(padfname,'            ')
+  SetStr(padfname,12)
+
+  StringF(path,'\sDIR\d',getConfLocation(destConf),destDir)
+  getFileName(path)      ->get the actual name for the file so we can preserve the casing
+  StringF(destDirStr,'\s\s',getConfLocation(destConf),path)
+
+  StrCopy(path,dirname)
+  getFileName(path)      ->get the actual name for the file so we can preserve the casing
+  StringF(dirname,'\s\s',currentConfDir,path)
+
+  StrCopy(oldDirName,dirname)
+  StrAdd(oldDirName,'.old')
+
+  StrCopy(oldDestDirName,destDirStr)
+  StrAdd(oldDestDirName,'.old')
+
+  aePuts('\b\nUpdating directory list, please wait..')
+
+  DeleteFile(oldDirName)
+  IF Rename(dirname,oldDirName)=FALSE
+    aePuts('\b\nError accessing the directory list, move operation aborted.\b\n')
+    RETURN
+  ENDIF
+
+  DeleteFile(oldDestDirName)
+  IF Rename(destDirStr,oldDestDirName)=FALSE
+    Rename(oldDirName,dirname)
+    aePuts('\b\nError accessing the destination directory list, move operation aborted.\b\n')
+    RETURN
+  ENDIF
+   
+  IF (fh1:=Open(dirname,MODE_NEWFILE))>0
+    IF (fh2:=Open(oldDirName,MODE_OLDFILE))>0
+      IF (fh3:=Open(destDirStr,MODE_NEWFILE))>0
+        IF (fh4:=Open(oldDestDirName,MODE_OLDFILE))>0
+          found:=0
+          WHILE(Fgets(fh2,dirline,255)<>NIL)
+            IF(dirline[0]<>" ")
+              StrCopy(compareFname,dirline,12)
+              UpperStr(compareFname)
+              IF(StrCmp(compareFname,padfname))
+                found:=1
+
+                ->we've found our file in the source dir, scan the dest dir for the correct position to put it
+                WHILE(Fgets(fh4,dirline2,255)<>NIL)
+                  brk:=FALSE
+                  IF(dirline2[0]<>" ")
+
+                    parseParams(dirline2)
+                    
+                    FOR n:=2 TO 4
+                      StrCopy(destDate,parsedParams[n])
+                      IF (StrLen(destDate)=8) AND (destDate[2]="-") AND (destDate[5]="-")
+                        destDate[2]:=" "
+                        destDate[5]:=" "
+                        d2:=getDateCompareVal(destDate)
+                      ENDIF
+                    ENDFOR
+                    brk:=(d2>=d1)
+                  ENDIF
+                  EXIT brk
+                  ->copy the line from the old dest dir to the new dest dir
+                  Fputs(fh3,dirline2)
+                ENDWHILE
+              ELSE
+                IF (found=1)
+                  ->we've found the end of the file in the source dir, copy the remainder of the dest dir over
+                  Fputs(fh3,dirline2)
+                  WHILE(Fgets(fh4,dirline2,255)<>NIL)
+                    Fputs(fh3,dirline2)
+                  ENDWHILE
+                  found:=0
+                ENDIF
+              ENDIF
+            ENDIF
+
+            IF found=1
+              ->copy the line from the old source dir to the new dest dir
+              Fputs(fh3,dirline)
+            ELSE
+              ->copy the line back to the new source dir
+              Fputs(fh1,dirline)
+            ENDIF
+          ENDWHILE
+
+          Close(fh1)
+          Close(fh2)
+          Close(fh3)
+          Close(fh4)
+
+          drivenum:=1
+          StringF(path,'ULPATH.\d',drivenum)
+          IF(readToolType(TOOLTYPE_CONF,destConf,path,tempstr))=FALSE
+            DeleteFile(dirname)
+
+            ->put the old file back
+            Rename(oldDirName,dirname)
+
+            DeleteFile(destDirStr)
+
+            ->put the old file back
+            Rename(oldDestDirName,destDirStr)
+
+            aePuts('\b\n Error reading upload directory, move operation aborted.\b\n')
+            
+          ENDIF
+
+          aePuts('\b\nMoving file, please wait..')
+          drivenum:=1
+          filemoved:=FALSE
+
+          IF srchold
+            StringF(path,'\sHold/\s',currentConfDir,fname)
+
+            StringF(destFile,'\s\s',tempstr,fname)
+
+            IF (fileExists(path))
+              status:=Rename(path,destFile)
+              IF(status=FALSE)
+                status:=fileCopy(path,destFile)
+                IF(status)
+                  SetProtection(path,FIBF_OTR_DELETE)
+                  DeleteFile(path) 
+                  filemoved:=TRUE
+                ENDIF
+              ELSE
+                filemoved:=TRUE
+              ENDIF
+            ENDIF
+          ELSE
+            StringF(path,'DLPATH.\d',drivenum++)
+            WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path)) AND (filemoved=FALSE)
+              IF strCmpi(path,tempstr,ALL)=FALSE
+                StrAdd(path,fname)
+
+                StringF(destFile,'\s\s',tempstr,fname)
+
+                IF (fileExists(path))
+                  status:=Rename(path,destFile)
+                  IF(status=FALSE)
+                    status:=fileCopy(path,destFile)
+                    IF(status)
+                      SetProtection(path,FIBF_OTR_DELETE)
+                      DeleteFile(path) 
+                      filemoved:=TRUE
+                    ENDIF
+                  ELSE
+                    filemoved:=TRUE
+                  ENDIF
+                ENDIF
+              ELSE
+                filemoved:=TRUE
+              ENDIF
+              StringF(path,'DLPATH.\d',drivenum++)
+            ENDWHILE
+          ENDIF
+          
+          IF (filemoved)
+            DeleteFile(oldDirName)
+            DeleteFile(oldDestDirName)
+            aePuts('\b\n\b\nMove operation successful \b\n')
+          ELSE
+            DeleteFile(dirname)
+
+            ->put the old file back
+            Rename(oldDirName,dirname)
+
+            DeleteFile(destDirStr)
+
+            ->put the old file back
+            Rename(oldDestDirName,destDirStr)
+
+            aePuts('\b\n\b\nMove operation failed, restoring directories \b\n')
+          ENDIF
+
+        ELSE
+          Close(fh3)
+          Close(fh2)
+          Close(fh1)
+
+          DeleteFile(dirname)
+
+          ->put the old file back
+          Rename(oldDirName,dirname)
+
+          DeleteFile(destDirStr)
+
+          ->put the old file back
+          Rename(oldDestDirName,destDirStr)
+
+          aePuts('\b\n Error reading directory list, move operation aborted.\b\n')
+        ENDIF
+      ELSE
+        Close(fh2)
+        Close(fh1)
+
+        DeleteFile(dirname)
+
+        ->put the old file back
+        Rename(oldDirName,dirname)
+
+        ->put the old file back
+        Rename(oldDestDirName,destDirStr)
+        aePuts('\b\n Error creating the new directory list, move operation aborted.\b\n')
+      ENDIF
+    ELSE
+      Close(fh1)
+      DeleteFile(dirname)
+
+      ->put the old file back
+      Rename(oldDirName,dirname)
+      aePuts('\b\nError reading directory list, delete operation aborted.\b\n')
+    ENDIF
+  ELSE
+    ->put the old file back
+    Rename(oldDirName,dirname)
+    aePuts('\b\nError creating the new directory list, delete operation aborted.\b\n')
+  ENDIF
+
+ENDPROC
+
+PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,search_string: PTR TO CHAR,outfname: PTR TO CHAR, outfiledate: PTR TO CHAR)
+  DEF fi,found=FALSE
+  DEF image[258]:ARRAY OF CHAR
+  DEF dirfname[12]:STRING
+  DEF gi1,count=0,loop,ch
+  DEF datestr[20]:STRING
+  DEF test:PTR TO CHAR
+  DEF viewAllowed
+
+  UpperStr(search_string);
+
+  fi:=Open(fname,MODE_OLDFILE)
+  IF(fi<=0)
+    RETURN RESULT_SUCCESS
+  ENDIF
+
+  viewAllowed:=checkSecurity(ACS_VIEW_A_FILE)
+  IF holddir THEN viewAllowed:=FALSE
+
+  WHILE(Fgets(fi,image,252)<>NIL)
+    stripReturn(image)
+    IF(checkInput())
+      gi1:=readChar(1)
+      IF gi1=3	/*  ctrl-c */
+          Close(fi)
+          aePuts('**Break\b\n')
+          RETURN RESULT_FAILURE
+      ENDIF
+    ENDIF
+    IF(image[0]<>" ")
+      StrCopy(dirfname,image,12)
+      UpperStr(dirfname)
+      IF(InStr(dirfname,search_string))>=0 THEN found:=1
+      parseParams(image)
+      FOR count:=2 TO 4
+        test:=parsedParams[count]
+        IF (StrLen(test)=8) AND (test[2]="-") AND (test[5]="-")
+          StrCopy(datestr,parsedParams[count])
+        ENDIF
+      ENDFOR
+    ENDIF
+
+    IF found
+      count:=0
+      aePuts('\b\n')
+      aePuts(image)
+      aePuts('\b\n')
+      WHILE(Fgets(fi,image,252)<>NIL) AND (image[0]=" ") AND (count<my_struct.max_desclines)
+        stripReturn(image)
+        aePuts(image)
+        aePuts('\b\n')
+        count++
+      ENDWHILE
+      aePuts('\b\n')
+      IF (viewAllowed=TRUE)
+        aePuts('[32m([33mC[32m)[36montinue, [32m([33mD[32m)[36melete, [32m([33mM[32m)[36move, [32m([33mV[32m)[36miew, [32m([33mQ[32m)[36muit[0m? ')
+      ELSE
+        aePuts('[32m([33mC[32m)[36montinue, [32m([33mD[32m)[36melete, [32m([33mM[32m)[36move, [32m([33mQ[32m)[36muit[0m? ')
+      ENDIF
+      loop:=TRUE
+      WHILE(loop)
+        ch:=readChar(INPUT_TIMEOUT)
+        IF(ch<0) 
+          RETURN ch
+        ENDIF
+        IF (ch="C") OR (ch="c")
+          aePuts('\b\n')
+          found:=FALSE
+          loop:=FALSE
+        ELSEIF (ch="d") OR (ch="D") OR (ch="m") OR (ch="M") OR (((ch="v") OR (ch="V")) AND (viewAllowed=TRUE)) OR (ch="q") OR (ch="Q")
+          Close(fi)
+          StrCopy(outfname,dirfname)
+          IF (count:=InStr(dirfname,' '))>=0 THEN SetStr(outfname,count)
+          StrCopy(outfiledate,datestr)
+          RETURN RESULT_SUCCESS,ch
+        ENDIF
+      ENDWHILE
+    ENDIF
+  ENDWHILE
+  Close(fi)
+ENDPROC RESULT_NOT_FOUND,0
 
 PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
   DEF fi;
@@ -18510,6 +19141,8 @@ PROC processInternalCommand(cmdcode,cmdparams,silentFail=FALSE)
     res:=internalCommandT()
   ELSEIF (StrCmp(cmdcode,'F'))
     res:=internalCommandF(cmdparams)
+  ELSEIF (StrCmp(cmdcode,'FM'))
+    res:=internalCommandFM(cmdparams)
   ELSEIF (StrCmp(cmdcode,'FS'))
     res:=internalCommandFS()
   ELSEIF (StrCmp(cmdcode,'G'))
@@ -18609,7 +19242,7 @@ PROC processLoggedOnUser()
         currDay:=Div(currTime-21600,86400)
         lastDay:=Div(loggedOnUser.timeLastOn-21600,86400)
         IF (lastDay<>currDay)
-          StringF(string,'timeused debug: logon new day reset,  currday \d, lastday \d',currDay,lastDay)
+          StringF(string,'timeused debug: \s logon new day reset,  currday \d, lastday \d',loggedOnUser.name, currDay,lastDay)
           debugLog(LOG_WARN,string)
 
           loggedOnUser.timeUsed:=0
@@ -18618,7 +19251,7 @@ PROC processLoggedOnUser()
           loggedOnUser.timeTotal:=loggedOnUser.timeLimit
           loggedOnUser.timeLastOn:=currTime
         ELSE
-          StringF(string,'timeused debug: logon same day,  currday \d, lastday \d, timeused \d',currDay,lastDay,loggedOnUser.timeUsed)
+          StringF(string,'timeused debug: \s logon same day,  currday \d, lastday \d, timeused \d',loggedOnUser.name,currDay,lastDay,loggedOnUser.timeUsed)
           debugLog(LOG_WARN,string)
         ENDIF
 
