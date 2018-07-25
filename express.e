@@ -13,7 +13,7 @@ ENUM SUBSTATE_DISPLAY_AWAIT, SUBSTATE_INPUT, SUBSTATE_DISPLAY_BULL, SUBSTATE_DIS
 
 ENUM CMDTYPE_BBSCMD,CMDTYPE_SYSCMD
 
-ENUM TOOLTYPE_PRESET, TOOLTYPE_NODE,TOOLTYPE_CONFCONFIG,TOOLTYPE_CONF,TOOLTYPE_BBSCMD,TOOLTYPE_CONFCMD,TOOLTYPE_NODECMD,TOOLTYPE_SYSCMD,TOOLTYPE_DRIVES,TOOLTYPE_NAMESNOTALLOWED,TOOLTYPE_COMPUTERLIST,TOOLTYPE_ACCESS,TOOLTYPE_AREA,TOOLTYPE_PRESET,TOOLTYPE_FCHECK,TOOLTYPE_NODE_WINDOW,TOOLTYPE_NODE_TIMES,TOOLTYPE_WINDOW,TOOLTYPE_CONNECT,TOOLTYPE_XPRTYPES,TOOLTYPE_XFERLIB,TOOLTYPE_SCREENTYPES,TOOLTYPE_NRAMS, TOOLTYPE_MAILCONFIG
+ENUM TOOLTYPE_PRESET, TOOLTYPE_NODE,TOOLTYPE_CONFCONFIG,TOOLTYPE_CONF,TOOLTYPE_BBSCMD,TOOLTYPE_CONFCMD,TOOLTYPE_NODECMD,TOOLTYPE_SYSCMD,TOOLTYPE_DRIVES,TOOLTYPE_NAMESNOTALLOWED,TOOLTYPE_COMPUTERLIST,TOOLTYPE_ACCESS,TOOLTYPE_AREA,TOOLTYPE_PRESET,TOOLTYPE_FCHECK,TOOLTYPE_NODE_WINDOW,TOOLTYPE_NODE_TIMES,TOOLTYPE_WINDOW,TOOLTYPE_CONNECT,TOOLTYPE_XPRTYPES,TOOLTYPE_XFERLIB,TOOLTYPE_SCREENTYPES,TOOLTYPE_NRAMS, TOOLTYPE_BBSCONFIG
 
 ENUM DOORTYPE_XIM, DOORTYPE_AIM, DOORTYPE_SIM
 
@@ -1195,6 +1195,7 @@ DEF lastNewReadConf=0
 DEF msgBuf: PTR TO LONG
 DEF confNames: PTR TO LONG
 DEF confDirs: PTR TO LONG
+DEF historyFolder[255]:STRING
 DEF historyBuf : PTR TO LONG
 DEF historyNum
 DEF historyCycle
@@ -1857,6 +1858,7 @@ PROC updateTimeUsed()
     dropDTR()
     quickFlag:=TRUE
     saveFlagged()
+    IF StrLen(historyFolder)>0 THEN saveHistory()
     reqState:=REQ_STATE_LOGOFF
     setEnvStat(ENV_LOGOFF)  
   ENDIF
@@ -2417,7 +2419,7 @@ PROC getDateCompareVal(datestr:PTR TO CHAR)
 
   IF (year>TWODIGITYEARSWITCHOVER) THEN year:=1900+year ELSE year:=2000+year
   
-ENDPROC Mul(year,10000)+Mul(month,100)+day
+ENDPROC Mul(year,400)+Mul(month,32)+day
 
 PROC isupper(c)
 ENDPROC (c>="A") AND (c<="Z")
@@ -2636,8 +2638,8 @@ PROC aePuts2(string,length)
   ENDIF
   
   IF (ansiColour=FALSE)
-    IF (ioFlags[IOFLAG_SCR_OUT]) THEN conPuts(str2,length)
-    IF (ioFlags[IOFLAG_SER_OUT]) THEN serPuts(str2,length)
+    conPuts(str2,length)
+    serPuts(str2,length)
   ELSE
     IF (ioFlags[IOFLAG_SCR_OUT]) 
       IF bitPlanes<3 THEN conPuts(str2) ELSE conPuts(string,length)
@@ -2860,7 +2862,7 @@ PROC yesNo(flag)
 ENDPROC
 
 PROC addToHistory(text)
-  DEF msg[255]:STRING
+  DEF msg
   IF ListLen(historyBuf)<20
     msg:=String(255)
     StrCopy(msg,text)
@@ -2941,9 +2943,9 @@ redoinput:
       
       IF ch=24       -> CTRL X
         FOR i:=1 TO StrLen(outputString)
-          aePuts(sendBackspace())
+          sendBackspace()
           aePuts(' ')
-          aePuts(sendBackspace())
+          sendBackspace()
         ENDFOR
         StrCopy(outputString,'')
       ENDIF
@@ -2951,9 +2953,9 @@ redoinput:
       IF (rawArrow=FALSE)
         IF (ch=UPARROW) AND (ListLen(historyBuf)>0)
           FOR i:=1 TO StrLen(outputString)
-            aePuts(sendBackspace())
+            sendBackspace()
             aePuts(' ')
-            aePuts(sendBackspace())
+            sendBackspace()
           ENDFOR
           StrCopy(outputString,historyBuf[historyCycle],maxLen)
           historyCycle--
@@ -2962,9 +2964,9 @@ redoinput:
         ENDIF
         IF (ch=DOWNARROW) AND (ListLen(historyBuf)>0) 
           FOR i:=1 TO StrLen(outputString)
-            aePuts(sendBackspace())
+            sendBackspace()
             aePuts(' ')
-            aePuts(sendBackspace())
+            sendBackspace()
           ENDFOR
           StrCopy(outputString,historyBuf[historyCycle],maxLen)
           historyCycle++
@@ -3129,6 +3131,56 @@ loc_48726:
 -> End of function sub_486F0
 ENDPROC
 -> ---------------------------------------------------------------------------
+
+PROC loadHistory()
+  DEF fh,i
+  DEF fname[255]:STRING
+  DEF tempstr[255]:STRING
+  DEF msg
+
+  StringF(fname,'\shistory\d',historyFolder,loggedOnUser.slotNumber)
+  IF(fh:=Open(fname,MODE_OLDFILE))>0
+    ReadStr(fh,tempstr)
+    historyNum:=Val(tempstr)
+    ReadStr(fh,tempstr)
+    historyCycle:=Val(tempstr)
+
+    FOR i:=0 TO ListLen(historyBuf)-1
+      DisposeLink(ListItem(historyBuf,i))
+    ENDFOR
+    SetList(historyBuf,0)
+
+    WHILE(ReadStr(fh,tempstr)<>-1) OR (StrLen(tempstr)>0)
+      msg:=String(255)
+      StrCopy(msg,tempstr)
+
+      ListAdd(historyBuf,[msg])
+    ENDWHILE
+    Close(fh)
+  ENDIF
+ENDPROC
+
+PROC saveHistory()
+  DEF fh,i,lock
+  DEF fname[255]:STRING
+  DEF tempstr[255]:STRING
+
+  IF(lock:=CreateDir(historyFolder))
+    UnLock(lock)
+  ENDIF
+  
+  StringF(fname,'\shistory\d',historyFolder,loggedOnUser.slotNumber)
+  IF(fh:=Open(fname,MODE_NEWFILE))>0
+    StringF(tempstr,'\d',historyNum)
+    fileWriteLn(fh,tempstr)
+    StringF(tempstr,'\d',historyCycle)
+    fileWriteLn(fh,tempstr)
+    FOR i:=0 TO ListLen(historyBuf)-1
+      fileWriteLn(fh,historyBuf[i])
+    ENDFOR
+    Close(fh)
+  ENDIF
+ENDPROC
 
 PROC loadFlagged()
   DEF fh
@@ -3299,9 +3351,9 @@ PROC getNodeFile(toolType,tooltypeSelector,nodeFile)
     CASE TOOLTYPE_CONFCONFIG
       -> tooltypeSector is not used
       StringF(nodeFile,'\sConfconfig',cmds.bbsLoc)
-    CASE TOOLTYPE_MAILCONFIG
+    CASE TOOLTYPE_BBSCONFIG
       -> tooltypeSector is not used
-      StringF(nodeFile,'\sMailconfig',cmds.bbsLoc)
+      StringF(nodeFile,'\sbbsConfig',cmds.bbsLoc)
     CASE TOOLTYPE_NAMESNOTALLOWED
       -> tooltypeSector is not used
       StringF(nodeFile,'\sNamesNotAllowed',cmds.bbsLoc)
@@ -3945,13 +3997,13 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
             pagedFlag:=Val(msg.string)
 
             IF pagedFlag AND Not(temp)
-              IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_SYSOP_PAGE',tempstring))
+              IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_SYSOP_PAGE',tempstring))
                 filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
                 processMci2(tempstring,tempstring2)
                 SystemTagList(tempstring2,filetags)
                 END filetags
               ENDIF
-              IF(checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_SYSOP_PAGE')) AND (StrLen(mailOptions.sysopEmail)>0)
+              IF(checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_SYSOP_PAGE')) AND (StrLen(mailOptions.sysopEmail)>0)
                 StringF(tempstring,'\s: Ami-Express page notification',cmds.bbsName)
                 StringF(tempstring2,'This is a notification that you were paged by \s.',loggedOnUser.name)
                 sendMail(tempstring,tempstring2,FALSE,mailOptions.sysopEmail)
@@ -6569,6 +6621,7 @@ PROC processInputMessage(timeout, extsig = 0)
       dropDTR()
       ioFlags[IOFLAG_SER_OUT]:=0
       saveFlagged()
+      IF StrLen(historyFolder)>0 THEN saveHistory()
       reqState:=REQ_STATE_LOGOFF
       setEnvStat(ENV_LOGOFF)
     ENDIF
@@ -6770,14 +6823,14 @@ PROC processLoggingOff()
     masterSavePointers(loggedOnUser)
     saveAccount(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc,0,0) /* Reseave users account after logoff */
 
-    IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_LOGOFF',tempstr))
+    IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_LOGOFF',tempstr))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
       processMci2(tempstr,tempstr2)
       SystemTagList(tempstr2,filetags)
       END filetags
     ENDIF
 
-    IF (checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_LOGOFF')) AND (StrLen(mailOptions.sysopEmail)>0)
+    IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_LOGOFF')) AND (StrLen(mailOptions.sysopEmail)>0)
       StringF(tempstr,'\s: Ami-Express logoff notification',cmds.bbsName)
       StringF(tempstr2,'This is a notification that \s from \s has logged off\n\n',loggedOnUser.name,loggedOnUser.location)
       sendMail(tempstr,tempstr2,TRUE, mailOptions.sysopEmail)
@@ -8766,13 +8819,13 @@ skipAll:
      UnLock(msgbaselock)
 
     IF (tempUser.slotNumber=1)
-      IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_SYSOP_COMMENT',tempStr))
+      IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_SYSOP_COMMENT',tempStr))
         filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
         processMci2(tempStr,tempStr2)
         SystemTagList(tempStr2,filetags)
         END filetags
       ENDIF
-      IF (checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_SYSOP_COMMENT')) AND (StrLen(mailOptions.sysopEmail)>0)
+      IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_SYSOP_COMMENT')) AND (StrLen(mailOptions.sysopEmail)>0)
         StringF(tempStr,'\s: Ami-Express sysop message notification',cmds.bbsName)
         StringF(tempStr2,'This is a notification that \s has sent you a message.\n\nSubject: \s\n\n',mailHeader.fromName,mailHeader.subject)
         sendMail(tempStr,tempStr2,TRUE, mailOptions.sysopEmail)
@@ -13968,14 +14021,14 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   IF(onlineNFiles>0)
     callersLog(str)
     udLog(str)
-    IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_UPLOAD',str))
+    IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_UPLOAD',str))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
       processMci2(str,string)
       SystemTagList(string,filetags)
       END filetags
     ENDIF
 
-    IF (checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_UPLOAD')) AND (StrLen(mailOptions.sysopEmail)>0)
+    IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_UPLOAD')) AND (StrLen(mailOptions.sysopEmail)>0)
       StringF(str,'\s: Ami-Express logoff notification',cmds.bbsName)
       StringF(string,'This is a notification that \s from \s has logged off\n\n',loggedOnUser.name,loggedOnUser.location)
       sendMail(str,string,TRUE, mailOptions.sysopEmail)
@@ -16712,7 +16765,7 @@ PROC internalCommand2(params)
 
   IF ListLen(parsedParams)>0
     n:=Val(parsedParams[0])
-    StringF(temp,'\sNode\d/Callerslog',cmds.bbsLoc,n)
+    StringF(temp,'\sNode\d/Callerslog',cmds.bbsLoc,node)
     displayCallersLog(temp,paramsContains('NS')) 
   ELSE
      loop:=0
@@ -17048,8 +17101,6 @@ PROC internalCommandFM(params)
 fmSkip1:
   UpperStr(ss)
   
-  aePuts('\b\n')
-
   IF(ListLen(parsedParams)>1)
  		stat,startDir,dirScan:=getDirSpan(parsedParams[1])
   ELSE
@@ -17064,7 +17115,6 @@ fmSkip1:
  	  WHILE(fLLoop<=dirScan)
  		  StrCopy(str,currentConfDir)   /* get BBS conf locale dir */
  		  IF(dirScan<>(-1))                /* add 'DIR' */
-        aePuts('\b\n')
  ->(RTS) buff copy
         IF(fLLoop = maxDirs)    /* at upload dir */
           StrAdd(str,'DIR')
@@ -17087,11 +17137,12 @@ fmSkip1:
  			    aePuts(ray)
         ENDIF
  			  lineCount++
- 	    ELSE
+ 	    ENDIF 
+ 			IF(dirScan=-1) 
  			  StrAdd(str,'hold/held')
- 			  aePuts('\b\nScanning directory HOLD\b\n')
+ 			  aePuts('Scanning directory HOLD\b\n')
  			ENDIF
- 		  stat,action:=maintenanceFileSearch(dirScan=-1,str,ss,foundfile,foundDateStr)
+ 		  stat,action:=maintenanceFileSearch(str,ss,foundfile,foundDateStr)
  		  IF(stat<0)
  			  aePuts('\b\n')
         IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
@@ -17101,20 +17152,16 @@ fmSkip1:
       IF (stat<>RESULT_NOT_FOUND)
           aePuts('\b\n')
           IF (action="D") OR (action="d")
-            maintenanceFileDelete(str,dirScan=-1,foundfile)
+            maintenanceFileDelete(str,foundfile)
             IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
             RETURN RESULT_SUCCESS
           ELSEIF (action="M") OR (action="m")
-            maintenanceFileMove(str,dirScan=-1,foundfile,foundDateStr)
+            maintenanceFileMove(str,foundfile,foundDateStr)
             IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
             RETURN RESULT_SUCCESS
           ELSEIF (action="V") OR (action="v")
             IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
-            IF dirScan=-1
-              aePuts('\b\nView option is not available for hold directory\b\n')
-            ELSE
-              internalCommandV('V',foundfile)
-            ENDIF
+            internalCommandV('V',foundfile)
             RETURN RESULT_SUCCESS
           ELSEIF (action="q") OR (action="q")
             IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
@@ -17141,6 +17188,7 @@ PROC internalCommandG()
       RETURN RESULT_SUCCESS
     ENDIF
     saveFlagged()
+    IF StrLen(historyFolder)>0 THEN saveHistory()
     reqState:=REQ_STATE_LOGOFF
    setEnvStat(ENV_LOGOFF)
 
@@ -17259,14 +17307,14 @@ PROC internalCommandO()
   setEnvStat(ENV_REQ_CHAT)
   pagedFlag:=1
   
-  IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_SYSOP_PAGE',string))
+  IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_SYSOP_PAGE',string))
     filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
     processMci2(string,string2)
     SystemTagList(string2,filetags)
     END filetags
   ENDIF
   
-  IF (checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_SYSOP_PAGE')) AND (StrLen(mailOptions.sysopEmail)>0)
+  IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_SYSOP_PAGE')) AND (StrLen(mailOptions.sysopEmail)>0)
     StringF(string,'\s: Ami-Express page notification',cmds.bbsName)
     
     StringF(string2,'This is a notification that you were paged by \s.',loggedOnUser.name)
@@ -17958,11 +18006,7 @@ PROC getDirSpan(pass:PTR TO CHAR)
   DEF dirScan=0,startDir=0
 
   IF(StrLen(pass)=0)
-    IF loggedOnUser.secStatus>200
-      StringF(str,'Directories: (1-\d), (A)ll, (U)pload, (H)old, (Enter)=none? ',maxDirs)
-    ELSE
-      StringF(str,'Directories: (1-\d), (A)ll, (U)pload, (Enter)=none? ',maxDirs)
-    ENDIF
+	  StringF(str,'Directories: (1-\d), (All), (Upload), (Enter)=none? ',maxDirs)
  	  aePuts(str)
 	  mystat:=lineInput('','',8,INPUT_TIMEOUT,str)
 	  IF(mystat<0) THEN RETURN RESULT_NO_CARRIER
@@ -18009,7 +18053,7 @@ mNCont:
 ->  nonStopDisplayFlag:=CheckForNS(str);
 ENDPROC RESULT_SUCCESS,startDir,dirScan
 
-PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR)
+PROC maintenanceFileDelete(dirname:PTR TO CHAR, fname:PTR TO CHAR)
   DEF oldDirName[255]:STRING
   DEF fh1,fh2
   DEF dirline[255]:STRING
@@ -18036,10 +18080,7 @@ PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR)
 
     DeleteFile(oldDirName)
 
-    IF Rename(dirname,oldDirName) = FALSE
-      aePuts('\b\nError during operation, delete operation aborted.\b\n')
-      RETURN
-    ENDIF
+    Rename(dirname,oldDirName)
     
     IF (fh1:=Open(dirname,MODE_NEWFILE))>0
       IF (fh2:=Open(oldDirName,MODE_OLDFILE))>0
@@ -18060,20 +18101,14 @@ PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR)
         Close(fh2)
         DeleteFile(oldDirName)
 
-        IF srchold
-          aePuts('\b\nRemoving from hold folder, please wait..')
-          StringF(path,'\sHold/\s',currentConfDir,fname)
+        aePuts('\b\nRemoving from download folder, please wait..')
+        drivenum:=1
+        StringF(path,'DLPATH.\d',drivenum++)
+        WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path))
+          StrAdd(path,fname)
           DeleteFile(path)
-        ELSE
-          aePuts('\b\nRemoving from download folder, please wait..')
-          drivenum:=1
           StringF(path,'DLPATH.\d',drivenum++)
-          WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path))
-            StrAdd(path,fname)
-            DeleteFile(path)
-            StringF(path,'DLPATH.\d',drivenum++)
-          ENDWHILE
-        ENDIF
+        ENDWHILE
         aePuts('\b\n\b\nDelete operation complete \b\n')
 
       ELSE
@@ -18092,7 +18127,7 @@ PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR)
 
 ENDPROC
 
-PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr:PTR TO CHAR)
+PROC maintenanceFileMove(dirname:PTR TO CHAR, fname:PTR TO CHAR,datestr:PTR TO CHAR)
   DEF oldDirName[255]:STRING
   DEF oldDestDirName[255]:STRING
   DEF fh1,fh2,fh3,fh4
@@ -18107,10 +18142,10 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
   DEF found,drivenum
   DEF destConfStr[255]:STRING
   DEF destDirStr[255]:STRING
-  DEF d1,d2,brk,filemoved,status,n
+  DEF d1,d2,brk,filemoved,status
   DEF destConf,destDir,stat,maxConfDir
 
-  stat:=lineInput('\b\nConference Number to move to: ','',5,INPUT_TIMEOUT,destConfStr)
+  stat:=lineInput('Conference Number to move to: ','',5,INPUT_TIMEOUT,destConfStr)
   IF stat<>RESULT_SUCCESS THEN RETURN stat
 
   IF StrLen(destConfStr)=0 THEN RETURN RESULT_SUCCESS
@@ -18129,12 +18164,9 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
     RETURN RESULT_FAILURE
   ENDIF
 
-  StringF(tempstr,'\b\nYou have chosen conference: \s\b\n',getConfName(destConf))
-  aePuts(tempstr)
-
   maxConfDir:=readToolTypeInt(TOOLTYPE_CONF,destConf,'NDIRS')
 
-  StringF(tempstr,'\b\nDirectory to move to: (1-\d), (A)uto, (Enter)=abort? ',maxConfDir)
+  StringF(tempstr,'Directory to move to: (1-\d), (S)earch, (Enter)=none? ',maxConfDir)
   aePuts(tempstr)
   stat:=lineInput('','',5,INPUT_TIMEOUT,destDirStr)
 
@@ -18142,7 +18174,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
 
   IF StrLen(destDirStr)=0 THEN RETURN RESULT_SUCCESS
 
-  IF (destDirStr[0]="A") OR (destDirStr[0]="a")
+  IF (destDirStr[0]="S") OR (destDirStr[0]="s")
     destDir:=-1
     stat:=maxConfDir
     WHILE (destDir=-1) AND (stat>0)
@@ -18150,14 +18182,10 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
       IF (fh1:=Open(path,MODE_OLDFILE))>0
         Fgets(fh1,dirline,255)
         parseParams(dirline)
-        FOR n:=2 TO 4
-          StrCopy(destDate,parsedParams[n])
-          IF (StrLen(destDate)=8) AND (destDate[2]="-") AND (destDate[5]="-")
-            destDate[2]:=" "
-            destDate[5]:=" "
-            d2:=getDateCompareVal(destDate)
-          ENDIF
-        ENDFOR
+        StrCopy(destDate,parsedParams[3])
+        destDate[2]:=" "
+        destDate[5]:=" "
+        d2:=getDateCompareVal(destDate)
         IF d1>=d2 THEN destDir:=stat
 
         Close(fh1)
@@ -18194,17 +18222,10 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
   aePuts('\b\nUpdating directory list, please wait..')
 
   DeleteFile(oldDirName)
-  IF Rename(dirname,oldDirName)=FALSE
-    aePuts('\b\nError accessing the directory list, move operation aborted.\b\n')
-    RETURN
-  ENDIF
+  Rename(dirname,oldDirName)
 
   DeleteFile(oldDestDirName)
-  IF Rename(destDirStr,oldDestDirName)=FALSE
-    Rename(oldDirName,dirname)
-    aePuts('\b\nError accessing the destination directory list, move operation aborted.\b\n')
-    RETURN
-  ENDIF
+  Rename(destDirStr,oldDestDirName)
    
   IF (fh1:=Open(dirname,MODE_NEWFILE))>0
     IF (fh2:=Open(oldDirName,MODE_OLDFILE))>0
@@ -18224,19 +18245,14 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
                   IF(dirline2[0]<>" ")
 
                     parseParams(dirline2)
-                    
-                    FOR n:=2 TO 4
-                      StrCopy(destDate,parsedParams[n])
-                      IF (StrLen(destDate)=8) AND (destDate[2]="-") AND (destDate[5]="-")
-                        destDate[2]:=" "
-                        destDate[5]:=" "
-                        d2:=getDateCompareVal(destDate)
-                      ENDIF
-                    ENDFOR
+                    StrCopy(destDate,parsedParams[3])
+                    destDate[2]:=" "
+                    destDate[5]:=" "
+                    d2:=getDateCompareVal(destDate)
+
                     brk:=(d2>=d1)
                   ENDIF
                   EXIT brk
-                  ->copy the line from the old dest dir to the new dest dir
                   Fputs(fh3,dirline2)
                 ENDWHILE
               ELSE
@@ -18252,7 +18268,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
             ENDIF
 
             IF found=1
-              ->copy the line from the old source dir to the new dest dir
+              ->copy the line from the source dir to the dest dir
               Fputs(fh3,dirline)
             ELSE
               ->copy the line back to the new source dir
@@ -18285,52 +18301,31 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
           aePuts('\b\nMoving file, please wait..')
           drivenum:=1
           filemoved:=FALSE
+          StringF(path,'DLPATH.\d',drivenum++)
+          WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path)) AND (filemoved=FALSE)
+            IF strCmpi(path,tempstr,ALL)=FALSE
+              StrAdd(path,fname)
 
-          IF srchold
-            StringF(path,'\sHold/\s',currentConfDir,fname)
+              StringF(destFile,'\s\s',tempstr,fname)
 
-            StringF(destFile,'\s\s',tempstr,fname)
-
-            IF (fileExists(path))
-              status:=Rename(path,destFile)
-              IF(status=FALSE)
-                status:=fileCopy(path,destFile)
-                IF(status)
-                  SetProtection(path,FIBF_OTR_DELETE)
-                  DeleteFile(path) 
-                  filemoved:=TRUE
-                ENDIF
-              ELSE
-                filemoved:=TRUE
-              ENDIF
-            ENDIF
-          ELSE
-            StringF(path,'DLPATH.\d',drivenum++)
-            WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path)) AND (filemoved=FALSE)
-              IF strCmpi(path,tempstr,ALL)=FALSE
-                StrAdd(path,fname)
-
-                StringF(destFile,'\s\s',tempstr,fname)
-
-                IF (fileExists(path))
-                  status:=Rename(path,destFile)
-                  IF(status=FALSE)
-                    status:=fileCopy(path,destFile)
-                    IF(status)
-                      SetProtection(path,FIBF_OTR_DELETE)
-                      DeleteFile(path) 
-                      filemoved:=TRUE
-                    ENDIF
-                  ELSE
+              IF (fileExists(path))
+                status:=Rename(path,destFile)
+                IF(status=FALSE)
+                  status:=fileCopy(path,destFile)
+                  IF(status)
+                    SetProtection(path,FIBF_OTR_DELETE)
+                    DeleteFile(path) 
                     filemoved:=TRUE
                   ENDIF
+                ELSE
+                  filemoved:=TRUE
                 ENDIF
-              ELSE
-                filemoved:=TRUE
               ENDIF
-              StringF(path,'DLPATH.\d',drivenum++)
-            ENDWHILE
-          ENDIF
+            ELSE
+              filemoved:=TRUE
+            ENDIF
+            StringF(path,'DLPATH.\d',drivenum++)
+          ENDWHILE
           
           IF (filemoved)
             DeleteFile(oldDirName)
@@ -18396,14 +18391,12 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
 
 ENDPROC
 
-PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,search_string: PTR TO CHAR,outfname: PTR TO CHAR, outfiledate: PTR TO CHAR)
+PROC maintenanceFileSearch(fname:PTR TO CHAR,search_string: PTR TO CHAR,outfname: PTR TO CHAR, outfiledate: PTR TO CHAR)
   DEF fi,found=FALSE
   DEF image[258]:ARRAY OF CHAR
   DEF dirfname[12]:STRING
   DEF gi1,count=0,loop,ch
   DEF datestr[20]:STRING
-  DEF test:PTR TO CHAR
-  DEF viewAllowed
 
   UpperStr(search_string);
 
@@ -18411,9 +18404,6 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,search_string: PTR TO CHAR,
   IF(fi<=0)
     RETURN RESULT_SUCCESS
   ENDIF
-
-  viewAllowed:=checkSecurity(ACS_VIEW_A_FILE)
-  IF holddir THEN viewAllowed:=FALSE
 
   WHILE(Fgets(fi,image,252)<>NIL)
     stripReturn(image)
@@ -18430,12 +18420,7 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,search_string: PTR TO CHAR,
       UpperStr(dirfname)
       IF(InStr(dirfname,search_string))>=0 THEN found:=1
       parseParams(image)
-      FOR count:=2 TO 4
-        test:=parsedParams[count]
-        IF (StrLen(test)=8) AND (test[2]="-") AND (test[5]="-")
-          StrCopy(datestr,parsedParams[count])
-        ENDIF
-      ENDFOR
+      StrCopy(datestr,parsedParams[3])
     ENDIF
 
     IF found
@@ -18450,11 +18435,7 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,search_string: PTR TO CHAR,
         count++
       ENDWHILE
       aePuts('\b\n')
-      IF (viewAllowed=TRUE)
-        aePuts('[32m([33mC[32m)[36montinue, [32m([33mD[32m)[36melete, [32m([33mM[32m)[36move, [32m([33mV[32m)[36miew, [32m([33mQ[32m)[36muit[0m? ')
-      ELSE
-        aePuts('[32m([33mC[32m)[36montinue, [32m([33mD[32m)[36melete, [32m([33mM[32m)[36move, [32m([33mQ[32m)[36muit[0m? ')
-      ENDIF
+      aePuts('[32m([33mC[32m)[36montinue, [32m([33mD[32m)[36melete, [32m([33mM[32m)[36move, [32m([33mV[32m)[36miew, [32m([33mQ[32m)[36muit[0m? ')
       loop:=TRUE
       WHILE(loop)
         ch:=readChar(INPUT_TIMEOUT)
@@ -18465,7 +18446,7 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,search_string: PTR TO CHAR,
           aePuts('\b\n')
           found:=FALSE
           loop:=FALSE
-        ELSEIF (ch="d") OR (ch="D") OR (ch="m") OR (ch="M") OR (((ch="v") OR (ch="V")) AND (viewAllowed=TRUE)) OR (ch="q") OR (ch="Q")
+        ELSEIF (ch="d") OR (ch="D") OR (ch="m") OR (ch="M") OR (ch="v") OR (ch="V") OR (ch="q") OR (ch="Q")
           Close(fi)
           StrCopy(outfname,dirfname)
           IF (count:=InStr(dirfname,' '))>=0 THEN SetStr(outfname,count)
@@ -19242,7 +19223,7 @@ PROC processLoggedOnUser()
         currDay:=Div(currTime-21600,86400)
         lastDay:=Div(loggedOnUser.timeLastOn-21600,86400)
         IF (lastDay<>currDay)
-          StringF(string,'timeused debug: \s logon new day reset,  currday \d, lastday \d',loggedOnUser.name, currDay,lastDay)
+          StringF(string,'timeused debug: logon new day reset,  currday \d, lastday \d',currDay,lastDay)
           debugLog(LOG_WARN,string)
 
           loggedOnUser.timeUsed:=0
@@ -19251,7 +19232,7 @@ PROC processLoggedOnUser()
           loggedOnUser.timeTotal:=loggedOnUser.timeLimit
           loggedOnUser.timeLastOn:=currTime
         ELSE
-          StringF(string,'timeused debug: \s logon same day,  currday \d, lastday \d, timeused \d',loggedOnUser.name,currDay,lastDay,loggedOnUser.timeUsed)
+          StringF(string,'timeused debug: logon same day,  currday \d, lastday \d, timeused \d',currDay,lastDay,loggedOnUser.timeUsed)
           debugLog(LOG_WARN,string)
         ENDIF
 
@@ -19285,6 +19266,8 @@ PROC processLoggedOnUser()
     ELSEIF subState.subState=SUBSTATE_DISPLAY_CONF_BULL
       joinConf(loggedOnUser.confRJoin,FALSE,TRUE)
       loadFlagged()
+      IF StrLen(historyFolder)>0 THEN loadHistory()
+
       subState.subState:=SUBSTATE_DISPLAY_MENU
     ELSEIF subState.subState=SUBSTATE_DISPLAY_MENU
       IF (loggedOnUser.expert="N")
@@ -19319,6 +19302,7 @@ PROC processLoggedOnUser()
         aePuts('Goodbye\b\n\b\n')
         aePuts('Disconnecting..\b\n')
         saveFlagged()
+        IF StrLen(historyFolder)>0 THEN saveHistory()
         quickFlag:=TRUE
         IF reqState=REQ_STATE_NONE THEN reqState:=REQ_STATE_LOGOFF
       ENDIF
@@ -19772,14 +19756,14 @@ logonLoop:
  ENDIF
 
   IF logonType>=LOGON_TYPE_REMOTE
-    IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_LOGON',tempStr))
+    IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_LOGON',tempStr))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
       processMci2(tempStr,tempStr2)
       SystemTagList(tempStr2,filetags)
       END filetags
     ENDIF
 
-    IF (checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_LOGON')) AND (StrLen(mailOptions.sysopEmail)>0)
+    IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_LOGON')) AND (StrLen(mailOptions.sysopEmail)>0)
       StringF(tempStr,'\s: Ami-Express logon notification',cmds.bbsName)
       StringF(tempStr2,'This is a notification that \s from \s has logged on\n\n',loggedOnUser.name,loggedOnUser.location)
       sendMail(tempStr,tempStr2,TRUE, mailOptions.sysopEmail)
@@ -19967,14 +19951,14 @@ PROC newUserAccount(userName: PTR TO CHAR)
   clearMsgPointers()
   masterSavePointers(loggedOnUser)
 
-  IF (readToolType(TOOLTYPE_MAILCONFIG,0,'EXECUTE_ON_NEW_USER',tempStr2))
+  IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_NEW_USER',tempStr2))
     filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
     processMci2(tempStr2,tempStr)
     SystemTagList(tempStr,filetags)
     END filetags
   ENDIF
 
-  IF (checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'MAIL_ON_NEW_USER')) AND (StrLen(mailOptions.sysopEmail)>0)
+  IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_NEW_USER')) AND (StrLen(mailOptions.sysopEmail)>0)
     StringF(tempStr,'\s: Ami-Express new user notification',cmds.bbsName)
     StringF(tempStr2,'This is a notification that a new user called \s from \s has registered.',loggedOnUser.name,loggedOnUser.location)
     sendMail(tempStr,tempStr2,FALSE,mailOptions.sysopEmail)
@@ -20865,14 +20849,17 @@ PROC main() HANDLE
 
   sysopAvail:=checkToolTypeExists(TOOLTYPE_NODE,node,'CHAT_ON')
 
+  StrCopy(historyFolder,'')
+  readToolType(TOOLTYPE_BBSCONFIG,'','HISTORY',historyFolder)
+  
   IF checkToolTypeExists(TOOLTYPE_NODE,node,'NO_EMAILS')=FALSE
-    mailOptions.smtpPort:=readToolTypeInt(TOOLTYPE_MAILCONFIG,0,'SMTP_PORT')
-    IF readToolType(TOOLTYPE_MAILCONFIG,0,'SMTP_HOST',tempstr) THEN strCpy(mailOptions.smtpHost,tempstr,255)
-    IF readToolType(TOOLTYPE_MAILCONFIG,0,'SMTP_USERNAME',tempstr) THEN strCpy(mailOptions.username,tempstr,255)
-    IF readToolType(TOOLTYPE_MAILCONFIG,0,'SMTP_PASSWORD',tempstr) THEN strCpy(mailOptions.password,tempstr,255)
-    IF readToolType(TOOLTYPE_MAILCONFIG,0,'SYSOP_EMAIL',tempstr) THEN strCpy(mailOptions.sysopEmail,tempstr,255)
-    IF readToolType(TOOLTYPE_MAILCONFIG,0,'BBS_EMAIL',tempstr) THEN strCpy(mailOptions.bbsEmail,tempstr,255)
-    IF checkToolTypeExists(TOOLTYPE_MAILCONFIG,0,'SMTP_SSL') THEN mailOptions.ssl:=TRUE ELSE mailOptions.ssl:=FALSE
+    mailOptions.smtpPort:=readToolTypeInt(TOOLTYPE_BBSCONFIG,0,'SMTP_PORT')
+    IF readToolType(TOOLTYPE_BBSCONFIG,0,'SMTP_HOST',tempstr) THEN strCpy(mailOptions.smtpHost,tempstr,255)
+    IF readToolType(TOOLTYPE_BBSCONFIG,0,'SMTP_USERNAME',tempstr) THEN strCpy(mailOptions.username,tempstr,255)
+    IF readToolType(TOOLTYPE_BBSCONFIG,0,'SMTP_PASSWORD',tempstr) THEN strCpy(mailOptions.password,tempstr,255)
+    IF readToolType(TOOLTYPE_BBSCONFIG,0,'SYSOP_EMAIL',tempstr) THEN strCpy(mailOptions.sysopEmail,tempstr,255)
+    IF readToolType(TOOLTYPE_BBSCONFIG,0,'BBS_EMAIL',tempstr) THEN strCpy(mailOptions.bbsEmail,tempstr,255)
+    IF checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'SMTP_SSL') THEN mailOptions.ssl:=TRUE ELSE mailOptions.ssl:=FALSE
   ENDIF
 
   IF StrLen(mailOptions.smtpHost)>0 
