@@ -20728,8 +20728,8 @@ PROC main() HANDLE
   DEF p : PTR TO CHAR
   DEF tempfh
    
-  StrCopy(expressVer,'v5.0.0-b6',ALL)
-  StrCopy(expressDate,'19-Jul-2018',ALL)
+  StrCopy(expressVer,'v5.0.0-b7',ALL)
+  StrCopy(expressDate,'27-Jul-2018',ALL)
 
   stripAnsi(0,0,1,0)
   
