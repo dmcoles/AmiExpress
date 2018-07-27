@@ -1,7 +1,7 @@
 -> Replacement Express Project
 ->
 ->
-OPT LARGE
+OPT LARGE,REG=5
 
 ENUM ERR_NONE, ERR_NOICON, ERR_NO_DISKFONT,ERR_SCREEN, ERR_WINDOW, ERR_MP, ERR_IO, ERR_DEV, ERR_PORT, ERR_ARG, ERR_BRKR, ERR_CXERR, ERR_LIB, ERR_PORT, ERR_ASL, ERR_KICK, ERR_LIB, ERR_SERVERRP, ERR_NOSERIAL, ERR_SSL
 
@@ -1280,11 +1280,24 @@ ENDPROC
 PROC convertAccess()
 ENDPROC
 
-PROC stcsma(a: PTR TO CHAR,b: PTR TO CHAR)
-  DEF tempstr[255]:STRING
-  StringF(tempstr,'sctsma: \s AND \s',a,b)
-  debugLog(LOG_DEBUG,tempstr)
-ENDPROC TRUE
+PROC stcsma(s: PTR TO CHAR,p: PTR TO CHAR)
+  DEF ret,len
+  DEF buf
+
+  len:=StrLen(p)*2+2
+  buf:=New(len)
+
+  IF(buf=NIL)
+    ret:=0
+  ELSE
+    IF (ParsePatternNoCase(p, buf, len) < 0)
+      ret:=0
+    ELSE
+      ret:=MatchPatternNoCase(buf, s)
+     ENDIF
+  ENDIF
+  END buf
+ENDPROC ret
 
 PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, toemail:PTR TO CHAR)
   DEF ssl,sock=0,errcode=0
@@ -2419,7 +2432,7 @@ PROC getDateCompareVal(datestr:PTR TO CHAR)
 
   IF (year>TWODIGITYEARSWITCHOVER) THEN year:=1900+year ELSE year:=2000+year
   
-ENDPROC Mul(year,400)+Mul(month,32)+day
+ENDPROC Mul(year,10000)+Mul(month,100)+day
 
 PROC isupper(c)
 ENDPROC (c>="A") AND (c<="Z")
@@ -2638,8 +2651,8 @@ PROC aePuts2(string,length)
   ENDIF
   
   IF (ansiColour=FALSE)
-    conPuts(str2,length)
-    serPuts(str2,length)
+    IF (ioFlags[IOFLAG_SCR_OUT]) THEN conPuts(str2,length)
+    IF (ioFlags[IOFLAG_SER_OUT]) THEN serPuts(str2,length)
   ELSE
     IF (ioFlags[IOFLAG_SCR_OUT]) 
       IF bitPlanes<3 THEN conPuts(str2) ELSE conPuts(string,length)
@@ -6169,15 +6182,14 @@ go:
       StringF(string,'\s\b',cmds.mAnswer)
       serPuts(string)
       n:=0
-      input:=lineInput('','',80,40,string)  ->skip local echo of answer string
       IF(input=RESULT_TIMEOUT) THEN JUMP timedout
       REPEAT
         input:=lineInput('','',80,40,string)
         IF(input=RESULT_TIMEOUT) THEN JUMP timedout
-        n++
         IF (StrCmp(string,'CONNECT',7))
           isConnected:=TRUE
-        ELSE
+        ELSEIF (StrCmp(string,cmds.mRing,ALL)=FALSE) AND (StrCmp(string,cmds.mAnswer,ALL)=FALSE)
+          n++
           StringF(tempstr,'\tINVALID	CONNECT	= \s',string)
           callersLog(tempstr)
         ENDIF
@@ -7249,7 +7261,6 @@ PROC parseList(liststring,list)
       StrCopy(newitem,TrimStr(tempstr),ALL)
       ListAdd(list,[newitem])
     ENDIF
-    
   ELSE
     newitem:=String(StrLen(liststring))
     StrCopy(newitem,liststring,ALL)
@@ -9922,29 +9933,30 @@ PROC showFlags()
   ENDIF
 ENDPROC
 
-PROC isInList(flaglist,s)
+PROC isInList(testflaglist,s)
   DEF tempStr[20]:STRING
-  DEF v
-  IF StrCmp(flaglist,s) THEN RETURN TRUE
+  DEF v,i
+  DEF flagfilelist: PTR TO LONG
+  DEF result
 
-  IF StrLen(flaglist)<StrLen(s) THEN RETURN FALSE
-  
-  StrCopy(tempStr,s)  
-  StrAdd(tempStr,' ')
-  v:=InStr(flaglist,tempStr)
-  IF v=0 THEN RETURN TRUE
- 
-  StrCopy(tempStr,' ')
-  StrAdd(tempStr,s)
-  v:=InStr(flaglist,tempStr)
-  IF (v>=0) AND (v=(StrLen(flaglist)-StrLen(tempStr))) THEN RETURN TRUE
+  IF StrLen(testflaglist)=0 THEN RETURN FALSE
 
-  StrCopy(tempStr,' ')
-  StrAdd(tempStr,s)
-  StrAdd(tempStr,' ')
-  v:=InStr(flaglist,tempStr)
-  IF v<>-1 THEN RETURN TRUE
-ENDPROC FALSE
+  flagfilelist:=List(StrLen(testflaglist))
+
+  parseList(testflaglist,flagfilelist)
+
+  result:=FALSE
+
+  FOR i:=0 TO ListLen(flagfilelist)-1
+    IF stcsma(s,ListItem(flagfilelist,i)) THEN result:=TRUE
+  ENDFOR
+
+  FOR i:=0 TO ListLen(flagfilelist)-1
+    DisposeLink(ListItem(flagfilelist,i))
+  ENDFOR
+  END flagfilelist
+
+ENDPROC result
 
 PROC addFlagtoList(s:PTR TO CHAR)
   DEF p: PTR TO CHAR
@@ -10176,7 +10188,7 @@ PROC checkForFileSize(fn: PTR TO CHAR, cfn:PTR TO CHAR, z)
   DEF drivenum
   
   FOR min:=0 TO StrLen(fn)-1
-    IF((fn[min]='?') OR (fn[min]='*')) THEN wflag:=1
+    IF((fn[min]="?") OR (fn[min]="*")) THEN wflag:=1
   ENDFOR
   StrCopy(tempstr2,fn)
   UpperStr(tempstr2)
@@ -10253,72 +10265,73 @@ PROC checkForFileSize(fn: PTR TO CHAR, cfn:PTR TO CHAR, z)
             StrCopy(tempstr,fBlock.filename)
             UpperStr(tempstr)
             stat:=stcsma(tempstr,tempstr2)
-            IF((stat>0) OR sysopdl) 
+            IF((stat<>0) OR sysopdl) 
               fflag:=1
-              IF(sysopdl) THEN StrCopy(final,fn)
-            ELSE
-              StrCopy(final,path)
-              StrAdd(final,fBlock.filename)
-            ENDIF
-            fsize:=fBlock.size
-            tsec:=Div(Div(fsize,onlineBaud),10)
-            min:=tsec/60
-            secs:=tsec-(min*60)
-            StringF(str,' \r\d[4]k,\r\d[3] mins \z\r\d[2] secs \s\t',Div(fsize,1024),min,secs,fBlock.filename)
-            IF(str[16]=" ") THEN SetStr(str,16)
-            aePuts(str)
-            IF((fBlock.comment[0]="F") OR (freeDownloads))
-              aePuts('  >>Free Download!\b\n')
-              tfsize:=tfsize-fsize
-            ELSE
-              freeDFlag++
-              aePuts('\b\n')
-            ENDIF
-            IF((z<>1) OR sysopdl)
-               /***** SYSTEM SECURITY ADDED BY JOSEPH HODGE *****/
-                IF(strCmpi(fBlock.comment,'Restricted',10))
-                 aePuts('    >>Restricted File<< Updating CallersLog\b\n')
-                 StringF(clog,'\t\tAttempt to download RESTRICTED file [\s]',fn)
-                 callersLog(clog)
-                 FreeDosObject(DOS_FIB,fBlock)
-                 UnLock(fLock)
-                 RETURN 11
-               ENDIF
-
-               IF(StrLen(final)+StrLen(cfn)>2000)
-                 aePuts(' Too many entries!!  The remainder was left off.\b\n')
-                 numFiles--
-                 FreeDosObject(DOS_FIB,fBlock)
-                 UnLock(fLock)
-                 RETURN 11
-               ENDIF
-               IF((dp:=isInList(cfn,final))=FALSE)
-                 numFiles++
-                 StrAdd(cfn,final)
-                 StrAdd(cfn,' ')
-                 IF((p:=isInList(flaglist,fBlock.filename))=FALSE)
-                   StrAdd(flaglist,fBlock.filename)
-                   StrAdd(flaglist,' ')
-                 ENDIF
-               ELSE
-                 aePuts('   File is already selected!\b\n')
-               ENDIF
-            ENDIF
-
-            IF(dp=NIL) 
-                tfsize:=tfsize+fsize
-                dtfsize:=dtfsize+fsize
-            ELSE
-              IF(wflag=0)
-                FreeDosObject(DOS_FIB,fBlock)
-                UnLock(fLock)
-                IF(dp<>NIL) THEN RETURN RESULT_FAILURE
+              IF(sysopdl) 
+                StrCopy(final,fn)
               ELSE
-                RETURN RESULT_SUCCESS
+                StrCopy(final,path)
+                StrAdd(final,fBlock.filename)
+              ENDIF
+              fsize:=fBlock.size
+              tsec:=Div(Div(fsize,onlineBaud),10)
+              min:=tsec/60
+              secs:=tsec-(min*60)
+              StringF(str,' \r\d[4]k,\r\d[3] mins \z\r\d[2] secs \s\t',Div(fsize,1024),min,secs,fBlock.filename)
+              IF(str[16]=" ") THEN SetStr(str,16)
+              aePuts(str)
+              IF((fBlock.comment[0]="F") OR (freeDownloads))
+                aePuts('  >>Free Download!\b\n')
+                tfsize:=tfsize-fsize
+              ELSE
+                freeDFlag++
+                aePuts('\b\n')
+              ENDIF
+              IF((z<>1) OR sysopdl)
+                 /***** SYSTEM SECURITY ADDED BY JOSEPH HODGE *****/
+                  IF(strCmpi(fBlock.comment,'Restricted',10))
+                   aePuts('    >>Restricted File<< Updating CallersLog\b\n')
+                   StringF(clog,'\t\tAttempt to download RESTRICTED file [\s]',fn)
+                   callersLog(clog)
+                   FreeDosObject(DOS_FIB,fBlock)
+                   UnLock(fLock)
+                   RETURN 11
+                 ENDIF
+
+                 IF(StrLen(final)+StrLen(cfn)>2000)
+                   aePuts(' Too many entries!!  The remainder was left off.\b\n')
+                   numFiles--
+                   FreeDosObject(DOS_FIB,fBlock)
+                   UnLock(fLock)
+                   RETURN 11
+                 ENDIF
+                 IF((dp:=isInList(cfn,final)))=FALSE
+                   numFiles++
+                   IF StrLen(cfn)>0 THEN StrAdd(cfn,' ')
+                   StrAdd(cfn,final)
+                   IF((p:=isInList(flaglist,fBlock.filename)))=FALSE
+                     addFlagtoList(fBlock.filename)
+                   ENDIF
+                 ELSE
+                   aePuts('   File is already selected!\b\n')
+                 ENDIF
+              ENDIF
+
+              IF(dp=NIL) 
+                  tfsize:=tfsize+fsize
+                  dtfsize:=dtfsize+fsize
+              ELSE
+                IF(wflag=0)
+                  FreeDosObject(DOS_FIB,fBlock)
+                  UnLock(fLock)
+                  IF(dp<>NIL) THEN RETURN RESULT_FAILURE
+                ELSE
+                  RETURN RESULT_SUCCESS
+                ENDIF
               ENDIF
             ENDIF
           ENDIF
-          
+
           IF(sCheckInput())
             stat:=readChar(1)
             IF(stat<0)
@@ -17137,12 +17150,11 @@ fmSkip1:
  			    aePuts(ray)
         ENDIF
  			  lineCount++
- 	    ENDIF 
- 			IF(dirScan=-1) 
+ 	    ELSE
  			  StrAdd(str,'hold/held')
- 			  aePuts('Scanning directory HOLD\b\n')
+ 			  aePuts('\b\nScanning directory HOLD\b\n')
  			ENDIF
- 		  stat,action:=maintenanceFileSearch(str,ss,foundfile,foundDateStr)
+ 		  stat,action:=maintenanceFileSearch(dirScan=-1,str,ss,foundfile,foundDateStr)
  		  IF(stat<0)
  			  aePuts('\b\n')
         IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
@@ -17152,16 +17164,20 @@ fmSkip1:
       IF (stat<>RESULT_NOT_FOUND)
           aePuts('\b\n')
           IF (action="D") OR (action="d")
-            maintenanceFileDelete(str,foundfile)
+            maintenanceFileDelete(str,dirScan=-1,foundfile)
             IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
             RETURN RESULT_SUCCESS
           ELSEIF (action="M") OR (action="m")
-            maintenanceFileMove(str,foundfile,foundDateStr)
+            maintenanceFileMove(str,dirScan=-1,foundfile,foundDateStr)
             IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
             RETURN RESULT_SUCCESS
           ELSEIF (action="V") OR (action="v")
             IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
-            internalCommandV('V',foundfile)
+            IF dirScan=-1
+              aePuts('\b\nView option is not available for hold directory\b\n')
+            ELSE
+              internalCommandV('V',foundfile)
+            ENDIF
             RETURN RESULT_SUCCESS
           ELSEIF (action="q") OR (action="q")
             IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
@@ -18006,7 +18022,11 @@ PROC getDirSpan(pass:PTR TO CHAR)
   DEF dirScan=0,startDir=0
 
   IF(StrLen(pass)=0)
-	  StringF(str,'Directories: (1-\d), (All), (Upload), (Enter)=none? ',maxDirs)
+    IF loggedOnUser.secStatus>200
+      StringF(str,'Directories: (1-\d), (A)ll, (U)pload, (H)old, (Enter)=none? ',maxDirs)
+    ELSE
+      StringF(str,'Directories: (1-\d), (A)ll, (U)pload, (Enter)=none? ',maxDirs)
+    ENDIF
  	  aePuts(str)
 	  mystat:=lineInput('','',8,INPUT_TIMEOUT,str)
 	  IF(mystat<0) THEN RETURN RESULT_NO_CARRIER
@@ -18053,7 +18073,7 @@ mNCont:
 ->  nonStopDisplayFlag:=CheckForNS(str);
 ENDPROC RESULT_SUCCESS,startDir,dirScan
 
-PROC maintenanceFileDelete(dirname:PTR TO CHAR, fname:PTR TO CHAR)
+PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR)
   DEF oldDirName[255]:STRING
   DEF fh1,fh2
   DEF dirline[255]:STRING
@@ -18080,7 +18100,10 @@ PROC maintenanceFileDelete(dirname:PTR TO CHAR, fname:PTR TO CHAR)
 
     DeleteFile(oldDirName)
 
-    Rename(dirname,oldDirName)
+    IF Rename(dirname,oldDirName) = FALSE
+      aePuts('\b\nError during operation, delete operation aborted.\b\n')
+      RETURN
+    ENDIF
     
     IF (fh1:=Open(dirname,MODE_NEWFILE))>0
       IF (fh2:=Open(oldDirName,MODE_OLDFILE))>0
@@ -18101,14 +18124,20 @@ PROC maintenanceFileDelete(dirname:PTR TO CHAR, fname:PTR TO CHAR)
         Close(fh2)
         DeleteFile(oldDirName)
 
-        aePuts('\b\nRemoving from download folder, please wait..')
-        drivenum:=1
-        StringF(path,'DLPATH.\d',drivenum++)
-        WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path))
-          StrAdd(path,fname)
+        IF srchold
+          aePuts('\b\nRemoving from hold folder, please wait..')
+          StringF(path,'\sHold/\s',currentConfDir,fname)
           DeleteFile(path)
+        ELSE
+          aePuts('\b\nRemoving from download folder, please wait..')
+          drivenum:=1
           StringF(path,'DLPATH.\d',drivenum++)
-        ENDWHILE
+          WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path))
+            StrAdd(path,fname)
+            DeleteFile(path)
+            StringF(path,'DLPATH.\d',drivenum++)
+          ENDWHILE
+        ENDIF
         aePuts('\b\n\b\nDelete operation complete \b\n')
 
       ELSE
@@ -18127,7 +18156,7 @@ PROC maintenanceFileDelete(dirname:PTR TO CHAR, fname:PTR TO CHAR)
 
 ENDPROC
 
-PROC maintenanceFileMove(dirname:PTR TO CHAR, fname:PTR TO CHAR,datestr:PTR TO CHAR)
+PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr:PTR TO CHAR)
   DEF oldDirName[255]:STRING
   DEF oldDestDirName[255]:STRING
   DEF fh1,fh2,fh3,fh4
@@ -18142,10 +18171,10 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, fname:PTR TO CHAR,datestr:PTR TO C
   DEF found,drivenum
   DEF destConfStr[255]:STRING
   DEF destDirStr[255]:STRING
-  DEF d1,d2,brk,filemoved,status
+  DEF d1,d2,brk,filemoved,status,n
   DEF destConf,destDir,stat,maxConfDir
 
-  stat:=lineInput('Conference Number to move to: ','',5,INPUT_TIMEOUT,destConfStr)
+  stat:=lineInput('\b\nConference Number to move to: ','',5,INPUT_TIMEOUT,destConfStr)
   IF stat<>RESULT_SUCCESS THEN RETURN stat
 
   IF StrLen(destConfStr)=0 THEN RETURN RESULT_SUCCESS
@@ -18164,9 +18193,12 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, fname:PTR TO CHAR,datestr:PTR TO C
     RETURN RESULT_FAILURE
   ENDIF
 
+  StringF(tempstr,'\b\nYou have chosen conference: \s\b\n',getConfName(destConf))
+  aePuts(tempstr)
+
   maxConfDir:=readToolTypeInt(TOOLTYPE_CONF,destConf,'NDIRS')
 
-  StringF(tempstr,'Directory to move to: (1-\d), (S)earch, (Enter)=none? ',maxConfDir)
+  StringF(tempstr,'\b\nDirectory to move to: (1-\d), (A)uto, (Enter)=abort? ',maxConfDir)
   aePuts(tempstr)
   stat:=lineInput('','',5,INPUT_TIMEOUT,destDirStr)
 
@@ -18174,7 +18206,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, fname:PTR TO CHAR,datestr:PTR TO C
 
   IF StrLen(destDirStr)=0 THEN RETURN RESULT_SUCCESS
 
-  IF (destDirStr[0]="S") OR (destDirStr[0]="s")
+  IF (destDirStr[0]="A") OR (destDirStr[0]="a")
     destDir:=-1
     stat:=maxConfDir
     WHILE (destDir=-1) AND (stat>0)
@@ -18182,10 +18214,14 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, fname:PTR TO CHAR,datestr:PTR TO C
       IF (fh1:=Open(path,MODE_OLDFILE))>0
         Fgets(fh1,dirline,255)
         parseParams(dirline)
-        StrCopy(destDate,parsedParams[3])
-        destDate[2]:=" "
-        destDate[5]:=" "
-        d2:=getDateCompareVal(destDate)
+        FOR n:=2 TO 4
+          StrCopy(destDate,parsedParams[n])
+          IF (StrLen(destDate)=8) AND (destDate[2]="-") AND (destDate[5]="-")
+            destDate[2]:=" "
+            destDate[5]:=" "
+            d2:=getDateCompareVal(destDate)
+          ENDIF
+        ENDFOR
         IF d1>=d2 THEN destDir:=stat
 
         Close(fh1)
@@ -18222,10 +18258,17 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, fname:PTR TO CHAR,datestr:PTR TO C
   aePuts('\b\nUpdating directory list, please wait..')
 
   DeleteFile(oldDirName)
-  Rename(dirname,oldDirName)
+  IF Rename(dirname,oldDirName)=FALSE
+    aePuts('\b\nError accessing the directory list, move operation aborted.\b\n')
+    RETURN
+  ENDIF
 
   DeleteFile(oldDestDirName)
-  Rename(destDirStr,oldDestDirName)
+  IF Rename(destDirStr,oldDestDirName)=FALSE
+    Rename(oldDirName,dirname)
+    aePuts('\b\nError accessing the destination directory list, move operation aborted.\b\n')
+    RETURN
+  ENDIF
    
   IF (fh1:=Open(dirname,MODE_NEWFILE))>0
     IF (fh2:=Open(oldDirName,MODE_OLDFILE))>0
@@ -18245,14 +18288,19 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, fname:PTR TO CHAR,datestr:PTR TO C
                   IF(dirline2[0]<>" ")
 
                     parseParams(dirline2)
-                    StrCopy(destDate,parsedParams[3])
-                    destDate[2]:=" "
-                    destDate[5]:=" "
-                    d2:=getDateCompareVal(destDate)
-
+                    
+                    FOR n:=2 TO 4
+                      StrCopy(destDate,parsedParams[n])
+                      IF (StrLen(destDate)=8) AND (destDate[2]="-") AND (destDate[5]="-")
+                        destDate[2]:=" "
+                        destDate[5]:=" "
+                        d2:=getDateCompareVal(destDate)
+                      ENDIF
+                    ENDFOR
                     brk:=(d2>=d1)
                   ENDIF
                   EXIT brk
+                  ->copy the line from the old dest dir to the new dest dir
                   Fputs(fh3,dirline2)
                 ENDWHILE
               ELSE
@@ -18268,7 +18316,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, fname:PTR TO CHAR,datestr:PTR TO C
             ENDIF
 
             IF found=1
-              ->copy the line from the source dir to the dest dir
+              ->copy the line from the old source dir to the new dest dir
               Fputs(fh3,dirline)
             ELSE
               ->copy the line back to the new source dir
@@ -18301,31 +18349,52 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, fname:PTR TO CHAR,datestr:PTR TO C
           aePuts('\b\nMoving file, please wait..')
           drivenum:=1
           filemoved:=FALSE
-          StringF(path,'DLPATH.\d',drivenum++)
-          WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path)) AND (filemoved=FALSE)
-            IF strCmpi(path,tempstr,ALL)=FALSE
-              StrAdd(path,fname)
 
-              StringF(destFile,'\s\s',tempstr,fname)
+          IF srchold
+            StringF(path,'\sHold/\s',currentConfDir,fname)
 
-              IF (fileExists(path))
-                status:=Rename(path,destFile)
-                IF(status=FALSE)
-                  status:=fileCopy(path,destFile)
-                  IF(status)
-                    SetProtection(path,FIBF_OTR_DELETE)
-                    DeleteFile(path) 
-                    filemoved:=TRUE
-                  ENDIF
-                ELSE
+            StringF(destFile,'\s\s',tempstr,fname)
+
+            IF (fileExists(path))
+              status:=Rename(path,destFile)
+              IF(status=FALSE)
+                status:=fileCopy(path,destFile)
+                IF(status)
+                  SetProtection(path,FIBF_OTR_DELETE)
+                  DeleteFile(path) 
                   filemoved:=TRUE
                 ENDIF
+              ELSE
+                filemoved:=TRUE
               ENDIF
-            ELSE
-              filemoved:=TRUE
             ENDIF
+          ELSE
             StringF(path,'DLPATH.\d',drivenum++)
-          ENDWHILE
+            WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path)) AND (filemoved=FALSE)
+              IF strCmpi(path,tempstr,ALL)=FALSE
+                StrAdd(path,fname)
+
+                StringF(destFile,'\s\s',tempstr,fname)
+
+                IF (fileExists(path))
+                  status:=Rename(path,destFile)
+                  IF(status=FALSE)
+                    status:=fileCopy(path,destFile)
+                    IF(status)
+                      SetProtection(path,FIBF_OTR_DELETE)
+                      DeleteFile(path) 
+                      filemoved:=TRUE
+                    ENDIF
+                  ELSE
+                    filemoved:=TRUE
+                  ENDIF
+                ENDIF
+              ELSE
+                filemoved:=TRUE
+              ENDIF
+              StringF(path,'DLPATH.\d',drivenum++)
+            ENDWHILE
+          ENDIF
           
           IF (filemoved)
             DeleteFile(oldDirName)
@@ -18391,12 +18460,14 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, fname:PTR TO CHAR,datestr:PTR TO C
 
 ENDPROC
 
-PROC maintenanceFileSearch(fname:PTR TO CHAR,search_string: PTR TO CHAR,outfname: PTR TO CHAR, outfiledate: PTR TO CHAR)
+PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,search_string: PTR TO CHAR,outfname: PTR TO CHAR, outfiledate: PTR TO CHAR)
   DEF fi,found=FALSE
   DEF image[258]:ARRAY OF CHAR
   DEF dirfname[12]:STRING
   DEF gi1,count=0,loop,ch
   DEF datestr[20]:STRING
+  DEF test:PTR TO CHAR
+  DEF viewAllowed
 
   UpperStr(search_string);
 
@@ -18404,6 +18475,9 @@ PROC maintenanceFileSearch(fname:PTR TO CHAR,search_string: PTR TO CHAR,outfname
   IF(fi<=0)
     RETURN RESULT_SUCCESS
   ENDIF
+
+  viewAllowed:=checkSecurity(ACS_VIEW_A_FILE)
+  IF holddir THEN viewAllowed:=FALSE
 
   WHILE(Fgets(fi,image,252)<>NIL)
     stripReturn(image)
@@ -18420,7 +18494,12 @@ PROC maintenanceFileSearch(fname:PTR TO CHAR,search_string: PTR TO CHAR,outfname
       UpperStr(dirfname)
       IF(InStr(dirfname,search_string))>=0 THEN found:=1
       parseParams(image)
-      StrCopy(datestr,parsedParams[3])
+      FOR count:=2 TO 4
+        test:=parsedParams[count]
+        IF (StrLen(test)=8) AND (test[2]="-") AND (test[5]="-")
+          StrCopy(datestr,parsedParams[count])
+        ENDIF
+      ENDFOR
     ENDIF
 
     IF found
@@ -18435,7 +18514,11 @@ PROC maintenanceFileSearch(fname:PTR TO CHAR,search_string: PTR TO CHAR,outfname
         count++
       ENDWHILE
       aePuts('\b\n')
-      aePuts('[32m([33mC[32m)[36montinue, [32m([33mD[32m)[36melete, [32m([33mM[32m)[36move, [32m([33mV[32m)[36miew, [32m([33mQ[32m)[36muit[0m? ')
+      IF (viewAllowed=TRUE)
+        aePuts('[32m([33mC[32m)[36montinue, [32m([33mD[32m)[36melete, [32m([33mM[32m)[36move, [32m([33mV[32m)[36miew, [32m([33mQ[32m)[36muit[0m? ')
+      ELSE
+        aePuts('[32m([33mC[32m)[36montinue, [32m([33mD[32m)[36melete, [32m([33mM[32m)[36move, [32m([33mQ[32m)[36muit[0m? ')
+      ENDIF
       loop:=TRUE
       WHILE(loop)
         ch:=readChar(INPUT_TIMEOUT)
@@ -18446,7 +18529,7 @@ PROC maintenanceFileSearch(fname:PTR TO CHAR,search_string: PTR TO CHAR,outfname
           aePuts('\b\n')
           found:=FALSE
           loop:=FALSE
-        ELSEIF (ch="d") OR (ch="D") OR (ch="m") OR (ch="M") OR (ch="v") OR (ch="V") OR (ch="q") OR (ch="Q")
+        ELSEIF (ch="d") OR (ch="D") OR (ch="m") OR (ch="M") OR (((ch="v") OR (ch="V")) AND (viewAllowed=TRUE)) OR (ch="q") OR (ch="Q")
           Close(fi)
           StrCopy(outfname,dirfname)
           IF (count:=InStr(dirfname,' '))>=0 THEN SetStr(outfname,count)
@@ -19223,7 +19306,7 @@ PROC processLoggedOnUser()
         currDay:=Div(currTime-21600,86400)
         lastDay:=Div(loggedOnUser.timeLastOn-21600,86400)
         IF (lastDay<>currDay)
-          StringF(string,'timeused debug: logon new day reset,  currday \d, lastday \d',currDay,lastDay)
+          StringF(string,'timeused debug: \s logon new day reset,  currday \d, lastday \d',loggedOnUser.name, currDay,lastDay)
           debugLog(LOG_WARN,string)
 
           loggedOnUser.timeUsed:=0
@@ -19232,7 +19315,7 @@ PROC processLoggedOnUser()
           loggedOnUser.timeTotal:=loggedOnUser.timeLimit
           loggedOnUser.timeLastOn:=currTime
         ELSE
-          StringF(string,'timeused debug: logon same day,  currday \d, lastday \d, timeused \d',currDay,lastDay,loggedOnUser.timeUsed)
+          StringF(string,'timeused debug: \s logon same day,  currday \d, lastday \d, timeused \d',loggedOnUser.name,currDay,lastDay,loggedOnUser.timeUsed)
           debugLog(LOG_WARN,string)
         ENDIF
 
