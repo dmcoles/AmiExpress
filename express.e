@@ -6188,9 +6188,9 @@ go:
         IF(input=RESULT_TIMEOUT) THEN JUMP timedout
         IF (StrCmp(string,'CONNECT',7))
           isConnected:=TRUE
-        ELSEIF (StrCmp(string,cmds.mRing,ALL)=FALSE) AND (StrCmp(string,cmds.mAnswer,ALL)=FALSE)
+        ELSEIF (StrLen(string)>0) AND (StrCmp(string,cmds.mRing,ALL)=FALSE) AND (StrCmp(string,cmds.mAnswer,ALL)=FALSE)
           n++
-          StringF(tempstr,'\tINVALID	CONNECT	= \s',string)
+          StringF(tempstr,'\tINVALID CONNECT	= \s',string)
           callersLog(tempstr)
         ENDIF
       UNTIL((isConnected) OR (n=5))
@@ -10320,14 +10320,11 @@ PROC checkForFileSize(fn: PTR TO CHAR, cfn:PTR TO CHAR, z)
               IF(dp=NIL) 
                   tfsize:=tfsize+fsize
                   dtfsize:=dtfsize+fsize
-              ELSE
-                IF(wflag=0)
-                  FreeDosObject(DOS_FIB,fBlock)
-                  UnLock(fLock)
-                  IF(dp<>NIL) THEN RETURN RESULT_FAILURE
-                ELSE
-                  RETURN RESULT_SUCCESS
-                ENDIF
+              ENDIF
+              IF(wflag=0)
+                FreeDosObject(DOS_FIB,fBlock)
+                UnLock(fLock)
+                IF(dp<>NIL) THEN RETURN RESULT_FAILURE ELSE RETURN RESULT_SUCCESS
               ENDIF
             ENDIF
           ENDIF
@@ -16778,7 +16775,7 @@ PROC internalCommand2(params)
 
   IF ListLen(parsedParams)>0
     n:=Val(parsedParams[0])
-    StringF(temp,'\sNode\d/Callerslog',cmds.bbsLoc,node)
+    StringF(temp,'\sNode\d/Callerslog',cmds.bbsLoc,n)
     displayCallersLog(temp,paramsContains('NS')) 
   ELSE
      loop:=0
