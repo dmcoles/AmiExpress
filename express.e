@@ -18174,10 +18174,22 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
   DEF d1,d2,brk,filemoved,status,n
   DEF destConf,destDir,stat,maxConfDir
 
-  stat:=lineInput('\b\nConference Number to move to: ','',5,INPUT_TIMEOUT,destConfStr)
-  IF stat<>RESULT_SUCCESS THEN RETURN stat
+  REPEAT
+    stat:=lineInput('\b\nConference Number to move to (L to List): ','',5,INPUT_TIMEOUT,destConfStr)
+    IF stat<>RESULT_SUCCESS THEN RETURN stat
 
-  IF StrLen(destConfStr)=0 THEN RETURN RESULT_SUCCESS
+    IF StrLen(destConfStr)=0 THEN RETURN RESULT_SUCCESS
+
+    IF ((StrCmp(destConfStr,'L')) OR (StrCmp(destConfStr,'l')))
+      aePuts('\b\n')
+      aePuts('                                 [32mConference List\b\n')
+      aePuts('\b\n')
+      processMciCmd('~CL|',4,0)
+      n:=FALSE
+    ELSE
+      n:=TRUE
+    ENDIF
+  UNTIL n
   
   datestr[2]:=" "
   datestr[5]:=" "
@@ -18281,10 +18293,9 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
               UpperStr(compareFname)
               IF(StrCmp(compareFname,padfname))
                 found:=1
-
+                brk:=FALSE
                 ->we've found our file in the source dir, scan the dest dir for the correct position to put it
                 WHILE(Fgets(fh4,dirline2,255)<>NIL)
-                  brk:=FALSE
                   IF(dirline2[0]<>" ")
 
                     parseParams(dirline2)
@@ -18305,8 +18316,8 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
                 ENDWHILE
               ELSE
                 IF (found=1)
-                  ->we've found the end of the file in the source dir, copy the remainder of the dest dir over
-                  Fputs(fh3,dirline2)
+                  ->we've found the end of the file being moved in the source dir, copy the remainder of the dest dir over
+                  IF brk THEN Fputs(fh3,dirline2)
                   WHILE(Fgets(fh4,dirline2,255)<>NIL)
                     Fputs(fh3,dirline2)
                   ENDWHILE
@@ -18323,6 +18334,15 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
               Fputs(fh1,dirline)
             ENDIF
           ENDWHILE
+
+          IF (found=1)
+            ->if we still haven't copied over the remainder of the dest file then do it now
+            IF brk THEN Fputs(fh3,dirline2)
+            WHILE(Fgets(fh4,dirline2,255)<>NIL)
+              Fputs(fh3,dirline2)
+            ENDWHILE
+            found:=0
+          ENDIF
 
           Close(fh1)
           Close(fh2)
