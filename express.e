@@ -1172,6 +1172,7 @@ DEF captureFP = NIL
 DEF nofkeys=0
 DEF relogon=FALSE
 DEF lostCarrier=FALSE
+DEF timeoutLC=FALSE
 
 DEF doormsgcode=0
 DEF nonStopMail=FALSE
@@ -6298,6 +6299,8 @@ PROC processInputMessage(timeout, extsig = 0)
     IF (extsig<>0) AND ((signals AND extsig)<>0) THEN RETURN TRUE,RESULT_SIGNALLED
 
   IF (timedout)
+    IF (state<>STATE_AWAIT) THEN callersLog('\t**Input timed out **')
+    IF timeoutLC THEN lostCarrier:=TRUE
     RETURN TRUE,RESULT_TIMEOUT
   ENDIF
 
@@ -13779,7 +13782,7 @@ PROC sysopUpload()
   DEF stat,cnt
   DEF space,space2
   DEF path[255]:STRING
-  DEF status,x
+  DEF status,x,ch
   
   aePuts('\b\nDestination path for upload? ')
   stat:=lineInput('','',250,INPUT_TIMEOUT,destpath)
@@ -13866,10 +13869,31 @@ PROC sysopUpload()
       ELSE
         StringF(tempstr,'\sNode\d/PLAYPEN/\s',cmds.bbsLoc,node,str)
       ENDIF
-      StringF(tempstr2,'copying \s to \s\n',str,destpath)
+      StringF(tempstr2,'copying \s to \s',str,destpath)
       aePuts(tempstr2)
-      StringF(tempstr2,'\s/\s',destpath,str)
+
+      ch:=tempstr2[StrLen(tempstr2)-1];
+      IF((ch<>":") AND (ch<>"/"))
+        StringF(tempstr2,'\s/\s',destpath,str)
+      ELSE
+        StringF(tempstr2,'\s\s',destpath,str)
+      ENDIF
       
+      IF fileExists(tempstr2)
+        StringF(string,' - file exists, do you wish to overwrite? ',FilePart(tempstr2))
+        aePuts(string)
+        ch:=readChar(INPUT_TIMEOUT)
+        IF(ch<0) THEN RETURN ch
+        IF((ch="Y") OR (ch="y"))
+          aePuts('Yes\b\n')
+          DeleteFile(tempstr2) 
+        ELSE
+          aePuts('No\b\n')
+        ENDIF
+      ELSE
+        aePuts('\b\n')
+      ENDIF
+
       status:=0
       WHILE((StrLen(FilePart(tempstr2))<35) AND (status=FALSE))
         status:=Rename(tempstr,tempstr2)
@@ -20967,6 +20991,8 @@ PROC main() HANDLE
       Raise(ERR_SSL)
     ENDIF
   ENDIF
+
+  timeoutLC:=checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'TIMEOUT_LC');
 
   consoleDebugLevel:=readToolTypeInt(TOOLTYPE_NODE,node,'CONSOLE_DEBUG')
   IF checkToolTypeExists(TOOLTYPE_NODE,node,'DEBUG_LOG') THEN debugLogLevel:=LOG_WARN ELSE debugLogLevel:=LOG_NONE
