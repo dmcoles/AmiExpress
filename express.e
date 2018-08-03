@@ -12277,14 +12277,18 @@ ENDPROC
 PROC dynAllocate(maxbufsize)
   DEF pbuf
   DEF maxBuf
+  DEF avail
   
   maxBuf:=readToolTypeInt(TOOLTYPE_NODE,node,'COPYBUFFER')
   IF (maxBuf>0) AND (maxbufsize>maxBuf) THEN maxbufsize:=maxBuf
   
+  avail:=AvailMem(MEMF_LARGEST)
+  IF maxbufsize>avail THEN maxbufsize:=avail-65536
+
  /* first try Fast mem allocate */
  WHILE((pbuf:=AllocMem(maxbufsize,MEMF_PUBLIC OR MEMF_CLEAR)))=FALSE
-    maxbufsize:=maxbufsize-8192;
-    EXIT (maxbufsize<8192)
+    maxbufsize:=maxbufsize-65536;
+    EXIT (maxbufsize<65536)
     Delay(5)
  ENDWHILE
  IF(maxbufsize<8192)  THEN RETURN 0,0
@@ -13928,6 +13932,7 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   DEF foundDupe=0
   DEF mstat      /* check for carrier. trying to stop upload guru from parcial upload */
   DEF filetags
+  DEF fsstr[11]:STRING
  
    /* these two for testing asCII chars */
   DEF cnt1 = 0
@@ -14211,6 +14216,18 @@ ax:
             RETURN RESULT_FAILURE
         ENDIF
         IF( Examine(fLock,fBlock) ) THEN fsize:=fBlock.size
+        IF fsize<=9999999
+          StringF(fsstr,'\r\d[7]',fsize)
+        ELSEIF fsize<=99999999
+          StringF(fsstr,'\d',fsize)
+        ELSE
+          IF checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'CONVERT_TO_MB')=FALSE
+            StringF(fsstr,'\d',fsize)
+          ELSE
+            StringF(fsstr,'\r\d[4].\dM',Shr(fsize,20),Div(fsize-Shl(Shr(fsize,20),20),104858))
+          ENDIF
+        ENDIF
+
         UnLock(fLock)
         FreeDosObject(DOS_FIB,fBlock)
 ->#ifdef OLDCODE
@@ -14251,7 +14268,7 @@ cinpAgain:
           aePuts('\b\nPress return alone to end.  Begin description with (/) to make upload ''Private''.\b\n')
           aePuts('                                [--------------------------------------------]\b\n')
 ->#endif
-          StringF(fmtstr,'\l\s[13] \r\d[7]  \s :',str,fsize,odate)
+          StringF(fmtstr,'\l\s[13] \s  \s :',str,fsstr,odate)
           aePuts(fmtstr)
 clgo:
           IF(moveToLCFILES=1)
@@ -14407,9 +14424,9 @@ move_It:     /* gets here if lostcarrier, and file is complete but not when file
 
         /* Build the first line to send to upload dir */
         IF(lcfile AND (StrLen(str) > 12))
-          StringF(fmtstr,'\s \r\d[7]  \s  \s\n',str,fsize,odate,fcomment)
+          StringF(fmtstr,'\s \s  \s  \s\n',str,fsstr,odate,fcomment)
         ELSE
-          StringF(fmtstr,'\l\s[13] \r\d[7]  \s  \s\n',str,fsize,odate,fcomment)
+          StringF(fmtstr,'\l\s[13] \s  \s  \s\n',str,fsstr,odate,fcomment)
         ENDIF
 
         IF(StrLen(str) < 13)       /* for big file name on lost carrier */
@@ -20769,8 +20786,8 @@ PROC main() HANDLE
   DEF p : PTR TO CHAR
   DEF tempfh
    
-  StrCopy(expressVer,'v5.0.0-b7',ALL)
-  StrCopy(expressDate,'27-Jul-2018',ALL)
+  StrCopy(expressVer,'v5.0.0-b8',ALL)
+  StrCopy(expressDate,'03-Aug-2018',ALL)
 
   stripAnsi(0,0,1,0)
   
