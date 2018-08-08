@@ -42,6 +42,21 @@ ENUM ENV_IDLE=0,ENV_DOWNLOADING=1,ENV_UPLOADING=2,ENV_DOORS=3,ENV_MAIL=4,ENV_STA
        ENV_REQ_CHAT=19,ENV_CONNECT=20,ENV_LOGGINGON=21,ENV_AWAITCONNECT=22,ENV_SCANNING=23,ENV_SHUTDOWN=24,ENV_MULTICHAT=25,ENV_SUSPEND=26,ENV_RESERVE=27,
        ENV_ONLINEMSG=28
 
+CONST ACTION_REQUEST=5000
+
+CONST FIFOF_READ=$00000100	  /*  intend to read from fifo	  */
+CONST FIFOF_WRITE=$00000200	  /*  intend to write to fifo	  */
+CONST FIFOF_RESERVED=$FFFF0000	  /*  reserved for internal use   */
+CONST FIFOF_NORMAL=$00000400	  /*  request blocking/sig support*/
+CONST FIFOF_NBIO=$00000800	  /*  non-blocking IO		  */
+
+CONST FIFOF_KEEPIFD=$00002000	  /*  keep fifo alive if data pending */
+CONST FIFOF_EOF=$00004000	  /*  EOF on close		      */
+CONST FIFOF_RREQUIRED=$00008000	  /*  reader required to exist	  */
+
+CONST FREQ_RPEND=1
+CONST FREQ_WAVAIL=2
+CONST FREQ_ABORT=3
 
 CONST TWODIGITYEARSWITCHOVER=70
 
@@ -603,7 +618,8 @@ MODULE 'intuition/screens',
        'net/netdb',
        'net/in',
        'amissl',
-       'amisslmaster'
+       'amisslmaster',
+       'fifo'
 
 OBJECT semiNodestat
   status:CHAR
@@ -2260,7 +2276,7 @@ PROC checkDoorMsg(mode)
    ENDWHILE
 ENDPROC returnval
 
-PROC getPass2(prompt: PTR TO CHAR,password:PTR TO CHAR,pwdhash:LONG, max:LONG)
+PROC getPass2(prompt: PTR TO CHAR,password:PTR TO CHAR,pwdhash:LONG, max:LONG,outstr=NIL:PTR TO CHAR)
 
   DEF c,i,j
   DEF pass[200]:STRING
@@ -2293,6 +2309,8 @@ PROC getPass2(prompt: PTR TO CHAR,password:PTR TO CHAR,pwdhash:LONG, max:LONG)
     UNTIL (c=13) OR (c=12) OR (j>=30)
         
     SetStr(pass,j)
+    IF (outstr<>NIL) THEN StrCopy(outstr,pass)
+
     IF(j>max) THEN SetStr(pass,max)
 
     IF (password<>NIL)
@@ -6130,7 +6148,9 @@ PROC checkIncomingCall()
   DEF rCount,input
   DEF string[255]:STRING
   DEF tempstr[255]:STRING
+  DEF tempstr2[255]:STRING
   DEF stat,n,isConnected=FALSE
+  DEF filetags
    
     IF(sopt.trapDoor) THEN JUMP go
 
@@ -6217,6 +6237,14 @@ go:
       ioFlags[IOFLAG_SER_OUT]:=-1
       ioFlags[IOFLAG_SCR_OUT]:=-1
       IF(cmds.acLvl[LVL_VARYING_LINK_RATE]=1) THEN setBaud(onlineBaud)
+
+      IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_CONNECT',tempstr))
+        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+        processMci2(tempstr,tempstr2)
+        SystemTagList(tempstr2,filetags)
+        END filetags
+      ENDIF
+
       conCLS()
 
       RETURN RESULT_CONNECT
@@ -6486,6 +6514,22 @@ PROC processInputMessage(timeout, extsig = 0)
       loggedOnUser:=NIL
       loggedOnUserMisc:=NIL
       loggedOnUserKeys:=NIL
+      ioFlags[IOFLAG_SER_IN]:=-1
+      ioFlags[IOFLAG_SCR_OUT]:=0
+      IF(ioFlags[IOFLAG_FIL_IN]) THEN ioFlags[IOFLAG_FIL_IN]:=0
+      IF reqState=REQ_STATE_NONE THEN reqState:=REQ_STATE_DISPLAY_AWAIT
+    ENDIF
+
+    ->Shift F5
+    IF ((wasControl=2) AND (ch="4"))
+      servercmd:=-1
+      ioFlags[IOFLAG_SER_IN]:=0
+      ioFlags[IOFLAG_SCR_OUT]:=-1
+      intDoReset(sopt.offHook)
+      IF (scropen) THEN expressToFront() ELSE openExpressScreen()
+      sendCLS()
+      remoteShell()
+      resetSystem(1)
       ioFlags[IOFLAG_SER_IN]:=-1
       ioFlags[IOFLAG_SCR_OUT]:=0
       IF(ioFlags[IOFLAG_FIL_IN]) THEN ioFlags[IOFLAG_FIL_IN]:=0
@@ -7557,7 +7601,7 @@ PROC displayCallersLog(filename: PTR TO CHAR,tf)
           IF(stat<0) 
             stat:=IoErr()
             IF(stat>0)
-                ->sprintf(GSTR2,"IOErr #%d\r\n",stat);
+                ->sprintf(GSTR2,"IOErr #%d\b\n",stat);
                 ->AEPutStr(GSTR2);
             ENDIF
             stat:=(-1)
@@ -7584,6 +7628,194 @@ PROC debugLog(logType,logline:PTR TO CHAR)
   ENDIF
 ENDPROC
 
+PROC remoteShell()
+  DEF rMsg:mn
+  DEF wMsg:mn
+  DEF fifoName[255]:STRING
+  DEF fifoMast[255]:STRING
+  DEF fifoSlav[255]:STRING
+  DEF ioSink:PTR TO mp
+  DEF fifoR
+  DEF fifoW
+  
+  DEF fifrIP=0
+  DEF fifwIP=0
+  DEF done=0
+  DEF pmask
+  DEF msg:PTR TO mn
+  DEF n,ch
+  DEF bufptr:PTR TO CHAR
+  DEF temp[255]:STRING
+
+  StringF(fifoName,'bbsshell\d',node)
+
+  StringF(fifoMast, '\s_m', fifoName)
+  StringF(fifoSlav, '\s_s', fifoName)
+
+  ioSink:=createPort(NIL, 0)
+
+    /*
+     *	FIFOS
+     */
+
+  fifobase:=OpenLibrary('fifo.library', 0)
+  IF (fifobase=NIL) 
+    aePuts('unable to open fifo.library\n')
+    callersLog('\tunable to open fifo.library\n')
+    deletePort(ioSink)
+    RETURN RESULT_FAILURE
+  ENDIF
+
+  fifoW:=OpenFifo(fifoMast, 2048, FIFOF_WRITE OR FIFOF_NORMAL OR FIFOF_NBIO)
+  IF (fifoW = NIL) 
+    aePuts('unable to open fifo master\n')
+    callersLog('\tunable to open fifo master\n')
+    CloseLibrary(fifobase)
+    deletePort(ioSink)   
+    RETURN RESULT_FAILURE
+  ENDIF
+  
+  fifoR:=OpenFifo(fifoSlav, 2048, FIFOF_READ  OR FIFOF_NORMAL OR FIFOF_NBIO)
+  IF (fifoR = NIL) 
+    aePuts('unable to open fifo slave\n')
+    callersLog('\tunable to open fifo slave\n')
+    CloseFifo(fifoW,FIFOF_EOF)
+    CloseLibrary(fifobase)
+    deletePort(ioSink)
+    RETURN RESULT_FAILURE
+  ENDIF
+  
+
+  rMsg.replyport:=ioSink
+  wMsg.replyport:=ioSink
+
+  /*
+   *	WINDOW
+   */
+
+  IF(findAssign('fifo:')<>0)
+    aePuts('unable to find fifo: device\n')
+    callersLog('\tunable to find fifo: device\n')
+    CloseFifo(fifoW,FIFOF_EOF)
+    CloseLibrary(fifobase)
+    deletePort(ioSink)
+    RETURN RESULT_FAILURE
+  ENDIF
+
+
+  StringF(temp,'newshell fifo:\s/rwkecs',fifoName)
+  SystemTagList(temp,[SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,1])
+
+  pmask:=Shl(1,ioSink.sigbit)
+
+  RequestFifo(fifoR, rMsg, FREQ_RPEND)
+  fifrIP:=1
+
+  /*
+   * start shell for slave side
+   */
+
+  conPuts('[ p') /* turn console cursor on */
+  aePuts('\b\n')
+
+  Wait(pmask)   ->shell should send start string when it's started
+
+  WHILE (done=FALSE) 
+    
+    WHILE ((msg:=GetMsg(ioSink)))
+      IF (msg = rMsg) 
+        ->incoming message from fifo read
+        fifrIP:=0
+
+        IF ((n:=ReadFifo(fifoR, {bufptr}, 0)) > 0)
+          aePuts2(bufptr, n)
+                    /*	clear N bytes	*/
+          n:=ReadFifo(fifoR, {bufptr}, n)
+        ENDIF
+        
+        IF (n < 0)            /*  EOF */
+          aePuts('\nREMOTE EOF!\n')
+          done:=TRUE
+        ELSE
+          RequestFifo(fifoR, rMsg, FREQ_RPEND)
+          fifrIP:=1
+        ENDIF
+      ENDIF
+    ENDWHILE
+
+    IF done=0
+      ch:=readChar(INPUT_TIMEOUT,pmask)
+
+      IF (ch<0) OR (reqState<>REQ_STATE_NONE)
+          ->timeout or kill signal
+         done:=TRUE
+      ENDIF
+      
+      IF (done=0) AND (ch<>0)
+        ->incoming message from console read
+        SELECT ch
+          CASE 3
+            sendBreak("C")
+          CASE 4
+            sendBreak("D")
+          CASE 5
+            sendBreak("E")
+          CASE 6
+            sendBreak("F")
+          DEFAULT
+            StrCopy(temp,'#')
+            temp[0]:=ch
+            n:=WriteFifo(fifoW, temp, 1)
+            IF (n <> 1)
+              IF (fifwIP = 0)
+                RequestFifo(fifoW, wMsg, FREQ_WAVAIL)
+                fifwIP:=1
+              ENDIF
+            ENDIF
+        ENDSELECT
+      ENDIF       
+    ENDIF
+  ENDWHILE
+
+  conPuts('[0 p'); /* turn console cursor off */
+
+  IF (fifwIP) 
+    RequestFifo(fifoW, wMsg, FREQ_ABORT)
+    waitMsg(wMsg)
+  ENDIF
+
+  IF (fifrIP)
+    RequestFifo(fifoR, rMsg, FREQ_ABORT)
+    waitMsg(rMsg)
+  ENDIF
+
+  IF (fifoR) THEN CloseFifo(fifoR, FIFOF_EOF)
+
+  /*  no FIFOF_EOF on IDCMP_CLOSEWINDOW to conform to documentation */
+  IF (fifoW) THEN	CloseFifo(fifoW, FIFOF_EOF)	
+
+  IF (fifobase) THEN CloseLibrary(fifobase)
+
+  IF (ioSink) THEN deletePort(ioSink)
+
+ENDPROC RESULT_SUCCESS
+
+PROC waitMsg(msg:PTR TO mn)
+    WHILE(msg.ln.type = NT_MESSAGE)
+      Wait(Shl(1,msg.replyport.sigbit))
+    ENDWHILE
+    Forbid()
+    Remove(msg)
+    Permit()
+ENDPROC
+
+PROC sendBreak(c)
+    DEF buf[256]:STRING
+    DEF fh
+
+    StringF(buf, 'FIFO:bbsshell\d/\c', node, c)
+    IF ((fh:=Open(buf, 1005))) THEN Close(fh)
+ENDPROC
 
 PROC doorLog(type, str:PTR TO CHAR)
   DEF gfp1
@@ -12598,8 +12830,8 @@ ENDPROC stat
 /*
 static void ListProtocols(void)
 {
- AEPutStr("\r\n                              [Z] AMI-Zmodem Batch");
-//AEPutStr("\r\n                              [X] XPR-Zmodem Batch\r\n");
+ AEPutStr("\b\n                              [Z] AMI-Zmodem Batch");
+//AEPutStr("\b\n                              [X] XPR-Zmodem Batch\b\n");
 }
 */
 
@@ -12819,7 +13051,7 @@ PROC partUploadOK(option)
         ENDWHILE          /* end forever */
         JUMP outoh
       ENDIF
-      ->//AEPutStr("Yes..\r\n");
+      ->//AEPutStr("Yes..\b\n");
 inoh:
     ENDWHILE  /* end while (ExNext(FLock,Fib)) */
   ENDIF     /* end if(Fib->fib_DirEntryType > 0) */
@@ -13168,7 +13400,7 @@ PROC zmodemReceive(flname:PTR TO CHAR,uLFType)
       receivePlayPen()
     ENDIF
     lcFileXfr:=0
-    ->AEPutStr("\r\nNot supported locally...");
+    ->AEPutStr("\b\nNot supported locally...");
   ENDIF
   localUpload:=0
 ENDPROC 0
@@ -16792,7 +17024,34 @@ PROC sendOlmPacket(nodenum,msg:PTR TO CHAR,last)
   ENDIF
 ENDPROC RESULT_SUCCESS
 
+PROC internalCommand0()
+  DEF status
+  DEF string[32]:STRING
+  DEF str[255]:STRING
 
+  IF (checkSecurity(ACS_REMOTE_SHELL)=FALSE)
+    RETURN RESULT_NOT_ALLOWED
+  ENDIF
+  setEnvStat(ENV_SHELL)
+
+  IF(StrLen(cmds.remotePass)>0)
+    status:=getPass2('\b\nEnter Remote Shell Password: ',cmds.remotePass,0,30,string)
+    IF(status<0) THEN RETURN RESULT_SLEEP_LOGOFF
+    IF(status<>RESULT_SUCCESS)
+      aePuts('\b\n')
+      aePuts('Remote password failed\b\n\b\n')
+      StringF(str,'\tRemote password (\s) failed.\n',string)
+      callersLog(str)
+      RETURN RESULT_FAILURE
+		ENDIF
+
+    IF(logonType>=LOGON_TYPE_REMOTE) 
+      status:=checkCarrier()
+      IF(status=FALSE) THEN RETURN RESULT_SLEEP_LOGOFF
+    ENDIF
+  ENDIF
+  remoteShell()
+ENDPROC RESULT_SUCCESS
 
 PROC internalCommand1(params)
   IF (checkSecurity(ACS_ACCOUNT_EDITING)=FALSE)
@@ -16804,7 +17063,6 @@ ENDPROC RESULT_SUCCESS
 PROC internalCommand2(params)
   DEF temp[255]:STRING
   DEF n,loop,fh,stat
-  setEnvStat(ENV_SYSOP)
   IF (checkSecurity(ACS_LIST_NODES)=FALSE)
     RETURN RESULT_NOT_ALLOWED
   ENDIF
@@ -16952,7 +17210,7 @@ inputAgain:
      stat2:=lineInput('','',8,INPUT_TIMEOUT,str)
      IF(stat2<0) THEN RETURN stat2
      IF(StrLen(str)=0)
-       aePuts('\r\n')
+       aePuts('\b\n')
        RETURN RESULT_SUCCESS
      ENDIF
      IF(StrCmp(str,'?')) THEN JUMP helpAgain
@@ -19104,7 +19362,7 @@ PROC confScan()
     ENDFOR
 
     IF checkSecurity(ACS_UPLOAD)
-      ->//AEPutStr("\r\n[35m  --[32mChecking for PartUploads\r\n[0m");
+      ->//AEPutStr("\b\n[35m  --[32mChecking for PartUploads\b\n[0m");
       FOR conf:=1 TO cmds.numConf
         IF (checkConfAccess(conf))
            mystat:=joinConf(conf,TRUE,FALSE,TRUE)
@@ -19159,7 +19417,7 @@ PROC captureRealAndInternetNames()
         ELSEIF findUserFromName(1,NAME_TYPE_REALNAME,tempstr,tempUser,tempUserKeys,tempUserMisc)
             aePuts('Already in use!, try another.\b\n\b\n')
         ELSE
-          aePuts('Ok!\r\n')
+          aePuts('Ok!\b\n')
           valid:=TRUE
         ENDIF
       ENDIF
@@ -19183,7 +19441,7 @@ PROC captureRealAndInternetNames()
         ELSEIF findUserFromName(1,NAME_TYPE_INTERNETNAME,tempstr,tempUser,tempUserKeys,tempUserMisc)
             aePuts('Already in use!, try another.\b\n\b\n')
         ELSE
-          aePuts('Ok!\r\n')
+          aePuts('Ok!\b\n')
           valid:=TRUE
         ENDIF
       ENDIF
@@ -19243,7 +19501,9 @@ ENDPROC processInternalCommand(cmdcode,cmdparams,TRUE)
 PROC processInternalCommand(cmdcode,cmdparams,silentFail=FALSE)
   DEF res=RESULT_SUCCESS
 
-  IF (StrCmp(cmdcode,'1'))
+  IF (StrCmp(cmdcode,'0'))
+    res:=internalCommand0()
+  ELSEIF (StrCmp(cmdcode,'1'))
     res:=internalCommand1(cmdparams)
   ELSEIF (StrCmp(cmdcode,'2'))
     res:=internalCommand2(cmdparams)
@@ -19519,7 +19779,7 @@ PROC checkPassword()
           runSysCommand('PWFAIL','')
 			    JUMP logoffErr
 			  ENDIF
-		    stat:=getPass2('PassWord: ',0,loggedOnUser.pwdHash,50)
+		    stat:=getPass2('PassWord: ',0,loggedOnUser.pwdHash,50,tempStr)
 		    IF(stat<0) THEN RETURN RESULT_SLEEP_LOGOFF
         IF(stat<>RESULT_SUCCESS)
 			    StringF(tempStr2,'\tPassword Failure (\s)',tempStr)
