@@ -139,6 +139,7 @@ CONST UPARROW=4
 CONST DOWNARROW=5
 
 CONST CHAR_BACKSPACE=8
+CONST CHAR_DELETE=127
 CONST CHAR_TAB=9
 
 CONST BIO_CTRL_FLUSH=11
@@ -2280,6 +2281,7 @@ PROC getPass2(prompt: PTR TO CHAR,password:PTR TO CHAR,pwdhash:LONG, max:LONG,ou
 
   DEF c,i,j
   DEF pass[200]:STRING
+  DEF tempstr[255]:STRING
 
   i:=1
   IF (password<>NIL) AND (StrLen(password)=0) THEN RETURN RESULT_FAILURE
@@ -2292,9 +2294,11 @@ PROC getPass2(prompt: PTR TO CHAR,password:PTR TO CHAR,pwdhash:LONG, max:LONG,ou
       IF((c=RESULT_NO_CARRIER) OR (c=RESULT_TIMEOUT)) THEN RETURN c
       IF(c=CHAR_BACKSPACE)
          IF j<>0
-            sendBackspace()
-            aePuts(' ')
-            sendBackspace()
+            StrCopy(tempstr,'')
+            strAddChar(tempstr,8)
+            StrAdd(tempstr,' ')
+            strAddChar(tempstr,8)
+            aePuts(tempstr)
            j--
          ENDIF
       ELSE
@@ -2603,6 +2607,11 @@ PROC strCpy(dest: PTR TO CHAR, source: PTR TO CHAR, len)
   ENDIF
 ENDPROC
 
+PROC strAddChar(dest,source)
+  StrAdd(dest,' ')
+  dest[EstrLen(dest)-1]:=source
+ENDPROC
+
 /*PROC aePutChar(c)
   DEF str[1]:STRING
   StrCopy(str,' ')
@@ -2817,8 +2826,8 @@ ENDPROC
 PROC sCheckInput()
   DEF result1=0,result2=0
   
-  IF(consoleReadIO) THEN result1:=CheckIO(consoleReadIO)
-  IF(serialReadIO) THEN result2:=CheckIO(serialReadIO)
+  IF(consoleReadIO) AND (ioFlags[IOFLAG_KBD_IN]) THEN result1:=CheckIO(consoleReadIO)
+  IF(serialReadIO) AND (ioFlags[IOFLAG_SER_IN]) THEN result2:=CheckIO(serialReadIO)
 ENDPROC result1 OR result2
 
 ->PROC dateDiff(date1: PTR TO datestamp, date2: PTR TO datestamp)
@@ -2913,8 +2922,10 @@ PROC lineInput(promptText,defaultOutput,maxLen,timeout,outputString,addToHistory
   DEF result
   DEF wasControl,ch
   DEF cmdCharString[1]:STRING
-  DEF timedout, i,originalTimeout
+  DEF timedout, i,originalTimeout,curpos
+  DEF tempstr[255]:STRING
   DEF warning=FALSE
+
   IF StrLen(promptText)>0
     aePuts(promptText)
   ENDIF
@@ -2940,6 +2951,7 @@ PROC lineInput(promptText,defaultOutput,maxLen,timeout,outputString,addToHistory
   ->IF defaultOutput<>outputString THEN
   StrCopy(outputString,defaultOutput,ALL)
   aePuts(outputString)
+  curpos:=StrLen(outputString)
   
   conPuts('[ p') /* turn console cursor on */
 
@@ -2963,7 +2975,7 @@ redoinput:
     IF timedout=FALSE
       warning:=FALSE
       timeout:=originalTimeout
-      IF ch=2       -> CTRL B
+      IF (ch=2) AND (wasControl=0)  -> CTRL B
         FOR i:=0 TO ListLen(historyBuf)-1
           DisposeLink(ListItem(historyBuf,i))
         ENDFOR
@@ -2973,52 +2985,115 @@ redoinput:
         wasControl:=TRUE
       ENDIF
       
-      IF ch=24       -> CTRL X
-        FOR i:=1 TO StrLen(outputString)
-          sendBackspace()
-          aePuts(' ')
-          sendBackspace()
+      IF (ch=24) AND (wasControl=0)   -> CTRL X
+        StrCopy(tempstr,'')
+        FOR i:=curpos TO StrLen(outputString)-1
+          StrAdd(tempstr,'[1C')
         ENDFOR
+        FOR i:=1 TO StrLen(outputString)
+          strAddChar(tempstr,8)
+          StrAdd(tempstr,' ')
+          strAddChar(tempstr,8)
+        ENDFOR
+        aePuts(tempstr)
         StrCopy(outputString,'')
+        curpos:=0
       ENDIF
       
       IF (rawArrow=FALSE)
         IF (ch=UPARROW) AND (ListLen(historyBuf)>0)
+          StrCopy(tempstr,'')
+          FOR i:=curpos TO StrLen(outputString)-1
+            StrAdd(tempstr,'[1C')
+          ENDFOR
           FOR i:=1 TO StrLen(outputString)
-            sendBackspace()
-            aePuts(' ')
-            sendBackspace()
+            strAddChar(tempstr,8)
+            StrAdd(tempstr,' ')
+            strAddChar(tempstr,8)
           ENDFOR
           StrCopy(outputString,historyBuf[historyCycle],maxLen)
           historyCycle--
           IF historyCycle<0 THEN historyCycle:=ListLen(historyBuf)-1
+          aePuts(tempstr)
           aePuts(outputString)
+          curpos:=StrLen(outputString)
         ENDIF
         IF (ch=DOWNARROW) AND (ListLen(historyBuf)>0) 
+          StrCopy(tempstr,'')
+          FOR i:=curpos TO StrLen(outputString)-1
+            StrAdd(tempstr,'[1C')
+          ENDFOR
           FOR i:=1 TO StrLen(outputString)
-            sendBackspace()
-            aePuts(' ')
-            sendBackspace()
+            strAddChar(tempstr,8)
+            StrAdd(tempstr,' ')
+            strAddChar(tempstr,8)
           ENDFOR
           StrCopy(outputString,historyBuf[historyCycle],maxLen)
           historyCycle++
           IF historyCycle>=ListLen(historyBuf) THEN historyCycle:=0
+          aePuts(tempstr)
           aePuts(outputString)
+          curpos:=StrLen(outputString)
+        ENDIF
+        IF ((ch=LEFTARROW) AND (curpos>0))
+          curpos--
+          aePuts('[1D')
+        ENDIF
+        IF ((ch=RIGHTARROW) AND (curpos<(StrLen(outputString))))
+          curpos++
+          aePuts('[1C')
         ENDIF
       ENDIF
 
       IF (wasControl=FALSE)
         cmdCharString[0]:=ch
-        IF (ch=8)
-          IF EstrLen(outputString)>0
+        IF (ch=CHAR_BACKSPACE)
+          StrCopy(tempstr,'')
+          IF curpos>0
+            strAddChar(tempstr,ch)
+            curpos--
+            FOR i:=curpos TO StrLen(outputString)-2
+              outputString[i]:=outputString[i+1]
+              strAddChar(tempstr,outputString[i+1])
+            ENDFOR
+            StrAdd(tempstr,' ')
+            FOR i:=curpos TO StrLen(outputString)-1
+              StrAdd(tempstr,'[1D')
+            ENDFOR
+            
             SetStr(outputString,EstrLen(outputString)-1)      
-            aePuts(cmdCharString)
-            aePuts(' ')
-            aePuts(cmdCharString)
+            aePuts(tempstr)
+          ENDIF
+        ELSEIF (ch=CHAR_DELETE)
+          StrCopy(tempstr,'')
+          IF curpos<(StrLen(outputString))
+            FOR i:=curpos TO StrLen(outputString)-2
+              outputString[i]:=outputString[i+1]
+              strAddChar(tempstr,outputString[i+1])
+            ENDFOR
+            StrAdd(tempstr,' ')
+            FOR i:=curpos TO StrLen(outputString)-1
+              StrAdd(tempstr,'[1D')
+            ENDFOR
+            SetStr(outputString,EstrLen(outputString)-1)      
+            aePuts(tempstr)
           ENDIF
         ELSEIF (ch>31) AND (EstrLen(outputString)<maxLen)
-          StrAdd(outputString,cmdCharString)
+          StrCopy(tempstr,'')
+          StrAdd(outputString,'#')
+          FOR i:=StrLen(outputString)-1 TO curpos+1 STEP -1
+            outputString[i]:=outputString[i-1]
+          ENDFOR
+          outputString[curpos]:=ch
           aePuts(cmdCharString)
+          curpos++
+          FOR i:=curpos TO StrLen(outputString)-1
+            strAddChar(tempstr,outputString[i])
+          ENDFOR
+          FOR i:=curpos TO StrLen(outputString)-1
+            StrAdd(tempstr,'[1D')
+          ENDFOR
+          aePuts(tempstr)
         ENDIF
       ENDIF
     ENDIF
@@ -4030,6 +4105,12 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
 
             IF pagedFlag AND Not(temp)
               IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_SYSOP_PAGE',tempstring))
+                filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+                processMci2(tempstring,tempstring2)
+                SystemTagList(tempstring2,filetags)
+                END filetags
+              ENDIF
+              IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_SYSOP_PAGE',tempstring))
                 filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
                 processMci2(tempstring,tempstring2)
                 SystemTagList(tempstring2,filetags)
@@ -6062,7 +6143,7 @@ PROC clearStatusPane()
   statPrint('[0mLOCATION                       [34m|[0m 0[34m|[0m 0[34m|[0m    0[34m|[0m    0[34m|[0m           0[34m|[0m           0[34m|   ')
   statCursorTo(1,3)
   formatLongDateTime(getSystemTime(),tempstr2)
-  StringF(tempStr,'[0mTIME \s[25] [34m|[0m       0[34m|[0m    0[34m|[0mLAST CALLED                   [34m|',tempstr2)
+  StringF(tempStr,'[0mTIME \s[25] [34m   |[0m       0[34m|[0m    0[34m|[0mLAST CALLED               [34m',tempstr2)
   statPrint(tempStr)
   statPrint('[0m')     /* and set text to normal */
   statParkCursor()
@@ -6239,6 +6320,13 @@ go:
       IF(cmds.acLvl[LVL_VARYING_LINK_RATE]=1) THEN setBaud(onlineBaud)
 
       IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_CONNECT',tempstr))
+        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+        processMci2(tempstr,tempstr2)
+        SystemTagList(tempstr2,filetags)
+        END filetags
+      ENDIF
+
+      IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_CONNECT',tempstr))
         filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
         processMci2(tempstr,tempstr2)
         SystemTagList(tempstr2,filetags)
@@ -6289,6 +6377,7 @@ PROC processInputMessage(timeout, extsig = 0)
     DEF consolesig=0,windowsig=0,obuf[255]:STRING
     DEF ch=0,lch,wasControl=0,signals
     DEF doorsig=0,rexxsig=0,serialsig=0,timersig=0,timedout=0
+    DEF temp[255]:STRING
 
     IF loggedOnUser<>NIL THEN statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
  
@@ -6353,7 +6442,6 @@ PROC processInputMessage(timeout, extsig = 0)
     IF -1<>(lch:=readMayGetChar(serialReadMP,{serbuff}))
       IF (ioFlags[IOFLAG_SER_IN])
         ch:=lch
-
         wasControl:=FALSE
         ->StringF(obuf, 'Serial Received: hex $\z\h[2] = \c', ch, ch)
         ->debugLog(LOG_DEBUG,obuf)
@@ -6374,10 +6462,10 @@ PROC processInputMessage(timeout, extsig = 0)
                    ch:=DOWNARROW
                  CASE "C"
                    IF rawArrow THEN wasControl:=0
-                   ch:=LEFTARROW
+                   ch:=RIGHTARROW
                  CASE "D"
                    IF rawArrow THEN wasControl:=0 
-                   ch:=RIGHTARROW
+                   ch:=LEFTARROW
                ENDSELECT
             ENDIF
           ENDIF
@@ -6425,10 +6513,10 @@ PROC processInputMessage(timeout, extsig = 0)
                    ch:=DOWNARROW
                  CASE "C"
                    IF rawArrow THEN wasControl:=0
-                   ch:=LEFTARROW
+                   ch:=RIGHTARROW
                  CASE "D"
                    IF rawArrow THEN wasControl:=0 
-                   ch:=RIGHTARROW
+                   ch:=LEFTARROW
                ENDSELECT
           ENDIF
         ENDIF     
@@ -6568,6 +6656,42 @@ PROC processInputMessage(timeout, extsig = 0)
       IF reqState=REQ_STATE_NONE THEN reqState:=REQ_STATE_DISPLAY_AWAIT
     ENDIF
 
+    ->Shift F6
+    IF ((wasControl=2) AND (ch="5"))
+      servercmd:=-1
+      ioFlags[IOFLAG_SER_IN]:=0
+      ioFlags[IOFLAG_SCR_OUT]:=-1
+      intDoReset(sopt.offHook)
+      IF (scropen) THEN expressToFront() ELSE openExpressScreen()
+      sendCLS()
+      StringF(temp,'\sNode\d/Callerslog',cmds.bbsLoc,node)
+      logonType:=LOGON_TYPE_LOCAL
+      loggedOnUser:=NEW loggedOnUser
+      loggedOnUserKeys:=NEW loggedOnUserKeys
+      loggedOnUserMisc:=NEW loggedOnUserMisc
+      loadAccount(1,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
+      masterLoadPointers(loggedOnUser)
+      displayCallersLog(temp,FALSE)
+      END loggedOnUser
+      END loggedOnUserKeys
+      END loggedOnUserMisc
+      loggedOnUser:=NIL
+      loggedOnUserMisc:=NIL
+      loggedOnUserKeys:=NIL   
+      resetSystem(1)
+      ioFlags[IOFLAG_SER_IN]:=-1
+      ioFlags[IOFLAG_SCR_OUT]:=0
+      IF(ioFlags[IOFLAG_FIL_IN]) THEN ioFlags[IOFLAG_FIL_IN]:=0
+      IF reqState=REQ_STATE_NONE THEN reqState:=REQ_STATE_DISPLAY_AWAIT
+    ENDIF
+
+    ->F7
+    IF ((wasControl=1) AND (ch="6"))
+      sysopAvail:=Not(sysopAvail)
+      updateTitle(NIL)
+      statChatFlag()
+    ENDIF
+
     ->F8
 	  IF ((wasControl=1) AND (ch="7"))
  			reInitModem()
@@ -6663,6 +6787,7 @@ PROC processInputMessage(timeout, extsig = 0)
     ->F7
     IF ((wasControl=1) AND (ch="6"))
       sysopAvail:=Not(sysopAvail)
+      statChatFlag()
     ENDIF
     
     ->F8 - toggle SER-OUT
@@ -6883,6 +7008,13 @@ PROC processLoggingOff()
     saveAccount(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc,0,0) /* Reseave users account after logoff */
 
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_LOGOFF',tempstr))
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+      processMci2(tempstr,tempstr2)
+      SystemTagList(tempstr2,filetags)
+      END filetags
+    ENDIF
+
+    IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_LOGOFF',tempstr))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
       processMci2(tempstr,tempstr2)
       SystemTagList(tempstr2,filetags)
@@ -8387,12 +8519,13 @@ ENDPROC
 
 PROC edit()
   DEF c
-  DEF cn,j,x,back,bkFlag,helplist
+  DEF cn,i,j,x,back,bkFlag,helplist
   DEF str[200]:STRING
   DEF space[90]:STRING
   DEF str2[10]:STRING
   DEF temp[170]:STRING
   DEF stat,brkflag
+  DEF tempstr[255]:STRING
 
 /* Clear msg buffer */
  rzmsg:=NIL
@@ -8469,6 +8602,8 @@ PROC edit()
 */
   StrCopy(space,'',ALL)
 
+ rawArrow:=TRUE
+
  REPEAT
      bEG_IN:
      StrCopy(msgBuf[lines],space,ALL)
@@ -8493,28 +8628,55 @@ PROC edit()
              JUMP brk
          ENDIF
          IF(c=30) 
+             StrCopy(tempstr,'')
              WHILE(x)
-                 sendBackspace()
-                 aePuts(' ')
-                 sendBackspace()
+                 strAddChar(tempstr,8)
+                 StrAdd(tempstr,' ')
+                 strAddChar(tempstr,8)
                  x--
              ENDWHILE
+             aePuts(tempstr)
              StrCopy(space,'',ALL)
              JUMP next2
          ENDIF
          IF((c=CHAR_BACKSPACE) OR (c=177)) 
-             IF(x>0)
-                 x--
-                 SetStr(space,EstrLen(space)-1)
-                 sendBackspace()
-                 aePuts(' ')
-                 sendBackspace()
-                 JUMP next2
-             ENDIF
-             JUMP next2
+          StrCopy(tempstr,'')
+          IF x>0
+            strAddChar(tempstr,c)
+            x--
+            FOR i:=x TO StrLen(space)-2
+              space[i]:=space[i+1]
+              strAddChar(tempstr,space[i+1])
+            ENDFOR
+            StrAdd(tempstr,' ')
+            FOR i:=x TO StrLen(space)-1
+              StrAdd(tempstr,'[1D')
+            ENDFOR
+            
+            SetStr(space,EstrLen(space)-1)      
+            aePuts(tempstr)
+          ENDIF
+          JUMP next2
+         ENDIF
+         IF (c=CHAR_DELETE)
+          StrCopy(tempstr,'')
+          IF x<(StrLen(space))
+            FOR i:=x TO StrLen(space)-2
+              space[i]:=space[i+1]
+              strAddChar(tempstr,space[i+1])
+            ENDFOR
+            StrAdd(tempstr,' ')
+            FOR i:=x TO StrLen(space)-1
+              StrAdd(tempstr,'[1D')
+            ENDFOR
+            SetStr(space,EstrLen(space)-1)      
+            aePuts(tempstr)
+          ENDIF
+          JUMP next2
          ENDIF
          IF(c=CHAR_TAB)
-             c:=Mod(x,8)
+           c:=Mod(x,8)
+           IF x=(StrLen(space))
              IF(x+(8-c)>72)
               c:=CHAR_TAB
              ELSE
@@ -8526,14 +8688,71 @@ PROC edit()
                     c++
                  ENDWHILE
              ENDIF
+           ELSE
+             IF(StrLen(space)+(7-c)<75)
+               FOR i:=c TO 7
+                StrCopy(tempstr,'')
+                StrAdd(space,'#')
+               ENDFOR
+               FOR i:=StrLen(space)-1 TO x+(7-c) STEP -1
+                 space[i]:=space[i-(8-c)]
+               ENDFOR
+
+               FOR i:=c TO 7
+                space[x]:=" "
+                sendChar(" ")
+                x++
+               ENDFOR
+
+                FOR i:=x TO StrLen(space)-1
+                  strAddChar(tempstr,space[i])
+                ENDFOR
+                FOR i:=x TO StrLen(space)-1
+                  StrAdd(tempstr,'[1D')
+                ENDFOR
+                aePuts(tempstr)
+             ELSE
+              c:=CHAR_TAB
+             ENDIF
+           ENDIF
          ENDIF
+         IF ((c=LEFTARROW) AND (x>0))
+           x--
+           aePuts('[1D')
+         ENDIF
+         IF ((c=RIGHTARROW) AND (x<(StrLen(space))))
+           x++
+           aePuts('[1C')
+         ENDIF
+
          IF(c<" ") THEN JUMP next2
 
-         x++
-         sendChar(c)
-         StrCopy(str2,' ',ALL)
-         str2[0]:=c
-         StrAdd(space,str2)
+         IF (x<StrLen(space))
+            IF StrLen(space)<75
+              StrCopy(tempstr,'')
+              StrAdd(space,'#')
+              FOR i:=StrLen(space)-1 TO x+1 STEP -1
+                space[i]:=space[i-1]
+              ENDFOR
+              space[x]:=c
+              sendChar(c)
+              x++
+              FOR i:=x TO StrLen(space)-1
+                strAddChar(tempstr,space[i])
+              ENDFOR
+              FOR i:=x TO StrLen(space)-1
+                StrAdd(tempstr,'[1D')
+              ENDFOR
+              aePuts(tempstr)
+            ENDIF
+         ELSE
+           x++
+           sendChar(c)
+           StrCopy(str2,' ',ALL)
+           str2[0]:=c
+           StrAdd(space,str2)
+         ENDIF
+
          IF(x>75) 
              back:=0
              brkflag:=FALSE
@@ -8561,11 +8780,13 @@ PROC edit()
              x:=StrLen(str)
              StrCopy(msgBuf[lines],space,ALL)
              StrCopy(space,str,ALL)
+             StrCopy(tempstr,'')
              FOR cn:=0 TO x
-                 sendBackspace()
-                 aePuts(' ')
-                 sendBackspace()
+                 strAddChar(tempstr,8)
+                 StrAdd(tempstr,' ')
+                 strAddChar(tempstr,8)
              ENDFOR
+             aePuts(tempstr)
              aePuts('\b\n')
              JUMP brk
          ENDIF
@@ -8581,6 +8802,8 @@ brk:
   ELSE
       lines:=100
   ENDIF
+
+ rawArrow:=FALSE
 
  aePuts('\b\n')
 
@@ -8689,7 +8912,14 @@ loopHere:
              aePuts(str)
              JUMP loopHere
          ENDIF
-         StringF(space,'\b\n\d[2]> \s\b\n',x,msgBuf[x-1])
+         StrCopy(temp,msgBuf[x-1])
+         aePuts('\b\n    Edit Line')
+         aePuts('\b\n   (---------------------------------------------------------------------------)')
+         stat:=lineInput('\b\n    ',temp,75,INPUT_TIMEOUT,temp)
+         IF (stat<0) THEN RETURN stat
+         StrCopy(msgBuf[x-1],temp,ALL)
+         
+         /*StringF(space,'\b\n\d[2]> \s\b\n',x,msgBuf[x-1])
          aePuts(space)
          aePuts('\b\n    Old string;New string')
          aePuts('\b\n   (------------------------------------------------------------)')
@@ -8713,7 +8943,7 @@ loopHere:
              IF (stat=0) THEN JUMP cont2
 
              StrCopy(msgBuf[x-1],temp,ALL)
-         ENDIF
+         ENDIF*/
          JUMP cont2
      ENDIF
 
@@ -9066,6 +9296,12 @@ skipAll:
 
     IF (tempUser.slotNumber=1)
       IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_SYSOP_COMMENT',tempStr))
+        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+        processMci2(tempStr,tempStr2)
+        SystemTagList(tempStr2,filetags)
+        END filetags
+      ENDIF
+      IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_SYSOP_COMMENT',tempStr))
         filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
         processMci2(tempStr,tempStr2)
         SystemTagList(tempStr2,filetags)
@@ -11157,13 +11393,21 @@ PROC sendQuietFlag(opt)
   ENDIF
 ENDPROC
 
-PROC upDateTitle(hoozer: PTR TO user)
-  DEF pflag[1]:STRING
+PROC updateTitle(hoozer: PTR TO user)
+  DEF aflag,pflag
+
+  IF pagedFlag THEN pflag:="*" ELSE pflag:=" "
+  IF sysopAvail THEN aflag:="*" ELSE aflag:=" "
+
+  StringF(titlebar,'    AmiExpress BBS (c)\s  \s                      Node \d \c',expressDate,expressVer,node,aflag)
+
+  IF hoozer=NIL
+    IF window<>NIL THEN SetWindowTitles(window,titlebar,titlebar)
+    RETURN
+  ENDIF
   
   IF(scropen)
-    StrCopy(pflag,' ')
-    IF pagedFlag THEN pflag[0]:="*" ELSE pflag[0]:=" "
-    StringF(ititlebar,'   \s\s, \s, (\d \s[10] [\d]) \d mins, \d',pflag,hoozer.name,hoozer.phoneNumber,hoozer.secStatus,hoozer.conferenceAccess,currentConf,Div(timeLimit,60),onlineBaud) ->//(RTS) was Online_BaudR
+    StringF(ititlebar,'   \c\s, \s, (\d \s[10] [\d]) \d mins, \d \c',pflag,hoozer.name,hoozer.phoneNumber,hoozer.secStatus,hoozer.conferenceAccess,currentConf,Div(timeLimit,60),onlineBaud,aflag) ->//(RTS) was Online_BaudR
     IF(dStatBar=NIL)
       SetWindowTitles(window,ititlebar,ititlebar)
     
@@ -11186,7 +11430,7 @@ ENDPROC
 PROC statPrintTime(s: PTR TO CHAR)
   DEF str[32]:STRING
  
-  StringF(str,'\s[30]',s)
+  StringF(str,'\s[18]',s)
   statMessage(1,3,str)
 ENDPROC
 
@@ -11213,7 +11457,7 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
   IF((bitPlanes=1) AND (pagedFlag)) THEN StringF(string,'*\s[14]',hoozer.name) ELSE StringF(string,'\s[15]',hoozer.name)
   statMessage(1,1,string)
   ->statChatFlag()
-  upDateTitle(hoozer)
+  updateTitle(hoozer)
 
   StringF(string,'\s[15]',hoozer3.realName)
   statMessage(17,1,string)
@@ -11262,12 +11506,12 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
   statMessage(77,2,string)
 
   StringF(string,'\d[8]',hoozer.dailyBytesLimit)
-  statMessage(33,3,string)
+  statMessage(36,3,string)
 
   StringF(string,'\d[5]',hoozer.timesCalled AND $FFFF)
-  statMessage(42,3,string)
+  statMessage(45,3,string)
 
-  statMessage(48,3,'                              ')
+  statMessage(51,3,'                           ')
 
   IF(hoozer.newUser = FALSE) 
     formatLongDateTime(loggedOnUser.timeLastOn,string)
@@ -11278,10 +11522,13 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
       StringF(string,' * * New User Account  * * ')
     ENDIF
   ENDIF
-  statMessage(48,3,string)
+  statMessage(51,3,string)
 
-  StringF(string,'\d Min & \d[2] Secs ', Div(timeLimit,60), timeLimit-(Mul(Div(timeLimit,60),60)))
+  StringF(string,'\d Min & \d[2] Secs', Div(timeLimit,60), timeLimit-(Mul(Div(timeLimit,60),60)))
   statPrintTime(string)
+
+  StringF(string,' \r\s[15]',hostIP)
+  statMessage(19,3,string)
 
 ENDPROC
 
@@ -13065,6 +13312,7 @@ PROC uploadDesc()
   DEF str[255]:STRING,str2[255]:STRING,odate[50]:STRING,str3[200]:STRING,str4[200]:STRING,buff[255]:STRING
   DEF udf
   DEF brk=0
+  DEF seglist=0
  
   cleanItUp()
   aePuts('Batch UpLoading.....\b\n')
@@ -13076,7 +13324,8 @@ updesccont:
     count++
     StringF(str,'\b\nFileName \d: ',count)
     aePuts(str)
-    status:=lineInput('','',12,INPUT_TIMEOUT,str);
+    ->status:=lineInput('','',12,INPUT_TIMEOUT,str);
+    status:=lineInput('','',100,INPUT_TIMEOUT,str)
     IF(status<0) THEN RETURN status
     IF(((str[0]="A") OR (str[0]="a")) AND (StrLen(str)=1))
       aePuts('\b\n')
@@ -13086,14 +13335,39 @@ updesccont:
     brk:=(StrLen(str)=0)
     IF(brk) THEN aePuts('\b\n')
     EXIT brk
-
-    status:=checkForFile(str)   /* is file online ?? */
-    IF(status=RESULT_FAILURE)
-      aePuts('File Exists, or has a symbol (#?*).\b\n')
-      count--
-      JUMP updesccont
+    
+    StrCopy(str2,str)
+    UpperStr(str2)
+    IF Not((strCmpi(str2,'HTTP://',7)) OR (strCmpi(str2,'HTTPS://',8)) OR (strCmpi(str2,'FTP://',6)))
+      IF StrLen(str)>12
+        aePuts('Files longer than 12 characters are not allowed.\b\n')
+        count--
+        JUMP updesccont
+      ENDIF
+      status:=checkForFile(str)   /* is file online ?? */
+      IF(status=RESULT_FAILURE)
+        aePuts('File Exists, or has a symbol (#?*).\b\n')
+        count--
+        JUMP updesccont
+      ENDIF
     ENDIF
 
+    IF (strCmpi(str2,'HTTP://',7)) OR (strCmpi(str2,'HTTPS://',8)) OR (strCmpi(str2,'FTP://',6))
+      StrCopy(str2,str)
+      StrCopy(str,FilePart(str2),ALL)
+
+      IF(StrLen(sopt.ramPen)>0) THEN StringF(str4,'\s/\s',sopt.ramPen,str) ELSE StringF(str4,'\sNode\d/Playpen/\s',cmds.bbsLoc,node,str)
+      StringF(str3,'curl -# -f -k \s -o \s',str2,str4)
+      Execute(str3,NIL,NIL)
+      IF fileExists(str4)
+        lcFileXfr:=TRUE
+      ELSE
+        aePuts('File download was not successful.\b\n')
+        count--
+        JUMP updesccont
+      ENDIF
+    ENDIF
+    
     StringF(str4,'\s\s',nodeWorkDir,str)             /* 11w add */
     
     udf:=Open(str4,MODE_OLDFILE)
@@ -14293,6 +14567,12 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
     callersLog(str)
     udLog(str)
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_UPLOAD',str))
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+      processMci2(str,string)
+      SystemTagList(string,filetags)
+      END filetags
+    ENDIF
+    IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_UPLOAD',str))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
       processMci2(str,string)
       SystemTagList(string,filetags)
@@ -15294,7 +15574,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
 
   DEF flag, command
   DEF tempStr[255]:STRING
-  DEF temp,stat
+  DEF temp,stat,i
 
   nofkeys:=1
   displayAccount(which,hoozer,hoozer2,hoozer3,f6)
@@ -15430,19 +15710,23 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
           IF(loggedOnUser.slotNumber=1)
  				    aePuts('[3;56H')
 
-            aePuts('         ')
-            sendBackspace();sendBackspace();sendBackspace();sendBackspace();sendBackspace()
-            sendBackspace();sendBackspace();sendBackspace();sendBackspace()
-
+            StrCopy(tempStr,'')
+            StrAdd(tempStr,'         ')
+            FOR i:=1 TO 9
+              strAddChar(tempStr,8)
+            ENDFOR
+            aePuts(tempStr)
  				    lineInput('','',50,INPUT_TIMEOUT,tempStr)
             UpperStr(tempStr)
             hoozer.pwdHash:=calcPasswordHash(tempStr)
           ENDIF
         ELSE
-          aePuts('[3;56H')
-          aePuts('         ')
-          sendBackspace();sendBackspace();sendBackspace();sendBackspace();sendBackspace()
-          sendBackspace();sendBackspace();sendBackspace();sendBackspace()
+          StrCopy(tempStr,'[3;56H')
+          StrAdd(tempStr,'         ')
+          FOR i:=1 TO 9
+            strAddChar(tempStr,8)
+          ENDFOR
+          aePuts(tempStr)
  				  lineInput('','',50,INPUT_TIMEOUT,tempStr)
           UpperStr(tempStr)
           hoozer.pwdHash:=calcPasswordHash(tempStr)
@@ -15594,6 +15878,7 @@ PROC listNewAccounts(f6)
   DEF foflag,x,maximum,stat
   DEF fh
   DEF tempStr[255]:STRING
+  DEF i
 
   onlineEdit:=1
   foflag:=0
@@ -15637,9 +15922,16 @@ PROC listNewAccounts(f6)
               onlineEdit:=0
               RETURN stat
             ENDIF
-            sendBackspace();sendBackspace();sendBackspace();sendBackspace();sendBackspace();sendBackspace();sendBackspace();sendBackspace();sendBackspace()
-            aePuts('         ')
-            sendBackspace();sendBackspace();sendBackspace();sendBackspace();sendBackspace();sendBackspace();sendBackspace();sendBackspace();sendBackspace()
+            StrCopy(tempStr,'')
+            
+            FOR i:=1 TO 9
+              strAddChar(tempStr,8)
+            ENDFOR
+            StrAdd(tempStr,'         ')
+            FOR i:=1 TO 9
+              strAddChar(tempStr,8)
+            ENDFOR
+            aePuts(tempStr)
           CASE 3 /* ^C */
             aePuts('\b\nAbort\b\n')
             JUMP acctMark1
@@ -17620,12 +17912,19 @@ PROC internalCommandO()
   pagedFlag:=1
   
   IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_SYSOP_PAGE',string))
-    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
     processMci2(string,string2)
     SystemTagList(string2,filetags)
     END filetags
   ENDIF
   
+  IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_SYSOP_PAGE',string))
+    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+    processMci2(string,string2)
+    SystemTagList(string2,filetags)
+    END filetags
+  ENDIF
+
   IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_SYSOP_PAGE')) AND (StrLen(mailOptions.sysopEmail)>0)
     StringF(string,'\s: Ami-Express page notification',cmds.bbsName)
     
@@ -20158,6 +20457,13 @@ logonLoop:
 
   IF logonType>=LOGON_TYPE_REMOTE
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_LOGON',tempStr))
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+      processMci2(tempStr,tempStr2)
+      SystemTagList(tempStr2,filetags)
+      END filetags
+    ENDIF
+
+    IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_LOGON',tempStr))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
       processMci2(tempStr,tempStr2)
       SystemTagList(tempStr2,filetags)
@@ -20353,6 +20659,13 @@ PROC newUserAccount(userName: PTR TO CHAR)
   masterSavePointers(loggedOnUser)
 
   IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_NEW_USER',tempStr2))
+    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+    processMci2(tempStr2,tempStr)
+    SystemTagList(tempStr,filetags)
+    END filetags
+  ENDIF
+
+  IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_NEW_USER',tempStr2))
     filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
     processMci2(tempStr2,tempStr)
     SystemTagList(tempStr,filetags)
@@ -21162,8 +21475,6 @@ PROC main() HANDLE
     debug:=TRUE
   ENDIF
 
-  StringF(titlebar,'    AmiExpress BBS (c)\s  \s                      Node \d',expressDate,expressVer,node)
-  
   ioFlags[IOFLAG_FIL_IN]:=0
   ioFlags[IOFLAG_KBD_IN]:=-1
   ioFlags[IOFLAG_SER_IN]:=-1
@@ -21402,7 +21713,8 @@ PROC main() HANDLE
     ENDFOR
   ENDIF
 
-  sysopAvail:=cmds.acLvl[LVL_DEFAULT_CHAT_ON]
+  sysopAvail:=IF cmds.acLvl[LVL_DEFAULT_CHAT_ON] THEN TRUE ELSE FALSE
+  updateTitle(NIL)
 
   IF(sopt.toggles[TOGGLES_QUIETSTART])
     quietFlag:=TRUE
