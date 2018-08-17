@@ -35,7 +35,7 @@ ENUM ZMODEM_NONE, ZMODEM_UPLOAD, ZMODEM_DOWNLOAD
 
 ENUM NAME_TYPE_USERNAME, NAME_TYPE_REALNAME, NAME_TYPE_INTERNETNAME
 
-ENUM UPDATE_RATIO,UPDATE_RATIO_TYPE,UPDATE_MAILSCAN_PTRS,UPDATE_NEW_MAIL_SCAN,UPDATE_NEW_FILE_SCAN,UPDATE_DEFAULT_ZOOM_FLAG,UPDATE_LAST_MESSAGE,UPDATE_MESSAGES_POSTED
+ENUM UPDATE_RATIO,UPDATE_RATIO_TYPE,UPDATE_MAILSCAN_PTRS,UPDATE_NEW_MAIL_SCAN,UPDATE_NEW_FILE_SCAN,UPDATE_DEFAULT_ZOOM_FLAG,UPDATE_LAST_MESSAGE,UPDATE_MESSAGES_POSTED, UPDATE_RESET_VOTING
 
 ENUM ENV_IDLE=0,ENV_DOWNLOADING=1,ENV_UPLOADING=2,ENV_DOORS=3,ENV_MAIL=4,ENV_STATS=5,ENV_ACCOUNT=6,ENV_ZOOM=7,ENV_FILES=8,ENV_BULLETINS=9,
       ENV_VIEWING=10,ENV_ACCOUNTSEQ=11,ENV_LOGOFF=12,ENV_SYSOP=13,ENV_SHELL=14,ENV_EMACS=15,ENV_JOIN=16,ENV_CHAT=17,ENV_NOTACTIVE=18,
@@ -220,66 +220,6 @@ CONST TOGGLES_CREDITBYKB=19
 
 stuff to do:
 
-'Voting Booth'
-'                  [34m*[0m--[33mVOTING TOPICS MENU[0m--[34m*[0m\b\n'
-'[0mVOTING IS NOT ESTABLISHED FOR THIS CONFERENCE\b\n\b\n'
-'[34m[[0m Q[34m] [33mQUIT[0m\b\n'
-'>: '
-'Vote/vote%02d.def'
-'[34m[[0m%2d[34m] [32mVOTED [35m'
-'[34m[[0m%2d[34m]       [35m'
-'[0m\b\n'
-'                 [34m*[0m--[33mVOTE MAINTENANCE[0m--[34m*[0m\b\n\b\n'
-'[34m[[0m 1[34m] [35mSHOW VOTING STATISTICS[0m\b\n'
-
-'[34m[[0m 2[34m] [35mSHOW TOPICS[0m\b\n'
-'[34m[[0m 3[34m] [35mCREATE VOTE TOPIC[0m\b\n'
-					
-'[34m[[0m 4[34m] [35mDELETE VOTE TOPIC[0m\b\n'
-'[34m[[0m 5[34m] [35mEDIT   VOTE TOPIC[0m\b\n'
-'[34m[[0m 6[34m] [35mVOTE[0m\b\n'
-
-'[34m[[0m 7[34m] [33mEXIT VOTE MAINTENANCE[0m\b\n'
-'>'
-'%sVote/uservote%d'
-'[33mTOPIC [34m[[0m'
-'[34m][0m\b\n\b\n'
-'%sVote/vote%02d.%02d.qst'
-'\b\nQUESTION #%02d\b\n'
-'%sVote/vote%02d.%02d.cnt'
-'[35mTOTAL VOTES FOR THIS QUESTION [0m= [33m%4.0f\b\n'
-'%sVote/vote%02d.%02d.%c.cnt'
-'%sVote/vote%02d.%02d.%c'
-'[34m[[0m%c[34m][0m %-40.40s [35mVOTES[33m:' [0m%4.0f, %3.0f%%\b\n'
-'[34m[[0m%c[34m][0m %-40.40s\b\n'
-'    %s\b\n'
-'\b\n[0mCHOICE >: '
-'%c\b\n'
-'vote%02d.%02d.%c.cnt'
-'%sVote/%s'
-'%f''%sVote/VoteLock'
-'[34mENTER TOPIC NUMBER TO DELETE [33m>:[0m '
-'[0mTHIS TOPIC DOES NOT EXIST\b\n'
-'[33mTOPIC DELETED[0m\b\n'
-'[34mENTER TOPIC NUMBER [33m([0m1-25[33m)[34m>:[0m '
-'[0mINVALID TOPIC\b\n'
-'[0mTOPIC ALREADY EXISTS\b\n'
-'[0m   ENTER OPTION\b\n'
-'[0m1. EDIT DESCRIPTION\b\n'
-'[0m2. EDIT QUESTION\b\n'
-'[0m3. EDIT ANSWER\b\n'
-'[0m4. EXIT\b\n'
-'[0m>'
-'%c'
-'%sVote'
-'[33mENTER TOPIC DESCRIPTION [0m[34mEDIT QUESTION NUMBER[0m > '
-'QUESTION DOES NOT EXIST\b\n'
-'[33mENTER QUESTION[0m\b\n'
-'[34mEDIT CHOICE [33m[[0mA-Z[33m][0m > '
-'CHOICE DOES NOT EXIST\b\n'
-'[0mANSWER [33m%c [0m] '
-
-
 any missing Door port commands
     DT_LANGUAGE(set),MOD_TYPE,BYPASS_CSI_CHECK,SETOVERIDE,FULLEDIT (not implemented in /X3 or 4), unknown commands 551,600-640
 
@@ -309,7 +249,6 @@ door tooltypes
 full Acp integration
 RIP
 translations
-F3 instant logon
 ACS_EDIT_FILES
 partdownloads - user@ files
 TOGGLES_NOMCIMSGS=5   ACS_MCI_MSG
@@ -318,42 +257,12 @@ private command
 user.misc - unknown fields
 
 missing commands:
-   VO - conf voting
    ZOOM - zoom mail
 
 NOT needed
 
 multinode / door lock - not used in /X4 anymore
 
-notes:
-
-await screen keys
-
-F1 - sysop logon - done
-F2 - local logon - done
-F3 - instant remote logon
-F4 - reserve node - done
-F5 - conference maintenance
-F6 - account editing - done
-F7 - chat toggle - done
-F8 - reprogram modem - done
-F9 - exit bbs - done
-F10 - exit bbs offhook - done
-
-in call keys
-
-F1- chat   - done
-F2 - add time - done
-F3 - less time - done
-F4 - open capture, F4 to close again - done
-Shift F4 - display file to user - done
-f5 - shell - removed
-F6 - account edit - done
-Shift F6 - temporary account edit - done
-F7 - chat toggle   - done
-f8 - toggle ser in - done
-f9 - toggle ser out - done
-F10 - kick   - done
 */
 
 CONST MAX_SAYINGS=50
@@ -519,6 +428,45 @@ CONST SETOVERIDE=549
 CONST FULLEDIT=550
 CONST SETMCIOFF=551
 
+CONST UNKNOWN1=600
+CONST UNKNOWN2=601
+CONST LAST_READ=602
+CONST LAST_SCANNED=603
+CONST MSGBASE_LOC=604
+CONST UNKNOWN3=605
+CONST DT_REALNAME=606
+CONST UNKNOWN4=607
+CONST UNKNOWN5=608
+CONST SER_INOUT=609
+CONST UNKNOWN6=610
+CONST UNKNOWN7=611
+CONST MEMCONF=612
+CONST UNKNOWN8=613
+CONST CONF_ACCESS=614
+CONST PASSWORD_HASH=615
+CONST GET_GNSFLAG=616
+CONST DISPLAY_FILE=617
+CONST CHECK_TO_DISPLAY=618
+CONST CHOOSE_NAME=619
+CONST SET_FILEATTACH=620
+CONST INTERPRET_MCI=621
+CONST GET_XIMPORT=622
+CONST UNKNOWN9=623
+CONST FILE_REQUEST=624
+CONST UNKNOWN10=625
+CONST UNKNOWN11=626
+CONST REL_CONF=627
+CONST RETURNCOMMAND2=628
+CONST UNKNOWN12=631
+CONST CHECK_PLAYPEN_EXISTS=632
+CONST EXT_LOAD_ACCOUNT=633
+CONST EXT_CHOOSE_NAME=635
+CONST CHECK_REALNAME=636
+CONST DT_INTERNETNAME=637
+CONST DT_TRANSLATOR=638
+CONST DT_HOST_LANGUAGE=639
+CONST XNET_OUTBOUND=640
+
 /*
 undocumented host addresses:
 
@@ -539,8 +487,8 @@ undocumented host addresses:
 614 - check conf access
 615 - calculate password hash from msg.string back to msg.string
 616 - get gnsflag
-617 - display file (fn)
-618 - checktodislay(msg.string)
+617 - display file (fn) without reseting gnsflag
+618 - checktodislay(msg.string) without reseting gnsflag
 619 - choose a name with no filler3 user misc support
 620 - set fileattach flag
 621 - interpret mci string
@@ -556,14 +504,11 @@ undocumented host addresses:
 633 - extended LOAD_ACCOUNT (532) with filler3 / user misc 
 635 - choose a name with filler3 / user misc support 
 636 - 1 if realname turned on, 2 if username turned on otherwise 0
-637 - get or set real name
+637 - get or set internet name
 638 - get or set translator
 639 - get or set host language name (languages.info)
 640 - set amixnet outbound path
 */
-CONST CONF_ACCESS=614
-CONST PASSWORD_HASH=615
-CONST RETURNCOMMAND2=628
 
 /* New host commands for /X5 using range 700+ */
 
@@ -575,6 +520,8 @@ CONST DT_HOSTIP=701
 CONST DT_ADDBIT=1000
 CONST DT_REMBIT=1001
 CONST DT_QUERYBIT=1002
+
+CONST MAX_CMD=1003
 
 MODULE 'intuition/screens',
        'intuition/intuition',
@@ -1085,7 +1032,7 @@ DEF debug=FALSE
 DEF consoleDebugLevel=LOG_NONE
 DEF debugLogLevel=LOG_NONE
 
-DEF state, stateData, reqState
+DEF state, stateData, reqState,instantLogon=FALSE
 DEF windowClose=NIL:PTR TO window
 DEF windowStat=NIL:PTR TO window
 DEF windowZmodem:PTR TO window
@@ -2220,6 +2167,8 @@ PROC checkDoorMsg(mode)
           servercmd:=SV_SYSOPLOG
         CASE SV_LOCALLOG
           servercmd:=SV_LOCALLOG
+        CASE SV_INSTANT
+          servercmd:=SV_INSTANT
         CASE SV_CHATTOGGLE
           sysopAvail:=Not(sysopAvail)
           statChatFlag()
@@ -3342,11 +3291,32 @@ PROC readIntFromFile(filename: PTR TO CHAR)
   ENDIF
 ENDPROC -1
 
+PROC readFloatFromFile(filename: PTR TO CHAR)
+  DEF fh
+  DEF v[100]:STRING
+  IF((fh:=Open(filename,MODE_OLDFILE)))>0
+    ReadStr(fh,v)
+    Close(fh)
+    RETURN RealVal(v)
+  ENDIF
+ENDPROC 0.0
+
 PROC writeIntToFile(filename: PTR TO CHAR, v: LONG)
   DEF fh
   DEF vStr[100]:STRING
   IF((fh:=Open(filename,MODE_NEWFILE)))>0
     StringF(vStr,'\d',v)
+    fileWriteLn(fh,vStr)
+    Close(fh)
+    RETURN RESULT_SUCCESS
+  ENDIF
+ENDPROC RESULT_FAILURE
+
+PROC writeFloatToFile(filename: PTR TO CHAR, v: LONG)
+  DEF fh
+  DEF vStr[100]:STRING
+  IF((fh:=Open(filename,MODE_NEWFILE)))>0
+    RealF(vStr,v,8)
     fileWriteLn(fh,vStr)
     Close(fh)
     RETURN RESULT_SUCCESS
@@ -3731,7 +3701,7 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
     StringF(tempstring,'string: \s',msg.string)
     debugLog(LOG_DEBUG,tempstring)
       IF(msgcmd<>ACP_COMMAND) THEN msg.lineNum:=0
-      SELECT msgcmd
+      SELECT MAX_CMD OF msgcmd
         CASE JH_REGISTER
             msg.command:=IF loggedOnUser<>NIL THEN loggedOnUser.lineLength ELSE 29
             nodes:=nodes+1  
@@ -3832,8 +3802,6 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
         CASE JH_FLAGFILE
            addFlagtoList(msg.string)
         CASE RETURNCOMMAND
-          StrCopy(runOnExit,msg.string,200)
-        CASE RETURNCOMMAND2
           StrCopy(runOnExit,msg.string,200)
         CASE DT_NAME
           IF (msg.data)
@@ -4256,7 +4224,7 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
             IF ansiColour THEN msg.data:=1 ELSE msg.data:=0
         CASE MULTICOM
             msg.semi:=masterNode
-        CASE LOAD_ACCOUNT
+        CASE EXT_LOAD_ACCOUNT,LOAD_ACCOUNT
             msg.nodeID:=0;
             tuserdata:=msg.filler1
             tuserkeys:=msg.filler2
@@ -4329,7 +4297,7 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
         CASE GET_CONFNUM
           strCpy(msg.filler1,getConfName(msg.data),54)
           strCpy(msg.filler2,getConfLocation(msg.data),54)
-       CASE MOD_TYPE
+        CASE MOD_TYPE
             debugLog(LOG_WARN,'MOD_TYPE not yet implemented')
         CASE DT_FILECODE
           checksym:=msg.data
@@ -4343,6 +4311,27 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
             debugLog(LOG_WARN,'SETOVERIDE not yet implemented')
         CASE FULLEDIT
             debugLog(LOG_WARN,'FULLEDIT not yet implemented')
+        CASE LAST_READ
+          msg.data:=lastMsgReadConf
+        CASE LAST_SCANNED
+          msg.data:=lastNewReadConf
+        CASE MSGBASE_LOC
+          IF (msg.data)
+            strCpy(msg.string,msgBaseLocation,26)
+          ELSE
+            StrCopy(msgBaseLocation,msg.string,26)
+          ENDIF
+        CASE DT_REALNAME
+          IF (msg.data)
+            strCpy(msg.string,loggedOnUserMisc.realName,26)
+          ELSE
+            strCpy(loggedOnUserMisc.realName,msg.string,26)
+          ENDIF
+        CASE SER_INOUT
+          ioFlags[IOFLAG_SER_IN]:=msg.data
+          ioFlags[IOFLAG_SER_OUT]:=msg.data
+        CASE MEMCONF
+            debugLog(LOG_WARN,'MEMCONF not yet implemented')
         CASE CONF_ACCESS
           IF (msg.data<0) OR (msg.data>=cmds.numConf)
             msg.data:=2
@@ -4352,6 +4341,56 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
         CASE PASSWORD_HASH
           formatUnsignedLong(calcPasswordHash(msg.string),tempstring)
           strCpy(msg.string,tempstring,20)
+        CASE GET_GNSFLAG
+          msg.data:=IF(nonStopDisplayFlag) THEN 1  ELSE 0
+        CASE DISPLAY_FILE
+          displayFile(msg.string,TRUE,FALSE)
+        CASE CHECK_TO_DISPLAY
+          IF (findSecurityScreen(msg.string,tempstring)) THEN displayFile(tempstring,TRUE,FALSE)
+        CASE SET_FILEATTACH
+          fileattach:=(msg.data<>0)
+        CASE INTERPRET_MCI
+            debugLog(LOG_WARN,'INTERPRET_MCI not yet implemented')
+        CASE GET_XIMPORT
+          msg.data:=ximPort
+        CASE FILE_REQUEST
+          asl(msg.string)
+        CASE REL_CONF
+          msg.data:=relConf(msg.data)
+        CASE RETURNCOMMAND2
+          StrCopy(runOnExit,msg.string,200)
+        CASE CHECK_PLAYPEN_EXISTS
+          msg.data:=checkForFile(msg.string)
+          IF msg.data=0 THEN msg.data:=checkInPlaypens(msg.string)
+        CASE EXT_CHOOSE_NAME,CHOOSE_NAME
+            tuserdata:=msg.filler1
+            tuserkeys:=msg.filler2
+            IF (msg.msg.length>=SIZEOF jhMessage)
+              tusermisc:=msg.filler3
+            ELSE
+              tusermisc:=NIL
+            ENDIF
+            msg.data:=chooseAName(msg.string,tuserdata,tuserkeys,tusermisc,msg.data)
+        CASE CHECK_REALNAME
+          IF checkToolTypeExists(TOOLTYPE_CONF,currentConf,'USERNAME')
+            msg.data:=2
+          ELSEIF checkToolTypeExists(TOOLTYPE_CONF,currentConf,'REALNAME')
+            msg.data:=1
+          ELSE
+            msg.data:=0
+          ENDIF
+        CASE DT_INTERNETNAME
+          IF (msg.data)
+            strCpy(msg.string,loggedOnUserMisc.internetName,10)
+          ELSE
+            strCpy(loggedOnUserMisc.internetName,msg.string,10)
+          ENDIF
+        CASE DT_TRANSLATOR
+            debugLog(LOG_WARN,'DT_TRANSLATOR not yet implemented')
+        CASE DT_HOST_LANGUAGE
+            debugLog(LOG_WARN,'DT_HOST_LANGUAGE not yet implemented')
+        CASE XNET_OUTBOUND
+            debugLog(LOG_WARN,'XNET_OUTBOUND not yet implemented')
         CASE DT_HOSTNAME
           strCpy(msg.string,hostName,200)
         CASE DT_HOSTIP
@@ -6233,7 +6272,10 @@ PROC checkIncomingCall()
   DEF stat,n,isConnected=FALSE
   DEF filetags
    
-    IF(sopt.trapDoor) THEN JUMP go
+    IF(sopt.trapDoor OR instantLogon)
+      instantLogon:=FALSE
+      JUMP go
+    ENDIF
 
     rCount:=ringCount
   
@@ -6530,7 +6572,7 @@ PROC processInputMessage(timeout, extsig = 0)
       reqState:=REQ_STATE_DISPLAY_AWAIT
     ENDIF
 
-    -> F1
+    ->F1
     IF (servercmd=SV_SYSOPLOG) OR ((wasControl=1) AND (ch="0"))
       debugLog(LOG_DEBUG,'SYSOP LOGON')
       statClearTime()
@@ -6542,7 +6584,7 @@ PROC processInputMessage(timeout, extsig = 0)
       reqState:=REQ_STATE_SYSOPLOGON
     ENDIF
   
-    -> F2
+    ->F2
     IF (servercmd=SV_LOCALLOG) OR ((wasControl=1) AND (ch="1"))
       debugLog(LOG_DEBUG,'LOCAL LOGON')
       statClearTime()
@@ -6555,7 +6597,12 @@ PROC processInputMessage(timeout, extsig = 0)
       reqState:=REQ_STATE_LOGON
     ENDIF
 
-    ->F4
+    ->F3
+    IF (servercmd=SV_INSTANT) OR ((wasControl=1) AND (ch="2"))
+      instantLogon:=TRUE
+    ENDIF
+
+    -> F4
     IF (servercmd=SV_LOCALLOG) OR ((wasControl=1) AND (ch="3"))
     
     	IF(StrLen(reservedName)>0)
@@ -8517,7 +8564,7 @@ PROC editAnyFile(params)
 ENDPROC
 
 
-PROC edit()
+PROC edit(allowFullscreen=TRUE,maxLineLen=75)
   DEF c
   DEF cn,i,j,x,back,bkFlag,helplist
   DEF str[200]:STRING
@@ -8535,12 +8582,16 @@ PROC edit()
 
   StringF(str,'\sCommands/SysCmd/FULLEDIT.info',cmds.bbsLoc)
   IF(fileExists(str) AND checkSecurity(ACS_FULL_EDIT) AND (loggedOnUser.editorType<>1))
-    IF(loggedOnUser.editorType<>2)
-      aePuts('[36mFullScreen Editor[0m')
-      stat:=yesNo(2)
-    ELSE
-      stat:=1 
+    stat:=0
+    IF allowFullscreen
+      IF(loggedOnUser.editorType<>2)
+        aePuts('[36mFullScreen Editor[0m')
+        stat:=yesNo(2)
+      ELSE
+        stat:=1 
+      ENDIF
     ENDIF
+    
     IF(stat>0)
       editor.editorIncludeFile:=0
       StringF(editorFileInclude,'\sNode\d/Work/msg.i',cmds.bbsLoc,node)
@@ -8583,8 +8634,12 @@ PROC edit()
   ENDIF
 
   aePuts('\b\n')
-  aePuts('   Enter your text. (Enter) alone to end. (75 chars/line, 100 lines, max)\b\n')
-  aePuts('   (|-------|-------|-------|-------|-------|-------|-------|-------|-------|--)\b\n')
+  StringF(tempstr,'   Enter your text. (Enter) alone to end. (\d chars/line, 100 lines, max)\b\n',maxLineLen)
+  aePuts(tempstr)
+  StrCopy(str,'|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|')
+  SetStr(str,maxLineLen)
+  StringF(tempstr,'   (\s)\b\n',str)
+  aePuts(tempstr)
   IF(lines<>0)
     FOR j:=0 TO lines-1
     StringF(space,'\d[2]> \s\b\n',j+1,msgBuf[j])
@@ -8677,7 +8732,7 @@ PROC edit()
          IF(c=CHAR_TAB)
            c:=Mod(x,8)
            IF x=(StrLen(space))
-             IF(x+(8-c)>72)
+             IF(x+(8-c)>maxLineLen-3)
               c:=CHAR_TAB
              ELSE
                  WHILE c<8
@@ -8689,7 +8744,7 @@ PROC edit()
                  ENDWHILE
              ENDIF
            ELSE
-             IF(StrLen(space)+(7-c)<75)
+             IF(StrLen(space)+(7-c)<maxLineLen)
                FOR i:=c TO 7
                 StrCopy(tempstr,'')
                 StrAdd(space,'#')
@@ -8728,7 +8783,7 @@ PROC edit()
          IF(c<" ") THEN JUMP next2
 
          IF (x<StrLen(space))
-            IF StrLen(space)<75
+            IF StrLen(space)<maxLineLen
               StrCopy(tempstr,'')
               StrAdd(space,'#')
               FOR i:=StrLen(space)-1 TO x+1 STEP -1
@@ -8753,7 +8808,7 @@ PROC edit()
            StrAdd(space,str2)
          ENDIF
 
-         IF(x>75) 
+         IF(x>maxLineLen) 
              back:=0
              brkflag:=FALSE
              FOR cn:=x TO 1 STEP -1
@@ -8915,7 +8970,7 @@ loopHere:
          StrCopy(temp,msgBuf[x-1])
          aePuts('\b\n    Edit Line')
          aePuts('\b\n   (---------------------------------------------------------------------------)')
-         stat:=lineInput('\b\n    ',temp,75,INPUT_TIMEOUT,temp)
+         stat:=lineInput('\b\n    ',temp,maxLineLen,INPUT_TIMEOUT,temp)
          IF (stat<0) THEN RETURN stat
          StrCopy(msgBuf[x-1],temp,ALL)
          
@@ -14089,6 +14144,33 @@ PROC checkForFile(fn: PTR TO CHAR)
 
 ENDPROC RESULT_SUCCESS
 
+PROC checkInPlaypens(s: PTR TO CHAR)
+  DEF lock1,lock2,loop
+  DEF tempstr[255]:STRING
+  loop:=0;
+
+  REPEAT
+    IF(loop=node) THEN loop++
+
+    StringF(tempstr,'\snode\d',cmds.bbsLoc,loop)
+    IF(lock1:=Lock(tempstr,ACCESS_READ))
+      StringF(tempstr,'\sNode\d/PLAYPEN/\s',cmds.bbsLoc,loop,s)
+      IF(lock2:=Lock(tempstr,ACCESS_READ))
+        UnLock(lock2)
+        UnLock(lock1)
+        RETURN 1
+      ELSEIF(IoErr()<>205)
+        UnLock(lock1)
+        RETURN 1
+      ENDIF
+      UnLock(lock1)
+		ENDIF
+    loop++
+  UNTIL lock1=NIL
+ENDPROC 0
+
+
+
 PROC displayOutPutofTest()
   DEF tempstr[255]:STRING
   StringF(tempstr,'\sOutPut_Of_Test',nodeWorkDir)
@@ -15537,6 +15619,553 @@ skipit:
   aePuts('File not found.\b\n\b\n')
 ENDPROC RESULT_SUCCESS
 
+PROC showVoteTopics()
+  DEF topicNum
+  DEF tempstr[255]:STRING
+  DEF votefile[255]:STRING
+  DEF voted=FALSE
+  DEF i,confbit,confbyte
+  DEF cb: PTR TO confBase
+  
+  FOR topicNum:=1 TO 25
+    StringF(votefile,'\sVote/Vote\r\z\d[2].def',currentConfDir,topicNum)
+    IF fileExists(votefile)
+      confbyte:=Shr(topicNum+3,3)
+      confbit:=Shl(1,Mod(topicNum+3,8))
+      cb:=ListItem(confBases,currentConf-1)
+      voted:=(cb.handle[confbyte] AND confbit)<>0
+
+      loadMsg(votefile)
+      FOR i:=0 TO lines-1
+        IF i=0
+          StringF(tempstr,'[34m[[0m\r\d[2][34m] [32m\s [35m\s\b\n',topicNum,msgBuf[i],IF voted THEN 'VOTED' ELSE '     ')
+        ELSE
+          StringF(tempstr,'           [35m\s\b\n',msgBuf[i])
+        ENDIF
+        aePuts(tempstr)
+      ENDFOR
+        
+->      '[34m[[0m\r\z\d[2][34m]       [35m'
+    ENDIF
+  ENDFOR
+  doPause()
+ENDPROC
+
+PROC createVoteTopic()
+  DEF topicNum
+  DEF votefile[255]:STRING
+  DEF tempStr[255]:STRING
+  DEF i,ans,questNum,fh
+  
+  StringF(votefile,'\sVote',currentConfDir)
+  CreateDir(votefile)
+  
+  StringF(votefile,'\sVote/VoteLock',currentConfDir)
+  IF fileExists(votefile)=FALSE
+    IF((fh:=Open(votefile,MODE_NEWFILE)))<=0 THEN RETURN RESULT_FAILURE
+    fileWriteLn(fh,'DO NOT DELETE!')
+    Close(fh)
+  ENDIF
+  
+  aePuts('\b\n[34mENTER TOPIC NUMBER [33m([0m1-25[33m)[34m>:[0m ')
+  topicNum:=numberInputNoDefault()
+  IF (topicNum<1) OR (topicNum>25)
+    RETURN
+  ENDIF  
+  
+  StringF(votefile,'\sVote/Vote\r\z\d[2].def',currentConfDir,topicNum)
+  IF fileExists(votefile)
+    aePuts('\b\n[0mTOPIC ALREADY EXISTS\b\n')
+    RETURN
+  ENDIF
+
+  aePuts('\b\n[33mENTER TOPIC DESCRIPTION [0m\b\n')
+  FOR i:=0 TO ListLen(msgBuf)-1
+    StrCopy(msgBuf[i],'')
+  ENDFOR
+  lines:=0
+  IF edit(FALSE,50)<>RESULT_SUCCESS THEN RETURN RESULT_SUCCESS
+  IF lines=0 THEN RETURN RESULT_SUCCESS
+  
+  saveMsg(votefile)
+  questNum:=1
+  REPEAT
+    StringF(tempStr,'\b\n[33mENTER QUESTION \d[0m\b\n',questNum)
+    aePuts(tempStr)
+    FOR i:=0 TO ListLen(msgBuf)-1
+      StrCopy(msgBuf[i],'')
+    ENDFOR
+    lines:=0
+
+    IF edit(FALSE,50)<>RESULT_SUCCESS THEN lines:=0
+
+    IF lines<>0
+      StringF(votefile,'\sVote/Vote\r\z\d[2].\r\z\d[2].qst',currentConfDir,topicNum,questNum)
+      saveMsg(votefile)
+      ans:="A"
+      REPEAT  
+        StringF(tempStr,'\b\nANSWER [33m\c[0m ]\b\n',ans)
+        aePuts(tempStr)
+        FOR i:=0 TO ListLen(msgBuf)-1
+          StrCopy(msgBuf[i],'')
+        ENDFOR
+        lines:=0
+        IF edit(FALSE,50)<>RESULT_SUCCESS THEN lines:=0
+        
+        IF (lines<>0)
+          StringF(votefile,'\sVote/Vote\r\z\d[2].\z\d[2].\c',currentConfDir,topicNum,ans)
+          saveMsg(votefile)
+          ans++
+        ELSE
+          ans:=0
+        ENDIF
+      UNTIL (ans>="Z") OR (ans=0)
+      questNum++
+    ELSE
+      questNum:=-1
+    ENDIF
+  UNTIL (questNum<0) OR (questNum>99)
+ENDPROC
+
+PROC deleteVoteTopic()
+  DEF topicNum
+  DEF votefile[255]:STRING
+  DEF i,ans
+  
+  aePuts('\b\n[34mENTER TOPIC NUMBER TO DELETE [33m>:[0m ' )
+  topicNum:=numberInputNoDefault()
+  IF (topicNum<1) OR (topicNum>25)
+    RETURN
+  ENDIF  
+  StringF(votefile,'\sVote/Vote\r\z\d[2].def',currentConfDir,topicNum)
+  
+  IF fileExists(votefile)=FALSE
+    aePuts('\b\n[0mTHIS TOPIC DOES NOT EXIST\b\n')
+    doPause()
+    RETURN
+  ENDIF
+  
+  DeleteFile(votefile)
+
+  i:=1
+  REPEAT 
+    StringF(votefile,'\sVote/Vote\r\z\d[2].\r\z\d[2].qst',currentConfDir,topicNum,i)
+    IF fileExists(votefile)
+      DeleteFile(votefile)
+      StringF(votefile,'\sVote/Vote\r\z\d[2].\r\z\d[2].cnt',currentConfDir,topicNum,i)
+      DeleteFile(votefile)
+      ans:="A"
+      REPEAT
+        StringF(votefile,'\sVote/Vote\r\z\d[2].\r\z\d[2].\c',currentConfDir,topicNum,i,ans)
+        IF fileExists(votefile)
+          DeleteFile(votefile)
+          StringF(votefile,'\sVote/Vote\r\z\d[2].\r\z\d[2].\c.cnt',currentConfDir,topicNum,i,ans)
+          DeleteFile(votefile)
+        ELSE
+          ans:="Z"
+        ENDIF
+        ans++
+      UNTIL ans>"Z"
+    ELSE
+      i:=99
+    ENDIF
+    i++
+  UNTIL i>99
+  
+  aePuts('\b\n[33mTOPIC DELETED[0m\b\n')
+  doPause()
+ENDPROC
+
+PROC editVoteTopic()
+  DEF topicNum,questNum,ans
+  DEF votefile[255]:STRING
+  DEF n,i
+
+  aePuts('\b\n[34mENTER TOPIC NUMBER [33m([0m1-25[33m)[34m>:[0m ')
+  topicNum:=numberInputNoDefault()
+  IF (topicNum<1) OR (topicNum>25)
+    RETURN
+  ENDIF  
+  StringF(votefile,'\sVote/Vote\r\z\d[2].def',currentConfDir,topicNum)
+  IF fileExists(votefile)=FALSE
+    aePuts('[0mTHIS TOPIC DOES NOT EXIST\b\n')
+    RETURN
+  ENDIF
+
+  aePuts('\b\n')
+  REPEAT
+    aePuts('[0m   ENTER OPTION\b\n')
+    aePuts('[0m1. EDIT DESCRIPTION\b\n')
+    aePuts('[0m2. EDIT QUESTION\b\n')
+    aePuts('[0m3. EDIT ANSWER\b\n')
+    aePuts('[0m4. EXIT\b\n')
+    aePuts('[0m>')
+    n:=readChar(INPUT_TIMEOUT)
+    IF n<0 THEN RETURN
+    sendChar(n)
+    aePuts('\b\n')
+    SELECT n
+      CASE "1"
+        aePuts('\b\n[33mEDIT TOPIC DESCRIPTION [0m')
+        StringF(votefile,'\sVote/Vote\r\z\d[2].def',currentConfDir,topicNum)
+        loadMsg(votefile)
+        IF edit(FALSE,50)=RESULT_SUCCESS
+          IF lines>0
+            saveMsg(votefile)
+          ENDIF
+        ENDIF        
+        n:="4"
+      CASE "2"
+        aePuts('\b\n[34mEDIT QUESTION NUMBER[0m > ')
+        questNum:=numberInputNoDefault()
+        IF (questNum>0) AND (questNum<100)
+          StringF(votefile,'\sVote/Vote\r\z\d[2].\r\z\d[2].qst',currentConfDir,topicNum,questNum)
+          IF fileExists(votefile)
+            loadMsg(votefile)
+            IF edit(FALSE,50)=RESULT_SUCCESS
+              IF lines>0
+                saveMsg(votefile)
+              ENDIF
+            ENDIF        
+          ELSE
+            aePuts('\b\nQUESTION DOES NOT EXIST\b\n')
+            doPause()
+          ENDIF
+        ENDIF  
+        n:="4"
+        
+      CASE "3"
+        aePuts('\b\n[34mEDIT QUESTION NUMBER[0m > ')
+        questNum:=numberInputNoDefault()
+        IF (questNum>0) AND (questNum<100)
+          StringF(votefile,'\sVote/Vote\r\z\d[2].\r\z\d[2].qst',currentConfDir,topicNum,questNum)
+          IF fileExists(votefile)
+            aePuts('\b\n[34mEDIT CHOICE [33m[[0mA-Z[33m][0m > ')
+            ans:=readChar(INPUT_TIMEOUT)
+            IF ans<0 THEN RETURN
+            ans:=charToUpper(ans)
+            sendChar(ans)
+            aePuts('\b\n')
+            IF (ans>="A") AND (ans<="Z")
+              StringF(votefile,'\sVote/Vote\r\z\d[2].\r\z\d[2].\c',currentConfDir,topicNum,questNum,ans)
+              IF fileExists(votefile)
+                loadMsg(votefile)
+                IF edit(FALSE,50)=RESULT_SUCCESS
+                  IF lines>0
+                    saveMsg(votefile)
+                  ENDIF
+                ENDIF        
+              ELSE
+                aePuts('\b\nCHOICE DOES NOT EXIST\b\n')
+                doPause()
+              ENDIF
+            ENDIF
+          ELSE
+            aePuts('\b\nQUESTION DOES NOT EXIST\b\n')
+            doPause()
+          ENDIF
+        ENDIF  
+        n:="4"    
+    ENDSELECT
+  UNTIL n="4"
+
+ENDPROC
+
+PROC vote()
+  DEF votefile[255]:STRING
+  DEF topicNum
+  DEF found=0
+  DEF i,confbyte,confbit
+  DEF tempstr[255]:STRING
+  DEF questNum
+  DEF cb: PTR TO confBase
+  DEF voted,stat
+  
+  REPEAT
+    aePuts('\b\n\b\n                  [34m*[0m--[33mVOTING TOPICS MENU[0m--[34m*[0m\b\n\b\n')
+    
+    FOR topicNum:=1 TO 25
+      StringF(votefile,'\sVote/Vote\r\z\d[2].def',currentConfDir,topicNum)
+      IF fileExists(votefile)
+        confbyte:=Shr(topicNum+3,3)
+        confbit:=Shl(1,Mod(topicNum+3,8))
+        cb:=ListItem(confBases,currentConf-1)
+        voted:=(cb.handle[confbyte] AND confbit)<>0
+        loadMsg(votefile)
+        FOR i:=0 TO lines-1
+          IF i=0
+            StringF(tempstr,'[34m[[0m\r\d[2][34m] [32m\s [35m\s\b\n',topicNum,msgBuf[i],IF voted THEN 'VOTED' ELSE '     ')
+          ELSE
+            StringF(tempstr,'           [35m\s\b\n',msgBuf[i])
+          ENDIF
+          aePuts(tempstr)
+        ENDFOR
+        found++
+      ENDIF
+    ENDFOR
+
+    IF found=0
+      aePuts('[0mVOTING IS NOT ESTABLISHED FOR THIS CONFERENCE\b\n\b\n')
+      doPause()
+      RETURN
+    ENDIF
+
+    aePuts('[34m[[0m Q[34m] [33mQUIT[0m\b\n')
+    aePuts('>: ')
+    
+    stat:=lineInput('','',2,INPUT_TIMEOUT,tempstr)
+    IF stat<>RESULT_SUCCESS THEN RETURN
+    topicNum:=Val(tempstr)
+    IF (topicNum>0) AND (topicNum<26)
+      confbyte:=Shr(topicNum+3,3)
+      confbit:=Shl(1,Mod(topicNum+3,8))
+      cb:=ListItem(confBases,currentConf-1)
+      voted:=(cb.handle[confbyte] AND confbit)<>0
+      IF voted
+        showTopicVotes(topicNum)
+      ELSE
+        topicVote(topicNum)
+      ENDIF
+    ENDIF
+  UNTIL strCmpi(tempstr,'Q',ALL)
+ENDPROC
+
+PROC showTopicVotes(topicNum)
+  DEF questNum,i,stat
+  DEF votefile[255]:STRING
+  DEF tempstr[255]:STRING
+  DEF tempstr2[10]:STRING
+  DEF tempstr3[10]:STRING
+  DEF ans
+  DEF cnt1,cnt2
+
+  StringF(tempstr,'\b\n[33mTOPIC [34m[[0m\d[34m][0m\b\n',topicNum)
+  aePuts(tempstr)
+
+  questNum:=1
+  StringF(votefile,'\sVote/Vote\r\z\d[2].\r\z\d[2].qst',currentConfDir,topicNum,questNum)
+  WHILE fileExists(votefile)
+    aePuts('\b\n')   
+    loadMsg(votefile)
+    FOR i:=0 TO lines-1
+      StringF(tempstr,'\s\b\n',msgBuf[i])
+      aePuts(tempstr)
+    ENDFOR
+    aePuts('\b\n')   
+    StringF(votefile,'\sVote/Vote\r\z\d[2].\z\d[2].cnt',currentConfDir,topicNum,questNum)
+    cnt1:=readFloatFromFile(votefile)
+    RealF(tempstr2,cnt1,0)
+
+    StringF(tempstr,'[35mTOTAL VOTES FOR THIS QUESTION [0m= [33m\s\b\n',tempstr2)
+    aePuts(tempstr)
+    ans:="A"
+    StringF(votefile,'\sVote/Vote\r\z\d[2].\z\d[2].\c',currentConfDir,topicNum,questNum,ans)
+    WHILE fileExists(votefile)
+      loadMsg(votefile)
+
+      StringF(votefile,'\sVote/Vote\r\z\d[2].\z\d[2].\c.cnt',currentConfDir,topicNum,questNum,ans)
+      cnt2:=readFloatFromFile(votefile)
+
+      FOR i:=0 TO lines-1
+        IF i=0
+          IF !cnt1>0.0
+            RealF(tempstr2,cnt2,0)
+            RealF(tempstr3,!cnt2/cnt1*100.0,1)
+            StringF(tempstr,'[34m[[0m\c[34m][0m \l\s[40] [35mVOTES[33m: [0m\s, \s%\b\n',ans,msgBuf[i],tempstr2,tempstr3)
+          ELSE
+            StringF(tempstr,'[34m[[0m\c[34m][0m \l\s[40]\b\n',ans,msgBuf[i])
+          ENDIF
+        ELSE
+          StringF(tempstr,'    \s\b\n',msgBuf[i])
+        ENDIF
+        aePuts(tempstr)
+      ENDFOR
+      ans++
+      StringF(votefile,'\sVote/Vote\r\z\d[2].\z\d[2].\c',currentConfDir,topicNum,questNum,ans)
+    ENDWHILE
+
+    stat:=doPause()
+    IF stat<>RESULT_SUCCESS THEN RETURN
+
+    questNum++
+    StringF(votefile,'\sVote/Vote\r\z\d[2].\r\z\d[2].qst',currentConfDir,topicNum,questNum)
+  ENDWHILE
+
+ENDPROC
+
+PROC topicVote(topicNum)
+  DEF questNum,i,stat
+  DEF userfile[255]:STRING
+  DEF votefile[255]:STRING
+  DEF tempstr[255]:STRING
+  DEF tempstr2[10]:STRING
+  DEF tempstr3[10]:STRING
+  DEF ans,ch
+  DEF cnt1,cnt2
+  DEF fh,lock
+  DEF confbyte,confbit
+  DEF cb:PTR TO confBase
+
+  StringF(userfile,'\sVote/uservote\d',currentConfDir,node)
+  IF((fh:=Open(userfile,MODE_NEWFILE)))<=0
+    StringF(tempstr,'\b\nTell \s an error occured creating the uservote file\b\n',cmds.sysopName)
+    aePuts(tempstr)
+    RETURN
+  ENDIF
+
+  StringF(tempstr,'\b\n[33mTOPIC [34m[[0m\d[34m][0m\b\n',topicNum)
+  aePuts(tempstr)
+
+  questNum:=1
+  StringF(votefile,'\sVote/Vote\r\z\d[2].\r\z\d[2].qst',currentConfDir,topicNum,questNum)
+  WHILE fileExists(votefile)
+    aePuts('\b\n')   
+    loadMsg(votefile)
+    FOR i:=0 TO lines-1
+      StringF(tempstr,'\s\b\n',msgBuf[i])
+      aePuts(tempstr)
+    ENDFOR
+    aePuts('\b\n')   
+    StringF(votefile,'\sVote/Vote\r\z\d[2].\z\d[2].cnt',currentConfDir,topicNum,questNum)
+    cnt1:=readFloatFromFile(votefile)
+    RealF(tempstr2,cnt1,0)
+
+    StringF(tempstr,'[35mTOTAL VOTES FOR THIS QUESTION [0m= [33m\s\b\n',tempstr2)
+    aePuts(tempstr)
+    ans:="A"
+    StringF(votefile,'\sVote/Vote\r\z\d[2].\z\d[2].\c',currentConfDir,topicNum,questNum,ans)
+    WHILE fileExists(votefile)
+      loadMsg(votefile)
+
+      FOR i:=0 TO lines-1
+        IF i=0
+          StringF(tempstr,'[34m[[0m\c[34m][0m \l\s[40]\b\n',ans,msgBuf[i])
+        ELSE
+          StringF(tempstr,'    \s\b\n',msgBuf[i])
+        ENDIF
+        aePuts(tempstr)
+      ENDFOR
+      ans++
+      StringF(votefile,'\sVote/Vote\r\z\d[2].\z\d[2].\c',currentConfDir,topicNum,questNum,ans)
+    ENDWHILE
+
+    aePuts('\b\n[0mCHOICE >: ')
+
+    ch:=readChar(INPUT_TIMEOUT)
+    IF ch<0
+      Close(fh)
+      RETURN
+    ENDIF
+    ch:=charToUpper(ch)
+    sendChar(ch)
+    aePuts('\b\n')
+
+    IF (ch>="A") AND (ch<="Z")
+      ans:=ch
+      StringF(votefile,'\sVote/Vote\r\z\d[2].\z\d[2].\c',currentConfDir,topicNum,questNum,ans)
+      IF fileExists(votefile)
+        StringF(votefile,'\sVote/Vote\r\z\d[2].\z\d[2].cnt',currentConfDir,topicNum,questNum)
+        fileWriteLn(fh,votefile)
+        StringF(votefile,'\sVote/Vote\r\z\d[2].\z\d[2].\c.cnt',currentConfDir,topicNum,questNum,ans)
+        fileWriteLn(fh,votefile)
+      ENDIF
+    ENDIF
+
+    stat:=doPause()
+    IF stat<>RESULT_SUCCESS
+      Close(fh)
+      RETURN
+    ENDIF
+
+    questNum++
+    StringF(votefile,'\sVote/Vote\r\z\d[2].\r\z\d[2].qst',currentConfDir,topicNum,questNum)
+  ENDWHILE
+
+  Close(fh)
+  StringF(votefile,'\sVote/VoteLock',currentConfDir)
+
+  i:=0
+  REPEAT
+    lock:=Lock(votefile,ACCESS_WRITE)
+    IF lock=NIL
+      Delay(60)
+    ENDIF
+    i++
+  UNTIL (lock<>NIL) OR (i=10)
+
+  IF(lock) 
+    IF((fh:=Open(userfile,MODE_OLDFILE)))>0
+      WHILE(ReadStr(fh,votefile)<>-1) OR (StrLen(votefile)>0)
+        cnt2:=!readFloatFromFile(votefile)+1.0
+        writeFloatToFile(votefile,cnt2)
+      ENDWHILE
+      Close(fh)
+    ENDIF
+    UnLock(lock)
+
+    ->flag voting as complete
+    cb:=ListItem(confBases,currentConf-1)
+    confbyte:=Shr(topicNum+3,3)
+    confbit:=Shl(1,Mod(topicNum+3,8))
+    cb.handle[confbyte]:=cb.handle[confbyte] OR confbit
+  ELSE
+    StringF(tempstr,'\tError \d trying to Lock Voting Booth',IoErr())
+    callersLog(tempstr)
+  ENDIF
+
+ENDPROC
+
+PROC showVoteStats()
+  DEF topicNum
+  DEF votefile[255]:STRING
+
+  FOR topicNum:=1 TO 25
+    StringF(votefile,'\sVote/Vote\r\z\d[2].def',currentConfDir,topicNum)
+    IF fileExists(votefile)
+      showTopicVotes(topicNum)
+    ENDIF
+  ENDFOR
+ENDPROC
+
+PROC voteMenu()
+  DEF ch
+  REPEAT
+    sendCLS()
+    aePuts('\b\n                 [34m*[0m--[33mVOTE MAINTENANCE[0m--[34m*[0m\b\n\b\n')
+    aePuts('[34m[[0m 1[34m] [35mSHOW VOTING STATISTICS[0m\b\n')
+    aePuts('[34m[[0m 2[34m] [35mSHOW TOPICS[0m\b\n')
+    aePuts('[34m[[0m 3[34m] [35mCREATE VOTE TOPIC[0m\b\n'	)				
+    aePuts('[34m[[0m 4[34m] [35mDELETE VOTE TOPIC[0m\b\n')
+    aePuts('[34m[[0m 5[34m] [35mEDIT   VOTE TOPIC[0m\b\n')
+    aePuts('[34m[[0m 6[34m] [35mVOTE[0m\b\n')
+    aePuts('[34m[[0m 7[34m] [33mEXIT VOTE MAINTENANCE[0m\b\n')
+    aePuts('\b\n>')
+  
+    ch:=readChar(INPUT_TIMEOUT)
+    IF ch<0 THEN RETURN
+    sendChar(ch)
+    aePuts('\b\n')
+
+    SELECT ch
+      CASE "1"
+        showVoteStats()
+      CASE "2"
+        showVoteTopics()
+      CASE "3"
+        createVoteTopic()
+      CASE "4"
+        deleteVoteTopic()
+      CASE "5"
+        editVoteTopic()
+      CASE "6"
+        vote()
+        ch:=0
+    ENDSELECT
+      
+  UNTIL (ch<"1") OR (ch="7") 
+
+ENDPROC
+
 PROC findLastAccount()
   DEF fh,size
 
@@ -16503,6 +17132,11 @@ PROC updateAllUsers(confnum,updateType, newVal)
             cb.confYM:=newVal
           CASE UPDATE_MESSAGES_POSTED
             cb.messagesPosted:=newVal
+          CASE UPDATE_RESET_VOTING
+            cb.handle[0]:=cb.handle[0] AND 15
+            cb.handle[1]:=0
+            cb.handle[2]:=0
+            cb.handle[3]:=0
         ENDSELECT
 
         stat:=Write(fh,cb,SIZEOF confBase)
@@ -16726,8 +17360,8 @@ PROC conferenceMaintenance()
         aePuts('[17;2H [0mWorking....')
         updateAllUsers(conf,UPDATE_MESSAGES_POSTED,0)
       CASE "A"
-        aePuts('[17;2H [0mNot yet implemented....')
-        Delay(60)
+        aePuts('[17;2H [0mWorking....')
+        updateAllUsers(conf,UPDATE_RESET_VOTING,-1)
       CASE "B"
         aePuts('[0mNext Message > ')
         n:=numberInputNoDefault()
@@ -18172,6 +18806,18 @@ PROC internalCommandV(cmdcode,params)
 
   setEnvStat(ENV_VIEWING)
   viewAFile(cmdcode,params)
+ENDPROC RESULT_SUCCESS
+
+PROC internalCommandVO()
+  IF checkSecurity(ACS_VOTE)=FALSE THEN RETURN RESULT_NOT_ALLOWED
+  
+  setEnvStat(ENV_DOORS)
+  setEnvMsg('Voting Booth')
+  IF checkSecurity(ACS_MODIFY_VOTE)
+    voteMenu()
+  ELSE
+    vote()
+  ENDIF
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandW()
@@ -19870,6 +20516,8 @@ PROC processInternalCommand(cmdcode,cmdparams,silentFail=FALSE)
     res:=internalCommandV(cmdcode,cmdparams)
   ELSEIF (StrCmp(cmdcode,'VS'))
     res:=internalCommandV(cmdcode,cmdparams)
+  ELSEIF (StrCmp(cmdcode,'VO'))
+    res:=internalCommandVO()
   ELSEIF (StrCmp(cmdcode,'W'))
     res:=internalCommandW()
   ELSEIF (StrCmp(cmdcode,'WHO'))
@@ -20555,7 +21203,7 @@ PROC processAwait()
       IF dStatBar THEN clearStatusPane()
     ENDIF
     
-    IF (checkSer()) OR (sopt.trapDoor)
+    IF (checkSer()) OR (sopt.trapDoor) OR (instantLogon)
       IF checkIncomingCall()=RESULT_CONNECT
         debugLog(LOG_DEBUG,'REMOTE LOGON')
         ioFlags[IOFLAG_SCR_OUT]:=-1
@@ -21359,8 +22007,8 @@ PROC main() HANDLE
   DEF p : PTR TO CHAR
   DEF tempfh
    
-  StrCopy(expressVer,'v5.0.0-b8',ALL)
-  StrCopy(expressDate,'03-Aug-2018',ALL)
+  StrCopy(expressVer,'v5.0.0-b9',ALL)
+  StrCopy(expressDate,'17-Aug-2018',ALL)
 
   stripAnsi(0,0,1,0)
   
