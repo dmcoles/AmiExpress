@@ -13,13 +13,13 @@ ENUM SUBSTATE_DISPLAY_AWAIT, SUBSTATE_INPUT, SUBSTATE_DISPLAY_BULL, SUBSTATE_DIS
 
 ENUM CMDTYPE_BBSCMD,CMDTYPE_SYSCMD
 
-ENUM TOOLTYPE_PRESET, TOOLTYPE_NODE,TOOLTYPE_CONFCONFIG,TOOLTYPE_CONF,TOOLTYPE_BBSCMD,TOOLTYPE_CONFCMD,TOOLTYPE_NODECMD,TOOLTYPE_SYSCMD,TOOLTYPE_DRIVES,TOOLTYPE_NAMESNOTALLOWED,TOOLTYPE_COMPUTERLIST,TOOLTYPE_ACCESS,TOOLTYPE_AREA,TOOLTYPE_PRESET,TOOLTYPE_FCHECK,TOOLTYPE_NODE_WINDOW,TOOLTYPE_NODE_TIMES,TOOLTYPE_WINDOW,TOOLTYPE_CONNECT,TOOLTYPE_XPRTYPES,TOOLTYPE_XFERLIB,TOOLTYPE_SCREENTYPES,TOOLTYPE_NRAMS, TOOLTYPE_BBSCONFIG
+ENUM TOOLTYPE_PRESET, TOOLTYPE_NODE,TOOLTYPE_CONFCONFIG,TOOLTYPE_CONF,TOOLTYPE_BBSCMD,TOOLTYPE_CONFCMD,TOOLTYPE_NODECMD,TOOLTYPE_SYSCMD,TOOLTYPE_DRIVES,TOOLTYPE_NAMESNOTALLOWED,TOOLTYPE_COMPUTERLIST,TOOLTYPE_ACCESS,TOOLTYPE_AREA,TOOLTYPE_PRESET,TOOLTYPE_FCHECK,TOOLTYPE_NODE_WINDOW,TOOLTYPE_NODE_TIMES,TOOLTYPE_WINDOW,TOOLTYPE_CONNECT,TOOLTYPE_XPRTYPES,TOOLTYPE_XFERLIB,TOOLTYPE_SCREENTYPES,TOOLTYPE_NRAMS, TOOLTYPE_BBSCONFIG,TOOLTYPE_ASCPACK,TOOLTYPE_QWKPACK,TOOLTYPE_QWKCONFIG,TOOLTYPE_DEFAULT_ACCESS,TOOLTYPE_LANGUAGES
 
 ENUM DOORTYPE_XIM, DOORTYPE_AIM, DOORTYPE_SIM
 
 ENUM LOG_NONE=0, LOG_ERROR=1, LOG_WARN=2, LOG_DEBUG=3
 
-ENUM SCREEN_AWAIT, SCREEN_BBSTITLE, SCREEN_LOGON, SCREEN_JOIN, SCREEN_JOINCONF, SCREEN_JOINED, SCREEN_BULL, SCREEN_NODE_BULL, SCREEN_CONF_BULL, SCREEN_MENU, SCREEN_LOGOFF, SCREEN_DOWNLOAD, SCREEN_UPLOAD, SCREEN_NEWUSERPW, SCREEN_NONEWUSERS, SCREEN_NONEWATBAUD, SCREEN_GUESTLOGON, SCREEN_NOCALLERSATBAUD, SCREEN_LOCKOUT0, SCREEN_LOCKOUT1, SCREEN_PRIVATE, SCREEN_ONENODE, SCREEN_LOGON24, SCREEN_NOT_TIME, SCREEN_FILEHELP
+ENUM SCREEN_AWAIT, SCREEN_BBSTITLE, SCREEN_LOGON, SCREEN_JOIN, SCREEN_JOINCONF, SCREEN_JOINED, SCREEN_BULL, SCREEN_NODE_BULL, SCREEN_CONF_BULL, SCREEN_MENU, SCREEN_LOGOFF, SCREEN_DOWNLOAD, SCREEN_UPLOAD, SCREEN_NEWUSERPW, SCREEN_NONEWUSERS, SCREEN_NONEWATBAUD, SCREEN_GUESTLOGON, SCREEN_NOCALLERSATBAUD, SCREEN_LOCKOUT0, SCREEN_LOCKOUT1, SCREEN_PRIVATE, SCREEN_ONENODE, SCREEN_LOGON24, SCREEN_NOT_TIME, SCREEN_FILEHELP,SCREEN_LANGUAGES
 
 ENUM LOGON_TYPE_LOGGED_OFF=0, LOGON_TYPE_SYSOP=1, LOGON_TYPE_LOCAL=2, LOGON_TYPE_REMOTE=3
 
@@ -223,16 +223,8 @@ stuff to do:
 any missing Door port commands
     DT_LANGUAGE(set),MOD_TYPE,BYPASS_CSI_CHECK,SETOVERIDE,FULLEDIT (not implemented in /X3 or 4), unknown commands 551,600-640
 
-acp tooltypes
-  CREDIT_BY_KBYTES  (TOGGLES_CREDITBYKB)
-
-acs tooltypes
-  ACS_OVERRIDE_DEFAULTS
-  ACS_CENSORED
-
 node tooltypes
   FREE_RESUMING  - see /X4 docs (LVL_ALLOW_FREE_RESUMING & ACS_ALLOW_FREE_RESUMING)
-  STICKY - unknown
   RIPSCRIPT  - unknown (cant see any code that uses this value)
   NODBLBUFFER  - don't allow double buffer size during serial xfer
   HDTRANSBUFFER - see /X4 docs
@@ -247,17 +239,14 @@ door tooltypes
  TYPE= <TIM | IIM | MCI >
 
 full Acp integration
-RIP
+
+STICKY - trapdoor parameter
 translations
-ACS_EDIT_FILES
 partdownloads - user@ files
 TOGGLES_NOMCIMSGS=5   ACS_MCI_MSG
 private command
 (ami-x) net confs - msgbase.info
 user.misc - unknown fields
-
-missing commands:
-   ZOOM - zoom mail
 
 NOT needed
 
@@ -939,8 +928,9 @@ OBJECT startOption
   nodeScreens[80]:ARRAY OF CHAR ->done
   t: PTR TO LONG                ->done
   s: PTR TO LONG                ->done
-  unknown5: PTR TO LONG
-ENDOBJECT ->exp884
+  translation: PTR TO LONG   -> 
+  acpWindow: PTR TO window
+ENDOBJECT ->exp888
 
 OBJECT mailConfig
   smtpHost[255]:ARRAY OF CHAR
@@ -1002,8 +992,8 @@ ENDOBJECT
 ->792 nodeScreen[80]:ARRAY OF CHAR -> should be 792
 ->872  t: PTR TO LONG  -> should be 872
 ->876  s: PTR TO LONG  -> should be 876
-->880  unknown4: PTR TO LONG -> should be 880
-->884
+->880  unknown4: PTR TO LONG -> should be 880 - translator list (currently always null)
+->884  unknown5: PTR TO LONG -> should be 884 - acp window
 
 OBJECT editor
   maxFileLength:INT
@@ -1015,6 +1005,11 @@ OBJECT editor
   editorIncludeFile:PTR TO CHAR
   editorPrependFile: PTR TO CHAR
   editorPostPendFile: PTR TO CHAR
+ENDOBJECT
+
+OBJECT qwkNDX
+  recNum:LONG
+  conf:CHAR
 ENDOBJECT
 
 DEF masterMsg:master
@@ -1082,6 +1077,7 @@ DEF userMiscFile[255]:STRING
 DEF maxDirs
 DEF ansi: ansi
 DEF quickFlag=FALSE
+DEF ripMode=FALSE
 DEF ansiColour=TRUE
 DEF lineCount=0
 DEF nonStopDisplayFlag=FALSE
@@ -1128,6 +1124,7 @@ DEF purgeScanNM[31]:STRING
 DEF validUser=0
 DEF freeDownloads=FALSE
 DEF acsLevel=-1
+DEF overrideDefaultAccess=FALSE
 DEF connectString[20]:STRING
 DEF ioFlags[7]:ARRAY OF CHAR
 DEF trapConnect[100]:STRING
@@ -1176,6 +1173,10 @@ DEF xprTitle: PTR TO LONG
 DEF screenTypeTitle: PTR TO LONG
 DEF screenTypeExt: PTR TO LONG
 DEF scomment:PTR TO LONG
+
+DEF hostLanguage[255]:STRING
+DEF userLanguage[255]:STRING
+DEF wordHighlight=0
 
 DEF lines=0
 DEF rzmsg=0
@@ -1243,6 +1244,10 @@ PROC checkIconifyMsg()
 ENDPROC
 
 PROC convertAccess()
+  DEF tempStr[255]:STRING
+  StringF(tempStr,'\sAccess.info',cmds.bbsLoc)
+  IF fileExists(tempStr)=FALSE THEN overrideDefaultAccess:=TRUE ELSE overrideDefaultAccess:=checkSecurity(ACS_OVERRIDE_DEFAULTS)
+  StrCopy(securityFlags,'')
 ENDPROC
 
 PROC stcsma(s: PTR TO CHAR,p: PTR TO CHAR)
@@ -2394,6 +2399,34 @@ PROC formatLongDateTime(cDateVal,outDateStr)
   ENDIF
 ENDPROC FALSE
 
+PROC formatLongDateTime2(cDateVal,outDateStr)
+  DEF d : PTR TO datestamp
+  DEF dt : datetime
+  DEF datestr[10]:STRING
+  DEF timestr[10]:STRING
+  DEF r,dateVal
+  
+  dateVal:=cDateVal-21600
+
+  d:=dt.stamp
+  d.tick:=(dateVal-Mul(Div(dateVal,60),60))
+  d.tick:=Mul(d.tick,50)
+  dateVal:=Div(dateVal,60)
+  d.days:=Div((dateVal),1440)-2922   ->-2922 days between 1/1/70 and 1/1/78
+  d.minute:=dateVal-(Mul(d.days+2922,1440))
+
+  dt.format:=FORMAT_USA
+  dt.flags:=0
+  dt.strday:=0
+  dt.strdate:=datestr
+  dt.strtime:=timestr
+
+  IF DateToStr(dt)
+    StringF(outDateStr,'\s,\s',datestr,timestr)
+    RETURN TRUE
+  ENDIF
+ENDPROC FALSE
+
 ->returns a numeric value of the date suitable for comparing to other dates
 PROC getDateCompareVal(datestr:PTR TO CHAR)
   DEF month,day,year
@@ -3459,6 +3492,9 @@ PROC getNodeFile(toolType,tooltypeSelector,nodeFile)
     CASE TOOLTYPE_COMPUTERLIST
       -> tooltypeSector is not used
       StringF(nodeFile,'\sComputerList',cmds.bbsLoc)
+    CASE TOOLTYPE_DEFAULT_ACCESS
+      -> tooltypeSector is not used
+      StringF(nodeFile,'\sAccess',cmds.bbsLoc)
     CASE TOOLTYPE_ACCESS
       -> tooltypeSector is access level number
       StringF(nodeFile,'\sAccess/ACS.\d',cmds.bbsLoc,tooltypeSelector)
@@ -3504,6 +3540,18 @@ PROC getNodeFile(toolType,tooltypeSelector,nodeFile)
       ELSE
         StrCopy(nodeFile,'')
       ENDIF   
+    CASE TOOLTYPE_ASCPACK
+      -> tooltypeSector is not used
+      StringF(nodeFile,'\sZoom/ASCPACK',cmds.bbsLoc)
+    CASE TOOLTYPE_QWKPACK
+      -> tooltypeSector is not used
+      StringF(nodeFile,'\sZoom/QWKPACK',cmds.bbsLoc)
+    CASE TOOLTYPE_QWKCONFIG
+      -> tooltypeSector is not used
+      StringF(nodeFile,'\sZoom/QWKCFG',cmds.bbsLoc)
+    CASE TOOLTYPE_LANGUAGES
+      -> tooltypeSector is not used
+      StringF(nodeFile,'\sLanguages',cmds.bbsLoc)
   ENDSELECT
 ENDPROC
 
@@ -4220,6 +4268,7 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
           aeGoodFile:=msg.data
         CASE DT_ANSICOLOR
             IF msg.data THEN ansiColour:=TRUE ELSE ansiColour:=FALSE
+            IF msg.data=2 THEN ripMode:=TRUE
         CASE DT_ISANSI
             IF ansiColour THEN msg.data:=1 ELSE msg.data:=0
         CASE MULTICOM
@@ -4386,9 +4435,17 @@ PROC runDoor(cmd,type,command,params,pri=0,stacksize=20000)
             strCpy(loggedOnUserMisc.internetName,msg.string,10)
           ENDIF
         CASE DT_TRANSLATOR
-            debugLog(LOG_WARN,'DT_TRANSLATOR not yet implemented')
+          IF (msg.data)
+            strCpy(msg.string,userLanguage,200)
+          ELSE
+            strCpy(userLanguage,msg.string,200)
+          ENDIF
         CASE DT_HOST_LANGUAGE
-            debugLog(LOG_WARN,'DT_HOST_LANGUAGE not yet implemented')
+          IF (msg.data)
+            strCpy(msg.string,hostLanguage,200)
+          ELSE
+            strCpy(hostLanguage,msg.string,200)
+          ENDIF
         CASE XNET_OUTBOUND
             debugLog(LOG_WARN,'XNET_OUTBOUND not yet implemented')
         CASE DT_HOSTNAME
@@ -4733,7 +4790,7 @@ PROC joinConf(conf, confScan, auto, skipMailScan=FALSE)
 
   loadMsgPointers(conf)
  
-  mystat:=getMailStatFile()
+  mystat:=getMailStatFile(conf)
   IF(mystat=RESULT_FAILURE) THEN RETURN RESULT_FAILURE
   IF(lastMsgReadConf<mailStat.lowestNotDel) THEN lastMsgReadConf:=mailStat.lowestNotDel
   IF(lastNewReadConf<mailStat.lowestNotDel) THEN lastNewReadConf:=mailStat.lowestNotDel
@@ -5766,6 +5823,11 @@ PROC findSecurityScreen(screenDirAndName,screenfileName)
 
   ->DEF_SCREENS means find non-security screens first
   IF (defscr)
+    IF ripMode
+      StringF(screenfileName,'\s\s',screenDirAndName,'.RIP')
+      IF fileExists(screenfileName) THEN RETURN TRUE
+    ENDIF
+
     IF loggedOnUser<>NIL
       IF (loggedOnUser.screenType<ListLen(screenTypeExt))
         StringF(screenfileName,'\s\s',screenDirAndName,screenTypeExt[loggedOnUser.screenType])
@@ -5780,6 +5842,11 @@ PROC findSecurityScreen(screenDirAndName,screenfileName)
   IF (loggedOnUser<>NIL)
     secLevel:=loggedOnUser.secStatus/5*5
     WHILE (secLevel>=minLevel)
+      IF ripMode
+        StringF(screenfileName,'\s\d\s',screenDirAndName,secLevel,'.RIP')
+        IF fileExists(screenfileName) THEN RETURN TRUE
+      ENDIF
+
       IF (loggedOnUser.screenType<ListLen(screenTypeExt))
         StringF(screenfileName,'\s\d\s',screenDirAndName,secLevel,screenTypeExt[loggedOnUser.screenType])
         IF fileExists(screenfileName) THEN RETURN TRUE
@@ -5792,6 +5859,10 @@ PROC findSecurityScreen(screenDirAndName,screenfileName)
 
   ->check non security screens at end if not DEF_SCREENS
   IF (defscr=FALSE)
+    IF ripMode
+      StringF(screenfileName,'\s\s',screenDirAndName,'.RIP')
+      IF fileExists(screenfileName) THEN RETURN TRUE
+    ENDIF
     IF loggedOnUser<>NIL
       IF (loggedOnUser.screenType<ListLen(screenTypeExt))
         StringF(screenfileName,'\s\s',screenDirAndName,screenTypeExt[loggedOnUser.screenType])
@@ -5953,6 +6024,9 @@ PROC displayScreen(screenType)
     CASE SCREEN_LOGON24
       StringF(screencheck,'\s',cmds.bbsLoc,'Logon24hrs')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
+    CASE SCREEN_LANGUAGES
+      StringF(screencheck,'\s',cmds.bbsLoc,'Languages')
+      IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
   ENDSELECT
 ENDPROC res
 
@@ -5961,17 +6035,31 @@ PROC displayFile(filename, allowMCI=TRUE, resetNonStop=TRUE)
   DEF firstline=TRUE
   DEF linedata[999]:STRING
   DEF len,res,stat,read,lf
+  DEF ripFile=FALSE
+  DEF extension[4]:STRING
   
   lineCount:=0
 
   StrCopy(mciterminator,'|')
+  RightStr(extension,filename,4)
   
+  IF strCmpi(extension,'.rip',ALL)
+    conPuts('\b\n\b\n[0mDisplaying Rip Script\b\n\b\n')
+    ripFile:=TRUE
+  ENDIF
+
   IF (resetNonStop) AND (state<>STATE_LOGGING_OFF) THEN nonStopDisplayFlag:=FALSE
   res:=FALSE
 
   IF (fh:=Open(filename,OLDFILE))>0
     res:=TRUE
     WHILE ((read:=Fgets(fh,linedata,999))<>NIL)
+      IF ripFile
+        IF ioFlags[IOFLAG_SER_OUT]
+          serPuts(linedata)
+        ENDIF
+        JUMP ripCont
+      ENDIF
       len:=StrLen(linedata)-1
       IF linedata[len]="\n"
         SetStr(linedata,len)
@@ -5994,12 +6082,15 @@ PROC displayFile(filename, allowMCI=TRUE, resetNonStop=TRUE)
         aePuts(linedata)
       ENDIF
       stat:=RESULT_SUCCESS
-      IF lf
-        aePuts('\b\n')
-        stat:=checkForPause()
+      IF (ripMode=FALSE) OR (ripFile=FALSE)
+        IF lf
+          aePuts('\b\n')
+          stat:=checkForPause()
+        ENDIF
       ENDIF
       EXIT (stat<>RESULT_SUCCESS) OR (reqState<>REQ_STATE_NONE)
       firstline:=FALSE
+ripCont:
     ENDWHILE
     Close(fh)
   ENDIF
@@ -7099,6 +7190,7 @@ PROC processLoggingOff()
 
   quickFlag:=FALSE
   ansiColour:=TRUE
+  ripMode:=FALSE
   my_struct.ansiColor:=-1
 
   IF (relogon=FALSE)
@@ -7286,10 +7378,17 @@ PROC extCheckSecurity(securityFlag)
 ENDPROC
 
 PROC checkSecurity(securityFlag)  
+  DEF res 
   IF (loggedOnUser=NIL) OR (acsLevel=-1) THEN RETURN FALSE
+
   IF StrLen(securityFlags)>securityFlag
     IF securityFlags[securityFlag]<>"?" THEN RETURN (securityFlags[securityFlag]="T")
   ENDIF
+
+  IF overrideDefaultAccess=FALSE
+    IF checkToolTypeExists(TOOLTYPE_DEFAULT_ACCESS,0,ListItem(securityNames,securityFlag)) THEN RETURN TRUE
+  ENDIF
+
 ENDPROC checkToolTypeExists(TOOLTYPE_ACCESS,acsLevel,ListItem(securityNames,securityFlag)) 
 
 PROC checkConfAccess(confNum)
@@ -7428,11 +7527,11 @@ PROC masterSavePointers(hoozer: PTR TO user)
   ENDFOR
 ENDPROC
 
-PROC getMailStatFile()
+PROC getMailStatFile(confNum)
   DEF fd, stat
   DEF string[100]:STRING
  
-  StringF(string,'\s\s',msgBaseLocation,'MailStats')
+  StringF(string,'\sMsgBase/\s',getConfLocation(confNum),'MailStats')
 
   fd:=Open(string,OLDFILE)
   IF(fd<=0)
@@ -7621,7 +7720,7 @@ PROC displayMessage(gfh)
        ENDIF
    ENDIF
 
-   IF(mailHeader.status="P")
+   IF(mailHeader.status="P") OR (mailHeader.status="p")
        StrCopy(string,'Public Message',ALL)
    ELSE
        StrCopy(string,'Private Message',ALL)
@@ -7633,7 +7732,7 @@ PROC displayMessage(gfh)
    aePuts(str)
  /*ELSE
     netflag=true to be implemented
-   IF(mailHeader.status="P")
+   IF(mailHeader.status="P") OR (mailHeader.status="p")
        StrCopy(string,'Public Message',ALL)
    ELSE
        StrCopy(string,'Private Message',ALL)
@@ -8566,7 +8665,7 @@ ENDPROC
 
 PROC edit(allowFullscreen=TRUE,maxLineLen=75)
   DEF c
-  DEF cn,i,j,x,back,bkFlag,helplist
+  DEF cn,i,j,x,back,bkFlag,helplist=0
   DEF str[200]:STRING
   DEF space[90]:STRING
   DEF str2[10]:STRING
@@ -9123,7 +9222,12 @@ PROC enterMSG(gfh)
 
 skipEntry:
 
- mailHeader.status:="P"
+ IF checkSecurity(ACS_CENSORED)
+   mailHeader.status:="p"
+ ELSE
+   mailHeader.status:="P"
+ ENDIF
+
  IF(StrLen(mailHeader.toName)=0) 
      aFlag:=1
      strCpy(mailHeader.toName,'ALL',ALL)
@@ -9204,7 +9308,15 @@ skipBegin:
         RETURN stat
      ENDIF
 
-     IF (stat) THEN mailHeader.status:="R" ELSE mailHeader.status:="P"
+     IF (stat) 
+       mailHeader.status:="R"
+     ELSE
+       IF checkSecurity(ACS_CENSORED) OR ((mailHeader.status="p") AND (replyFlag=1))
+         mailHeader.status:="p"
+       ELSE
+         mailHeader.status:="P"
+       ENDIF
+     ENDIF
  ENDIF
 
  IF(replyFlag=1)
@@ -9321,7 +9433,7 @@ skipAll:
  mailHeader.msgDate:=getSystemTime()
  strCpy(mailHeader.fromName,loggedOnUser.name,31)
  IF(msgbaselock:=lockMsgBase())
-     getMailStatFile()
+     getMailStatFile(currentConf)
      mailHeader.msgNumb:=mailStat.highMsgNum
      stat:=saveMessageHeader(gfh)
      IF(stat<>RESULT_FAILURE) 
@@ -9641,7 +9753,40 @@ pLoop1:
   IF((stat <= 0) OR (stat > ListLen(xprTitle))) THEN JUMP pLoop1
 
   loggedOnUser.xferProtocol:=stat-1
-ENDPROC
+ENDPROC RESULT_SUCCESS
+
+PROC chooseTranslator()
+  DEF tempstr[15]:STRING
+  DEF stat
+  
+  IF displayScreen(SCREEN_LANGUAGES)=FALSE
+    aePuts('Languages list unavailable\b\n\b\n')
+  ENDIF
+
+redoTrans:
+  aePuts('\b\nLanguage (num) >: ')
+         
+  stat:=lineInput('','',5,INPUT_TIMEOUT,tempstr)
+  IF(stat<0) THEN RETURN stat
+
+  IF(StrLen(tempstr)=0) THEN RETURN RESULT_SUCCESS
+  
+  IF (tempstr[0]="H") OR (tempstr[0]="h")
+    wordHighlight:=Not(wordHighlight)
+    IF wordHighlight
+      aePuts('WORD HIGHLIGHT ON')
+    ELSE
+      aePuts('WORD HIGHLIGHT OFF')
+    ENDIF
+    JUMP redoTrans
+  ENDIF
+  
+  stat:=Val(tempstr)
+  IF (stat <= 0) THEN RETURN RESULT_SUCCESS
+  
+  StringF(tempstr,'LANGUAGE.\d',stat)
+  readToolType(TOOLTYPE_LANGUAGES,'',tempstr,userLanguage)  
+ENDPROC RESULT_SUCCESS
 
 PROC findUserFromNumber(start,hoozer:PTR TO userKeys)
   DEF fh
@@ -9894,7 +10039,7 @@ PROC searchNewMail(gfh, cn)
            aePuts('[0m')
            mailFlag:=1
        ENDIF
-       IF (mailHeader="P") THEN StrCopy(mailStatus,'Public ') ELSE StrCopy(mailStatus,'Private')
+       IF (mailHeader="P") OR (mailHeader="p") THEN StrCopy(mailStatus,'Public ') ELSE StrCopy(mailStatus,'Private')
        StringF(tempStr,'\s  \l\s[29]  \l\s[21]  [0m\z\r\d[6]\b\n',mailStatus,mailHeader.fromName,mailHeader.subject,mailHeader.msgNumb)
        aePuts(tempStr)
         
@@ -9968,11 +10113,12 @@ PROC saveOverHeader(gfh)
   error:=error+Write(gfh,mailHeader+102,9)  ->msgdate, recv & pad
   error:=error+Write(gfh,mailHeader+110,1)   ->PAD
 
+ Seek(gfh,currentSeekPos,OFFSET_BEGINNING)
+
  IF(error<>size)
      myError(ERR_MSGBASE)
      RETURN RESULT_FAILURE
  ENDIF
- Seek(gfh,currentSeekPos,OFFSET_BEGINNING)
  
 ENDPROC RESULT_SUCCESS
 
@@ -10013,7 +10159,7 @@ PROC deleteMSG(gfh)
 
 goAheadDel:
  IF(msgbaselock:=lockMsgBase())
-    getMailStatFile()
+    getMailStatFile(currentConf)
     delMsgNum:=msgNum-fwdFlag
     IF(mailStat.lowestNotDel=delMsgNum) THEN mailStat.lowestNotDel:=mailStat.lowestNotDel+1
     stat:=saveStatOnly()
@@ -10314,7 +10460,7 @@ PROC readit(gfh)
      ENDIF
 
      privateFlag:=0
-     IF((mailHeader.status="R") AND (Not(checkSecurity(ACS_SYSOP_READ)))) 
+     IF(((mailHeader.status="R") OR (mailHeader.status="p")) AND (Not(checkSecurity(ACS_SYSOP_READ)))) 
          IF((stringCompare(mailHeader.toName,loggedOnUser.name)<>RESULT_SUCCESS) AND
             (stringCompare(mailHeader.fromName,loggedOnUser.name)<>RESULT_SUCCESS))
              privateFlag:=1
@@ -10377,12 +10523,13 @@ PROC loadMessageHeader(gfh)
   error:=error+Read(gfh,mailHeader+102,9)
   Seek(gfh,1,OFFSET_CURRENT)
   
+  currentSeekPos:=Seek(gfh,0,OFFSET_CURRENT)
+
   IF(error<>107)
      myError(ERR_MSGBASE)
      RETURN RESULT_FAILURE
  ENDIF
 
- currentSeekPos:=Seek(gfh,0,OFFSET_CURRENT)
  
 ENDPROC RESULT_SUCCESS
 
@@ -10401,9 +10548,9 @@ DEF stat, error
   error:=error+Write(gfh,mailHeader+102,9)  ->msgdate, recv & pad
   error:=error+Write(gfh,mailHeader+110,1)   ->PAD
 
- IF(error<>110) THEN RETURN RESULT_FAILURE
-
  Seek(gfh,currentSeekPos,OFFSET_BEGINNING)
+
+ IF(error<>110) THEN RETURN RESULT_FAILURE
 
  mailStat.highMsgNum:=mailStat.highMsgNum+1
  IF(mailStat.highMsgNum=2) THEN mailStat.lowestNotDel:=1
@@ -10639,12 +10786,26 @@ ENDPROC
 
 PROC displayULStats(u: PTR TO user)
   DEF string[200]:STRING
+  DEF ktot
 
-  StringF(string,'Number of Downloads   : \d (\dk total)\b\n',u.downloads AND $FFFF,Div(u.bytesDownload,1000))
+  ktot:=u.bytesDownload
+  IF sopt.toggles[TOGGLES_CREDITBYKB]=FALSE
+    ktot:=Shr(ktot,10)
+  ENDIF
+  StringF(string,'Number of Downloads   : \d (\dk total)\b\n',u.downloads AND $FFFF,ktot)
   aePuts(string)
-  StringF(string,'Number of Uploads     : \d (\dk total)\b\n',u.uploads AND $FFFF,Div(u.bytesUpload,1000))
+
+  ktot:=u.bytesUpload
+  IF sopt.toggles[TOGGLES_CREDITBYKB]=FALSE
+    ktot:=Shr(ktot,10)
+  ENDIF
+  StringF(string,'Number of Uploads     : \d (\dk total)\b\n',u.uploads AND $FFFF,ktot)
   aePuts(string)
-  StringF(string,'Todays Bytes Available: \d\b\n',bytesADL)
+  IF sopt.toggles[TOGGLES_CREDITBYKB]
+    StringF(string,'Todays KBytes Available: \d\b\n',bytesADL)
+  ELSE
+    StringF(string,'Todays Bytes Available: \d\b\n',bytesADL)
+  ENDIF
   aePuts(string)
 ENDPROC
 
@@ -11632,8 +11793,7 @@ PROC xprfopen()
 
   res:=task.userdata
   MOVE.L res,A4
-
-
+ 
   IF strCmpi(am,'r',ALL) 
     filemode:=MODE_OLDFILE
   ELSEIF strCmpi(am,'w',ALL) 
@@ -11705,7 +11865,7 @@ PROC xprfclose()
 
   res:=task.userdata
   MOVE.L res,A4
-
+ 
   StringF(tempstr,'xprfclose \d',fp)
   debugLog(LOG_DEBUG,tempstr)
   IF fp<>-1 THEN Close(fp)
@@ -11847,7 +12007,7 @@ PROC xprsread()
   IF(bsize > 0)
   
     waiting,status:=getSerialInfo()
-
+   
       /* Return error if carrier is lost. */
 
     IF(checkCarrier())=FALSE
@@ -14521,6 +14681,7 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   DEF mstat      /* check for carrier. trying to stop upload guru from parcial upload */
   DEF filetags
   DEF fsstr[11]:STRING
+  DEF tempsize
  
    /* these two for testing asCII chars */
   DEF cnt1 = 0
@@ -14810,15 +14971,20 @@ ax:
             RETURN RESULT_FAILURE
         ENDIF
         IF( Examine(fLock,fBlock) ) THEN fsize:=fBlock.size
-        IF fsize<=9999999
-          StringF(fsstr,'\r\d[7]',fsize)
-        ELSEIF fsize<=99999999
-          StringF(fsstr,'\d',fsize)
+        IF sopt.toggles[TOGGLES_CREDITBYKB]
+          fsize:=Shr(fsize,10)
+          StringF(fsstr,'\r\d[6]k',fsize)
         ELSE
-          IF checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'CONVERT_TO_MB')=FALSE
+          IF fsize<=9999999
+            StringF(fsstr,'\r\d[7]',fsize)
+          ELSEIF fsize<=99999999
             StringF(fsstr,'\d',fsize)
           ELSE
-            StringF(fsstr,'\r\d[4].\dM',Shr(fsize,20),Div(fsize-Shl(Shr(fsize,20),20),104858))
+            IF checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'CONVERT_TO_MB')=FALSE
+              StringF(fsstr,'\d',fsize)
+            ELSE
+              StringF(fsstr,'\r\d[4].\dM',Shr(fsize,20),Div(fsize-Shl(Shr(fsize,20),20),104858))
+            ENDIF
           ENDIF
         ENDIF
 
@@ -15012,6 +15178,7 @@ move_It:     /* gets here if lostcarrier, and file is complete but not when file
         /* Add Uploaded Bytes to Users Account */
         IF((hold=NIL) AND (lcfile=NIL) AND (rzmsg=NIL)) 
           IF creditAccountTrackUploads(loggedOnUser) 
+            IF sopt.toggles[TOGGLES_CREDITBYKB] THEN fsize:=Shr(fsize,10)
             loggedOnUser.bytesUpload:=loggedOnUser.bytesUpload+fsize
          ENDIF
         ENDIF
@@ -15088,7 +15255,12 @@ move_It:     /* gets here if lostcarrier, and file is complete but not when file
   cleanItUp()
  
  /* we get here after lcfile but gugued*/
-  IF(lcfile=FALSE) THEN bytesADL:=bytesADL+tBT     /* dont add bytes if files moved to LCFILES DIR */
+  tempsize:=tBT
+  IF sopt.toggles[TOGGLES_CREDITBYKB]
+    tempsize:=Shr(tempsize,10)
+  ENDIF
+
+  IF(lcfile=FALSE) THEN bytesADL:=bytesADL+tempsize     /* dont add bytes if files moved to LCFILES DIR */
  
   displayULStats(loggedOnUser)          /* Show User stats.. Num Dnloads, uploads */
   aePuts('\b\n')
@@ -15139,6 +15311,7 @@ PROC downloadAFile(str: PTR TO CHAR, cmdcode: PTR TO CHAR, params)
   DEF string[300]:ARRAY OF CHAR
   DEF tsec,min,secs,x,status,mystat,nad,proto
   DEF peff,pcps,bad,tbad
+  DEF tempsize
   
  -> DEF tempStr[255]:STRING
  ->extern BYTE FreeDownloads,BeenUDd
@@ -15179,7 +15352,11 @@ PROC downloadAFile(str: PTR TO CHAR, cmdcode: PTR TO CHAR, params)
     ENDIF
     IF(loggedOnUser.secBoard<2)
       bad:=(loggedOnUser.secLibrary*loggedOnUser.bytesUpload)-loggedOnUser.bytesDownload
-      StringF(string,'Bytes Avail before UL : \d\b\n',bad)
+      IF sopt.toggles[TOGGLES_CREDITBYKB]
+        StringF(string,'KBytes Avail before UL : \d\b\n',bad)
+      ELSE
+        StringF(string,'Bytes Avail before UL : \d\b\n',bad)
+      ENDIF
       aePuts(string)
       IF(bad<1)
         exceedRatio()
@@ -15240,7 +15417,10 @@ PROC downloadAFile(str: PTR TO CHAR, cmdcode: PTR TO CHAR, params)
      RETURN RESULT_SUCCESS
    ENDIF
  
-  IF(((tbad-tfsize)<0) AND (loggedOnUser.secBoard<2) AND (loggedOnUser.secLibrary<>0) AND (creditAccountEnabled(loggedOnUser)=FALSE))
+  tempsize:=tfsize
+  IF sopt.toggles[TOGGLES_CREDITBYKB] THEN tempsize:=Shr(tempsize,10)
+
+  IF(((tbad-tempsize)<0) AND (loggedOnUser.secBoard<2) AND (loggedOnUser.secLibrary<>0) AND (creditAccountEnabled(loggedOnUser)=FALSE))
     aePuts('Not enough free bytes for requested downloads.\b\n\b\n')
     RETURN RESULT_SUCCESS
   ENDIF
@@ -15255,7 +15435,7 @@ PROC downloadAFile(str: PTR TO CHAR, cmdcode: PTR TO CHAR, params)
   IF((loggedOnUser.secLibrary=0) OR (creditAccountEnabled(loggedOnUser)))
       StringF(str,'\b\n\d mins, (Ratio Disabled), Filespec(\d): ',(Div(timeLimit,60))-min,(numFiles+1))
   ELSE
-      downloadPrompt(loggedOnUser.secBoard,(Div(timeLimit,60))-min,tbad-tfsize,(numFiles+1),nad-freeDFlag,str)
+      downloadPrompt(loggedOnUser.secBoard,(Div(timeLimit,60))-min,tbad-tempsize,(numFiles+1),nad-freeDFlag,str)
   ENDIF
   aePuts(str)
 
@@ -15403,17 +15583,23 @@ sysopDL:
       
  ENDIF
  
- StringF(string,' \d files, \dk bytes, \d minutes \d seconds \d cps, \d% efficiency at \d',onlineNFiles,Div(tBT,1024),Div(tTTM,60),Mod(tTTM,60),pcps,peff,onlineBaud)
+  StringF(string,' \d files, \dk bytes, \d minutes \d seconds \d cps, \d% efficiency at \d',onlineNFiles,Div(tBT,1024),Div(tTTM,60),Mod(tTTM,60),pcps,peff,onlineBaud)
+
+  tempsize:=dTBT
+  IF sopt.toggles[TOGGLES_CREDITBYKB]
+    tempsize:=Shr(tempsize,10)
+  ENDIF
 
   IF(freeDownloads=FALSE)
     my_struct.sessiondbytes:=my_struct.sessiondbytes+dTBT   /* add dnloaded bytes to totalsession bytes */
     IF creditAccountTrackDownloads(loggedOnUser)
-      loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+dTBT
+      
+      loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+tempsize
       loggedOnUser.downloads:=loggedOnUser.downloads+donf
     ENDIF
   ENDIF
-  loggedOnUser.dailyBytesDld:=loggedOnUser.dailyBytesDld+dTBT
-  bytesADL:=bytesADL-dTBT
+  loggedOnUser.dailyBytesDld:=loggedOnUser.dailyBytesDld+tempsize
+  bytesADL:=bytesADL-tempsize
 
   aePuts(string)
   aePuts('\b\n\b\n')
@@ -17264,7 +17450,7 @@ PROC conferenceMaintenance()
   m:=findLastAccount()
   loadMsgPointers(conf)
   getConfLocation(conf,tempstr)
-  getMailStatFile()
+  getMailStatFile(conf)
   getConfDbFileName(conf,tempstr)
   size:=Div(getFileSize(tempstr),SIZEOF confBase)
 
@@ -17391,13 +17577,13 @@ PROC conferenceMaintenance()
         conf:=conf-1
         IF conf<1 THEN conf:=cmds.numConf
         loadMsgPointers(conf)
-        getMailStatFile()
+        getMailStatFile(conf)
         getConfDbFileName(conf,tempstr)
         size:=Div(getFileSize(tempstr),SIZEOF confBase)
       CASE "+"
         conf:=conf+1
         IF conf>cmds.numConf THEN conf:=1
-        getMailStatFile()
+        getMailStatFile(conf)
         getConfDbFileName(conf,tempstr)
         size:=Div(getFileSize(tempstr),SIZEOF confBase)
     ENDSELECT
@@ -17731,9 +17917,13 @@ PROC fileStatus(opt)
 
   IF(checkSecurity(ACS_CONFERENCE_ACCOUNTING)) THEN ca:=TRUE
 
-  aePuts('\b\n')
   aePuts('[32m              Uploads             Downloads\b\n')
-  aePuts('[32m     Conf  Files    Bytes     Files    Bytes     Bytes Avail  Ratio\b\n')
+  aePuts('\b\n')
+  IF sopt.toggles[TOGGLES_CREDITBYKB]
+    aePuts('[32m     Conf  Files    KBytes    Files    KBytes    KBytes Avail Ratio\b\n')
+  ELSE
+    aePuts('[32m     Conf  Files    Bytes     Files    Bytes     Bytes Avail  Ratio\b\n')
+  ENDIF
   aePuts('[0m     ----  -------  --------- -------  --------- -----------  -----\b\n')
   saveMsgPointers(currentConf)
 
@@ -17850,6 +18040,8 @@ PROC who(opt)
                 StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
                 IF(i=node)
                   StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','WHO',chatstr)
+                ELSEIF(StrLen(fileName)>0)
+                  StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m',fileName,chatstr)
                 ELSE
                   StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','MODULE',chatstr)
                 ENDIF
@@ -18044,7 +18236,7 @@ ENDPROC
 
 PROC internalCommand4(params)
   setEnvStat(ENV_EMACS)
-  IF(checkSecurity(ACS_SYSOP_COMMANDS)=FALSE) THEN RETURN RESULT_NOT_ALLOWED
+  IF(checkSecurity(ACS_EDIT_FILES)=FALSE) THEN RETURN RESULT_NOT_ALLOWED
   editAnyFile(params)
 ENDPROC RESULT_SUCCESS
   
@@ -18683,7 +18875,7 @@ PROC internalCommandR(params)
   setEnvStat(ENV_MAIL)
   parseParams(params)
 
-  getMailStatFile()
+  getMailStatFile(currentConf)
 ENDPROC callMsgFuncs(MAIL_READ,0)
 
 PROC internalCommandRL()
@@ -18805,7 +18997,13 @@ PROC internalCommandV(cmdcode,params)
   IF checkSecurity(ACS_VIEW_A_FILE)=FALSE THEN RETURN RESULT_NOT_ALLOWED
 
   setEnvStat(ENV_VIEWING)
+  IF ripMode
+    aePuts('[1!')
+  ENDIF
   viewAFile(cmdcode,params)
+  IF ripMode
+    aePuts('[2!')
+  ENDIF
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandVO()
@@ -18952,7 +19150,7 @@ PROC internalCommandW()
               StringF(str,'[34m[[0m 13[34m][35m ZOOM TYPE............... [33mQWK[0m\b\n')
         ENDSELECT
         aePuts(str)
-    ELSE
+      ELSE
         aePuts('[34m[[0m 13[34m][31m [DISABLED][0m\b\n')
       ENDIF
 
@@ -18962,11 +19160,16 @@ PROC internalCommandW()
         ELSE
               StringF(str,'[34m[[0m 14[34m][35m AVAILABLE FOR CHAT/OLM.. [37mNO[0m\b\n')
         ENDIF
+        aePuts(str)
       ELSE
         aePuts('[34m[[0m 14[34m][31m [DISABLED][0m\b\n')
       ENDIF
 
-     aePuts(str)
+      IF(checkSecurity(ACS_TRANSLATION))
+        StringF(str,'[34m[[0m 15[34m][35m TRANSLATOR.............. [33m\s[0m\b\n',userLanguage)
+        aePuts(str)
+      ENDIF
+      
      aePuts('\b\n')
 
     aePuts('Which to change <CR>=QUIT ? ')
@@ -19108,6 +19311,8 @@ PROC internalCommandW()
           loggedOnUserKeys.userFlags:=Eor(loggedOnUserKeys.userFlags,USER_SCRNCLR)
        CASE 11
           ->EDIT TRANSFER PROTOCOL
+         IF ((checkSecurity(ACS_XPR_SEND) OR checkSecurity(ACS_XPR_RECEIVE))=FALSE) THEN JUMP cant
+          
           IF(ListLen(xprTitle)>0)
             IF (stat:=chooseProtocol())
               IF(stat<0) THEN RETURN stat
@@ -19115,14 +19320,24 @@ PROC internalCommandW()
           ENDIF
        CASE 12
           ->EDIT EDITOR TYPE
-        loggedOnUser.editorType:=loggedOnUser.editorType+1
-        IF loggedOnUser.editorType=3 THEN loggedOnUser.editorType:=0
+         IF (checkSecurity(ACS_FULL_EDIT)=FALSE) THEN JUMP cant
+         loggedOnUser.editorType:=loggedOnUser.editorType+1
+         IF loggedOnUser.editorType=3 THEN loggedOnUser.editorType:=0
        CASE 13
           ->EDIT ZOOM MAIL 
+         IF (checkSecurity(ACS_ZOOM_MAIL)=FALSE) THEN JUMP cant
           loggedOnUser.zoomType:=((loggedOnUser.zoomType+1) AND 1)
        CASE 14
           ->EDIT AVAILABLE FOR CHAT/OLM 
+         IF (checkSecurity(ACS_OLM)=FALSE) THEN JUMP cant
           allowOLM:=Not(allowOLM)
+       CASE 15
+          ->EDIT TRANSLATOR 
+         IF (checkSecurity(ACS_TRANSLATION)=FALSE) THEN JUMP cant
+         
+         IF (stat:=chooseTranslator())
+           IF(stat<0) THEN RETURN stat
+         ENDIF
     ENDSELECT
   
    cant:
@@ -19256,6 +19471,542 @@ zSkip1:
 ENDPROC RESULT_SUCCESS
 
 ->#define ln(x,y) current=myzip+(y*100)+x;
+
+PROC internalCommandZOOM()
+  DEF zoomOption
+  DEF mystat
+  DEF lock=0,oldlock=0
+  DEF tempstr[255]:STRING
+  DEF tempstr2[255]:STRING
+  DEF tempZoomFile[255]:STRING
+  DEF outputZoomName[255]:STRING
+  DEF zip=FALSE
+
+  IF((checkSecurity(ACS_ZOOM_MAIL)))=FALSE THEN RETURN RESULT_NOT_ALLOWED
+
+  aePuts('\b\n')
+  mystat:=-1
+  
+  zoomOption:=loggedOnUser.zoomType
+  SELECT zoomOption
+      CASE 1
+        setEnvStat(ENV_ZOOM)
+        mystat:=asciiZoom()
+      CASE 0
+        setEnvStat(ENV_ZOOM)
+        mystat:=qwkZoom()
+  ENDSELECT
+
+  IF(mystat<0)
+    RETURN mystat
+  ENDIF
+
+  aePuts('\b\n[32mPack Method [0m1) LHA, 2) ZIP ?>')
+  mystat:=lineInput('','',1,INPUT_TIMEOUT,tempstr)
+
+  IF mystat<0
+    RETURN mystat
+  ENDIF
+
+  zip:=FALSE
+  IF StrLen(tempstr)>0
+    IF tempstr[0]="2"
+      zip:=TRUE
+    ENDIF
+  ENDIF
+  
+  IF zip
+    StrCopy(tempstr,'c:ZIP -0')
+  ELSE
+    StrCopy(tempstr,'c:LHA -z a')
+  ENDIF
+
+  SELECT zoomOption
+    CASE 1
+      IF zip
+        readToolType(TOOLTYPE_ASCPACK,'','ZIP',tempstr)
+      ELSE
+        readToolType(TOOLTYPE_ASCPACK,'','ASC',tempstr)
+      ENDIF
+    CASE 0
+      IF zip
+        readToolType(TOOLTYPE_QWKPACK,'','ZIP',tempstr)
+      ELSE
+        readToolType(TOOLTYPE_QWKPACK,'','ASC',tempstr)
+      ENDIF
+  ENDSELECT
+
+  StringF(tempstr2,'\sNode\d/PlayPen',cmds.bbsLoc,node)
+  lock:=Lock(tempstr2,ACCESS_READ)
+  IF lock<>0  
+    oldlock:=CurrentDir(lock)
+  ENDIF
+  
+  SELECT zoomOption
+    CASE 1
+      StringF(outputZoomName,'\sNode\d/PlayPen/AE\z\r\d[4].ASC',cmds.bbsLoc,node,loggedOnUser.slotNumber)
+
+      aePuts('\b\n[32mPacking Messages\b\n')
+      StringF(tempZoomFile,'\sNode\d/PlayPen/MESSAGES.DAT',cmds.bbsLoc,node)
+      StringF(tempstr2,'\s \s \s',tempstr,FilePart(outputZoomName),FilePart(tempZoomFile))
+      Execute(tempstr2,0,0)
+      DeleteFile(tempZoomFile)
+    CASE 0
+      StringF(outputZoomName,'\sNode\d/PlayPen/AE\z\r\d[4].QWK',cmds.bbsLoc,node,loggedOnUser.slotNumber)
+
+      aePuts('\b\n[32mPacking Control File\b\n')      
+      StringF(tempZoomFile,'\sNode\d/PlayPen/CONTROL.DAT',cmds.bbsLoc,node)
+      StringF(tempstr2,'\s \s \s',tempstr,FilePart(outputZoomName),FilePart(tempZoomFile))
+      Execute(tempstr2,0,0)
+      DeleteFile(tempZoomFile)
+
+      aePuts('\b\n[32mPacking Messages\b\n')
+      StringF(tempZoomFile,'\sNode\d/PlayPen/MESSAGES.DAT',cmds.bbsLoc,node)
+      StringF(tempstr2,'\s \s \s',tempstr,FilePart(outputZoomName),FilePart(tempZoomFile))
+      Execute(tempstr2,0,0)
+      DeleteFile(tempZoomFile)
+
+      aePuts('\b\n[32mPacking Index File\b\n')
+      StringF(tempZoomFile,'\sNode\d/PlayPen/MESSAGES.NDX',cmds.bbsLoc,node)
+      StringF(tempstr2,'\s \s \s',tempstr,FilePart(outputZoomName),FilePart(tempZoomFile))
+      Execute(tempstr2,0,0)
+      DeleteFile(tempZoomFile)
+  ENDSELECT
+  
+  IF oldlock<>0 THEN CurrentDir(oldlock)
+  IF lock<>0 THEN UnLock(lock)
+
+  IF fileExists(outputZoomName)
+    SetComment(outputZoomName,'F')
+    aePuts('\b\n')
+    IF(logonType>=LOGON_TYPE_REMOTE) 
+       dTBT:=0
+       tBT:=0
+       tTTM:=NIL
+       tTEFF:=NIL
+       tTCPS:=NIL
+       aePuts('[33mPrepare for ZoomMail Zmodem Download:\b\n')
+       mystat:=doPause()
+       IF(mystat<0)
+          DeleteFile(outputZoomName)
+          RETURN mystat
+       ENDIF
+       setEnvStat(ENV_DOWNLOADING)
+       downloadFile(outputZoomName)
+       DeleteFile(outputZoomName)
+    ENDIF
+  ENDIF
+ENDPROC RESULT_SUCCESS
+
+PROC asciiZoomConf(confNum)
+  DEF mystat,fi,fo,fi1,count,timeVar
+  DEF cb:PTR TO confBase
+  DEF tempstr[255]:STRING
+  DEF tempstr2[255]:STRING
+  DEF date[255]:STRING
+  DEF zoomName[255]:STRING
+  
+  loadMsgPointers(confNum)
+ 
+  mystat:=getMailStatFile(confNum)
+
+  IF(mystat=RESULT_FAILURE) THEN RETURN RESULT_FAILURE
+  IF(lastMsgReadConf<mailStat.lowestKey) THEN lastMsgReadConf:=mailStat.lowestKey
+  IF(lastNewReadConf<mailStat.lowestKey) THEN lastNewReadConf:=mailStat.lowestKey
+  
+  IF(lastMsgReadConf>mailStat.highMsgNum) THEN lastMsgReadConf:=mailStat.highMsgNum
+  IF(lastNewReadConf>mailStat.highMsgNum) THEN lastNewReadConf:=mailStat.highMsgNum
+
+  fo:=NIL
+
+  cb:=ListItem(confBases,confNum-1)
+ 
+  IF cb.handle[0] AND ZOOM_SCAN_MASK
+    StringF(tempstr,'[32mZooming Conference[33m: [0m  \s   ',getConfName(confNum))
+    aePuts(tempstr)
+    mystat:=0
+
+    StringF(tempstr,'\sMsgBase/HeaderFile',getConfLocation(confNum))
+    
+    IF (fi:=Open(tempstr,MODE_OLDFILE))<=0
+      aePuts('Message Base does not exist\b\n')
+      RETURN 0
+    ENDIF
+
+    StringF(zoomName,'\sNode\d/PlayPen/MESSAGES.DAT',cmds.bbsLoc,node)
+    fo:=Open(zoomName,MODE_READWRITE)
+    Seek(fo,0,OFFSET_END)
+    IF(fo<=0)
+      Close(fi)
+      RETURN 0
+    ENDIF
+    Seek(fo,0,OFFSET_END)
+    
+    currentSeekPos:=0
+    msgNum:=lastMsgReadConf
+    count:=0
+    WHILE ((msgNum<mailStat.highMsgNum) AND (count<200) AND (mystat<>RESULT_FAILURE))
+      mystat:=loadMessageHeader(fi)
+      IF(mystat<>RESULT_FAILURE)
+
+        IF(logonType>=LOGON_TYPE_REMOTE)
+          IF(checkCarrier()=FALSE)
+            Close(fo)
+            Close(fi)
+            RETURN RESULT_NO_CARRIER
+          ENDIF
+        ENDIF
+
+        checkDoorMsg(0)
+        IF(strCmpi(mailHeader.toName,loggedOnUser.name,ALL)) OR (strCmpi(mailHeader.fromName,loggedOnUser.name,ALL)) OR (mailHeader.status="P")  OR (mailHeader.status="p") OR (checkSecurity(ACS_SYSOP_READ))
+          IF(((mailHeader.recv=FALSE) OR (checkSecurity(ACS_SYSOP_READ))) AND (mailHeader.status<>"D")) 
+            timeVar:=mailHeader.msgDate
+            formatLongDate(timeVar,date)
+            StringF(tempstr,'\nDate   : \l\s[30]  Number: \d\n',date,mailHeader.msgNumb)
+            fileWrite(fo,tempstr)
+            StrCopy(date,mailHeader.toName)
+            IF(strCmpi(date,'eall',4))
+              StrCopy(date,loggedOnUser.name)
+              StrAdd(date,' (ALL)')
+            ELSE
+              StrCopy(date,mailHeader.toName)
+            ENDIF
+            StringF(tempstr,'To     : \l\s[30]  ',date)
+            fileWrite(fo,tempstr)
+
+            IF(mailHeader.recv<>0)
+              timeVar:=mailHeader.recv
+              formatLongDate(timeVar,date)
+              StringF(tempstr,'Recv''d: \l\s\n',date)
+              fileWrite(fo,tempstr)
+            ELSE
+              fileWrite(fo,'Recv''d: ')
+              IF(strCmpi(mailHeader.toName,'ALL',ALL))
+                fileWrite(fo,'N/A\n')
+              ELSE
+                fileWrite(fo,'No\n')
+              ENDIF
+            ENDIF
+
+            IF(mailHeader.status="P") OR (mailHeader.status="p")
+              StrCopy(tempstr,'Public Message')
+            ELSE
+              StrCopy(tempstr,'Receiver Only')
+            ENDIF
+
+            StringF(tempstr2,'From   : \l\s[30]  Status: \s\n',mailHeader.fromName,tempstr)
+            fileWrite(fo,tempstr2)
+            StringF(tempstr2,'Subject: \s\n',mailHeader.subject)
+            fileWrite(fo,tempstr2)
+            StringF(tempstr2,'Conf   : [\d] \s\n\n',relConf(confNum),getConfName(confNum))
+            fileWrite(fo,tempstr2)
+            StringF(tempstr2,'\sMsgbase/\d',getConfLocation(confNum),mailHeader.msgNumb)
+            IF(fi1:=Open(tempstr2,MODE_OLDFILE))>0
+              WHILE(Fgets(fi1,tempstr,80)<>NIL)
+                fileWrite(fo,tempstr)
+              ENDWHILE
+              fileWrite(fo,'\n==========================================================================\n\n');
+              Close(fi1)
+              count++
+              aePuts('.')
+            ENDIF
+          ENDIF
+        ENDIF
+        msgNum++
+        
+      ENDIF
+    ENDWHILE
+
+    IF msgNum>mailStat.highMsgNum THEN msgNum:=mailStat.highMsgNum
+
+    Close(fi)
+    Close(fo)
+    lastMsgReadConf:=msgNum
+    saveMsgPointers(confNum)
+    
+    IF (count=0)
+      aePuts('\tNo New Mail!\b\n')
+    ELSE
+      aePuts('\b\n')
+    ENDIF
+  ENDIF
+
+ENDPROC count
+
+PROC asciiZoom()
+  DEF conf
+  DEF mystat
+  DEF zoomName[255]:STRING
+
+  StringF(zoomName,'\sNode\d/PlayPen/MESSAGES.DAT',cmds.bbsLoc,node)
+  DeleteFile(zoomName)
+
+  saveMsgPointers(currentConf)
+  FOR conf:=1 TO cmds.numConf
+    IF (checkConfAccess(conf))
+      mystat:=asciiZoomConf(conf)
+    ENDIF
+    EXIT mystat=RESULT_FAILURE
+    IF (mystat=RESULT_TIMEOUT) OR (mystat=RESULT_NO_CARRIER) 
+      loadMsgPointers(currentConf)
+      RETURN mystat
+    ENDIF 
+  ENDFOR
+  loadMsgPointers(currentConf)
+ENDPROC RESULT_SUCCESS
+
+PROC qwkZoomConf(confNum,recNum)
+  DEF mystat,fi,fo,fo2,fi1,count,timeVar
+  DEF cb:PTR TO confBase
+  DEF tempstr[255]:STRING
+  DEF tempstr2[255]:STRING
+  DEF date[255]:STRING
+  DEF time[255]:STRING
+  DEF zoomName[255]:STRING
+  DEF i,j,status,msgLen
+  DEF ndx:qwkNDX
+  DEF cnt
+
+  loadMsgPointers(confNum)
+ 
+  mystat:=getMailStatFile(confNum)
+
+  IF(mystat=RESULT_FAILURE) THEN RETURN RESULT_FAILURE,recNum
+  IF(lastMsgReadConf<mailStat.lowestKey) THEN lastMsgReadConf:=mailStat.lowestKey
+  IF(lastNewReadConf<mailStat.lowestKey) THEN lastNewReadConf:=mailStat.lowestKey
+  
+  IF(lastMsgReadConf>mailStat.highMsgNum) THEN lastMsgReadConf:=mailStat.highMsgNum
+  IF(lastNewReadConf>mailStat.highMsgNum) THEN lastNewReadConf:=mailStat.highMsgNum
+
+  fo:=NIL
+
+  cb:=ListItem(confBases,confNum-1)
+ 
+  IF cb.handle[0] AND ZOOM_SCAN_MASK
+    StringF(tempstr,'[32mZooming Conference[33m: [0m  \s    ',getConfName(confNum))
+    aePuts(tempstr)
+    mystat:=0
+
+    StringF(tempstr,'\sMsgBase/HeaderFile',getConfLocation(confNum))
+    
+    IF (fi:=Open(tempstr,MODE_OLDFILE))<=0
+      aePuts('Message Base does not exist\b\n')
+      RETURN 0,recNum
+    ENDIF
+    
+    StringF(zoomName,'\sNode\d/PlayPen/MESSAGES.DAT',cmds.bbsLoc,node)
+    fo:=Open(zoomName,MODE_READWRITE)
+    Seek(fo,0,OFFSET_END)
+    IF(fo<=0)
+      Close(fi)
+      RETURN 0,recNum
+    ENDIF
+
+    StringF(zoomName,'\sNode\d/PlayPen/MESSAGES.NDX',cmds.bbsLoc,node)
+    fo2:=Open(zoomName,MODE_READWRITE)
+    Seek(fo2,0,OFFSET_END)
+    IF(fo2<=0)
+      Close(fo)
+      Close(fi)
+      RETURN 0,recNum
+    ENDIF
+   
+    currentSeekPos:=0
+    msgNum:=lastMsgReadConf
+    count:=0
+    WHILE ((msgNum<mailStat.highMsgNum) AND (count<200) AND (mystat<>RESULT_FAILURE))
+      mystat:=loadMessageHeader(fi)
+      IF(mystat<>RESULT_FAILURE)
+
+        IF(logonType>=LOGON_TYPE_REMOTE)
+          IF(checkCarrier()=FALSE)
+            Close(fo)
+            Close(fo2)
+            Close(fi);
+            RETURN RESULT_NO_CARRIER,recNum
+          ENDIF
+        ENDIF
+
+        checkDoorMsg(0)
+        IF(strCmpi(mailHeader.toName,loggedOnUser.name,ALL)) OR (strCmpi(mailHeader.fromName,loggedOnUser.name,ALL)) OR (mailHeader.status="P") OR (mailHeader.status="p") OR (checkSecurity(ACS_SYSOP_READ))
+          IF(((mailHeader.recv=FALSE) OR (checkSecurity(ACS_SYSOP_READ))) AND (mailHeader.status<>"D")) 
+
+            IF (mailHeader.status="P") OR (mailHeader.status="p")
+              IF mailHeader.recv>0
+                status:="-"
+              ELSE
+                status:=" "
+              ENDIF
+            ELSE
+              status:="*"
+            ENDIF
+          
+            formatLongDate(mailHeader.msgDate,date)
+            formatLongTime(mailHeader.msgDate,time)
+            SetStr(time,5)
+
+            StringF(tempstr,'\sMsgbase/\d',getConfLocation(confNum),mailHeader.msgNumb)            
+            mystat:=loadMsg(tempstr)
+            IF(mystat=FALSE) 
+              lines:=1
+              StrCopy(msgBuf[0],'MESSAGE IS MISSING\n')
+            ENDIF
+
+            msgLen:=0
+            FOR i:=0 TO lines-1
+              msgLen:=msgLen+StrLen(msgBuf[i])+1
+            ENDFOR
+            msgLen:=msgLen+127
+            msgLen:=Shr(msgLen,7)     ->divide by 128
+
+            ->append to MESSAGES.DAT
+            StringF(tempstr,'\s[128]','')
+            StringF(tempstr,'\c\z\r\d[7]\l\s[8]\l\s[5]\l\s[25]\l\s[25]\l\s[25]                    \l\d[6]\c\c\c   ',status,mailHeader.msgNumb,
+                date,time,mailHeader.toName,mailHeader.fromName,mailHeader.subject,msgLen+1,$E1,confNum,0)
+            cnt:=Write(fo,tempstr,128)
+            IF cnt<>128 THEN aePuts('error writing mail file')
+
+            StrCopy(tempstr2,'')
+            FOR i:=0 TO lines-1
+              StringF(tempstr,'\s\c',msgBuf[i],$e3)
+              StrAdd(tempstr2,tempstr)
+              IF (StrLen(tempstr2)>=128)
+                cnt:=Write(fo,tempstr2,128)
+                IF cnt<>128 THEN aePuts('error writing mail file')
+                FOR j:=128 TO StrLen(tempstr2)-1
+                  tempstr2[j-128]:=tempstr2[j]
+                ENDFOR
+                SetStr(tempstr2,StrLen(tempstr2)-128)
+              ENDIF
+            ENDFOR
+            IF StrLen(tempstr2)>0
+              StringF(tempstr,'\l\s[128]',tempstr2)
+              cnt:=Write(fo,tempstr,128)
+              IF cnt<>128 THEN aePuts('error writing mail file')
+            ENDIF
+
+            ->append to MESSAGES.NDX
+            ndx.recNum:=recNum
+            ndx.conf:=confNum
+            cnt:=Write(fo2,ndx,5)   ->SHOULD BE SIZEOF qwkNDX but it pads it to even size
+            IF cnt<>5 THEN aePuts('error writing mail file')
+            count++
+          ENDIF
+        ENDIF
+        msgNum++
+        recNum:=recNum+1.0
+        
+      ENDIF
+    ENDWHILE
+    IF msgNum>mailStat.highMsgNum THEN msgNum:=mailStat.highMsgNum
+
+    Close(fi)
+    Close(fo)
+    Close(fo2)
+    lastMsgReadConf:=msgNum
+    saveMsgPointers(confNum)
+
+    IF (count=0)
+      aePuts('\tNo New Mail!\b\n')
+    ELSE
+      aePuts('\b\n')
+    ENDIF
+  ENDIF
+
+ENDPROC count,recNum
+
+PROC qwkZoom()
+  DEF conf
+  DEF mystat
+  DEF zoomName[255]:STRING
+  DEF fo,count
+  DEF tempstr[255]:STRING
+  DEF recNum
+
+  StringF(zoomName,'\sNode\d/PlayPen/MESSAGES.DAT',cmds.bbsLoc,node)
+  DeleteFile(zoomName)
+
+  StringF(zoomName,'\sNode\d/PlayPen/MESSAGES.NDX',cmds.bbsLoc,node)
+  DeleteFile(zoomName)
+
+  ->CREATE CONTROL.DAT
+  StringF(zoomName,'\sNode\d/PlayPen/CONTROL.DAT',cmds.bbsLoc,node)
+  fo:=Open(zoomName,MODE_NEWFILE)
+  IF(fo<=0)
+    RETURN 0
+  ENDIF
+  fileWriteLn(fo,cmds.bbsName)
+  StrCopy(tempstr,'N/A')
+  readToolType(TOOLTYPE_QWKCONFIG,'','BBS.NUMBER',tempstr)
+  fileWrite(fo,tempstr); fileWrite(fo,'\b\n')
+  StrCopy(tempstr,'N/A')
+  readToolType(TOOLTYPE_QWKCONFIG,'','BBS.ADDRESS',tempstr)
+  fileWrite(fo,tempstr); fileWrite(fo,'\b\n')
+  StringF(tempstr,'\s, Sysop',cmds.sysopName)
+  fileWrite(fo,tempstr); fileWrite(fo,'\b\n')
+  
+  StrCopy(tempstr,'AMXBBS')
+  readToolType(TOOLTYPE_QWKCONFIG,'','BBS.ID',tempstr)
+  IF StrLen(tempstr)>6 THEN SetStr(tempstr,6)
+  fileWrite(fo,'000000,')
+  fileWrite(fo,tempstr); fileWrite(fo,'\b\n')
+  formatLongDateTime2(getSystemTime(),tempstr)
+  fileWrite(fo,tempstr); fileWrite(fo,'\b\n')
+  StrCopy(tempstr,loggedOnUser.name)
+  UpperStr(tempstr)
+  fileWrite(fo,tempstr); fileWrite(fo,'\b\n')
+  fileWrite(fo,'\b\n')
+  fileWrite(fo,'0\b\n')
+  fileWrite(fo,'0\b\n')
+
+  count:=0
+  FOR conf:=1 TO cmds.numConf
+    IF (checkConfAccess(conf)) THEN count++
+  ENDFOR
+  StringF(tempstr,'\d\b\n',count-1)
+  fileWrite(fo,tempstr)
+  FOR conf:=1 TO cmds.numConf
+    IF (checkConfAccess(conf))
+      StringF(tempstr,'\d\b\n',relConf(conf))
+      fileWrite(fo,tempstr)
+      StringF(tempstr,'\s',getConfName(conf))
+      IF StrLen(tempstr)>10 THEN SetStr(tempstr,10)
+      StrAdd(tempstr,'\b\n')
+      fileWrite(fo,tempstr)
+    ENDIF
+  ENDFOR
+  fileWrite(fo,'HELLO\b\n')
+  fileWrite(fo,'NEWS\b\n')
+  fileWrite(fo,'GOODBYE\b\n')
+  Close(fo)
+  
+  StringF(zoomName,'\sNode\d/PlayPen/MESSAGES.DAT',cmds.bbsLoc,node) 
+  fo:=Open(zoomName,MODE_NEWFILE)
+  IF(fo<=0)
+    DeleteFile(zoomName)
+    RETURN 0
+  ENDIF
+
+  ->append signature bytes to messages.dat
+  StringF(tempstr,'\l\s[128]','CopyRight Sparkware')
+  fileWrite(fo,tempstr)
+  Close(fo)
+
+  recNum:=1.0
+
+  saveMsgPointers(currentConf)
+  FOR conf:=1 TO cmds.numConf
+    IF (checkConfAccess(conf))
+      mystat,recNum:=qwkZoomConf(conf,recNum)
+    ENDIF
+    EXIT mystat=RESULT_FAILURE
+    IF (mystat=RESULT_TIMEOUT) OR (mystat=RESULT_NO_CARRIER) 
+      loadMsgPointers(currentConf)
+      RETURN mystat
+    ENDIF 
+  ENDFOR
+  loadMsgPointers(currentConf)
+ENDPROC RESULT_SUCCESS
 
 PROC getDirSpan(pass:PTR TO CHAR)
   DEF str[200]:STRING
@@ -20528,6 +21279,8 @@ PROC processInternalCommand(cmdcode,cmdparams,silentFail=FALSE)
     res:=internalCommandX()
   ELSEIF (StrCmp(cmdcode,'Z'))
     res:=internalCommandZ(cmdparams)
+  ELSEIF (StrCmp(cmdcode,'ZOOM'))
+    res:=internalCommandZOOM()
   ELSEIF (StrCmp(cmdcode,'?'))
     res:=internalCommandQuestionMark()
   ELSEIF (StrCmp(cmdcode,'^'))
@@ -20681,6 +21434,7 @@ PROC processSysopLogon()
     loadAccount(1,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
     masterLoadPointers(loggedOnUser)
     acsLevel:=findAcsLevel()
+    convertAccess()
     logonType:=LOGON_TYPE_SYSOP
     displayUserToCallersLog(0)
     updateCallerNum()
@@ -20847,6 +21601,7 @@ PROC processLogon()
   DEF sysprompt[255]:STRING
   DEF filetags
 
+  ripMode:=FALSE
   state:=STATE_CONNECTING
   stateData:=0
   setEnvStat(ENV_CONNECT)
@@ -20878,7 +21633,6 @@ PROC processLogon()
 	ENDIF
 
   conPuts('[ p',-1)
-
   
   IF displayScreen(SCREEN_NOCALLERSATBAUD)
     state:=STATE_LOGGING_OFF
@@ -20926,7 +21680,8 @@ PROC processLogon()
      ENDIF
 
      IF (InStr(tempStr,'Q',0)>=0) AND (sopt.qLogon<>0) THEN quickFlag:=TRUE
-   ENDIF
+     IF (InStr(tempStr,'R',0)>=0) THEN ripMode:=TRUE
+  ENDIF
  
   IF((StrLen(cmds.sysPass)>0) AND (Not(checkToolTypeExists(TOOLTYPE_NODE,node,'STEALTH_MODE'))))
     IF readToolType(TOOLTYPE_NODE,node,'SYS_PWRD_PROMPT',sysprompt)=FALSE THEN StrCopy(sysprompt,'>: ')
@@ -21073,9 +21828,8 @@ logonLoop:
 
  validUser:=1
 
- convertAccess()
-
  acsLevel:=findAcsLevel()
+ convertAccess()
 
  loggedOnUserKeys.baud:=onlineBaud
  masterLoadPointers(loggedOnUser) 
@@ -22007,8 +22761,8 @@ PROC main() HANDLE
   DEF p : PTR TO CHAR
   DEF tempfh
    
-  StrCopy(expressVer,'v5.0.0-b9',ALL)
-  StrCopy(expressDate,'17-Aug-2018',ALL)
+  StrCopy(expressVer,'v5.0.0-b10',ALL)
+  StrCopy(expressDate,'24-Aug-2018',ALL)
 
   stripAnsi(0,0,1,0)
   
@@ -22196,6 +22950,10 @@ PROC main() HANDLE
   IF (StrLen(sopt.namePrompt)=0)
     strCpy(sopt.namePrompt,'Name',ALL)
   ENDIF
+ 
+  StrCopy(hostLanguage,'')
+  readToolType(TOOLTYPE_LANGUAGES,'','HOSTLANGUAGE',hostLanguage)
+  StrCopy(userLanguage,hostLanguage)
  
   timeoutOverride:=readToolTypeInt(TOOLTYPE_NODE,node,'OVERRIDE_TIMEOUT')
 
