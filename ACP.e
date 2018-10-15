@@ -1620,7 +1620,7 @@ PROC regLastUser(name:PTR TO CHAR,node)
   ->DEF num=0;  was static
   regNodeUser(name,node)
   IF((regLastUserNum>0) AND (regLastUserNum<5))
-    IF(StrCmp(ListItem(lastUsers,i-1),name)) THEN RETURN
+    IF(StrCmp(ListItem(lastUsers,regLastUserNum-1),name)) THEN RETURN
   ENDIF
   IF(regLastUserNum=5)
     WHILE(i<4)
