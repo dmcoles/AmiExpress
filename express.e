@@ -8080,6 +8080,8 @@ PROC processInputMessage(timeout, extsig = 0)
       onlineBaudR:=cmds.openingBaud
       timeLimit:=3600
       logonType:=LOGON_TYPE_LOCAL
+      logonTime:=getSystemTime()
+      lastTimeUpdate:=logonTime
       loggedOnUser:=NEW loggedOnUser
       loggedOnUserKeys:=NEW loggedOnUserKeys
       loggedOnUserMisc:=NEW loggedOnUserMisc
@@ -8127,6 +8129,8 @@ PROC processInputMessage(timeout, extsig = 0)
       onlineBaudR:=cmds.openingBaud
       timeLimit:=3600
       logonType:=LOGON_TYPE_LOCAL
+      logonTime:=getSystemTime()
+      lastTimeUpdate:=logonTime
       loggedOnUser:=NEW loggedOnUser
       loggedOnUserKeys:=NEW loggedOnUserKeys
       loggedOnUserMisc:=NEW loggedOnUserMisc
@@ -8156,6 +8160,8 @@ PROC processInputMessage(timeout, extsig = 0)
       sendCLS()
       StringF(temp,'\sNode\d/Callerslog',cmds.bbsLoc,node)
       logonType:=LOGON_TYPE_LOCAL
+      logonTime:=getSystemTime()
+      lastTimeUpdate:=logonTime
       loggedOnUser:=NEW loggedOnUser
       loggedOnUserKeys:=NEW loggedOnUserKeys
       loggedOnUserMisc:=NEW loggedOnUserMisc
@@ -23323,9 +23329,7 @@ PROC processLoggedOnUser()
         ENDIF
 
         my_struct.sessiondbytes:= 0    /* DOwnloaded Bytes for this user, this session */
-        logonTime:=getSystemTime()
         timeLimit:=loggedOnUser.timeTotal-loggedOnUser.timeUsed
-        lastTimeUpdate:=logonTime
         bytesADL:=loggedOnUser.dailyBytesLimit
         updateTimeUsed()
 
@@ -23408,6 +23412,8 @@ ENDPROC
 
 PROC processSysopLogon()
     setEnvStat(ENV_CONNECT)
+    logonTime:=getSystemTime()
+    lastTimeUpdate:=logonTime
     loggedOnUser:=NEW loggedOnUser
     loggedOnUserKeys:=NEW loggedOnUserKeys
     loggedOnUserMisc:=NEW loggedOnUserMisc
@@ -23796,6 +23802,8 @@ logonLoop:
      RETURN
    ENDIF
  ELSE
+   logonTime:=getSystemTime()
+   lastTimeUpdate:=logonTime
    loggedOnUser:=NEW loggedOnUser
    loggedOnUserKeys:=NEW loggedOnUserKeys
    loggedOnUserMisc:=NEW loggedOnUserMisc
@@ -24428,7 +24436,8 @@ PROC initNewUser(userData:PTR TO user,userKeys: PTR TO userKeys,userMisc: PTR TO
 ENDPROC
 
 PROC createNewAccount()
-
+  logonTime:=getSystemTime()
+  lastTimeUpdate:=logonTime
   loggedOnUser:=NEW loggedOnUser
   loggedOnUserKeys:=NEW loggedOnUserKeys
   loggedOnUserMisc:=NEW loggedOnUserMisc
