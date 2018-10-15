@@ -2097,7 +2097,7 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
       trans1.trans.succ:=trans2    ->ptr to next translator
     ENDIF
   ENDIF
-  WriteF('translators: \d\n',transCount)
+  ->WriteF('translators: \d\n',transCount)
 ENDPROC transCount<>0
 
 PROC unloadTranslators()
@@ -2109,9 +2109,9 @@ PROC unloadTranslators()
     REPEAT
       transptr2:=transptr
       transptr:=transptr2.trans.succ    ->get ptr to next translation object
-      IF StrLen(transptr2.translatorName)>0
+      /*IF StrLen(transptr2.translatorName)>0
         WriteF('unloading \s\n',transptr2.translatorName)
-      ENDIF
+      ENDIF*/
       IF transptr2.translationText<>NIL
         Dispose(transptr2.translationText) ->free the text for this object
       ENDIF
@@ -2771,7 +2771,8 @@ PROC main() HANDLE
   DEF alzMenu:PTR TO menuitem
   DEF alzMenu2:PTR TO menuitem
 
-  DEF olddir[255]:STRING
+  DEF oldDirLock=NIL
+  DEF tempstr[255]:ARRAY OF CHAR
   DEF argmsg: PTR TO wbstartup
   DEF wb_arg:PTR TO wbarg
   DEF appmsg:PTR TO iostd
@@ -2787,7 +2788,7 @@ PROC main() HANDLE
   DEF windowSig,myappsig
   DEF i,class
   DEF n:PTR TO packedCommands
-  
+ 
   StringF(myVerStr,'v5.0.0')
 
   dim:=[1,1,1,1]:INT  /*** Dimensions of ZIP window default ***/
@@ -2849,9 +2850,8 @@ PROC main() HANDLE
 
     FOR ktr:=0 TO argmsg.numargs      
       IF(wb_arg.lock)
-        olddir:=CurrentDir(wb_arg.lock)
+        oldDirLock:=CurrentDir(wb_arg.lock)
         StrCopy(iconStartName,wb_arg.name)
-        CurrentDir(olddir)
       ENDIF
       wb_arg++
     ENDFOR
@@ -3147,6 +3147,8 @@ PROC main() HANDLE
   ENDFOR
   
 EXCEPT DO
+  IF oldDirLock THEN CurrentDir(oldDirLock)
+
   IF fontHandle
     CloseFont(fontHandle)
     fontHandle:=NIL
