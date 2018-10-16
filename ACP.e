@@ -240,7 +240,7 @@ CONST BWID_TOPSBOX=300
 CONST BHEI_TOPSBOX=50
 
 OBJECT nodeUsers
-  lastUsers:PTR TO LONG ->array[6,44]
+  lastUsers[5]:ARRAY OF LONG ->array[6,44]
   num:INT
 ENDOBJECT
 
@@ -292,7 +292,7 @@ DEF masterSig /*** storage for our ports address ***/
 DEF scr:PTR TO screen /*** Pointer to our screen ***/
 DEF eWin:PTR TO window
 DEF gadgets: PTR TO gadget
-DEF startNode=NIL: PTR TO LONG  /*** Node startup scripts ***/
+DEF startNode[MAX_NODES]:ARRAY OF LONG  /*** Node startup scripts ***/
 DEF nodeIdle[MAX_NODES]:ARRAY OF CHAR
 DEF startUp=FALSE/*** Set startup scripts to none ***/
 DEF zipOn=FALSE/*** Turn ZIPPED window off ***/ 
@@ -333,15 +333,13 @@ DEF cpymsg:PTR TO acpMessage
 
 DEF portName[255]:STRING
 
-DEF lastUsers=NIL:PTR TO LONG    -> array[6,44]
-DEF lastUploads=NIL:PTR TO LONG  -> array[6,44]
-DEF lastDownloads=NIL:PTR TO LONG-> array[6,44]
+DEF lastUsers[5]:ARRAY OF LONG    -> array[6,44]
+DEF lastUploads[5]:ARRAY OF LONG  -> array[6,44]
+DEF lastDownloads[5]:ARRAY OF LONG-> array[6,44]
 
 DEF ndUser[MAX_NODES]:ARRAY OF nodeUsers
 DEF ndUploads[MAX_NODES]:ARRAY OF nodeUsers
 DEF ndDownloads[MAX_NODES]:ARRAY OF nodeUsers
-DEF lastBlank[32]:STRING
-DEF blank[68]:STRING
 
 DEF buttons[20]:ARRAY OF button
 
@@ -357,13 +355,13 @@ DEF bm[20]:ARRAY OF INT
 DEF button=FALSE
 DEF buttonID=-1  /**** Nutton to be processed when Node Button is selected*/
 DEF shortUp=FALSE
-DEF setOriText:PTR TO LONG    ->char[15][100]/** Original Text for 15 control buttons **/
+DEF setOriText[15]:ARRAY OF LONG    ->char[15][100]/** Original Text for 15 control buttons **/
 
 DEF semiNodes:PTR TO multiPort
 DEF singleNode:PTR TO singlePort
 
 DEF multiName[8]:STRING
-DEF singleName[7]:STRING
+DEF singleName[8]:STRING
 
 DEF eGList=NIL:PTR TO gadget
 DEF visInfo=NIL
@@ -399,6 +397,8 @@ DEF version[200]:STRING
 
 DEF translators=NIL: PTR TO translator
 DEF minNode=NIL: PTR TO mln
+
+DEF selectedNode=-1
 
 /* some global variables used to replace the statics from the C version 
 they are prefixed with the procdure name to prevent any name clashes
@@ -479,7 +479,7 @@ PROC clearUsers()
     strcpy(users[i].user,'')
     strcpy(users[i].location,'')
     strcpy(users[i].action,'')
-    strcpy(users[i].baud,'         ')
+    strcpy(users[i].baud,'       ')
     users[i].active:=0
   ENDFOR
 ENDPROC
@@ -530,16 +530,10 @@ ENDPROC
 
 PROC initCycles()
   DEF i
-  lastUsers:=List(5)
-  lastUploads:=List(5)
-  lastDownloads:=List(5)
   FOR i:=0 TO 4
-    ListAdd(lastUsers,[String(44)])
-    ListAdd(lastUploads,[String(44)])
-    ListAdd(lastDownloads,[String(44)])
-    StrCopy(ListItem(lastUsers,i),'                               ')
-    StrCopy(ListItem(lastUploads,i),ListItem(lastUsers,i))
-    StrCopy(ListItem(lastDownloads,i),ListItem(lastUsers,i))
+    lastUsers[i]:=String(44)
+    lastUploads[i]:=String(44)
+    lastDownloads[i]:=String(44)
   ENDFOR
   initNdCycles()
 ENDPROC
@@ -547,31 +541,15 @@ ENDPROC
 PROC initNdCycles()
   DEF i,x
   FOR x:=0 TO MAX_NODES-1
-    
-    ndUser[x].lastUsers:=List(5)
-    ndUploads[x].lastUsers:=List(5)
-    ndDownloads[x].lastUsers:=List(5)
     FOR i:=0 TO 4
-      ListAdd(ndUser[x].lastUsers,[String(44)])
-      ListAdd(ndUploads[x].lastUsers,[String(44)])
-      ListAdd(ndDownloads[x].lastUsers,[String(44)])
-      strcpy(ListItem(ndUser[x].lastUsers,i),'                               ')
-      strcpy(ListItem(ndUploads[x].lastUsers,i),'                               ')
-      strcpy(ListItem(ndDownloads[x].lastUsers,i),'                               ')
+      ndUser[x].lastUsers[i]:=String(44)
+      ndUploads[x].lastUsers[i]:=String(44)
+      ndDownloads[x].lastUsers[i]:=String(44)
     ENDFOR
     ndUser[x].num:=0
     ndUploads[x].num:=0
     ndDownloads[x].num:=0
   ENDFOR
-ENDPROC
-
-PROC freeStringList(slist)
-  DEF i
-  IF slist=NIL THEN RETURN
-  FOR i:=0 TO ListLen(slist)-1
-    IF ListItem(slist,i)<>NIL THEN DisposeLink(ListItem(slist,i))
-  ENDFOR
-  SetList(slist,0)
 ENDPROC
 
 PROC tLock(str:PTR TO CHAR)
@@ -1280,7 +1258,8 @@ ENDPROC 0
 ->//*******************************************************************
 PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PTR TO CHAR,node)
   DEF action2[50]:STRING
-  DEF v
+  DEF v,a,top
+  DEF tempstr[25]:STRING
 
   StrCopy(action2,'')
   v:=Val(action)
@@ -1292,7 +1271,7 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
     CASE ENV_UPLOADING
       StrCopy(action2,'Uploading       ')
     CASE ENV_DOORS
-      StrCopy(action2,'Module          ')
+      StringF(action2,'\l\s[16]',name)
     CASE ENV_MAIL
       StrCopy(action2,'Read/Write  Mail')
     CASE ENV_STATS
@@ -1356,42 +1335,47 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
     CASE SV_AESHELL
       StrCopy(action2,'Entered AEShell ')
     CASE SV_NEWMSG
-      StrCopy(action2,name)
+      StringF(action2,'\l\s[16]',name)
   ENDSELECT
   drawPen:=chat[node]
   IF(quietNode[node]) THEN drawPen:=3
 
-  SetAPen(eWin.rport,drawPen)
-  IF(Val(action)<>SV_NEWMSG)
-    Move(eWin.rport,69,topOffset+32+(node*11))
-    Text(eWin.rport,'                              ',22)
-    Move(eWin.rport,253,topOffset+32+(node*11))
-    Text(eWin.rport,'                              ',23)
+  a:=Val(action)
+  top:=topOffset+32+(node*11)
+  SetAPen(eWin.rport,0)
+  IF(a<>SV_NEWMSG) AND (a<>ENV_DOORS)
+    RectFill(eWin.rport,GLEF_USER+2,top-7,GLEF_USER+GWID_USER-2,top)
+    RectFill(eWin.rport,GLEF_LOCATION,top-7,GLEF_LOCATION+GWID_LOCATION,top)
+    RectFill(eWin.rport,GLEF_BAUD,top-7,GLEF_BAUD+GWID_BAUD-2,top)
   ENDIF
 
-  Move(eWin.rport,437,topOffset+32+(node*11))
-  Text(eWin.rport,'                ',16)
+  RectFill(eWin.rport,GLEF_ACTION,top-7,GLEF_ACTION+GWID_ACTION,top)
   SetAPen(eWin.rport,drawPen)
-  IF(Val(action)<>SV_NEWMSG)
-    Move(eWin.rport,69,topOffset+32+(node*11))
+  IF(a<>SV_NEWMSG) AND (a<>ENV_DOORS)
+    Move(eWin.rport,GLEF_USER+3,top)
     Text(eWin.rport,name,IF StrLen(name)>22 THEN 22 ELSE StrLen(name))
-    Move(eWin.rport,255,topOffset+32+(node*11))
+    Move(eWin.rport,GLEF_LOCATION+2,top)
     Text(eWin.rport,location,IF StrLen(location)>22 THEN 22 ELSE StrLen(location))
-    Move(eWin.rport,580,topOffset+32+(node*11))
-    Text(eWin.rport,baud,IF StrLen(baud)>6 THEN 6 ELSE StrLen(baud))
+    Move(eWin.rport,GLEF_BAUD+5,top)
+    StringF(tempstr,'\r\s[7]',baud)
+    Text(eWin.rport,tempstr,7)
   ENDIF
-  Move(eWin.rport,439,topOffset+32+(node*11))
+  Move(eWin.rport,GLEF_ACTION,top)
 
-  IF(Val(action)=26) THEN suspend[node]:=1 ELSE suspend[node]:=0
+  IF(a=26) THEN suspend[node]:=1 ELSE suspend[node]:=0
   Text(eWin.rport,action2,IF EstrLen(action2)>16 THEN 16 ELSE EstrLen(action2))
   
-  IF(Val(action)<>SV_NEWMSG)
-    strcpy(users[node].user,name)
-    strcpy(users[node].location,location)
+  IF(a<>SV_NEWMSG) AND (a<>ENV_DOORS)
+    StringF(tempstr,'\l\s[22]',name)
+    strcpy(users[node].user,tempstr)
+    StringF(tempstr,'\l\s[22]',location)
+    strcpy(users[node].location,tempstr)
   ENDIF
 
   strcpy(users[node].action,action2)
-  strcpy(users[node].baud,baud)
+  
+  StringF(tempstr,'\r\s[7]',baud)
+  strcpy(users[node].baud,tempstr)
   
   users[node].active:=1
   
@@ -1473,7 +1457,7 @@ PROC maddNodes(nodes)
   DEF i
   
   FOR i:=0 TO nodes
-    StringF(temp,'Node \c',"0"+i)
+    StringF(temp,'Node \d',i)
     maddItem(NM_SUB,temp,0,0,0,0)
   ENDFOR
 ENDPROC
@@ -1520,18 +1504,18 @@ PROC regLastDownloads(name:PTR TO CHAR,node)
   
   regNodeDownloads(name,node)
   IF((regLastDownloadsNum>0) AND (regLastDownloadsNum<5))
-    IF(StrCmp(ListItem(lastDownloads,regLastDownloadsNum-1),name))=FALSE THEN RETURN
+    IF(StrCmp(lastDownloads[regLastDownloadsNum-1],name))=FALSE THEN RETURN
   ENDIF
   
   IF(regLastDownloadsNum=5)
     WHILE(i<4)
-      strcpy(ListItem(lastDownloads,i),ListItem(lastDownloads,i+1));
+      strcpy(lastDownloads[i],lastDownloads[i+1])
       i++
     ENDWHILE
     regLastDownloadsNum:=4
-    strcpy(ListItem(lastDownloads,regLastDownloadsNum),name)    
+    strcpy(lastDownloads[regLastDownloadsNum],name)    
   ELSE
-    strcpy(ListItem(lastDownloads,regLastDownloadsNum),name)
+    strcpy(lastDownloads[regLastDownloadsNum],name)
   ENDIF
   regLastDownloadsNum++ 
 ENDPROC
@@ -1563,18 +1547,18 @@ PROC regLastUploads(name:PTR TO CHAR,node)
   
   regNodeUploads(name,node)
   IF((regLastUploadsNum>0) AND (regLastUploadsNum<5))
-    IF(StrCmp(ListItem(lastUploads,regLastUploadsNum-1),name))=FALSE THEN RETURN
+    IF(StrCmp(lastUploads[regLastUploadsNum-1],name))=FALSE THEN RETURN
   ENDIF
   
   IF(regLastUploadsNum=5)
     WHILE(i<4)
-      strcpy(ListItem(lastUploads,i),ListItem(lastUploads,i+1));
+      strcpy(lastUploads[i],lastUploads[i+1])
       i++
     ENDWHILE
     regLastUploadsNum:=4;
-    strcpy(ListItem(lastUploads,regLastUploadsNum),name); 
+    strcpy(lastUploads[regLastUploadsNum],name); 
   ELSE
-    strcpy(ListItem(lastUploads,regLastUploadsNum),name)
+    strcpy(lastUploads[regLastUploadsNum],name)
   ENDIF
   regLastUploadsNum++ 
 ENDPROC
@@ -1600,19 +1584,24 @@ PROC regNodeUploads(name:PTR TO CHAR,node)
 ENDPROC
 
 PROC showQuiet(i)
+  DEF rowTop
+  rowTop:=topOffset+32+(i*11)
+
+  SetAPen(eWin.rport,0)
+  RectFill(eWin.rport,BLEF_0+2,rowTop-7,BLEF_0+BWID_0-3,rowTop)
+
   IF(quietNode[i]) THEN SetAPen(eWin.rport,3) ELSE SetAPen(eWin.rport,1)
-  Move(eWin.rport,69,topOffset+32+(i*11))
-  Text(eWin.rport,blank,EstrLen(blank))
-  Move(eWin.rport,69,topOffset+32+(i*11))
+  Move(eWin.rport,GLEF_USER+3,rowTop)
   Text(eWin.rport,users[i].user,IF StrLen(users[i].user)>22 THEN 22 ELSE StrLen(users[i].user))
-  Move(eWin.rport,255,topOffset+32+(i*11))
 
+  Move(eWin.rport,GLEF_LOCATION+2,rowTop)
   Text(eWin.rport,users[i].location,IF StrLen(users[i].location)>22 THEN 22 ELSE StrLen(users[i].location))
-  Move(eWin.rport,439,topOffset+32+(i*11))
 
+  Move(eWin.rport,GLEF_ACTION,rowTop)
   Text(eWin.rport,users[i].action,IF StrLen(users[i].action)>16 THEN 16 ELSE StrLen(users[i].action))
-  Move(eWin.rport,580,topOffset+32+(i*11))
-  Text(eWin.rport,users[i].baud,IF StrLen(users[i].baud)>6 THEN 6 ELSE StrLen(users[i].baud))
+
+  Move(eWin.rport,GLEF_BAUD+5,rowTop)
+  Text(eWin.rport,users[i].baud,7)
 ENDPROC
 
 PROC regLastUser(name:PTR TO CHAR,node)
@@ -1620,17 +1609,17 @@ PROC regLastUser(name:PTR TO CHAR,node)
   ->DEF num=0;  was static
   regNodeUser(name,node)
   IF((regLastUserNum>0) AND (regLastUserNum<5))
-    IF(StrCmp(ListItem(lastUsers,regLastUserNum-1),name)) THEN RETURN
+    IF(StrCmp(lastUsers[regLastUserNum-1],name)) THEN RETURN
   ENDIF
   IF(regLastUserNum=5)
     WHILE(i<4)
-      strcpy(ListItem(lastUsers,i),ListItem(lastUsers,i+1))
+      strcpy(lastUsers[i],lastUsers[i+1])
       i++
     ENDWHILE
     regLastUserNum:=4
-    strcpy(ListItem(lastUsers,regLastUserNum),name)
+    strcpy(lastUsers[regLastUserNum],name)
   ELSE
-    strcpy(ListItem(lastUsers,regLastUserNum),name)
+    strcpy(lastUsers[regLastUserNum],name)
   ENDIF
   regLastUserNum++
 ENDPROC
@@ -1657,95 +1646,119 @@ ENDPROC
 
 PROC showLastUser(win:PTR TO window)
   DEF i=0
+  DEF rowTop
 
+  rowTop:=topOffset+(theight*11)+BTOP_TOPSBOX
+  SetAPen(win.rport,0)
+  RectFill(win.rport,BLEF_TOPSBOX+5,rowTop+1,BLEF_TOPSBOX+BWID_TOPSBOX-10,rowTop+BHEI_TOPSBOX-2)
   SetAPen(win.rport,1)
   WHILE(i<5)
-     printMyText(win.rport,lastBlank,340,topOffset+155+(i*10)-110+(theight*11))
-     printMyText(win.rport,ListItem(lastUsers,i),340,topOffset+155+(i*10)-110+(theight*11))
-     i++
+    rowTop:=topOffset+155+(i*10)-110+(theight*11)
+    printMyText(win.rport,lastUsers[i],GLEF_TOPS+5,rowTop)
+    i++
   ENDWHILE
 ENDPROC
 
 PROC showNdLastUser(win:PTR TO window,node)
   DEF i=0
+  DEF rowTop
+  rowTop:=topOffset+(theight*11)+BTOP_TOPSBOX
+  SetAPen(win.rport,0)
+  RectFill(win.rport,BLEF_TOPSBOX+5,rowTop+1,BLEF_TOPSBOX+BWID_TOPSBOX-10,rowTop+BHEI_TOPSBOX-2)
   SetAPen(win.rport,1)
-   WHILE(i<5)
-    printMyText(win.rport,lastBlank,340,topOffset+155+(i*10)-110+(theight*11))
-    printMyText(win.rport,ndUser[node].lastUsers[i],340,topOffset+155+(i*10)-110+(theight*11))
+  WHILE(i<5)
+    rowTop:=topOffset+155+(i*10)-110+(theight*11)
+    printMyText(win.rport,ndUser[node].lastUsers[i],GLEF_TOPS+5,rowTop)
     i++
-   ENDWHILE
+  ENDWHILE
 ENDPROC
 
 PROC showLastUploads(win:PTR TO window)
   DEF i=0
+  DEF rowTop
+  rowTop:=topOffset+(theight*11)+BTOP_TOPSBOX
+  SetAPen(win.rport,0)
+  RectFill(win.rport,BLEF_TOPSBOX+5,rowTop+1,BLEF_TOPSBOX+BWID_TOPSBOX-10,rowTop+BHEI_TOPSBOX-2)
   SetAPen(win.rport,1)
   WHILE(i<5)
-    printMyText(win.rport,lastBlank,340,topOffset+155+(i*10)-110+(theight*11))
-    printMyText(win.rport,ListItem(lastUploads,i),340,topOffset+155+(i*10)-110+(theight*11))
+    rowTop:=topOffset+155+(i*10)-110+(theight*11)
+    printMyText(win.rport,lastUploads[i],GLEF_TOPS+5,rowTop)
     i++
   ENDWHILE
 ENDPROC
 
 PROC showNdLastUploads(win:PTR TO window,node)
   DEF i=0
+  DEF rowTop
+  rowTop:=topOffset+(theight*11)+BTOP_TOPSBOX
+  SetAPen(win.rport,0)
+  RectFill(win.rport,BLEF_TOPSBOX+5,rowTop+1,BLEF_TOPSBOX+BWID_TOPSBOX-10,rowTop+BHEI_TOPSBOX-2)
   SetAPen(win.rport,1)
   WHILE(i<5)
-    printMyText(win.rport,lastBlank,340,topOffset+155+(i*10)-110+(theight*11))
-    printMyText(win.rport,ndUploads[node].lastUsers[i],340,topOffset+155+(i*10)-110+(theight*11))
+    rowTop:=topOffset+155+(i*10)-110+(theight*11)
+    printMyText(win.rport,ndUploads[node].lastUsers[i],GLEF_TOPS+5,rowTop)
     i++
   ENDWHILE
 ENDPROC
 
 PROC showLastDownloads(win:PTR TO window)
   DEF i=0
+  DEF rowTop
+  rowTop:=topOffset+(theight*11)+BTOP_TOPSBOX
+  SetAPen(win.rport,0)
+  RectFill(win.rport,BLEF_TOPSBOX+5,rowTop+1,BLEF_TOPSBOX+BWID_TOPSBOX-10,rowTop+BHEI_TOPSBOX-2)
   SetAPen(win.rport,1)
   WHILE(i<5)
-    printMyText(win.rport,lastBlank,340,topOffset+155+(i*10)-110+(theight*11))
-    printMyText(win.rport,FilePart(ListItem(lastDownloads,i)),340,topOffset+155+(i*10)-110+(theight*11))
+    rowTop:=topOffset+155+(i*10)-110+(theight*11)
+    printMyText(win.rport,FilePart(lastDownloads[i]),GLEF_TOPS+5,rowTop)
     i++
   ENDWHILE
 ENDPROC
 
 PROC showNdLastDownloads(win:PTR TO window,node)
   DEF i=0
+  DEF rowTop
+  rowTop:=topOffset+(theight*11)+BTOP_TOPSBOX
+  SetAPen(win.rport,0)
+  RectFill(win.rport,BLEF_TOPSBOX+5,rowTop+1,BLEF_TOPSBOX+BWID_TOPSBOX-10,rowTop+BHEI_TOPSBOX-2)
   SetAPen(win.rport,1)
   WHILE(i<5)
-    printMyText(win.rport,lastBlank,340,topOffset+155+(i*10)-110+(theight*11))
-    printMyText(win.rport,FilePart(ndDownloads[node].lastUsers[i]),340,topOffset+155+(i*10)-110+(theight*11))
+    rowTop:=topOffset+155+(i*10)-110+(theight*11)
+    printMyText(win.rport,FilePart(ndDownloads[node].lastUsers[i]),GLEF_TOPS+5,rowTop)
     i++
   ENDWHILE
 ENDPROC
 
 PROC showNodes()
-  DEF i
+  DEF i,rowTop
+  SetAPen(eWin.rport,0)
+  RectFill(eWin.rport,BLEF_0+2,topOffset+BTOP_0+1,BLEF_0+BWID_0-3,topOffset+BTOP_0+(theight*11)-2)
   FOR i:=0 TO theight-1
+    rowTop:=topOffset+32+(i*11)
     IF(quietNode[i]) THEN SetAPen(eWin.rport,3) ELSE SetAPen(eWin.rport,1)
-
-    Move(eWin.rport,69,topOffset+32+(i*11))    
-    Text(eWin.rport,blank,StrLen(blank))
      
     IF(users[i].active)
-      Move(eWin.rport,69,topOffset+32+(i*11))
+      Move(eWin.rport,GLEF_USER+3,rowTop)
       Text(eWin.rport,users[i].user,IF StrLen(users[i].user)>22 THEN 22 ELSE StrLen(users[i].user))
-      Move(eWin.rport,255,topOffset+32+(i*11))
+      Move(eWin.rport,GLEF_LOCATION+2,rowTop)
       Text(eWin.rport,users[i].location,IF StrLen(users[i].location)>22 THEN 22 ELSE StrLen(users[i].location))
-      Move(eWin.rport,439,topOffset+32+(i*11));
+      Move(eWin.rport,GLEF_ACTION,rowTop);
       Text(eWin.rport,users[i].action,IF StrLen(users[i].action)>16 THEN 16 ELSE StrLen(users[i].action))
-      Move(eWin.rport,580,topOffset+32+(i*11))
-      Text(eWin.rport,users[i].baud,IF StrLen(users[i].baud)>6 THEN 6 ELSE StrLen(users[i].baud))
+      Move(eWin.rport,GLEF_BAUD+5,rowTop)
+      Text(eWin.rport,users[i].baud,7)
     ENDIF
   ENDFOR
 ENDPROC
 
 PROC showCPS(node,incps:PTR TO CHAR)
   DEF cps[10]:STRING
-  StringF(cps,'\d[6]',incps)
+  StringF(cps,'\d[7]',incps)
 
   drawPen:=chat[node]
   IF(quietNode[node]) THEN drawPen:=3
 
-  Move(eWin.rport,580,topOffset+32+(node*11))
-  Text(eWin.rport,cps,6)
+  Move(eWin.rport,GLEF_BAUD+5,topOffset+32+(node*11))
+  Text(eWin.rport,cps,7)
 ENDPROC
 
 PROC checkMasterSig(signals)
@@ -1764,80 +1777,94 @@ PROC checkMasterSig(signals)
           activeNodes[cpymsg.node]:=TRUE
         ENDIF
       ENDIF
-      CopyMem(cpymsg,msg,SIZEOF acpMessage)
-      ReplyMsg(cpymsg)
-      c:=msg.command
-      SELECT c
-        CASE JH_UPDATE
-            updateNode(msg.user,msg.location,msg.action,msg.baud,msg.node)
-            IF(showAbout)
-              showNodes()
-              showAbout:=0
-            ENDIF
-        CASE JH_DOWNLOAD
-            regLastDownloads(msg.user,msg.node)
-            StringF(temp,'DL: \s',msg.user)
-            StringF(temp1,'\d',SV_NEWMSG)
-            updateNode(temp,msg.location,temp1,msg.baud,msg.node)
-            IF(showAbout)
-              showNodes()
-              showAbout:=0
-            ENDIF
-        CASE JH_UPLOAD
-            regLastUploads(msg.user,msg.node)
-            StringF(temp,'UL: \s',msg.user)
-            StringF(temp1,'\d',SV_NEWMSG)
-            updateNode(temp,msg.location,temp1,msg.baud,msg.node)
-            IF(showAbout)
-              showNodes()
-              showAbout:=0
-            ENDIF
-        CASE JH_CHATON
-            tChat[msg.node]:=1
-            SetAPen(eWin.rport,tChat[msg.node])
-            Move(eWin.rport,64,topOffset+26+(msg.node*11))
-            Draw(eWin.rport,64,topOffset+26+(msg.node*11)+6)
-            Move(eWin.rport,63,topOffset+26+(msg.node*11))
-            Draw(eWin.rport,63,topOffset+26+(msg.node*11)+6)
-            Move(eWin.rport,62,topOffset+26+(msg.node*11))
-            Draw(eWin.rport,62,topOffset+26+(msg.node*11)+6)
-            Move(eWin.rport,61,topOffset+26+(msg.node*11))
-            Draw(eWin.rport,61,topOffset+26+(msg.node*11)+6) 
-        CASE JH_CHATOFF
-            tChat[msg.node]:=0
-            SetAPen(eWin.rport,tChat[msg.node])
-            Move(eWin.rport,64,topOffset+26+(msg.node*11))
-            Draw(eWin.rport,64,topOffset+26+(msg.node*11)+6)
-            Move(eWin.rport,63,topOffset+26+(msg.node*11))
-            Draw(eWin.rport,63,topOffset+26+(msg.node*11)+6)
-            Move(eWin.rport,62,topOffset+26+(msg.node*11))
-            Draw(eWin.rport,62,topOffset+26+(msg.node*11)+6)
-            Move(eWin.rport,61,topOffset+26+(msg.node*11))
-            Draw(eWin.rport,61,topOffset+26+(msg.node*11)+6) 
-        CASE JH_QUIETON
-            quietNode[msg.node]:=1 
-            showQuiet(msg.node)
-        CASE JH_QUIETOFF
-            quietNode[msg.node]:=0
-            showQuiet(msg.node)
-        CASE JH_AUTOCOMMAND
-            i:=button
-            IF(msg.data<20)
-              button:=0
-              control:=0
-              IF(msg.data>=0) THEN handleEditGadget(NIL,GAD_SYSOPLOGIN+msg.data)
-              handleEditGadget(NIL,GAD_NODES+msg.node);
-            ELSE
-              button:=1
-              msg.data:=msg.data-20
-              control:=0
-              handleEditGadget(NIL,GAD_SYSOPLOGIN+bm[msg.data])
-              IF(buttons[bm[msg.data]].type) THEN handleEditGadget(NIL,GAD_NODES+msg.node) 
-            ENDIF
-            button:=i
-        CASE JH_TRANSFERCPS
-            showCPS(msg.node,msg.user)
-      ENDSELECT
+
+      IF(cpymsg.command=SV_NODE_SELECT)
+        IF selectedNode=-1
+          selectedNode:=cpymsg.node
+        ELSEIF selectedNode:=cpymsg.node
+          selectedNode:=-1
+        ENDIF
+        cpymsg.data:=selectedNode
+        ReplyMsg(cpymsg)
+      ELSEIF(cpymsg.command=SV_ACPALERT)
+        myrequest(cpymsg.user)
+        ReplyMsg(cpymsg)
+      ELSE
+        CopyMem(cpymsg,msg,SIZEOF acpMessage)
+        ReplyMsg(cpymsg)
+        c:=msg.command
+        SELECT c
+          CASE JH_UPDATE
+              updateNode(msg.user,msg.location,msg.action,msg.baud,msg.node)
+              IF(showAbout)
+                showNodes()
+                showAbout:=0
+              ENDIF
+          CASE JH_DOWNLOAD
+              regLastDownloads(msg.user,msg.node)
+              StringF(temp,'DL: \s',msg.user)
+              StringF(temp1,'\d',SV_NEWMSG)
+              updateNode(temp,msg.location,temp1,msg.baud,msg.node)
+              IF(showAbout)
+                showNodes()
+                showAbout:=0
+              ENDIF
+          CASE JH_UPLOAD
+              regLastUploads(msg.user,msg.node)
+              StringF(temp,'UL: \s',msg.user)
+              StringF(temp1,'\d',SV_NEWMSG)
+              updateNode(temp,msg.location,temp1,msg.baud,msg.node)
+              IF(showAbout)
+                showNodes()
+                showAbout:=0
+              ENDIF
+          CASE JH_CHATON
+              tChat[msg.node]:=1
+              SetAPen(eWin.rport,tChat[msg.node])
+              Move(eWin.rport,64,topOffset+26+(msg.node*11))
+              Draw(eWin.rport,64,topOffset+26+(msg.node*11)+6)
+              Move(eWin.rport,63,topOffset+26+(msg.node*11))
+              Draw(eWin.rport,63,topOffset+26+(msg.node*11)+6)
+              Move(eWin.rport,62,topOffset+26+(msg.node*11))
+              Draw(eWin.rport,62,topOffset+26+(msg.node*11)+6)
+              Move(eWin.rport,61,topOffset+26+(msg.node*11))
+              Draw(eWin.rport,61,topOffset+26+(msg.node*11)+6) 
+          CASE JH_CHATOFF
+              tChat[msg.node]:=0
+              SetAPen(eWin.rport,tChat[msg.node])
+              Move(eWin.rport,64,topOffset+26+(msg.node*11))
+              Draw(eWin.rport,64,topOffset+26+(msg.node*11)+6)
+              Move(eWin.rport,63,topOffset+26+(msg.node*11))
+              Draw(eWin.rport,63,topOffset+26+(msg.node*11)+6)
+              Move(eWin.rport,62,topOffset+26+(msg.node*11))
+              Draw(eWin.rport,62,topOffset+26+(msg.node*11)+6)
+              Move(eWin.rport,61,topOffset+26+(msg.node*11))
+              Draw(eWin.rport,61,topOffset+26+(msg.node*11)+6) 
+          CASE JH_QUIETON
+              quietNode[msg.node]:=1 
+              showQuiet(msg.node)
+          CASE JH_QUIETOFF
+              quietNode[msg.node]:=0
+              showQuiet(msg.node)
+          CASE JH_AUTOCOMMAND
+              i:=button
+              IF(msg.data<20)
+                button:=0
+                control:=0
+                IF(msg.data>=0) THEN handleEditGadget(NIL,GAD_SYSOPLOGIN+msg.data)
+                handleEditGadget(NIL,GAD_NODES+msg.node);
+              ELSE
+                button:=1
+                msg.data:=msg.data-20
+                control:=0
+                handleEditGadget(NIL,GAD_SYSOPLOGIN+bm[msg.data])
+                IF(buttons[bm[msg.data]].type) THEN handleEditGadget(NIL,GAD_NODES+msg.node) 
+              ENDIF
+              button:=i
+          CASE JH_TRANSFERCPS
+              showCPS(msg.node,msg.user)
+        ENDSELECT
+      ENDIF
     ENDWHILE
   ENDIF
 ENDPROC
@@ -1898,7 +1925,7 @@ PROC initSemaSemiNodes(s:PTR TO multiPort)
     s.myNode[i].private:=FALSE
     s.myNode[i].channel:=0
     s.myNode[i].chatColor:=i+1
-    singleName[6]:="0"+i
+    StringF(singleName,'AEStat\d',i)
     singleNode:=FindSemaphore(singleName)
     IF(singleNode=FALSE)
       singleNode:=AllocMem(SIZEOF singlePort,MEMF_PUBLIC OR MEMF_CLEAR)
@@ -2051,7 +2078,7 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
             trans2.translationIndexes[i]:=outtxt
             wordList:=indexes[i]
             FOR j:=0 TO ListLen(wordList)-1
-              intxt:=ListItem(wordList,j)
+              intxt:=wordList[j]
               StrCopy(tempstr1,intxt)
               intxt:=intxt+StrLen(intxt)+1
               StrCopy(tempstr2,intxt)
@@ -2336,26 +2363,21 @@ PROC setTheGads()
   DEF s
   
   IF(setTheGadsj=FALSE)
-    setOriText:=List(15)
-    FOR i:=1 TO 15
-      s:=String(100)
-      ListAdd(setOriText,[s])
-    ENDFOR
-    strcpy(ListItem(setOriText,0),'Sysop Login')
-    strcpy(ListItem(setOriText,1),'Instant Login')
-    strcpy(ListItem(setOriText,2),'AEShell')
-    strcpy(ListItem(setOriText,3),'Toggle Chat')
-    strcpy(ListItem(setOriText,4),'Exit Node')
-    strcpy(ListItem(setOriText,5),'Local Login')
-    strcpy(ListItem(setOriText,6),'Reserve Node')
-    strcpy(ListItem(setOriText,7),'Accounts')
-    strcpy(ListItem(setOriText,8),'Init Modem')
-    strcpy(ListItem(setOriText,9),'Node(offhook)')
-    strcpy(ListItem(setOriText,10),'Quiet Node')
-    strcpy(ListItem(setOriText,11),'Config Node')
-    strcpy(ListItem(setOriText,12),'Node Chat')
-    strcpy(ListItem(setOriText,13),'Save Win')
-    strcpy(ListItem(setOriText,14),'Set NRAMS')
+    strcpy(setOriText[0],'Sysop Login')
+    strcpy(setOriText[1],'Instant Login')
+    strcpy(setOriText[2],'AEShell')
+    strcpy(setOriText[3],'Toggle Chat')
+    strcpy(setOriText[4],'Exit Node')
+    strcpy(setOriText[5],'Local Login')
+    strcpy(setOriText[6],'Reserve Node')
+    strcpy(setOriText[7],'Accounts')
+    strcpy(setOriText[8],'Init Modem')
+    strcpy(setOriText[9],'Node(offhook)')
+    strcpy(setOriText[10],'Quiet Node')
+    strcpy(setOriText[11],'Config Node')
+    strcpy(setOriText[12],'Node Chat')
+    strcpy(setOriText[13],'Save Win')
+    strcpy(setOriText[14],'Set NRAMS')
     setTheGadsj:=1
     RETURN
   ENDIF
@@ -2368,7 +2390,7 @@ PROC setTheGads()
     ELSE
       button:=0
       buttonID:=-1
-      ng.gadgettext:=ListItem(setOriText,i)
+      ng.gadgettext:=setOriText[i]
     ENDIF
   ENDFOR
   IF(setTheGadsSet) THEN setTheGadsSet:=FALSE ELSE setTheGadsSet:=TRUE
@@ -2459,8 +2481,6 @@ PROC readStartUp(s:PTR TO CHAR)
   DEF j
   
   FOR i:=0 TO MAX_NODES-1
-    ListAdd(startNode,[String(255)])
-    StrCopy(startNode[i],'')
     nodeIdle[i]:=0
   ENDFOR
 
@@ -2786,7 +2806,7 @@ PROC main() HANDLE
   DEF num
   DEF version[200]:STRING
   DEF windowSig,myappsig
-  DEF i,class
+  DEF i,j,class
   DEF n:PTR TO packedCommands
  
   StringF(myVerStr,'v5.0.0')
@@ -2796,10 +2816,7 @@ PROC main() HANDLE
 
   tags:=[SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NP_STACKSIZE,0,NP_PRIORITY,0,TAG_END,0]
 
-  startNode:=List(MAX_NODES)
-
   StrCopy(portName,'AE.Master')
-  StrCopy(singleName,'AEStat ')
   StrCopy(multiName,'AEMulti')
   
   colourSpecs:= [
@@ -2837,9 +2854,6 @@ PROC main() HANDLE
   pens[FILLTEXTPEN]:=3
   pens[BACKGROUNDPEN]:=4
   pens[HIGHLIGHTTEXTPEN]:=7
-  
-  StrCopy(lastBlank,'                               ')
-  StrCopy(blank,'                                                                    ')
 
   gadtoolsbase:=OpenLibrary('gadtools.library',0)
   iconbase:=OpenLibrary('icon.library',33)
@@ -2863,7 +2877,12 @@ PROC main() HANDLE
     ENDIF
   ENDIF
   
+  FOR i:=0 TO 14
+    setOriText[i]:=String(100)
+  ENDFOR
+
   FOR i:=0 TO MAX_NODES-1
+    startNode[i]:=String(255)
     chat[i]:=1
     down[i]:=FALSE
     activeNodes[i]:=FALSE
@@ -3157,15 +3176,22 @@ EXCEPT DO
   IF translators THEN unloadTranslators()
   IF minNode THEN END minNode
 
-  freeStringList(setOriText)
-  freeStringList(lastUsers)
-  freeStringList(lastUploads)
-  freeStringList(lastDownloads)
-  freeStringList(startNode)
+  FOR i:=0 TO 14
+    DisposeLink(setOriText[i])
+  ENDFOR
+
+  FOR i:=0 TO 4
+    DisposeLink(lastUsers[i])
+    DisposeLink(lastUploads[i])
+    DisposeLink(lastDownloads[i])
+  ENDFOR
   FOR i:=0 TO MAX_NODES-1
-    freeStringList(ndUser[i].lastUsers)
-    freeStringList(ndUploads[i].lastUsers)
-    freeStringList(ndDownloads[i].lastUsers)
+    DisposeLink(startNode[i])
+    FOR j:=0 TO 4
+      DisposeLink(ndUser[i].lastUsers[j])
+      DisposeLink(ndUploads[i].lastUsers[j])
+      DisposeLink(ndDownloads[i].lastUsers[j])
+    ENDFOR
   ENDFOR
 
   IF iconbase THEN CloseLibrary(iconbase)

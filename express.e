@@ -146,10 +146,9 @@ CONST TRACK_DOWNLOADS_BIT=2
 
 /*
 
-
 stuff to do:
 
-Standby Node %d
+Standby Node %d + node select message
 cache msgscan ?
 consider errors on opening express screen/window
 \t\t****UL ERROR (-)	TIME USED = %ld\r\ message
@@ -183,261 +182,6 @@ CONST INPUT_TIMEOUT=300
 
 CONST CONU_CHARMAP=1
 CONST CONFLAG_DEFAULT=0
-
-CONST JH_LI=0
-CONST JH_REGISTER=1
-CONST JH_SHUTDOWN=2
-CONST JH_WRITE=3
-CONST JH_SM=4   
-CONST JH_PM=5
-CONST JH_HK=6
-CONST JH_SG=7
-CONST JH_SF=8
-CONST JH_EF=9
-CONST JH_CO=10
-CONST JH_BBSNAME=11
-CONST JH_SYSOP=12
-CONST JH_FLAGFILE=13
-CONST JH_SHOWFLAGS=14
-CONST JH_ExtHK=15
-CONST JH_SIGBIT=16
-CONST JH_FetchKey=17
-CONST JH_SO=18
-CONST JH_SMPTR=19
-CONST JH_20=20
-
-CONST DT_NAME=100
-CONST DT_PASSWORD=101
-CONST DT_LOCATION=102
-CONST DT_PHONENUMBER=103
-CONST DT_SLOTNUMBER=104
-CONST DT_SECSTATUS=105 /* DT_ACCESSLEVEL */
-CONST DT_SECBOARD=106 /* DT_RATIOTYPE */
-CONST DT_SECLIBRARY=107 /* DT_RATIO */
-CONST DT_SECBULLETIN=108 /* DT_COMPTYPE*/
-CONST DT_MESSAGESPOSTED=109
-CONST DT_UPLOADS=110
-CONST DT_DOWNLOADS=111
-CONST DT_TIMESCALLED=112
-CONST DT_TIMELASTON=113
-CONST DT_TIMEUSED=114
-CONST DT_TIMELIMIT=115
-CONST DT_TIMETOTAL=116
-CONST DT_BYTESUPLOAD=117
-CONST DT_BYTEDOWNLOAD=118
-CONST DT_DAILYBYTELIMIT=119
-CONST DT_DAILYBYTEDLD=120
-CONST DT_EXPERT=121
-CONST DT_LINELENGTH=122
-CONST ACTIVE_NODES=123
-CONST DT_DUMP=124
-CONST DT_TIMEOUT=125
-CONST BB_CONFNAME=126
-CONST BB_CONFLOCAL=127
-CONST BB_LOCAL=128
-CONST BB_STATUS=129
-CONST BB_COMMAND=130
-CONST BB_MAINLINE=131
-CONST NB_LOAD=132
-CONST DT_USERLOAD=133
-CONST BB_CONFIG=134
-CONST CHG_USER=135
-CONST RETURNCOMMAND=136
-CONST ZMODEMSEND=137
-CONST ZMODEMRECEIVE=138
-CONST SCREEN_ADDRESS=139
-CONST BB_TASKPRI=140
-CONST RAWSCREEN_ADDRESS=141
-CONST BB_CHATFLAG=142
-CONST DT_STAMP_LASTON=143
-CONST DT_STAMP_CTIME=144
-CONST DT_CURR_TIME=145
-CONST DT_CONFACCESS=146
-CONST BB_PCONFLOCAL=147
-CONST BB_PCONFNAME=148
-CONST BB_NODEID=149
-CONST BB_CALLERSLOG=150
-CONST BB_UDLOG=151
-CONST EXPRESS_VERSION=152
-CONST SV_UNICONIFY=153
-
-CONST SV_SYSOPLOG=154
-CONST SV_LOCALLOG=155
-CONST SV_ACCOUNTS=156
-CONST SV_CHAT=157
-CONST SV_NODEOFFHOOK=158
-CONST SV_EXITNODE=159
-CONST SV_INITMODEM=160
-CONST SV_WHATSUP=161
-CONST SV_INSTANT=170
-CONST SV_RESERVE=171
-CONST SV_CHATTOGGLE=172
-CONST SV_TOPS=173
-CONST SV_AESHELL=174
-CONST SV_START=176
-CONST SV_NEWMSG=177
-CONST SV_QUIETNODE=178
-CONST SV_SETNRAMS=179
-CONST SV_RESERVENODE=180
-
-CONST SV_INCOMING_MSG=183
-
-CONST BB_CHATSET=162
-CONST ENVSTAT=163
-
-CONST GETKEY=500
-CONST RAWARROW=501
-CONST CHAIN=502
-
-/****************** in progress ******************/
-CONST NODE_DEVICE=503
-CONST NODE_UNIT=504
-CONST NODE_BAUD=505
-CONST NODE_NUMBER=506
-CONST JH_MCI=507
-/*************************************************/
-
-CONST PRV_COMMAND=508
-CONST PRV_GROUP=509
-CONST BB_CONFNUM=510
-CONST BB_DROPDTR=511
-CONST BB_GETTASK=512
-CONST BB_REMOVEPORT=513
-CONST BB_SOPT=514
-CONST NODE_BAUDRATE=516
-CONST BB_LOGONTYPE=517
-CONST BB_SCRLEFT=518
-CONST BB_SCRTOP=519
-CONST BB_SCRWIDTH=520
-CONST BB_SCRHEIGHT=521
-CONST BB_PURGELINE=522
-CONST BB_PURGELINESTART=523
-CONST BB_PURGELINEEND=524
-CONST BB_NONSTOPTEXT=525
-CONST BB_LINECOUNT=526
-CONST DT_LANGUAGE=527
-CONST DT_QUICKFLAG=528
-CONST DT_GOODFILE=529
-CONST DT_ANSICOLOR=530
-CONST MULTICOM=531
-CONST LOAD_ACCOUNT=532
-CONST SAVE_ACCOUNT=533
-CONST SAVE_CONFDB=534
-CONST LOAD_CONFDB=535
-CONST GET_CONFNUM=536
-CONST SEARCH_ACCOUNT=537
-CONST APPEND_ACCOUNT=538
-CONST LAST_ACCOUNTNUM=539
-CONST MOD_TYPE=540
-CONST DT_ISANSI=541
-CONST BATCHZMODEMSEND=542
-CONST DT_MSGCODE=543
-CONST ACP_COMMAND=544
-CONST DT_FILECODE=545
-CONST EDITOR_STRUCT=546
-CONST BYPASS_CSI_CHECK=547
-CONST SENTBY=548
-CONST SETOVERIDE=549
-CONST FULLEDIT=550
-CONST SETMCIOFF=551
-
-CONST GET_CUSTOM_MSGBASE_PARAM1=600
-CONST GET_CUSTOM_MSGBASE_PARAM2=601
-CONST LAST_READ=602
-CONST LAST_SCANNED=603
-CONST MSGBASE_LOC=604
-CONST GET_CUSTOM_MSGBASE_MENUCMD=605
-CONST DT_REALNAME=606
-CONST UNKNOWN4=607
-CONST UNKNOWN5=608
-CONST SER_INOUT=609
-CONST UNKNOWN6=610
-CONST UNKNOWN7=611
-CONST MEMCONF=612
-CONST SET_SERSHARED=613
-CONST CONF_ACCESS=614
-CONST PASSWORD_HASH=615
-CONST GET_GNSFLAG=616
-CONST DISPLAY_FILE=617
-CONST CHECK_TO_DISPLAY=618
-CONST CHOOSE_NAME=619
-CONST SET_FILEATTACH=620
-CONST INTERPRET_MCI=621
-CONST GET_XIMPORT=622
-CONST GET_MENU_COMMAND_CHAR=623
-CONST FILE_REQUEST=624
-CONST DISABLE_FILE_ATTACH=625
-CONST QWKZOOM_REC=626
-CONST REL_CONF=627
-CONST RETURNCOMMAND2=628
-CONST CANCEL_TRANSFER_OFFHOOK=629
-CONST CLEAR_OLM_QUEUE=630
-CONST UNKNOWN12=631
-CONST CHECK_PLAYPEN_EXISTS=632
-CONST EXT_LOAD_ACCOUNT=633
-CONST EXT_SAVE_ACCOUNT=634
-CONST EXT_CHOOSE_NAME=635
-CONST CHECK_REALNAME=636
-CONST DT_INTERNETNAME=637
-CONST DT_TRANSLATOR=638
-CONST DT_HOST_LANGUAGE=639
-CONST XNET_OUTBOUND=640
-
-/*
-undocumented host addresses:
-
-600 - get custom msgbase conf command parameter 1
-601 - get custom msgbase conf command parameter 2
-602 - get/set last msg read to/from msg.string
-603 - get set last msg autoscanned to/from msg.string
-604 - get/set MsgBase_Location to/from msg.string
-605 - get custom msgbase command to msg.string
-606 - get/set real name to/from msg.string
-607 - get/set something that isnt used anywhere else in the code (not yet implemented)
-608 - some kind of input routine ???   (not yet implemented)
-609 - set IO_Flags[IOFLAG_SER_IN] and IO_Flags[IOFLAG_SER_OUT]
-610 - trigger netmail receive (not yet implemented)
-611 - trigger netmail send (not yet implemented)
-612 - get MemConf address (not yet implemented)
-613 - set something - something to do with external programs accessing serial ???
-614 - check conf access
-615 - calculate password hash from msg.string back to msg.string
-616 - get gnsflag
-617 - display file (fn) without reseting gnsflag
-618 - checktodislay(msg.string) without reseting gnsflag
-619 - choose a name with no filler3 user misc support
-620 - set fileattach flag
-621 - interpret mci string (not yet implemented)
-622 - get ximport value
-623 - get edit message menu command character (not yet implemented)
-624 -  asl requester asl(fn)
-625 - enable/disable file attach (not yet implemented)
-626 - get or set floating point record number used in qwkzoom (not yet implemented)
-627 - call RelConf(CN)
-628 - not sure - something to do with mainmenu_li and servercmd ??? used by aquascan to download - alternative version of RETURNCOMMAND
-631 - get or set unknown thing ??? (skips messages during download)    (not yet implemented)
-632 - check if file exists or is in playpens
-633 - extended LOAD_ACCOUNT (532) with filler3 / user misc 
-635 - choose a name with filler3 / user misc support 
-636 - 1 if realname turned on, 2 if username turned on otherwise 0
-637 - get or set internet name
-638 - get or set translator
-639 - get or set host language name (languages.info)
-640 - set amixnet outbound path (not yet implemented)
-*/
-
-/* New host commands for /X5 using range 700+ */
-
-CONST DT_HOSTNAME=700
-CONST DT_HOSTIP=701
-
-/* end of new /X 5 host commands */
-
-CONST DT_ADDBIT=1000
-CONST DT_REMBIT=1001
-CONST DT_QUERYBIT=1002
-
-CONST MAX_CMD=1003
 
 CONST PG_SM=1
 CONST PG_CO=2
@@ -1065,6 +809,7 @@ DEF doorExpertMode = FALSE
 
 DEF amixnetOutboundDir[255]:STRING
 DEF netMailTransfer=FALSE
+DEF sysopUploading=FALSE
 
 DEF sdReplyRexx=NIL: PTR TO rexxmsg
 
@@ -13445,7 +13190,7 @@ PROC xprfopen()
     ->check for dupes when the xpr lib asks us to open file in read mode and we are uploading
     
     dup:=FALSE
-    IF netMailTransfer=FALSE
+    IF (netMailTransfer=FALSE) AND (sysopUploading=FALSE)
       IF checkForFile(FilePart(fn))
         dup:=TRUE
       ELSEIF checkInPlaypens(FilePart(fn))
@@ -16353,9 +16098,12 @@ PROC sysopUpload()
   tTEFF:=0
   tTCPS:=0
   cnt:=0
+  sysopUploading:=TRUE
 
   displayUserToCallersLog(1)
   zmodemReceive(path,1)     /* path of upload */
+
+  sysopUploading:=FALSE
 
   aePuts('\b\n\b\nFile Uploading Complete...\b\n')
      
@@ -25045,8 +24793,8 @@ PROC main() HANDLE
   
   /**** If MultiCom port initialized in ACP then setup appropriate links ****/
  IF(sopt.toggles[TOGGLES_MULTICOM])
-    singleNode:=sopt.masterSemi
-    masterNode:=sopt.singleSemi
+    singleNode:=sopt.singleSemi
+    masterNode:=sopt.masterSemi
  ENDIF
 
   IF(StrLen(sopt.offHook)=0)
