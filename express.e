@@ -20822,7 +20822,7 @@ PROC internalCommandNM()
   DEF str[255]:STRING
   DEF stat,nd,read,status
   DEF sp:PTR TO singlePort
-  DEF serverMsg:jhMessage
+  DEF serverMsg:PTR TO jhMessage
   DEF nodeport
   
   IF checkSecurity(ACS_SYSOP_COMMANDS)=FALSE THEN RETURN RESULT_NOT_ALLOWED
@@ -20860,10 +20860,6 @@ PROC internalCommandNM()
           ReleaseSemaphore(sp)
         ENDIF
 
-        serverMsg.msg.ln.type:=NT_UNKNOWN
-        serverMsg.msg.length:=SIZEOF jhMessage
-        serverMsg.msg.replyport:=0
-
         IF status=ENV_AWAITCONNECT
           StringF(str,'Do you wish to take node \d offline ',nd)
           aePuts(str)
@@ -20872,6 +20868,10 @@ PROC internalCommandNM()
           IF(stat)
             StringF(str,'AEServer.\d',nd)
             IF (nodeport:=FindPort(str))<>NIL
+              serverMsg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
+              serverMsg.msg.ln.type:=NT_FREEMSG     ->this means the receiver should free the memory
+              serverMsg.msg.length:=SIZEOF jhMessage
+              serverMsg.msg.replyport:=0
               serverMsg.command:=SV_EXITNODE
               PutMsg(nodeport,serverMsg)
               Delay(60)
@@ -20884,7 +20884,7 @@ PROC internalCommandNM()
           stat:=yesNo(2)       
           IF(stat)
             sendACPCommand2('',SV_STARTNODE,nd)
-            Delay(120)
+            Delay(480)
           ENDIF
         ELSEIF status>=0
           StringF(str,'Do you wish to disconnect the current user from node \d ',nd)
@@ -20894,6 +20894,10 @@ PROC internalCommandNM()
           IF(stat)
             StringF(str,'AEServer.\d',nd)
             IF (nodeport:=FindPort(str))<>NIL
+              serverMsg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
+              serverMsg.msg.ln.type:=NT_FREEMSG     ->this means the receiver should free the memory
+              serverMsg.msg.length:=SIZEOF jhMessage
+              serverMsg.msg.replyport:=0
               serverMsg.command:=SV_KICKUSER
               PutMsg(nodeport,serverMsg)
               Delay(120)
