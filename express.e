@@ -850,6 +850,8 @@ ENDPROC
 
 PROC convertAccess()
   DEF tempStr[255]:STRING
+
+  acsLevel:=findAcsLevel()
   StringF(tempStr,'\sAccess.info',cmds.bbsLoc)
   IF fileExists(tempStr)=FALSE THEN overrideDefaultAccess:=TRUE ELSE overrideDefaultAccess:=checkSecurity(ACS_OVERRIDE_DEFAULTS)
   
@@ -20156,7 +20158,7 @@ PROC who(opt)
         StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','',chatstr)
     ENDSELECT
     StringF(mes2,'[34m| [0m\z\r\d[2]',i)
-    IF((status<>27) AND (status>=0) AND (status<>24) AND (status<>18))
+    IF((((status<>27) AND (status<>24) AND (status<>18)) OR checkSecurity(ACS_SYSOP_COMMANDS)) AND (status>=0))
       aePuts(mes2)
       aePuts(mes)
       aePuts(mes1)
@@ -23694,7 +23696,6 @@ PROC processSysopLogon()
     -> load sysop user data
     loadAccount(1,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
     masterLoadPointers(loggedOnUser)
-    acsLevel:=findAcsLevel()
     convertAccess()
     logonType:=LOGON_TYPE_SYSOP
     displayUserToCallersLog(0)
@@ -24139,7 +24140,6 @@ logonLoop:
  ENDIF
 
  validUser:=1
- acsLevel:=findAcsLevel()
  convertAccess()
 
  loggedOnUserKeys.baud:=onlineBaud
