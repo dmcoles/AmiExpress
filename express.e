@@ -147,12 +147,7 @@ CONST TRACK_DOWNLOADS_BIT=2
 /*
 
 stuff to do:
-
-Standby Node %d + node select message
 cache msgscan ?
-consider errors on opening express screen/window
-\t\t****UL ERROR (-)	TIME USED = %ld\r\ message
-
 
 any missing Door port commands
     DT_LANGUAGE(set),SETOVERIDE,FULLEDIT (not implemented in /X3 or 4)
@@ -329,7 +324,9 @@ ENDOBJECT
 OBJECT userMisc
   internetName[10]:ARRAY OF CHAR
   realName[26]:ARRAY OF CHAR
-  unknown[46]:ARRAY OF CHAR
+  downloadBytesBCD[8]:ARRAY OF CHAR
+  uploadBytesBCD[8]:ARRAY OF CHAR
+  unknown[30]:ARRAY OF CHAR
   unknown2:INT
   unknown3[164]:ARRAY OF CHAR
 ENDOBJECT
@@ -363,7 +360,9 @@ OBJECT zModem
 ENDOBJECT
 
 OBJECT confBase
-  handle[31]: ARRAY OF CHAR
+  handle[16]: ARRAY OF CHAR
+  downloadBytesBCD[8]:ARRAY OF CHAR
+  uploadBytesBCD[8]:ARRAY OF CHAR
   newSinceDate: LONG
   confRead: LONG
   confYM: LONG
@@ -787,7 +786,7 @@ DEF screen=NIL:PTR TO screen
 DEF window=NIL:PTR TO window
 DEF defaultfontattr: textattr
 DEF fontName[255]:STRING
-DEF fontHandle
+DEF fontHandle=NIL
 DEF dStatBar=NIL
 DEF consoleMP=NIL: PTR TO mp
 DEF consoleReadIO=NIL: PTR TO iostd
@@ -810,6 +809,8 @@ DEF doorExpertMode = FALSE
 DEF amixnetOutboundDir[255]:STRING
 DEF netMailTransfer=FALSE
 DEF sysopUploading=FALSE
+
+DEF autoDeactivateDays=-1
 
 DEF sdReplyRexx=NIL: PTR TO rexxmsg
 
@@ -1980,16 +1981,22 @@ PROC checkDoorMsg(mode)
         CASE DT_BYTESUPLOAD
           IF (servermsg.data)
             formatUnsignedLong(loggedOnUser.bytesUpload,tempstring)
+            formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstring)
             strCpy(servermsg.string,tempstring,80)
           ELSE
-            loggedOnUser.bytesUpload:=Val(servermsg.string)
+            ->loggedOnUser.bytesUpload:=Val(servermsg.string)
+            bcdVal(servermsg.string,loggedOnUserMisc.uploadBytesBCD)          
+            loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
           ENDIF
         CASE DT_BYTEDOWNLOAD
           IF (servermsg.data)
-            formatUnsignedLong(loggedOnUser.bytesDownload,tempstring)
+            ->formatUnsignedLong(loggedOnUser.bytesDownload,tempstring)
+            formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstring)
             strCpy(servermsg.string,tempstring,80)
           ELSE
-            loggedOnUser.bytesDownload:=Val(servermsg.string)
+            ->loggedOnUser.bytesDownload:=Val(servermsg.string)
+            bcdVal(servermsg.string,loggedOnUserMisc.downloadBytesBCD)
+            loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
           ENDIF
         CASE DT_DAILYBYTELIMIT
           IF (servermsg.data)
@@ -2122,6 +2129,8 @@ PROC checkDoorMsg(mode)
           servercmd:=SV_RESERVE
         CASE SV_AESHELL
           servercmd:=SV_AESHELL
+        CASE SV_KICKUSER
+          servercmd:=SV_KICKUSER
         CASE SV_RESERVENODE
             StrCopy(reservedName,servermsg.string)
             IF(StrLen(reservedName)>0)            
@@ -2176,7 +2185,7 @@ PROC checkDoorMsg(mode)
           processOlmMessageQueue(FALSE)
           
       ENDSELECT    
-     IF servermsg<>NIL
+      IF servermsg<>NIL
        type:=servermsg.msg.ln.type
        ReplyMsg(servermsg)
        IF type=NT_FREEMSG THEN FreeMem(servermsg,servermsg.msg.length)
@@ -2267,6 +2276,25 @@ ENDPROC
 
 PROC formatUnsignedLong(val,outStr)
   RawDoFmt('%lu',{val},{asmputchar},outStr)
+ENDPROC
+
+PROC formatBCD(valArrayBCD:PTR TO CHAR, outStr)
+  DEF tempStr[2]:STRING
+  DEF i,n,start=FALSE
+
+  StrCopy(outStr,'')
+  FOR i:=0 TO 7
+    n:=valArrayBCD[i]
+    IF (n<>0) OR (start) OR (i=7)
+      IF (start) OR (n>=$10)
+        StringF(tempStr,'\d\d',Shr(n AND $F0,4),n AND $F)
+      ELSE
+        StringF(tempStr,'\d',n AND $F)
+      ENDIF
+      StrAdd(outStr,tempStr)
+      start:=TRUE
+    ENDIF
+  ENDFOR
 ENDPROC
 
 PROC formatLongDate(cDateVal,outDateStr)
@@ -2761,8 +2789,9 @@ ENDPROC ((checkCon() OR checkSer()))
 PROC checkScreenClear()
   IF((loggedOnUserKeys.userFlags AND USER_SCRNCLR))
     sendCLS()
+    RETURN TRUE
   ENDIF
-ENDPROC
+ENDPROC FALSE
 
 PROC sCheckInput()
   DEF result1=0,result2=0
@@ -2827,19 +2856,19 @@ PROC yesNo(flag)
 
  WHILE(TRUE)
      ch:=readChar(INPUT_TIMEOUT)
-     IF(ch<0) THEN RETURN ch
-     IF((ch=13) OR (ch=10))
-         IF(flag=1) THEN ch:="y"
-         IF(flag=2) THEN ch:="n"
-     ENDIF
-     IF((ch="y") OR (ch="Y")) 
-         aePuts('Yes\b\n')
-         RETURN 1
-     ENDIF
-     IF((ch="n") OR  (ch="N"))
-         aePuts('No\b\n')
-         RETURN 0
-     ENDIF
+   IF(ch<0) THEN RETURN ch
+   IF(ch=13)     ->  removed ((ch=13) OR (ch=10))
+       IF(flag=1) THEN ch:="y"
+       IF(flag=2) THEN ch:="n"
+   ENDIF
+   IF((ch="y") OR (ch="Y")) 
+       aePuts('Yes\b\n')
+       RETURN 1
+   ENDIF
+   IF((ch="n") OR  (ch="N"))
+       aePuts('No\b\n')
+       RETURN 0
+   ENDIF
  ENDWHILE
 ENDPROC
 
@@ -3042,7 +3071,7 @@ redoinput:
   
   conPuts('[0 p'); /* turn console cursor off */
 
-  IF ch=13  THEN result:=RESULT_SUCCESS
+  IF ch=13 THEN result:=RESULT_SUCCESS
   IF (result=RESULT_SUCCESS) AND (StrLen(outputString)>0) AND (addToHistoryFlag)
     addToHistory(outputString)
   ENDIF
@@ -3544,6 +3573,8 @@ PROC checkUserOnLine(user: PTR TO user, check)
   DEF error=0,stat,loop
   DEF tempStr[255]:STRING
   DEF tuser:user
+  DEF sp:PTR TO singlePort
+  DEF status
  
   IF(check)
  	    ->IF(tuser=(struct User *)AllocMem(sizeof(struct User),MEMF_ANY|MEMF_CLEAR))	{
@@ -3551,23 +3582,40 @@ PROC checkUserOnLine(user: PTR TO user, check)
  		    error:=1
  		    REPEAT
  			    IF(loop=node)	THEN loop++
- 
- 			    StringF(tempStr,'\snode\d',cmds.bbsLoc,loop)
- 			    IF(lock:=Lock(tempStr,ACCESS_READ)) 
- 				    UnLock(lock)
- 				    StringF(tempStr,'\snode\d.user',cmds.bbsLoc,loop)
- 				    IF(fh:=Open(tempStr,MODE_OLDFILE))>0 
- 					    IF(stat:=Read(fh,tuser,SIZEOF user)) 
- 						    IF(stringCompare(tuser.name,loggedOnUser.name)=RESULT_SUCCESS)
- 							    error:=0
- 							    lock:=NIL
+
+          IF sopt.toggles[TOGGLES_MULTICOM]
+            status:=-1
+            ObtainSemaphore(masterNode)
+            sp:=(masterNode.myNode[loop].s)
+            ReleaseSemaphore(masterNode)
+
+            IF sp
+              ObtainSemaphore(sp)
+              status:=sp.status
+              ReleaseSemaphore(sp)
+            ENDIF
+          ELSE
+            status:=0
+          ENDIF
+
+          IF (status>=0) AND (status<>ENV_NOTACTIVE) AND (status<>ENV_SHUTDOWN)
+            StringF(tempStr,'\snode\d',cmds.bbsLoc,loop)
+            IF(lock:=Lock(tempStr,ACCESS_READ)) 
+              UnLock(lock)
+              StringF(tempStr,'\snode\d.user',cmds.bbsLoc,loop)
+              IF(fh:=Open(tempStr,MODE_OLDFILE))>0 
+                IF(stat:=Read(fh,tuser,SIZEOF user)) 
+                  IF(stringCompare(tuser.name,loggedOnUser.name)=RESULT_SUCCESS)
+                    error:=0
+                    lock:=NIL
+                  ENDIF
                 ENDIF
- 							ENDIF
- 						ENDIF
- 					  Close(fh)
- 					ENDIF
+              ENDIF
+              Close(fh)
+            ENDIF
+          ENDIF
  			  loop++
- 			  UNTIL lock=NIL
+ 			  UNTIL (lock=NIL) OR (loop=MAX_NODES)
  		  ->  FreeMem(tuser,sizeof(struct User))
  		->} else	AEPutStr("Can't allocate memory for user test\b\n")
  	ELSE
@@ -4226,16 +4274,22 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
           CASE DT_BYTESUPLOAD
             IF (msg.data)
               formatUnsignedLong(loggedOnUser.bytesUpload,tempstring)
+              formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstring)
               strCpy(msg.string,tempstring,200)
             ELSE
-              loggedOnUser.bytesUpload:=Val(msg.string)
+              ->loggedOnUser.bytesUpload:=Val(msg.string)
+              bcdVal(msg.string,loggedOnUserMisc.uploadBytesBCD)          
+              loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
             ENDIF
           CASE DT_BYTEDOWNLOAD
             IF (msg.data)
-              formatUnsignedLong(loggedOnUser.bytesDownload,tempstring)
+              ->formatUnsignedLong(loggedOnUser.bytesDownload,tempstring)
+              formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstring)
               strCpy(msg.string,tempstring,200)
             ELSE
-              loggedOnUser.bytesDownload:=Val(msg.string)
+              ->loggedOnUser.bytesDownload:=Val(msg.string)
+              bcdVal(msg.string,loggedOnUserMisc.downloadBytesBCD)          
+              loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
             ENDIF
           CASE DT_DAILYBYTELIMIT
             IF (msg.data)
@@ -5079,6 +5133,7 @@ ENDPROC runCommand(CMDTYPE_SYSCMD,cmd,params,privcmd)
 
 PROC loadConfDB(account,confNum,addr,force=FALSE)
   DEF bi, confLoc[255]:STRING
+  DEF tmpMem
   IF (account = loggedOnUser.slotNumber) AND (force=FALSE)
     CopyMem(ListItem(confBases,confNum-1),addr,SIZEOF confBase)
     RETURN
@@ -5100,8 +5155,14 @@ PROC loadConfDB(account,confNum,addr,force=FALSE)
   ENDIF
 
   IF (Read(bi,addr,SIZEOF confBase)<>SIZEOF confBase)
+    ->if we can't read the conf db then clear out any existing data
+    tmpMem:=New(SIZEOF confBase)
+    CopyMem(tmpMem,addr,SIZEOF confBase)
+    Dispose(tmpMem)
     callersLog('\tError Reading confbase data')
   ENDIF
+
+  convertConfUDBytesTOBCD(addr)
   
   Close(bi)
 ENDPROC
@@ -5135,6 +5196,7 @@ ENDPROC
 
 PROC loadMsgPointers(conf)
   DEF cb: PTR TO confBase
+  DEF i
 
   IF(loggedOnUser.slotNumber<=0)
     lastMsgReadConf:=0
@@ -5146,8 +5208,14 @@ PROC loadMsgPointers(conf)
 
   IF (checkSecurity(ACS_CONFERENCE_ACCOUNTING))
     IF (readToolTypeInt(TOOLTYPE_CONF,conf,'CONFDB_SHARED')<=0)
-      loggedOnUser.bytesDownload:=cb.bytesDownload
-      loggedOnUser.bytesUpload:=cb.bytesUpload
+      ->loggedOnUser.bytesDownload:=cb.bytesDownload
+      ->loggedOnUser.bytesUpload:=cb.bytesUpload
+      FOR i:=0 TO 7
+        loggedOnUserMisc.downloadBytesBCD[i]:=cb.downloadBytesBCD[i]
+        loggedOnUserMisc.uploadBytesBCD[i]:=cb.uploadBytesBCD[i]
+      ENDFOR
+      loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
+      loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
       ->User.Daily_Bytes_Limit= it->CB.Daily_Bytes_Limit
       ->User.Daily_Bytes_Dld=   it->CB.Daily_Bytes_Dld
       loggedOnUser.uploads:=cb.upload
@@ -5167,6 +5235,7 @@ ENDPROC
 PROC saveMsgPointers(conf)
   DEF cb: PTR TO confBase
   DEF debug[255]:STRING
+  DEF i
 
   IF(loggedOnUser.slotNumber<=0) OR (conf=0)
     lastMsgReadConf:=0
@@ -5180,6 +5249,10 @@ PROC saveMsgPointers(conf)
     IF (readToolTypeInt(TOOLTYPE_CONF,conf,'CONFDB_SHARED')<=0)
       cb.bytesDownload:=loggedOnUser.bytesDownload
       cb.bytesUpload:=loggedOnUser.bytesUpload
+      FOR i:=0 TO 7
+        cb.downloadBytesBCD[i]:=loggedOnUserMisc.downloadBytesBCD[i]
+        cb.uploadBytesBCD[i]:=loggedOnUserMisc.uploadBytesBCD[i]
+      ENDFOR
       ->User.Daily_Bytes_Limit= it->CB.Daily_Bytes_Limit
       ->User.Daily_Bytes_Dld=   it->CB.Daily_Bytes_Dld
       cb.upload:=loggedOnUser.uploads
@@ -5544,10 +5617,12 @@ PROC processMciCmd(mcidata,len,pos)
     ELSEIF (StrCmp(cmd,'UB',ALL))
       pos:=pos+2+t
       formatUnsignedLong(loggedOnUser.bytesUpload,tempstr)
+      formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstr)
       aePuts2(tempstr,nlen)
     ELSEIF (StrCmp(cmd,'DB',ALL))
       pos:=pos+2+t
-      formatUnsignedLong(loggedOnUser.bytesDownload,tempstr)
+      ->formatUnsignedLong(loggedOnUser.bytesDownload,tempstr)
+      formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstr)
       aePuts2(tempstr,nlen)
     ELSEIF (StrCmp(cmd,'FU',ALL))
       pos:=pos+2+t
@@ -5910,10 +5985,12 @@ PROC processMciCmd2(mcidata,len,pos,outdata)
     ELSEIF (StrCmp(cmd,'UB',ALL))
       pos:=pos+2+t
       formatUnsignedLong(loggedOnUser.bytesUpload,tempstr)
+      formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstr)
       StrAdd(outdata,tempstr,nlen)
     ELSEIF (StrCmp(cmd,'DB',ALL))
       pos:=pos+2+t
-      formatUnsignedLong(loggedOnUser.bytesDownload,tempstr)
+      ->formatUnsignedLong(loggedOnUser.bytesDownload,tempstr)
+      formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstr)
       StrAdd(outdata,tempstr,nlen)
     ELSEIF (StrCmp(cmd,'FU',ALL))
       pos:=pos+2+t
@@ -6157,7 +6234,7 @@ PROC tranChat()
       aePuts(str)
     ENDIF
         
-    IF((c=CHAR_BACKSPACE) OR (c=177))
+    IF((c=CHAR_BACKSPACE))
       StringF(str,'\c \c',CHAR_BACKSPACE,CHAR_BACKSPACE)
       IF(chatConFlag)
         IF conLineLen>0
@@ -6176,7 +6253,7 @@ PROC tranChat()
       JUMP tcloop
     ELSEIF((c=3) AND (checkSecurity(ACS_BREAK_CHAT)))
       chatFlag:=0
-    ELSEIF (c=13) OR (c=10)
+    ELSEIF (c=13)   -> removed OR (c=10)
       IF chatConFlag
         IF StrLen(tempstr1)>0
           translatorMode:=TRANS_HOST_TO_DEFINED
@@ -6360,7 +6437,7 @@ PROC tranChat()
       aePuts(str)
     ENDIF
         
-    IF((c=CHAR_BACKSPACE) OR (c=177))
+    IF((c=CHAR_BACKSPACE))
       StringF(str,'\c \c',CHAR_BACKSPACE,CHAR_BACKSPACE)
       IF(chatConFlag)
         IF conLineLen>0
@@ -6379,7 +6456,7 @@ PROC tranChat()
       JUMP tcloop
     ELSEIF((c=3) AND (checkSecurity(ACS_BREAK_CHAT)))
       chatFlag:=0
-    ELSEIF (c=13) OR (c=10) OR (c=32)
+    ELSEIF (c=13) OR (c=32)      ->removed OR (c=10) 
       IF chatConFlag
         IF serLineLen>0 
           cnt:=serLineLen
@@ -6574,7 +6651,7 @@ sx:
       JUMP cnext2
   	ENDIF
   
-    IF((c=CHAR_BACKSPACE) OR (c=177))
+    IF((c=CHAR_BACKSPACE))
   		IF(x>0)
       	x--
         SetStr(space,x)
@@ -8063,7 +8140,7 @@ PROC processInputMessage(timeout, extsig = 0)
     ENDIF
 
     ->F10
-    IF ((wasControl=1) AND (ch="9"))
+    IF (servercmd=SV_KICKUSER) OR ((wasControl=1) AND (ch="9"))
       servercmd:=-1
       dropDTR()
       ioFlags[IOFLAG_SER_OUT]:=0
@@ -8084,6 +8161,81 @@ PROC processInputMessage(timeout, extsig = 0)
   checkShutDown()
  
 ENDPROC wasControl, ch
+
+PROC convertFromBCD(inArray:PTR TO CHAR)
+  DEF tempBCD[8]:ARRAY
+  DEF bcdStr[20]:STRING
+  DEF i
+
+  convertToBCD($ffffffff,tempBCD)
+  subBCD2(tempBCD,inArray)
+  IF ((tempBCD[0] AND $F0)<>0)
+    RETURN $ffffffff
+  ENDIF
+  formatBCD(inArray,bcdStr)
+ENDPROC Val(bcdStr)
+
+PROC convertToBCD(invalue,outArray: PTR TO CHAR)
+  DEF shift,i
+
+  FOR i:=0 TO 7
+    outArray[i]:=0
+  ENDFOR
+
+  FOR shift:=0 TO 31
+    FOR i:=0 TO 7
+      IF (outArray[i] AND $F0)>=$50 THEN outArray[i]:=outArray[i]+$30
+      IF (outArray[i] AND $F)>=$5 THEN outArray[i]:=outArray[i]+$3
+    ENDFOR
+    FOR i:=0 TO 6
+      outArray[i]:=Shl(outArray[i],1)     
+      IF outArray[i+1] AND $80
+        outArray[i]:=outArray[i] OR 1
+      ENDIF
+    ENDFOR
+    outArray[7]:=Shl(outArray[7],1)
+    IF (invalue AND $80000000)
+      outArray[7]:=outArray[7] OR 1
+    ENDIF
+    invalue:=Shl(invalue,1)
+  ENDFOR
+ENDPROC
+
+PROC convertUserUDBytesTOBCD(userPtr: PTR TO user, userMiscPtr: PTR TO userMisc)
+  DEF updateUpload=TRUE, updateDownload=TRUE
+  DEF i
+
+  FOR i:=0 TO 7
+    IF (userMiscPtr.downloadBytesBCD[i]<>0) THEN updateDownload:=FALSE
+    IF (userMiscPtr.uploadBytesBCD[i]<>0) THEN updateUpload:=FALSE
+  ENDFOR
+
+  IF updateUpload
+    convertToBCD(userPtr.bytesUpload,userMiscPtr.uploadBytesBCD)
+  ENDIF
+
+  IF updateDownload
+    convertToBCD(userPtr.bytesDownload,userMiscPtr.downloadBytesBCD)
+  ENDIF
+ENDPROC
+
+PROC convertConfUDBytesTOBCD(confPtr: PTR TO confBase)
+  DEF updateUpload=TRUE, updateDownload=TRUE
+  DEF i
+
+  FOR i:=0 TO 7
+    IF (confPtr.downloadBytesBCD[i]<>0) THEN updateDownload:=FALSE
+    IF (confPtr.uploadBytesBCD[i]<>0) THEN updateUpload:=FALSE
+  ENDFOR
+
+  IF updateUpload
+    convertToBCD(confPtr.bytesUpload,confPtr.uploadBytesBCD)
+  ENDIF
+
+  IF updateDownload
+    convertToBCD(confPtr.bytesDownload,confPtr.downloadBytesBCD)
+  ENDIF
+ENDPROC
 
 PROC loadAccount(slot,userPtr, userKeysPtr, userMiscPtr)
   DEF l,fh
@@ -8119,6 +8271,10 @@ PROC loadAccount(slot,userPtr, userKeysPtr, userMiscPtr)
     ELSE
       result:=RESULT_FAILURE
     ENDIF
+  ENDIF
+
+  IF (result=RESULT_SUCCESS) AND userPtr AND userMiscPtr
+    convertUserUDBytesTOBCD(userPtr,userMiscPtr)
   ENDIF
 ENDPROC result
 
@@ -8297,15 +8453,29 @@ PROC processLoggingOff()
     
     StrCopy(reservedName,'')
     
+    WHILE(acpLockNodes()<>node)
+      StringF(tempstr,'Standby node \d',node)
+      setEnvMsg(tempstr)
+      Delay(30)
+    ENDWHILE
+    processSysCommand('LOGOFF')
+
+    IF autoDeactivateDays<>-1
+      deactivateOldUsers(autoDeactivateDays)
+    ENDIF
+
+    StringF(tempstr,'LOGOFF\d',node)
+    processSysCommand(tempstr)
+
     IF (relogon)
       processSysCommand('RELOGON')
       StringF(tempstr,'RELOGON\d',node)
       processSysCommand(tempstr)
+      IF consoleDebugLevel>=LOG_DEBUG
+        errorLog('RL')
+      ENDIF
     ENDIF
-
-    processSysCommand('LOGOFF')
-    StringF(tempstr,'LOGOFF\d',node)
-    processSysCommand(tempstr)
+    acpLockNodes()
 
     END loggedOnUser
     END loggedOnUserKeys
@@ -8616,12 +8786,16 @@ ENDPROC
 
 PROC clearMsgPointers()
   DEF cb: PTR TO confBase
-  DEF i
+  DEF i,j
 
   FOR i:=1 TO cmds.numConf
     cb:=ListItem(confBases,i-1)
     cb.bytesDownload:=0
     cb.bytesUpload:=0
+    FOR j:=0 TO 7
+      cb.downloadBytesBCD[j]:=0
+      cb.uploadBytesBCD[j]:=0
+    ENDFOR
     cb.upload:=0
     cb.downloads:=0
     cb.ratioType:=0
@@ -8643,6 +8817,10 @@ PROC addMsgPointers()
   IF (checkSecurity(ACS_CONFERENCE_ACCOUNTING))
     loggedOnUser.bytesDownload:=0
     loggedOnUser.bytesUpload:=0
+    FOR i:=0 TO 7
+      loggedOnUserMisc.downloadBytesBCD[i]:=0
+      loggedOnUserMisc.uploadBytesBCD[i]:=0
+    ENDFOR
     loggedOnUser.uploads:=0
     loggedOnUser.downloads:=0
   ENDIF
@@ -8651,8 +8829,12 @@ PROC addMsgPointers()
   FOR i:=1 TO cmds.numConf
     cb:=ListItem(confBases,i-1)
     IF (readToolTypeInt(TOOLTYPE_CONF,i,'CONFDB_SHARED')>0) AND (checkConfAccess(i))
-      loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+cb.bytesDownload
-      loggedOnUser.bytesUpload:=loggedOnUser.bytesUpload+cb.bytesUpload
+      ->loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+cb.bytesDownload
+      ->loggedOnUser.bytesUpload:=loggedOnUser.bytesUpload+cb.bytesUpload
+      addBCD2(loggedOnUserMisc.downloadBytesBCD,cb.downloadBytesBCD)
+      addBCD2(loggedOnUserMisc.uploadBytesBCD,cb.uploadBytesBCD)
+      loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
+      loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
       loggedOnUser.uploads:=loggedOnUser.uploads+cb.upload
       loggedOnUser.downloads:=loggedOnUser.downloads+cb.downloads
     ENDIF
@@ -8838,7 +9020,7 @@ PROC displayMessage(gfh)
  IF translatorMode=TRANS_NONE
    checkScreenClear()
 
-   StringF(str,'\b\n[32mDate   [33m: [0m\l\s[30]   [32mNumber[33m: [0m\d\b\n',date,mailHeader.msgNumb)
+   StringF(str,'[32mDate   [33m: [0m\l\s[30]   [32mNumber[33m: [0m\d\b\n',date,mailHeader.msgNumb)
    aePuts(str)
    StrCopy(date,mailHeader.toName,31)
    LowerStr(date)
@@ -9564,7 +9746,7 @@ PROC replyToMSG(gfh)
 
   delMsgNum:=mailHeader.msgNumb
   StrCopy(frm,mailHeader.toName)
-  aePuts('\b\n                       [32m([33m------------------------------[32m)[0m\b\n')
+  aePuts('                       [32m([33m------------------------------[32m)[0m\b\n')
   strCpy(mailHeader.toName,mailHeader.fromName,31)
   StringF(str,'     [36mTo[33m: [32m([33mEnter[32m)[0m=[32m''[33mALL[32m''[32m?[0m \s\b\n',mailHeader.toName)
   aePuts(str)
@@ -9960,7 +10142,7 @@ PROC edit(allowFullscreen=TRUE,maxLineLen=75)
              StrCopy(space,'',ALL)
              JUMP next2
          ENDIF
-         IF((c=CHAR_BACKSPACE) OR (c=177)) 
+         IF((c=CHAR_BACKSPACE)) 
           StrCopy(tempstr,'')
           IF x>0
             strAddChar(tempstr,c)
@@ -10590,8 +10772,8 @@ skipAll:
     RETURN stat
  ENDIF
 
+ aePuts('\b\n')
  IF(stat<0)
-    aePuts('\b\n')
     RETURN RESULT_FAILURE
  ENDIF
    
@@ -10698,7 +10880,7 @@ PROC replyPrompt(gfh)
         aePuts(string)
        ENDIF
     ELSEIF helplist=1
-         aePuts('\b\n[33mA[32m>[36mgain[0m')
+         aePuts('[33mA[32m>[36mgain[0m')
          IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
          aePuts('\b\n[33mR[32m>[36meply[0m')
          aePuts('\b\n[33mQ[32m>[36muit[0m')
@@ -10706,7 +10888,7 @@ PROC replyPrompt(gfh)
          aePuts(string)
          helplist:=0
     ELSE
-         aePuts('\b\n[33mA[32m>[36mgain[0m')
+         aePuts('[33mA[32m>[36mgain[0m')
          IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
          aePuts('\b\n[33mR[32m>[36meply[0m')
          aePuts('\b\n[33mNS[32m>[36m Non-stop mode[0m')
@@ -10732,6 +10914,7 @@ PROC replyPrompt(gfh)
    IF(nonStopMail=FALSE)
        stat:=lineInput('','',10,INPUT_TIMEOUT,str)
        IF(stat<0) THEN RETURN stat
+      aePuts('\b\n')
    ENDIF  
     IF(strCmpi(str,'??',ALL))
       helplist:=2
@@ -10798,7 +10981,7 @@ PROC replyPrompt(gfh)
              stat:=deleteMSG(gfh)
              RETURN RESULT_SUCCESS
          ELSE
-             aePuts('\b\nNot your message.\b\n')
+             aePuts('Not your message.\b\n')
              JUMP contloop
          ENDIF
       ENDIF
@@ -10814,7 +10997,7 @@ PROC replyPrompt(gfh)
         kMsgFlag:=TRUE
         RETURN RESULT_SUCCESS
       ELSE
-        aePuts('\b\nNot your message.\b\n')
+        aePuts('Not your message.\b\n')
         JUMP contloop
       ENDIF
     ENDIF
@@ -10858,11 +11041,11 @@ PROC replyPrompt(gfh)
          stat:=replyToMSG(gfh)
          RETURN RESULT_SUCCESS
      ELSE
-         aePuts('\b\nNot your message.\b\n')
+         aePuts('Not your message.\b\n')
          JUMP contloop
      ENDIF
    ENDIF
- aePuts('\b\nNo such command!!\b\n')
+ aePuts('No such command!!\b\n')
 ENDWHILE
 
 ENDPROC RESULT_SUCCESS
@@ -11048,6 +11231,42 @@ PROC findUserFromNumber(start,hoozer:PTR TO userKeys)
   ENDIF
   Close(fh)
 ENDPROC 0
+
+PROC deactivateOldUsers(days)
+  DEF fh,fh2
+  DEF l,l2
+  DEF i,deactivateLimit
+
+  deactivateLimit:=getSystemTime()-Mul(days,86400)
+
+  IF(fh:=Open(userDataFile,MODE_READWRITE))>0
+    l:=SIZEOF user
+    l2:=SIZEOF userKeys
+
+    IF(fh2:=Open(userKeysFile,MODE_READWRITE))>0
+      i:=0
+      WHILE(Read(fh,tempUser,l)=l)
+        IF tempUser.timeLastOn<deactivateLimit
+          IF tempUser.slotNumber<>0
+            Seek(fh,-l,OFFSET_CURRENT)
+            tempUser.slotNumber:=0
+            Write(fh,tempUser,l)
+
+            Seek(fh2,Mul(i,l2),OFFSET_BEGINNING)
+            IF (Read(fh2,tempUserKeys,l2)=l2)
+              Seek(fh2,-l2,OFFSET_CURRENT)
+              tempUserKeys.number:=0
+              Write(fh2,tempUserKeys,l2)
+            ENDIF
+          ENDIF
+        ENDIF
+        i++
+      ENDWHILE
+      Close(fh2)
+    ENDIF
+    Close(fh)
+  ENDIF
+ENDPROC
 
 PROC findUserFromName(start,nameType,name, hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO userMisc)
   DEF slot, stat, fh,fh2
@@ -11314,6 +11533,7 @@ getOUT:
  IF (mailFlag)
    aePuts('\b\nWould you like to read it now ')
    stat:=yesNo(1)
+   aePuts('\b\n')
    IF(stat<0) THEN RETURN stat
    IF(stat)
      msgNum:=displayMsg
@@ -11332,8 +11552,7 @@ getOUT:
        msgNum++
      ENDWHILE
    ELSE
-       aePuts('\b\n')
-       RETURN RESULT_SUCCESS
+     RETURN RESULT_SUCCESS
    ENDIF
  ELSE
    lastNewReadConf:=msgNum
@@ -11510,7 +11729,7 @@ PROC readMSG(gfh)
          aePuts(string)
        ENDIF
       ELSEIF(helplist=1)
-         aePuts('\b\n[33mA[32m>[36mgain[0m')
+         aePuts('[33mA[32m>[36mgain[0m')
          IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
          aePuts('\b\n[33mR[32m>[36meply[0m')
          aePuts('\b\n[33mQ[32m>[36muit[0m')
@@ -11518,7 +11737,7 @@ PROC readMSG(gfh)
          aePuts(string)
          helplist:=0
       ELSE
-         aePuts('\b\n[33mA[32m>[36mgain[0m')
+         aePuts('[33mA[32m>[36mgain[0m')
          IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
          aePuts('\b\n[33mR[32m>[36meply[0m')
          aePuts('\b\n[33mNS[32m>[36m Non-stop mode[0m')
@@ -11546,6 +11765,7 @@ PROC readMSG(gfh)
          noDirF:=1
          stat:=lineInput('','',10,INPUT_TIMEOUT,str)
          IF(stat<>RESULT_SUCCESS) THEN RETURN RESULT_FAILURE
+         aePuts('\b\n')
      ENDIF
     
      IF(strCmpi(str,'??',ALL))
@@ -11672,7 +11892,6 @@ PROC readMSG(gfh)
      ENDIF
 
      IF((str[0]="Q") OR (str[0]="q"))
-         aePuts('\b\n')
          RETURN RESULT_SUCCESS
      ENDIF
 
@@ -12134,22 +12353,30 @@ PROC exceedRatio()
   aePuts('You have exceeded your ratio, you must upload first.\b\n\b\n')
 ENDPROC
 
-PROC displayULStats(u: PTR TO user)
+PROC displayULStats(u: PTR TO user, um:PTR TO userMisc)
   DEF string[200]:STRING
-  DEF ktot
+  DEF ktot[20]:STRING
 
-  ktot:=u.bytesDownload
+  formatBCD(um.downloadBytesBCD,ktot)
   IF sopt.toggles[TOGGLES_CREDITBYKB]=FALSE
-    ktot:=Shr(ktot,10)
+    IF StrLen(ktot)>3
+      SetStr(ktot,StrLen(ktot)-3)
+    ELSE
+      StrCopy(ktot,'0')
+    ENDIF
   ENDIF
-  StringF(string,'Number of Downloads   : \d (\dk total)\b\n',u.downloads AND $FFFF,ktot)
+  StringF(string,'Number of Downloads   : \d (\sk total)\b\n',u.downloads AND $FFFF,ktot)
   aePuts(string)
 
-  ktot:=u.bytesUpload
+  formatBCD(um.uploadBytesBCD,ktot)
   IF sopt.toggles[TOGGLES_CREDITBYKB]=FALSE
-    ktot:=Shr(ktot,10)
+    IF StrLen(ktot)>3
+      SetStr(ktot,StrLen(ktot)-3)
+    ELSE
+      StrCopy(ktot,'0')
+    ENDIF
   ENDIF
-  StringF(string,'Number of Uploads     : \d (\dk total)\b\n',u.uploads AND $FFFF,ktot)
+  StringF(string,'Number of Uploads     : \d (\sk total)\b\n',u.uploads AND $FFFF,ktot)
   aePuts(string)
   IF sopt.toggles[TOGGLES_CREDITBYKB]
     StringF(string,'Todays KBytes Available: \d\b\n',bytesADL)
@@ -12813,6 +13040,18 @@ PROC setEnvMsg(s: PTR TO CHAR)
   ENDIF
 ENDPROC
 
+PROC acpLockNodes()
+  DEF port: PTR TO mp
+  masterMsg.command:=SV_NODE_LOCK
+  masterMsg.data:=node
+  IF((port:=FindPort('AE.Master')))
+    PutMsg(port,masterMsg)
+    WaitPort(serverRP)
+    GetMsg(serverRP)
+  ENDIF
+  masterMsg.command:=JH_UPDATE
+ENDPROC masterMsg.data
+
 
 PROC sendACPCommand(string:PTR TO CHAR,command,node)
   DEF port: PTR TO mp
@@ -12832,13 +13071,17 @@ PROC sendACPCommand(string:PTR TO CHAR,command,node)
   masterMsg.command:=JH_UPDATE
 ENDPROC
 
-PROC sendACPCommand2(string:PTR TO CHAR,command)
+PROC sendACPCommand2(string:PTR TO CHAR,command,destNode=-1)
   DEF port: PTR TO mp
   strCpy(masterMsg.user,string,ALL)
   strCpy(masterMsg.location,'',ALL)
   strCpy(masterMsg.action,'',ALL)
   masterMsg.command:=command
-  masterMsg.node:=node
+  IF destNode=-1
+    masterMsg.node:=node
+  ELSE
+    masterMsg.node:=destNode
+  ENDIF
   masterMsg.data:=command
 
   IF((port:=FindPort('AE.Master')))
@@ -13028,6 +13271,7 @@ ENDPROC
 
 PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO userMisc)
   DEF string[82]:STRING
+  DEF bcdStr[20]:STRING
 
   statChatFlag()
   IF scropen=FALSE THEN RETURN
@@ -13087,10 +13331,24 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
   StringF(string,'\d[5]',hoozer.uploads AND $FFFF)
   statMessage(45,2,string)
 
-  StringF(string,'\d[12]',hoozer.bytesDownload)
+  formatBCD(loggedOnUserMisc.downloadBytesBCD,bcdStr)
+  IF StrLen(bcdStr)>12
+    SetStr(bcdStr,StrLen(bcdStr)-3)
+    StrAdd(bcdStr,'K')
+  ENDIF
+
+  ->StringF(string,'\d[12]',hoozer.bytesDownload)
+  StringF(string,'\s[12]',bcdStr)
   statMessage(51,2,string)
 
-  StringF(string,'\d[12]',hoozer.bytesUpload)
+  formatBCD(loggedOnUserMisc.uploadBytesBCD,bcdStr)
+  IF StrLen(bcdStr)>12
+    SetStr(bcdStr,StrLen(bcdStr)-3)
+    StrAdd(bcdStr,'K')
+  ENDIF
+
+  ->StringF(string,'\d[12]',hoozer.bytesUpload)
+  StringF(string,'\s[12]',bcdStr)
   statMessage(64,2,string)
 
   StringF(string,'\r\z\d[3]',currentConf)
@@ -15207,7 +15465,7 @@ PROC batchasl(where: PTR TO CHAR) HANDLE
   StrCopy(aslDir,cmds.bbsLoc)
   IF readToolType(TOOLTYPE_CONF,currentConf,'LOCAL_UPLOAD_PATH',aslDir)=FALSE
     IF readToolType(TOOLTYPE_NODE,node,'LOCAL_UPLOAD_PATH',aslDir)=FALSE
-      readToolType(TOOLTYPE_CONFCONFIG,'','LOCAL_UPLOAD_PATH',aslDir)
+      readToolType(TOOLTYPE_BBSCONFIG,'','LOCAL_UPLOAD_PATH',aslDir)
     ENDIF
   ENDIF
   
@@ -16356,6 +16614,11 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
     udLog('\tUpload Failed..')
   ENDIF
  
+  IF tTTM<0
+    StringF(str,'\t\t****UL ERROR (-) TIME USED = \d',-tTTM)
+    callersLog(str)
+  ENDIF
+
   peff:=(Div(Mul(tTTM,3),2)+60)
   IF(onlineNFiles<1) THEN peff:=0
  
@@ -16702,7 +16965,9 @@ move_It:     /* gets here if lostcarrier, and file is complete but not when file
         IF((hold=NIL) AND (lcfile=NIL) AND (rzmsg=NIL)) 
           IF creditAccountTrackUploads(loggedOnUser) 
             IF sopt.toggles[TOGGLES_CREDITBYKB] THEN fsize:=Shr(fsize,10)
-            loggedOnUser.bytesUpload:=loggedOnUser.bytesUpload+fsize
+            ->loggedOnUser.bytesUpload:=loggedOnUser.bytesUpload+fsize
+            addBCD(loggedOnUserMisc.uploadBytesBCD,fsize)
+            loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
          ENDIF
         ENDIF
 
@@ -16785,7 +17050,7 @@ move_It:     /* gets here if lostcarrier, and file is complete but not when file
 
   IF(lcfile=FALSE) THEN bytesADL:=bytesADL+tempsize     /* dont add bytes if files moved to LCFILES DIR */
  
-  displayULStats(loggedOnUser)          /* Show User stats.. Num Dnloads, uploads */
+  displayULStats(loggedOnUser,loggedOnUserMisc)          /* Show User stats.. Num Dnloads, uploads */
   aePuts('\b\n')
  
   mstat:=checkOnlineStatus()
@@ -16863,9 +17128,11 @@ ENDPROC stat
 
 PROC downloadAFile(str: PTR TO CHAR, cmdcode: PTR TO CHAR, params)
   DEF string[300]:ARRAY OF CHAR
-  DEF tsec,min,secs,x,status,mystat,nad,proto
-  DEF peff,pcps,bad,tbad
+  DEF tsec,min,secs,i,x,status,mystat,bad,nad,proto
+  DEF peff,pcps,tbad
   DEF tempsize
+  DEF badBCD[8]:ARRAY OF CHAR
+  DEF bcdStr[20]:STRING
   
  -> DEF tempStr[255]:STRING
  ->extern BYTE FreeDownloads,BeenUDd
@@ -16891,7 +17158,7 @@ PROC downloadAFile(str: PTR TO CHAR, cmdcode: PTR TO CHAR, params)
   tfsize:=0
   dtfsize:=0
 
-  displayULStats(loggedOnUser)              /* Show User stats.. Num Dnloads, uploads */
+  displayULStats(loggedOnUser,loggedOnUserMisc)              /* Show User stats.. Num Dnloads, uploads */
 
   tbad:=bytesADL    /* User Daily Limit of bytes to dnload */
   IF(loggedOnUser.secLibrary<>0)     /* Dont have a zero ratio */
@@ -16905,13 +17172,32 @@ PROC downloadAFile(str: PTR TO CHAR, cmdcode: PTR TO CHAR, params)
       ENDIF
     ENDIF
     IF(loggedOnUser.secBoard<2)
-      bad:=(loggedOnUser.secLibrary*loggedOnUser.bytesUpload)-loggedOnUser.bytesDownload
-      IF sopt.toggles[TOGGLES_CREDITBYKB]
-        StringF(string,'KBytes Avail before UL : \d\b\n',bad)
+      
+      ->bad:=(loggedOnUser.secLibrary*loggedOnUser.bytesUpload)-loggedOnUser.bytesDownload
+      convertToBCD(0,badBCD)
+      FOR i:=1 TO loggedOnUser.secLibrary
+        addBCD2(badBCD,loggedOnUserMisc.uploadBytesBCD)
+      ENDFOR
+      subBCD2(badBCD,loggedOnUserMisc.downloadBytesBCD)
+      IF badBCD[0]>=$50
+        ->result was negative
+        StrCopy(bcdStr,'0')
+        bad:=0
       ELSE
-        StringF(string,'Bytes Avail before UL : \d\b\n',bad)
+        formatBCD(badBCD,bcdStr)
+        bad:=convertFromBCD(badBCD)
+
+        ->bad needs to be used in a signed comparison, so don't allow values >7fffffff
+        IF bad<0 THEN bad:=$7fffffff
+      ENDIF
+
+      IF sopt.toggles[TOGGLES_CREDITBYKB]
+        StringF(string,'KBytes Avail before UL : \s\b\n',bcdStr)
+      ELSE
+        StringF(string,'Bytes Avail before UL : \s\b\n',bcdStr)
       ENDIF
       aePuts(string)
+      
       IF(bad<1)
         exceedRatio()
         RETURN RESULT_SUCCESS
@@ -17143,7 +17429,9 @@ sysopDL:
     my_struct.sessiondbytes:=my_struct.sessiondbytes+dTBT   /* add dnloaded bytes to totalsession bytes */
     IF creditAccountTrackDownloads(loggedOnUser)
       
-      loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+tempsize
+      ->loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+tempsize
+      addBCD(loggedOnUserMisc.downloadBytesBCD,tempsize)
+      loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
       loggedOnUser.downloads:=loggedOnUser.downloads+donf
     ENDIF
   ENDIF
@@ -17164,7 +17452,7 @@ sysopDL:
     udLog('\tDownload Failed..')
   ENDIF
 
-  displayULStats(loggedOnUser)          /* Show User stats.. Num Dnloads, uploads */
+  displayULStats(loggedOnUser,loggedOnUserMisc)          /* Show User stats.. Num Dnloads, uploads */
   aePuts('\b\n')
 
   statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
@@ -17928,6 +18216,87 @@ PROC uucpNumberInput(n)
   lineInput('',tempStr,1,INPUT_TIMEOUT,tempStr)
 ENDPROC Val(tempStr)
 
+PROC bcdNumberInput(bcdArray:PTR TO CHAR)
+  DEF tempStr[20]:STRING
+
+  formatBCD(bcdArray,tempStr)
+  lineInput('',tempStr,14,INPUT_TIMEOUT,tempStr)
+ENDPROC bcdVal(tempStr,bcdArray)
+
+PROC bcdVal(inStr:PTR TO CHAR, bcdArray:PTR TO CHAR)
+  DEF valid=TRUE
+  DEF n,bit,i2,i
+
+  i2:=7
+  bit:=FALSE
+  i:=StrLen(inStr)-1
+  WHILE(i2>=0)
+    IF i>=0 THEN n:=inStr[i]-"0" ELSE n:=0
+    IF (n<0) OR (n>9) THEN valid:=FALSE
+    EXIT valid=FALSE
+
+    IF (bit)
+      bcdArray[i2]:=bcdArray[i2] OR Shl(n,4)
+      i2--
+    ELSE
+      bcdArray[i2]:=n
+    ENDIF
+    bit:=Not(bit)
+    i--
+  ENDWHILE
+
+  IF valid=FALSE
+    FOR i:=0 TO 7
+      bcdArray[i]:=0
+    ENDFOR
+  ENDIF
+ENDPROC valid
+
+PROC subBCD2(bcdTotal:PTR TO CHAR, bcdValToSub: PTR TO CHAR)
+  MOVE.L bcdValToSub,A0
+  LEA 8(A0),A0
+  MOVE.L bcdTotal,A1
+  LEA 8(A1),A1
+
+  SUB.L D0,D0        ->clear X flag
+
+  SBCD -(A0),-(A1)
+  SBCD -(A0),-(A1)
+  SBCD -(A0),-(A1)
+  SBCD -(A0),-(A1)
+  SBCD -(A0),-(A1)
+  SBCD -(A0),-(A1)
+  SBCD -(A0),-(A1)
+  SBCD -(A0),-(A1)
+ENDPROC
+
+
+PROC addBCD2(bcdTotal:PTR TO CHAR, bcdValToAdd: PTR TO CHAR)
+  MOVE.L bcdValToAdd,A0
+  LEA 8(A0),A0
+  MOVE.L bcdTotal,A1
+  LEA 8(A1),A1
+
+  SUB.L D0,D0        ->clear X flag
+
+  ABCD -(A0),-(A1)
+  ABCD -(A0),-(A1)
+  ABCD -(A0),-(A1)
+  ABCD -(A0),-(A1)
+  ABCD -(A0),-(A1)
+  ABCD -(A0),-(A1)
+  ABCD -(A0),-(A1)
+  ABCD -(A0),-(A1)
+ENDPROC
+
+
+PROC addBCD(bcdTotal:PTR TO CHAR, valToAdd)
+  DEF bcdVal[8]:ARRAY OF CHAR
+
+  convertToBCD(valToAdd,bcdVal)
+  addBCD2(bcdTotal,bcdVal)
+ENDPROC
+
 PROC checkLockAccounts(f6)
   DEF tempstr[255]:STRING
   DEF fh,res=FALSE
@@ -18038,7 +18407,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
         displayAccountInfo(which,hoozer,hoozer2,hoozer3,f6)
       ENDIF
       SELECT command
-        CASE 177                    /* DELETE */
+        CASE 127                    /* DELETE */
           aePuts('[JDelete\b\n')
           stat:=which
           hoozer.slotNumber:=0
@@ -18191,11 +18560,17 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
           flag:=0
         CASE "O" /* Bytes Uploaded */
           aePuts('[9;21H')
-          hoozer.bytesUpload:=longNumberInput(hoozer.bytesUpload)
+          
+          ->hoozer.bytesUpload:=longNumberInput(hoozer.bytesUpload)
+          bcdNumberInput(hoozer3.uploadBytesBCD)
+          hoozer.bytesUpload:=convertFromBCD(hoozer3.uploadBytesBCD)
+
           flag:=0
         CASE "P" /* Bytes Downloaded */
           aePuts('[10;21H')
-          hoozer.bytesDownload:=longNumberInput(hoozer.bytesDownload)
+          ->hoozer.bytesDownload:=longNumberInput(hoozer.bytesDownload)
+          bcdNumberInput(hoozer3.downloadBytesBCD)
+          hoozer.bytesDownload:=convertFromBCD(hoozer3.downloadBytesBCD)
           flag:=0
         CASE "Q" /* Daily Bytes Limit */
           aePuts('[11;21H')
@@ -18575,6 +18950,7 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
   DEF cb: PTR TO confBase
   DEF i,flag=0,conf,ch,oldval
   DEF checkLock
+  DEF oldBCD[8]:ARRAY OF CHAR
 
   IF loggedOnUser<>NIL THEN masterSavePointers(loggedOnUser)
 
@@ -18586,15 +18962,23 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
     hoozer.downloads:=0
     hoozer.bytesUpload:=0
     hoozer.bytesDownload:=0
+    FOR i:=0 TO 7
+      hoozer3.downloadBytesBCD[i]:=0
+      hoozer3.uploadBytesBCD[i]:=0
+    ENDFOR
     hoozer.messagesPosted:=0
     FOR i:=1 TO cmds.numConf
       cb:=confBases[i-1]
       IF (isTempConf(hoozer,i-1))
         hoozer.uploads:=hoozer.uploads+cb.upload
         hoozer.downloads:=hoozer.downloads+cb.downloads
-        hoozer.bytesUpload:=hoozer.bytesUpload+cb.bytesUpload
-        hoozer.bytesDownload:=hoozer.bytesDownload+cb.bytesDownload
+        ->hoozer.bytesUpload:=hoozer.bytesUpload+cb.bytesUpload
+        ->hoozer.bytesDownload:=hoozer.bytesDownload+cb.bytesDownload
         hoozer.messagesPosted:=hoozer.messagesPosted+cb.messagesPosted
+        addBCD2(hoozer3.downloadBytesBCD,cb.downloadBytesBCD)
+        addBCD2(hoozer3.uploadBytesBCD,cb.uploadBytesBCD)
+        hoozer.bytesDownload:=convertFromBCD(hoozer3.downloadBytesBCD)
+        hoozer.bytesUpload:=convertFromBCD(hoozer3.uploadBytesBCD)
       ENDIF
     ENDFOR
   ENDIF
@@ -18647,11 +19031,13 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
     StringF(tempstr,'[9;2H[33mK>[32mDownloads .....[36m:[0m \d[10]\b\n',cb.downloads)
     aePuts(tempstr)
 
-    formatUnsignedLong(cb.bytesUpload,tempstr2)
+    ->formatUnsignedLong(cb.bytesUpload,tempstr2)
+    formatBCD(cb.uploadBytesBCD,tempstr2)
     StringF(tempstr,'[10;2H[33mM>[32mBytes Uled ....[36m:[0m \s[10]\b\n',tempstr2)
     aePuts(tempstr)
 
-    formatUnsignedLong(cb.bytesDownload,tempstr2)
+    ->formatUnsignedLong(cb.bytesDownload,tempstr2)
+    formatBCD(cb.downloadBytesBCD,tempstr2)
     StringF(tempstr,'[11;2H[33mO>[32mBytes Dled ....[36m:[0m \s[10]\b\n',tempstr2)
     aePuts(tempstr)
 
@@ -18666,11 +19052,13 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
     StringF(tempstr,'[9;40H[32mDownloads .....[36m:[0m \d[10]\b\n',hoozer.downloads)
     aePuts(tempstr)
 
-    formatUnsignedLong(hoozer.bytesUpload,tempstr2)
+    ->formatUnsignedLong(hoozer.bytesUpload,tempstr2)
+    formatBCD(hoozer3.uploadBytesBCD,tempstr2)
     StringF(tempstr,'[10;40H[32mBytes Uled ....[36m:[0m \s[10]\b\n',tempstr2)
     aePuts(tempstr)
 
-    formatUnsignedLong(hoozer.bytesDownload,tempstr2)
+    ->formatUnsignedLong(hoozer.bytesDownload,tempstr2)
+    formatBCD(hoozer3.downloadBytesBCD,tempstr2)
     StringF(tempstr,'[11;40H[32mBytes Dled ....[36m:[0m \s[10]\b\n',tempstr2)
     aePuts(tempstr)
 
@@ -18729,14 +19117,31 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
           hoozer.downloads:=hoozer.downloads-oldval+cb.downloads
         CASE "M"
           aePuts('[10;21H')
-          oldval:=cb.bytesUpload
-          cb.bytesUpload:=numberInput(cb.bytesUpload)
-          hoozer.bytesUpload:=hoozer.bytesUpload-oldval+cb.bytesUpload
+          ->oldval:=cb.bytesUpload
+          ->cb.bytesUpload:=numberInput(cb.bytesUpload)
+          ->hoozer.bytesUpload:=hoozer.bytesUpload-oldval+cb.bytesUpload
+        
+          FOR i:=0 TO 7
+            oldBCD[i]:=cb.uploadBytesBCD[i]
+          ENDFOR
+          bcdNumberInput(cb.uploadBytesBCD)
+          cb.bytesUpload:=convertFromBCD(cb.uploadBytesBCD)
+          subBCD2(hoozer3.uploadBytesBCD,oldBCD)
+          addBCD2(hoozer3.uploadBytesBCD,cb.uploadBytesBCD)
+          hoozer.bytesUpload:=convertFromBCD(hoozer3.uploadBytesBCD)
         CASE "O"
           aePuts('[11;21H')
-          oldval:=cb.bytesDownload
-          cb.bytesDownload:=numberInput(cb.bytesDownload)
-          hoozer.bytesDownload:=hoozer.bytesDownload-oldval+cb.bytesDownload
+          ->oldval:=cb.bytesDownload
+          ->cb.bytesDownload:=numberInput(cb.bytesDownload)
+          ->hoozer.bytesDownload:=hoozer.bytesDownload-oldval+cb.bytesDownload
+          FOR i:=0 TO 7
+            oldBCD[i]:=cb.downloadBytesBCD[i]
+          ENDFOR
+          bcdNumberInput(cb.downloadBytesBCD)
+          cb.bytesDownload:=convertFromBCD(cb.downloadBytesBCD)
+          subBCD2(hoozer3.downloadBytesBCD,oldBCD)
+          addBCD2(hoozer3.downloadBytesBCD,cb.downloadBytesBCD)
+          hoozer.bytesDownload:=convertFromBCD(hoozer3.downloadBytesBCD)
         CASE "L"
           aePuts('[12;21H')
           oldval:=cb.messagesPosted
@@ -18786,7 +19191,7 @@ ENDPROC
 PROC deleteConfAccess(slot)
   DEF bi
   DEF t:confBase
-  DEF i
+  DEF i,j
   DEF temp[100]:STRING
   DEF conferenceLocation[100]:STRING
   
@@ -18813,6 +19218,10 @@ PROC deleteConfAccess(slot)
          t.messagesPosted:=0
          t.active:=0
          t.access:=0
+         FOR j:=0 TO 7
+            t.downloadBytesBCD[i]:=0
+            t.uploadBytesBCD[i]:=0
+         ENDFOR
       Seek(bi,(slot-1)*SIZEOF confBase,OFFSET_BEGINNING)
       Write(bi,t,SIZEOF confBase)
 
@@ -18955,6 +19364,7 @@ PROC dumpUserStats(confnum)
   DEF confDbFile[255]:STRING
   DEF confStatFile[255]:STRING
   DEF tempstr[255]:STRING
+  DEF tempstr2[20]:STRING
   DEF n,stat
 
   StringF(confStatFile,'\sConf\d.Stats',cmds.bbsLoc,confnum)
@@ -18990,9 +19400,11 @@ PROC dumpUserStats(confnum)
             fileWriteLn(fhs,tempstr)
             StringF(tempstr,'Files Downloaded: \d',cb.downloads)
             fileWriteLn(fhs,tempstr)
-            StringF(tempstr,'Bytes Uploaded  : \d',cb.bytesUpload)
+            formatBCD(cb.uploadBytesBCD,tempstr2)
+            StringF(tempstr,'Bytes Uploaded  : \s',tempstr2)
             fileWriteLn(fhs,tempstr)
-            StringF(tempstr,'Bytes Downloaded: \d',cb.bytesDownload)
+            formatBCD(cb.downloadBytesBCD,tempstr2)
+            StringF(tempstr,'Bytes Downloaded: \s',tempstr2)
             fileWriteLn(fhs,tempstr)
             StringF(tempstr,'Messages Posted : \d',cb.messagesPosted)
             fileWriteLn(fhs,tempstr)
@@ -19308,16 +19720,18 @@ PROC displayAccount(who:LONG, hoozer:PTR TO user, hoozer2: PTR TO userKeys, hooz
   StringF(tempStr,'[8;36H[33mN> [32mNew_User ......[36m:[0m \s[3] [33m#[32mCalls[36m: [0m\l\d[12]',tempStr2,hoozer.timesCalled AND $FFFF)
   aePuts(tempStr)
  
-  formatUnsignedLong(hoozer.bytesUpload,tempStr2)
-  StringF(tempStr,'[9;1H[33mO> [32mBytes Uled ....[36m:[0m \l\s[10]',tempStr2)
+  ->formatUnsignedLong(hoozer.bytesUpload,tempStr2)
+  formatBCD(hoozer3.uploadBytesBCD,tempStr2)
+  StringF(tempStr,'[9;1H[33mO> [32mBytes Uled ....[36m:[0m \l\s[14]',tempStr2)
   aePuts(tempStr)
  
   formatLongDateTime(hoozer.timeLastOn,tempStr2)
   StringF(tempStr,'[9;39H[32mLast Called ...[36m:[0m \s',tempStr2)
   aePuts(tempStr)
  
-  formatUnsignedLong(hoozer.bytesDownload,tempStr2)
-  StringF(tempStr,'[10;1H[33mP> [32mBytes Dled ....[36m:[0m \l\s[10]',tempStr2)
+  ->formatUnsignedLong(hoozer.bytesDownload,tempStr2)
+  formatBCD(hoozer3.downloadBytesBCD,tempStr2)
+  StringF(tempStr,'[10;1H[33mP> [32mBytes Dled ....[36m:[0m \l\s[14]',tempStr2)
   aePuts(tempStr)
 
   temp:=ListLen(computerTypes)
@@ -19402,7 +19816,7 @@ PROC displayAccountInfo(who:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, h
  	  StringF(tempStr,'[0;0H[33m  ACTIVE[0m [\d]   [32mBAUD[36m:[0m \d    \b\n',hoozer.slotNumber,baud)
  	  aePuts(tempStr)
  	ELSE
-  `	StringF(tempStr,'[0;0H[37mINACTIVE[0m [\d]     \b\n',who)
+  	StringF(tempStr,'[0;0H[37mINACTIVE[0m [\d]     \b\n',who)
  	  aePuts(tempStr)
  	ENDIF
  
@@ -19460,16 +19874,18 @@ PROC displayAccountInfo(who:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, h
   StringF(tempStr,'[8;56H\s [33m#[32mCalls[36m: [0m\l\d[12]',tempStr2,hoozer.timesCalled AND $FFFF)
   aePuts(tempStr)
 
-  formatUnsignedLong(hoozer.bytesUpload,tempStr2)
-  StringF(tempStr,'[9;21H\l\s[10]',tempStr2)
+  ->formatUnsignedLong(hoozer.bytesUpload,tempStr2)
+  formatBCD(hoozer3.uploadBytesBCD,tempStr2)
+  StringF(tempStr,'[9;21H\l\s[14]',tempStr2)
   aePuts(tempStr)
 
   formatLongDateTime(hoozer.timeLastOn,tempStr2)
   StringF(tempStr,'[9;56H\s',tempStr2)
   aePuts(tempStr)
  
-  formatUnsignedLong(hoozer.bytesDownload,tempStr2)
-  StringF(tempStr,'[10;21H\l\s[10]',tempStr2)
+  ->formatUnsignedLong(hoozer.bytesDownload,tempStr2)
+  formatBCD(hoozer3.downloadBytesBCD,tempStr2)
+  StringF(tempStr,'[10;21H\l\s[14]',tempStr2)
   aePuts(tempStr)
 
   temp:=ListLen(computerTypes)
@@ -19532,14 +19948,14 @@ PROC fileStatus(opt)
 
   IF(checkSecurity(ACS_CONFERENCE_ACCOUNTING)) THEN ca:=TRUE
 
-  aePuts('[32m              Uploads             Downloads\b\n')
+  aePuts('[32m              Uploads                 Downloads\b\n')
   aePuts('\b\n')
   IF sopt.toggles[TOGGLES_CREDITBYKB]
-    aePuts('[32m     Conf  Files    KBytes    Files    KBytes    KBytes Avail Ratio\b\n')
+    aePuts('[32m     Conf  Files    KBytes         Files    KBytes         KBytes Avail Ratio\b\n')
   ELSE
-    aePuts('[32m     Conf  Files    Bytes     Files    Bytes     Bytes Avail  Ratio\b\n')
+    aePuts('[32m     Conf  Files    Bytes          Files    Bytes          Bytes Avail  Ratio\b\n')
   ENDIF
-  aePuts('[0m     ----  -------  --------- -------  --------- -----------  -----\b\n')
+  aePuts('[0m     ----  -------  -------------- -------  -------------- -----------  -----\b\n')
   saveMsgPointers(currentConf)
 
   FOR i:=1 TO s
@@ -19550,13 +19966,13 @@ PROC fileStatus(opt)
         IF(ca) THEN k:=j ELSE k:=i
         IF (ca=TRUE) OR (i=currentConf)
           IF (ca) THEN loadMsgPointers(i)
-          formatUnsignedLong(loggedOnUser.bytesUpload,bytesup)
-          formatUnsignedLong(loggedOnUser.bytesDownload,bytesdown)
+          formatBCD(loggedOnUserMisc.uploadBytesBCD,bytesup)
+          formatBCD(loggedOnUserMisc.downloadBytesBCD,bytesdown)
           formatUnsignedLong((loggedOnUser.dailyBytesLimit-loggedOnUser.dailyBytesDld),bytesavail)
           IF(loggedOnUser.secLibrary)
-            StringF(tmp,'[33m     \r\d[4][0m> [3\dm\d[7]  \r\s[9] \r\d[7]  \r\s[9]   \r\s[9]   \d[0m:[3\dm1\b\n', relConf(k), n,loggedOnUser.uploads AND $FFFF,bytesup,loggedOnUser.downloads AND $FFFF AND $FFFF,bytesdown,bytesavail,loggedOnUser.secLibrary,n)
+            StringF(tmp,'[33m     \r\d[4][0m> [3\dm\d[7]  \r\s[14] \r\d[7]  \r\s[14]   \r\s[9]   \d[0m:[3\dm1\b\n', relConf(k), n,loggedOnUser.uploads AND $FFFF,bytesup,loggedOnUser.downloads AND $FFFF AND $FFFF,bytesdown,bytesavail,loggedOnUser.secLibrary,n)
           ELSE
-            StringF(tmp,'[33m     \r\d[4][0m> [3\dm\d[7]  \r\s[9] \r\d[7]  \r\s[9]   \r\s[9]  [31mDSBLD\b\n', relConf(k), n,loggedOnUser.uploads AND $FFFF,bytesup,loggedOnUser.downloads AND $FFFF,bytesdown,bytesavail)
+            StringF(tmp,'[33m     \r\d[4][0m> [3\dm\d[7]  \r\s[14] \r\d[7]  \r\s[14]   \r\s[9]  [31mDSBLD\b\n', relConf(k), n,loggedOnUser.uploads AND $FFFF,bytesup,loggedOnUser.downloads AND $FFFF,bytesdown,bytesavail)
           ENDIF
           aePuts(tmp)
         ENDIF
@@ -20111,6 +20527,16 @@ PROC internalCommandCF()
   UNTIL loop=FALSE
 ENDPROC
 
+PROC internalCommandCM()
+  IF checkSecurity(ACS_SYSOP_COMMANDS)=FALSE THEN RETURN RESULT_NOT_ALLOWED
+  setEnvStat(ENV_SYSOP)
+
+  sendCLS()
+  conferenceMaintenance()
+  loadMsgPointers(currentConf)
+
+ENDPROC RESULT_SUCCESS
+
 PROC internalCommandD(cmdcode,params)
   IF checkSecurity(ACS_DOWNLOAD)=FALSE THEN RETURN RESULT_NOT_ALLOWED
   setEnvStat(ENV_DOWNLOADING)
@@ -20260,20 +20686,27 @@ fmSkip1:
   IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
 ENDPROC RESULT_SUCCESS
 
-PROC internalCommandG()
+PROC internalCommandG(params)
   DEF mystat
+  DEF auto
 
-  IF partUploadOK(0)=RESULT_ABORT THEN RETURN RESULT_SUCCESS
+  parseParams(params)
+  IF ListLen(parsedParams)>0
+    auto:=paramsContains('Y')
+  ENDIF
   
+  IF auto=FALSE
+    IF partUploadOK(0)=RESULT_ABORT THEN RETURN RESULT_SUCCESS
     mystat:=checkFlagged()
     IF(mystat=0)
       aePuts('\b\n')
       RETURN RESULT_SUCCESS
     ENDIF
-    saveFlagged()
-    IF StrLen(historyFolder)>0 THEN saveHistory()
-    reqState:=REQ_STATE_LOGOFF
-   setEnvStat(ENV_LOGOFF)
+  ENDIF
+  saveFlagged()
+  IF StrLen(historyFolder)>0 THEN saveHistory()
+  reqState:=REQ_STATE_LOGOFF
+  setEnvStat(ENV_LOGOFF)
 
 ENDPROC RESULT_SUCCESS
 
@@ -20382,6 +20815,95 @@ PROC internalCommandN(params)
   
   setEnvStat(ENV_FILES) 
 ENDPROC myNewFiles(params)
+
+PROC internalCommandNM()
+  DEF str[255]:STRING
+  DEF stat,nd,read,status
+  DEF sp:PTR TO singlePort
+  DEF serverMsg:jhMessage
+  DEF nodeport
+  
+  IF checkSecurity(ACS_SYSOP_COMMANDS)=FALSE THEN RETURN RESULT_NOT_ALLOWED
+
+  IF sopt.toggles[TOGGLES_MULTICOM]=0 THEN RETURN RESULT_SUCCESS
+  
+  setEnvStat(ENV_SYSOP) 
+
+  REPEAT
+    who(0)
+    aePuts('\b\n')
+
+    aePuts('Which to change <Q>=QUIT ? ')
+
+    stat:=lineInput('','',2,INPUT_TIMEOUT,str)
+
+    aePuts('\b\n')
+    
+    IF(stat<0) THEN RETURN stat
+    IF (strCmpi(str,'q',ALL)) THEN RETURN RESULT_SUCCESS
+
+    nd,read:=Val(str)
+    IF read>0
+      IF nd=node
+        aePuts('You cannot perform actions on the node you are connected to.\b\n')
+      ELSEIF (nd>=0) AND (nd<MAXNODES)
+        status:=-1
+        ObtainSemaphore(masterNode)
+        sp:=(masterNode.myNode[nd].s)
+        ReleaseSemaphore(masterNode)
+
+        IF sp
+          ObtainSemaphore(sp)
+          status:=sp.status
+          ReleaseSemaphore(sp)
+        ENDIF
+
+        serverMsg.msg.ln.type:=NT_UNKNOWN
+        serverMsg.msg.length:=SIZEOF jhMessage
+        serverMsg.msg.replyport:=0
+
+        IF status=ENV_AWAITCONNECT
+          StringF(str,'Do you wish to take node \d offline ',nd)
+          aePuts(str)
+          stat:=yesNo(2)       
+          IF(stat<0) THEN RETURN stat
+          IF(stat)
+            StringF(str,'AEServer.\d',nd)
+            IF (nodeport:=FindPort(str))<>NIL
+              serverMsg.command:=SV_EXITNODE
+              PutMsg(nodeport,serverMsg)
+              Delay(60)
+            ENDIF
+          ENDIF
+          
+        ELSEIF (status=ENV_NOTACTIVE) OR (status=ENV_SHUTDOWN)
+          StringF(str,'Do you wish to bring node \d online ',nd)
+          aePuts(str)
+          stat:=yesNo(2)       
+          IF(stat)
+            sendACPCommand2('',SV_STARTNODE,nd)
+            Delay(120)
+          ENDIF
+        ELSEIF status>=0
+          StringF(str,'Do you wish to disconnect the current user from node \d ',nd)
+          aePuts(str)
+          stat:=yesNo(2)       
+          IF(stat<0) THEN RETURN stat
+          IF(stat)
+            StringF(str,'AEServer.\d',nd)
+            IF (nodeport:=FindPort(str))<>NIL
+              serverMsg.command:=SV_KICKUSER
+              PutMsg(nodeport,serverMsg)
+              Delay(120)
+            ENDIF
+          ENDIF
+        ENDIF
+      ENDIF
+    ENDIF
+    
+  UNTIL FALSE
+
+ENDPROC RESULT_SUCCESS
 
 PROC internalCommandO()
   DEF result
@@ -20532,10 +21054,10 @@ PROC internalCommandR(params)
   
 ENDPROC 
 
-PROC internalCommandRL()
+PROC internalCommandRL(params)
   IF checkSecurity(ACS_RELOGON)=FALSE THEN RETURN RESULT_NOT_ALLOWED
   relogon:=TRUE
-  internalCommandG()
+  internalCommandG(params)
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandS()
@@ -22958,7 +23480,7 @@ PROC processInternalCommand(cmdcode,cmdparams,privcmd=FALSE)
   ELSEIF (StrCmp(cmdcode,'FS'))
     res:=internalCommandFS()
   ELSEIF (StrCmp(cmdcode,'G'))
-    res:=internalCommandG()
+    res:=internalCommandG(cmdparams)
   ELSEIF (StrCmp(cmdcode,'J'))
     res:=internalCommandJ(cmdparams)
   ELSEIF (StrCmp(cmdcode,'<'))
@@ -22975,6 +23497,8 @@ PROC processInternalCommand(cmdcode,cmdparams,privcmd=FALSE)
     res:=internalCommandC(cmdparams)
   ELSEIF (StrCmp(cmdcode,'CF'))
     res:=internalCommandCF()
+  ELSEIF (StrCmp(cmdcode,'CM'))
+    res:=internalCommandCM()
   ELSEIF (StrCmp(cmdcode,'E'))
     res:=internalCommandE(cmdparams)
   ELSEIF (StrCmp(cmdcode,'H'))
@@ -22983,6 +23507,8 @@ PROC processInternalCommand(cmdcode,cmdparams,privcmd=FALSE)
     res:=internalCommandM()
   ELSEIF (StrCmp(cmdcode,'N'))
     res:=internalCommandN(cmdparams)
+  ELSEIF (StrCmp(cmdcode,'NM'))
+    res:=internalCommandNM()
   ELSEIF (StrCmp(cmdcode,'O'))
     res:=internalCommandO()
   ELSEIF (StrCmp(cmdcode,'OLM'))
@@ -22990,7 +23516,7 @@ PROC processInternalCommand(cmdcode,cmdparams,privcmd=FALSE)
   ELSEIF (StrCmp(cmdcode,'Q'))
     res:=internalCommandQ()
   ELSEIF (StrCmp(cmdcode,'RL'))
-    res:=internalCommandRL()
+    res:=internalCommandRL(cmdparams)
   ELSEIF (StrCmp(cmdcode,'U'))
     res:=internalCommandU(cmdcode,cmdparams)
   ELSEIF (StrCmp(cmdcode,'US'))
@@ -23580,6 +24106,22 @@ logonLoop:
     RETURN
   ENDIF
 
+  stat:=checkUserOnLine(loggedOnUser,1)
+  IF(stat=FALSE)
+    StringF(tempStr,'User \s already on another node!',loggedOnUser.name)
+	  callersLog(tempStr)
+    IF displayScreen(SCREEN_ONENODE)=FALSE THEN aePuts('\b\nYou are already logged into another node!\b\n')
+    state:=STATE_LOGGING_OFF
+    Delay(50)
+    END loggedOnUser
+    loggedOnUser:=NIL
+    END loggedOnUserKeys
+    loggedOnUserKeys:=NIL
+    END loggedOnUserMisc
+    loggedOnUserMisc:=NIL
+	  RETURN
+  ENDIF
+
  IF logonType>=LOGON_TYPE_REMOTE
     stat:=checkPassword()
     IF stat<>RESULT_SUCCESS
@@ -23597,7 +24139,6 @@ logonLoop:
  ENDIF
 
  validUser:=1
-
  acsLevel:=findAcsLevel()
  convertAccess()
 
@@ -23616,16 +24157,6 @@ logonLoop:
     state:=STATE_LOGGING_OFF
     RETURN
   ENDIF
-
- stat:=checkUserOnLine(loggedOnUser,1)
- IF(stat=FALSE)
-      StringF(tempStr,'User \s already on another node!',loggedOnUser.name)
-	    callersLog(tempStr)
-      IF displayScreen(SCREEN_ONENODE)=FALSE THEN aePuts('You are already logged into another node!\b\n')
-      state:=STATE_LOGGING_OFF
-      Delay(50)
-	    RETURN
- ENDIF
 
   IF logonType>=LOGON_TYPE_REMOTE
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_LOGON',tempStr))
@@ -24374,12 +24905,14 @@ PROC openExpressScreen()
   height:=sopt.height
   bitPlanes:=sopt.bitPlanes
   
-  readToolType(TOOLTYPE_NODE,node,'EXPFONT',fontName)
-  defaultfontattr.name:=fontName
-  defaultfontattr.ysize:=8
+  IF fontHandle=NIL
+    readToolType(TOOLTYPE_NODE,node,'EXPFONT',fontName)
+    defaultfontattr.name:=fontName
+    defaultfontattr.ysize:=8
 
-  fontHandle:=OpenFont(defaultfontattr)
-  IF fontHandle=NIL THEN fontHandle:=OpenDiskFont(defaultfontattr)
+    fontHandle:=OpenFont(defaultfontattr)
+    IF fontHandle=NIL THEN fontHandle:=OpenDiskFont(defaultfontattr)
+  ENDIF
 
   IF pub=FALSE
     IF screen=NIL  
@@ -24424,7 +24957,7 @@ PROC openExpressScreen()
         screen:=OpenScreenTagList(NIL,opentags)
         END opentags
 
-        IF StrLen(pubScreen)>0
+        IF (screen) AND (StrLen(pubScreen)>0)
           PubScreenStatus(screen,0)
           pubLock:=LockPubScreen(pubScreen)
           IF pubLock<>FALSE THEN pub:=TRUE
@@ -24433,9 +24966,9 @@ PROC openExpressScreen()
       ->ENDIF
       END pens
     ENDIF
-
+       
     IF screen=NIL THEN RETURN ERR_SCREEN
-        
+
     IF windowClose=NIL
       opentags:=NEW [WA_CLOSEGADGET,1,WA_BORDERLESS,1,WA_CUSTOMSCREEN,screen,
          WA_TOP,0,
@@ -24474,7 +25007,7 @@ PROC openExpressScreen()
       window:=OpenWindowTagList(NIL,opentags)
       END opentags
       UnlockPubScreen(NIL,pubLock)
-      IF fontHandle<>NIL THEN SetFont(window.rport,fontHandle)
+      IF (window) AND (fontHandle<>NIL) THEN SetFont(window.rport,fontHandle)
     ELSE
       opentags:=NEW [WA_BORDERLESS,1,WA_CUSTOMSCREEN,screen,
         WA_TOP,top+12,
@@ -24488,7 +25021,7 @@ PROC openExpressScreen()
       END opentags
     ENDIF
   ENDIF 
-  IF window=NIL THEN RETURN
+  IF window=NIL THEN RETURN ERR_WINDOW
 
   IF zModemInfo.inProgress<>ZMODEM_NONE
     openZmodemStat()
@@ -24526,7 +25059,6 @@ PROC openExpressScreen()
 ENDPROC ERR_NONE
 
 PROC closeExpressScreen()
-  IF scropen=FALSE THEN RETURN
 
     closeAEStats()
     closezModemStats()
@@ -24932,6 +25464,8 @@ PROC main() HANDLE
     StringF(userMiscFile,'\suser.misc',cmds.bbsLoc)
   ENDIF
 
+  autoDeactivateDays:=readToolTypeInt(TOOLTYPE_BBSCONFIG,'','AUTO_DEACTIVATE_DAYS')
+
   confNames:=List(cmds.numConf)
   confDirs:=List(cmds.numConf)
   FOR i:=1 TO cmds.numConf
@@ -24973,6 +25507,7 @@ PROC main() HANDLE
     Raise(ERR_COMPUTERTYPES)
   ENDIF
 
+  clearUser()
 
   sysopAvail:=IF cmds.acLvl[LVL_DEFAULT_CHAT_ON] THEN TRUE ELSE FALSE
   updateTitle(NIL)
@@ -24985,7 +25520,7 @@ PROC main() HANDLE
 
   sendQuietFlag(quietFlag)    
 
-  IF readToolType(TOOLTYPE_CONFCONFIG,'','REGKEY',regKey)=FALSE
+  IF readToolType(TOOLTYPE_BBSCONFIG,'','REGKEY',regKey)=FALSE
     StrCopy(regKey,'NONE')
   ENDIF
 

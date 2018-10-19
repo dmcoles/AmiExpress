@@ -307,7 +307,6 @@ DEF doMultiCom
 
 DEF quietNode[MAX_NODES]:ARRAY OF INT
 DEF bbsStack
-DEF startUpLocation[200]:STRING
 
 DEF nodes[MAX_NODES]:ARRAY OF INT
 DEF suspend[MAX_NODES]:ARRAY OF INT
@@ -398,7 +397,7 @@ DEF version[200]:STRING
 DEF translators=NIL: PTR TO translator
 DEF minNode=NIL: PTR TO mln
 
-DEF selectedNode=-1
+DEF lockedNodes=-1
 
 /* some global variables used to replace the statics from the C version 
 they are prefixed with the procdure name to prevent any name clashes
@@ -667,6 +666,12 @@ PROC drawborders()
   /* *** Stats *** */
   DrawBevelBoxA(eWin.rport, BLEF_0, topOffset+BTOP_0, BWID_0, theight*11,[GT_VISUALINFO, visInfo,TAG_END])
 ENDPROC
+
+PROC getNodeTextColour(node)
+  DEF c
+  c:=chat[node]
+  IF(quietNode[node]) THEN c:=3
+ENDPROC c
 
 ->//*********************************************************************
 ->// CallNode - This function opens a port to a nodes AEServer and tries
@@ -1030,7 +1035,8 @@ PROC doControl(node)
       cd:=users[node].actionVal
       IF((cd<>24) AND (cd<>26))
        /* if(TChat[node]) TChat[node]=0; else TChat[node]=1;
-        SetAPen(EWin->RPort,TChat[node]);
+
+        SetAPen(eWin.rport,getNodeTextColour(node))
         Move(EWin->RPort,64,topOffset+26+(node*11));
         Draw(EWin->RPort,64,topOffset+26+(node*11)+6);
         Move(EWin->RPort,63,topOffset+26+(node*11));
@@ -1337,8 +1343,7 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
     CASE SV_NEWMSG
       StringF(action2,'\l\s[16]',name)
   ENDSELECT
-  drawPen:=chat[node]
-  IF(quietNode[node]) THEN drawPen:=3
+  drawPen:=getNodeTextColour(node)
 
   a:=Val(action)
   top:=topOffset+32+(node*11)
@@ -1590,7 +1595,7 @@ PROC showQuiet(i)
   SetAPen(eWin.rport,0)
   RectFill(eWin.rport,BLEF_0+2,rowTop-7,BLEF_0+BWID_0-3,rowTop)
 
-  IF(quietNode[i]) THEN SetAPen(eWin.rport,3) ELSE SetAPen(eWin.rport,1)
+  SetAPen(eWin.rport,getNodeTextColour(i))
   Move(eWin.rport,GLEF_USER+3,rowTop)
   Text(eWin.rport,users[i].user,IF StrLen(users[i].user)>22 THEN 22 ELSE StrLen(users[i].user))
 
@@ -1735,7 +1740,7 @@ PROC showNodes()
   RectFill(eWin.rport,BLEF_0+2,topOffset+BTOP_0+1,BLEF_0+BWID_0-3,topOffset+BTOP_0+(theight*11)-2)
   FOR i:=0 TO theight-1
     rowTop:=topOffset+32+(i*11)
-    IF(quietNode[i]) THEN SetAPen(eWin.rport,3) ELSE SetAPen(eWin.rport,1)
+    SetAPen(eWin.rport,getNodeTextColour(i))
      
     IF(users[i].active)
       Move(eWin.rport,GLEF_USER+3,rowTop)
@@ -1778,16 +1783,27 @@ PROC checkMasterSig(signals)
         ENDIF
       ENDIF
 
-      IF(cpymsg.command=SV_NODE_SELECT)
-        IF selectedNode=-1
-          selectedNode:=cpymsg.node
-        ELSEIF selectedNode:=cpymsg.node
-          selectedNode:=-1
+      IF(cpymsg.command=SV_NODE_LOCK)
+        IF lockedNodes=-1
+          lockedNodes:=cpymsg.node
+        ELSEIF lockedNodes:=cpymsg.node
+          lockedNodes:=-1
         ENDIF
-        cpymsg.data:=selectedNode
+        cpymsg.data:=lockedNodes
         ReplyMsg(cpymsg)
       ELSEIF(cpymsg.command=SV_ACPALERT)
         myrequest(cpymsg.user)
+        ReplyMsg(cpymsg)
+      ELSEIF(cpymsg.command=SV_STARTNODE)
+        StringF(temp,'AmiExpress_Node.\d',cpymsg.node)
+        IF(FindPort(temp))=FALSE
+          IF(startProcess(startNode[cpymsg.node],bbsStack))
+            IF activeNodes[cpymsg.node]=FALSE
+              activeNodeCount++
+              activeNodes[cpymsg.node]:=TRUE
+            ENDIF
+          ENDIF
+        ENDIF
         ReplyMsg(cpymsg)
       ELSE
         CopyMem(cpymsg,msg,SIZEOF acpMessage)
@@ -1820,7 +1836,7 @@ PROC checkMasterSig(signals)
               ENDIF
           CASE JH_CHATON
               tChat[msg.node]:=1
-              SetAPen(eWin.rport,tChat[msg.node])
+              SetAPen(eWin.rport,getNodeTextColour(msg.node))
               Move(eWin.rport,64,topOffset+26+(msg.node*11))
               Draw(eWin.rport,64,topOffset+26+(msg.node*11)+6)
               Move(eWin.rport,63,topOffset+26+(msg.node*11))
@@ -1831,7 +1847,7 @@ PROC checkMasterSig(signals)
               Draw(eWin.rport,61,topOffset+26+(msg.node*11)+6) 
           CASE JH_CHATOFF
               tChat[msg.node]:=0
-              SetAPen(eWin.rport,tChat[msg.node])
+              SetAPen(eWin.rport,getNodeTextColour(msg.node))
               Move(eWin.rport,64,topOffset+26+(msg.node*11))
               Draw(eWin.rport,64,topOffset+26+(msg.node*11)+6)
               Move(eWin.rport,63,topOffset+26+(msg.node*11))
@@ -2712,8 +2728,8 @@ PROC loadScreen()
   
   edgeX:=pref.left
   edgeY:=pref.top
-  width:=pref.width
-  height:=pref.height
+  ->width:=pref.width
+  ->height:=pref.height
  
   ->DIM[0]=Pref.Zoom[0];
   ->DIM[1]=Pref.Zoom[1];
@@ -2808,6 +2824,8 @@ PROC main() HANDLE
   DEF windowSig,myappsig
   DEF i,j,class
   DEF n:PTR TO packedCommands
+
+  DEF sopt:PTR TO startOption
  
   StringF(myVerStr,'v5.0.0')
 
@@ -2843,7 +2861,6 @@ PROC main() HANDLE
 
   StrCopy(mybbslocation,'')
   StrCopy(publicName,'')
-  StrCopy(startUpLocation,'S:ACP.STARTUP')
   colours:=amigaSpecs
   pens[DETAILPEN]:=3
   pens[BLOCKPEN]:=4
@@ -3037,7 +3054,7 @@ PROC main() HANDLE
         IF(eWin AND startUp)
           FOR i:=0 TO MAX_NODES-1
             IF(StrLen(startNode[i])>0)
-              SetAPen(eWin.rport,tChat[i])
+              SetAPen(eWin.rport,getNodeTextColour(i))
               Move(eWin.rport,64,topOffset+26+(i*11))
               Draw(eWin.rport,64,topOffset+26+(i*11)+6)
               Move(eWin.rport,63,topOffset+26+(i*11))
@@ -3046,6 +3063,8 @@ PROC main() HANDLE
               Draw(eWin.rport,62,topOffset+26+(i*11)+6)
               Move(eWin.rport,61,topOffset+26+(i*11))
               Draw(eWin.rport,61,topOffset+26+(i*11)+6) 
+              sopt:=sopts[i]
+              IF sopt THEN sopt.acpWindow:=eWin
               IF(nodeIdle[i])=FALSE
                 IF(startProcess(startNode[i],bbsStack))
                   activeNodeCount++
@@ -3093,7 +3112,7 @@ PROC main() HANDLE
                   ENDSELECT
                   FOR i:=0 TO MAX_NODES-1
                     IF(StrLen(startNode[i])>0)
-                      SetAPen(eWin.rport,tChat[i])
+                      SetAPen(eWin.rport,getNodeTextColour(i))
                       Move(eWin.rport,64,topOffset+26+(i*11))
                       Draw(eWin.rport,64,topOffset+26+(i*11)+6)
                       Move(eWin.rport,63,topOffset+26+(i*11))
