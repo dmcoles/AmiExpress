@@ -3956,11 +3956,11 @@ PROC clearDiskObjectCache()
   DEF cacheObj: PTR TO diskObjectCacheItem
   DEF i
   IF diskObjectCache=NIL THEN RETURN
-  FOR i:=0 TO ListLen(diskObjectCache)
+  FOR i:=0 TO ListLen(diskObjectCache)-1
     IF diskObjectCache[i] 
       cacheObj:=diskObjectCache[i]
       DisposeLink(cacheObj.fileName)
-      FreeDiskObject(cacheObj.diskObject)
+      IF cacheObj.diskObject<>NIL THEN FreeDiskObject(cacheObj.diskObject)
       END cacheObj
     ENDIF
     diskObjectCache[i]:=NIL
