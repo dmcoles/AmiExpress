@@ -1349,12 +1349,12 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
   top:=topOffset+32+(node*11)
   SetAPen(eWin.rport,0)
   IF(a<>SV_NEWMSG) AND (a<>ENV_DOORS)
-    RectFill(eWin.rport,GLEF_USER+2,top-7,GLEF_USER+GWID_USER-2,top)
-    RectFill(eWin.rport,GLEF_LOCATION,top-7,GLEF_LOCATION+GWID_LOCATION,top)
-    RectFill(eWin.rport,GLEF_BAUD,top-7,GLEF_BAUD+GWID_BAUD-2,top)
+    RectFill(eWin.rport,GLEF_USER+2,top-7,GLEF_USER+GWID_USER-2,top+1)
+    RectFill(eWin.rport,GLEF_LOCATION,top-7,GLEF_LOCATION+GWID_LOCATION,top+1)
+    RectFill(eWin.rport,GLEF_BAUD,top-7,GLEF_BAUD+GWID_BAUD-2,top+1)
   ENDIF
 
-  RectFill(eWin.rport,GLEF_ACTION,top-7,GLEF_ACTION+GWID_ACTION,top)
+  RectFill(eWin.rport,GLEF_ACTION,top-7,GLEF_ACTION+GWID_ACTION,top+1)
   SetAPen(eWin.rport,drawPen)
   IF(a<>SV_NEWMSG) AND (a<>ENV_DOORS)
     Move(eWin.rport,GLEF_USER+3,top)
@@ -1593,7 +1593,7 @@ PROC showQuiet(i)
   rowTop:=topOffset+32+(i*11)
 
   SetAPen(eWin.rport,0)
-  RectFill(eWin.rport,BLEF_0+2,rowTop-7,BLEF_0+BWID_0-3,rowTop)
+  RectFill(eWin.rport,BLEF_0+2,rowTop-7,BLEF_0+BWID_0-3,rowTop+1)
 
   SetAPen(eWin.rport,getNodeTextColour(i))
   Move(eWin.rport,GLEF_USER+3,rowTop)
@@ -2230,24 +2230,14 @@ PROC getIconNodeInfo(i)
     IF(s:=FindToolType(oldtooltypes,'WINDOW.TO_FRONT')) THEN cmd.acLvl[LVL_SCREEN_TO_FRONT]:=1
     IF(s:=FindToolType(oldtooltypes,'WINDOW.NUM_COLORS'))
        n:=Val(s)
-       SELECT n
+       SELECT 9 OF n
          CASE 0
            sopt.bitPlanes:=0
-         CASE 1
+         CASE 1,2
            sopt.bitPlanes:=1
-         CASE 2
-           sopt.bitPlanes:=1
-         CASE 3
+         CASE 3,4
            sopt.bitPlanes:=2
-         CASE 4
-           sopt.bitPlanes:=2
-         CASE 5
-           sopt.bitPlanes:=3
-         CASE 6
-           sopt.bitPlanes:=3
-         CASE 7
-           sopt.bitPlanes:=3
-         CASE 8
+         CASE 5,6,7,8
            sopt.bitPlanes:=3
          DEFAULT 
            sopt.bitPlanes:=3
@@ -2794,8 +2784,12 @@ PROC do_appicon(myport: PTR TO mp)
 ENDPROC
 
 PROC startProcess(s:PTR TO CHAR,stack)
+  DEF err
+  
   tags[7]:=stack
-  IF(SystemTagList(s,tags)=-1)
+  
+  err:=SystemTagList(s,tags)
+  IF(err=-1)
     RETURN 0
   ELSE
     RETURN 1
@@ -3185,6 +3179,7 @@ PROC main() HANDLE
   ENDFOR
   
 EXCEPT DO
+  shutDownMaster()
   IF oldDirLock THEN CurrentDir(oldDirLock)
 
   IF fontHandle
