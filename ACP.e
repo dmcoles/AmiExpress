@@ -567,6 +567,64 @@ PROC free_pdir()
   ENDIF
 ENDPROC
 
+PROC getToolTypes(filename:PTR TO CHAR)
+  DEF dobj: PTR TO diskobject,fn[255]:STRING,isCfg
+  DEF toolTypes:PTR TO LONG
+  DEF fh,fileBuf,off,lineCount
+  DEF i
+
+  dobj:=GetDiskObject(filename)
+  isCfg:=FALSE
+  IF(dobj=NIL)
+    StringF(fn,'\s.cfg',filename)
+    IF fileExists(fn)
+      dobj:=GetDefDiskObject(WBPROJECT)
+      IF dobj<>NIL
+        fileBuf:=New(getFileSize(fn)+1)     ->allow an extra char in case file does not end in LF
+
+        fh:=Open(fn,MODE_OLDFILE)
+        IF fh>0
+          off:=0
+          lineCount:=0
+          WHILE(ReadStr(fh,fn)<>-1) OR (StrLen(fn)>0)
+            AstrCopy(fileBuf+off,fn,ALL)
+            lineCount++
+            off:=off+StrLen(fn)+1
+          ENDWHILE
+          
+          toolTypes:=List(lineCount+1)
+          off:=0
+          FOR i:=1 TO lineCount
+            ListAdd(toolTypes,[fileBuf+off])
+            off:=off+StrLen(fileBuf+off)+1
+          ENDFOR
+          ListAdd(toolTypes,[NIL])
+          dobj.tooltypes:=toolTypes
+          isCfg:=TRUE
+          Close(fh)
+        ELSE
+          Dispose(fileBuf)
+          FreeDiskObject(dobj)
+          dobj:=NIL
+        ENDIF
+      ENDIF
+    ENDIF
+  ENDIF
+ENDPROC dobj,isCfg
+
+PROC freeToolTypes(dobj:PTR TO diskobject,isCfg)
+  DEF mem
+
+  IF dobj
+    IF isCfg
+      mem:=dobj.tooltypes[0]      -> release the file buffer (first string pointer points to start of buffer)
+      Dispose(mem)
+      END dobj.tooltypes            ->our tooltypes is a list that needs to be freed
+    ENDIF
+    FreeDiskObject(dobj)
+  ENDIF
+ENDPROC
+
 PROC getFileName(path:PTR TO CHAR,buf:PTR TO CHAR)
   DEF returnval=0
   
@@ -597,6 +655,14 @@ PROC getFileName(path:PTR TO CHAR,buf:PTR TO CHAR)
   free_pdir()
   FreeDosObject(DOS_FIB,dir_info)
 ENDPROC returnval
+
+PROC fileExists(filename)
+  DEF lh
+  IF lh:=Lock(filename,ACCESS_READ)
+    UnLock(lh)
+    RETURN TRUE
+  ENDIF
+ENDPROC FALSE
 
 PROC getFileSize(s: PTR TO CHAR)
   DEF fBlock: fileinfoblock
@@ -2014,7 +2080,7 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
   DEF counts[27]:ARRAY OF LONG
   DEF indexes[27]:ARRAY OF LONG
   DEF i,j,n,cnt
-  DEF wordList,transCount=0
+  DEF wordList:PTR TO LONG,transCount=0
 
 
   FOR i:=0 TO 26
@@ -2166,7 +2232,7 @@ ENDPROC
 
 PROC getIconNodeInfo(i)
   DEF dobj: PTR TO diskobject
-  DEF oldtooltypes
+  DEF oldtooltypes,cfg
   DEF s:PTR TO CHAR
   DEF basis[200]:STRING
   DEF fileName[200]:STRING
@@ -2183,7 +2249,7 @@ PROC getIconNodeInfo(i)
   IF(getFileName(basis,fileName))
     stripInfo(fileName)
     StringF(basis,'\sNode\d/Modem/\s',cmd.bbsLoc,i,fileName)
-    dobj:=GetDiskObject(basis)
+    dobj,cfg:=getToolTypes(basis)
     IF(dobj)
       oldtooltypes:=dobj.tooltypes
       IF(s:=FindToolType(oldtooltypes,'MODEM.INIT')) THEN strcpy(cmd.mInit,s)
@@ -2193,7 +2259,7 @@ PROC getIconNodeInfo(i)
       IF(s:=FindToolType(oldtooltypes,'MODEM.OFFHOOK')) THEN strcpy(sopt.offHook,s)
       IF(s:=FindToolType(oldtooltypes,'MODEM.CALLERID-1')) THEN sopt.toggles[TOGGLES_CALLERID]:=1
       IF(s:=FindToolType(oldtooltypes,'MODEM.CALLERID-2')) THEN sopt.toggles[TOGGLES_CALLERIDNAME]:=1
-      FreeDiskObject(dobj)
+      freeToolTypes(dobj,cfg)
     ENDIF
   ENDIF
  
@@ -2201,7 +2267,7 @@ PROC getIconNodeInfo(i)
   IF(getFileName(basis,fileName))
     stripInfo(fileName)
     StringF(basis,'\sNode\d/Serial/\s',cmd.bbsLoc,i,fileName)
-    dobj:=GetDiskObject(basis)
+    dobj,cfg:=getToolTypes(basis)
     IF(dobj)
       oldtooltypes:=dobj.tooltypes
       IF(s:=FindToolType(oldtooltypes,'SERIAL.UNIT')) THEN cmd.serDevUnit:=Val(s)
@@ -2212,12 +2278,12 @@ PROC getIconNodeInfo(i)
       IF(s:=FindToolType(oldtooltypes,'SERIAL.REPURGE')) THEN sopt.toggles[TOGGLES_REPURGE]:=1
       IF(s:=FindToolType(oldtooltypes,'SERIAL.LOGOFF_RESET')) THEN sopt.toggles[TOGGLES_SERIALRESET]:=1
       IF(s:=FindToolType(oldtooltypes,'SERIAL.TRUE_RESET')) THEN sopt.toggles[TOGGLES_TRUERESET]:=1
-      FreeDiskObject(dobj)
+      freeToolTypes(dobj,cfg)
     ENDIF
   ENDIF
   
   StringF(fileName,'\sNode\d/WINDOW.DEF',cmd.bbsLoc,i)
-  dobj:=GetDiskObject(fileName)
+  dobj,cfg:=getToolTypes(fileName)
   IF(dobj)
     oldtooltypes:=dobj.tooltypes
     IF(s:=FindToolType(oldtooltypes,'WINDOW.LEFTEDGE')) THEN sopt.leftEdge:=Val(s)
@@ -2243,10 +2309,10 @@ PROC getIconNodeInfo(i)
            sopt.bitPlanes:=3
        ENDSELECT
     ENDIF
-    FreeDiskObject(dobj)
+    freeToolTypes(dobj,cfg)
   ENDIF
   StringF(fileName,'\sNode\d',cmd.bbsLoc,i)
-  dobj:=GetDiskObject(fileName)
+  dobj,cfg:=getToolTypes(fileName)
   IF(dobj)
     oldtooltypes:=dobj.tooltypes
     IF(s:=FindToolType(oldtooltypes,'SYSTEM_PASSWORD')) THEN strcpy(cmd.sysPass,s)
@@ -2288,12 +2354,13 @@ PROC getIconNodeInfo(i)
        strcpy(sopt.nodeScreens,temp)
     ENDIF
 
-    FreeDiskObject(dobj)
+    freeToolTypes(dobj,cfg)
   ENDIF
 ENDPROC
 
 PROC getIconBBSInfo(maxNodes)
   DEF dobj:PTR TO diskobject
+  DEF cfg
   DEF oldtooltypes
 
   DEF s:PTR TO CHAR
@@ -2306,7 +2373,7 @@ PROC getIconBBSInfo(maxNodes)
   DEF temp[100]:STRING
   cmd:=cmds[0]
   StringF(temp,'\sCONFCONFIG',cmd.bbsLoc)
-  dobj:=GetDiskObject(temp)
+  dobj,cfg:=getToolTypes(temp)
   IF(dobj)
     oldtooltypes:=dobj.tooltypes
     IF(s:=FindToolType(oldtooltypes,'RELATIVE_CONFERENCES'))
@@ -2315,10 +2382,10 @@ PROC getIconBBSInfo(maxNodes)
         sopt.toggles[TOGGLES_CONFRELATIVE]:=1
       ENDFOR
     ENDIF
-    FreeDiskObject(dobj)
+    freeToolTypes(dobj,cfg)
   ENDIF
   StringF(temp,'\sACCESS',cmd.bbsLoc)
-  dobj:=GetDiskObject(temp)
+  dobj,cfg:=getToolTypes(temp)
   IF(dobj=NIL) THEN RETURN
   oldtooltypes:=dobj.tooltypes
   
@@ -2358,7 +2425,7 @@ PROC getIconBBSInfo(maxNodes)
       sopt.eall_level:=def
     ENDFOR
   ENDIF
-  FreeDiskObject(dobj)
+  freeToolTypes(dobj,cfg)
 ENDPROC
 
 PROC setTheGads()
@@ -2477,7 +2544,7 @@ PROC readStartUp(s:PTR TO CHAR)
   DEF dobj:PTR TO diskobject
   DEF cmd:PTR TO packedCommands
   DEF sopt:PTR TO startOption
-  DEF oldtooltypes
+  DEF oldtooltypes,cfg
   DEF t:  PTR TO CHAR
   DEF p: pstr
   DEF i
@@ -2495,7 +2562,7 @@ PROC readStartUp(s:PTR TO CHAR)
     strcpy(buttons[i].command,'')
   ENDFOR
   
-  dobj:=GetDiskObject(s)
+  dobj,cfg:=getToolTypes(s)
   IF (dobj=NIL) 
     myrequest('Error, can''t locate acp.info')
     acpError:=1
@@ -2528,7 +2595,7 @@ PROC readStartUp(s:PTR TO CHAR)
       j++
     ENDWHILE
   ELSE
-    FreeDiskObject(dobj)
+    freeToolTypes(dobj,cfg)
     myrequest('ERROR, missing NODES tooltype\nPlease refer to /X documentation')
     acpError:=1
     RETURN
@@ -2672,7 +2739,7 @@ PROC readStartUp(s:PTR TO CHAR)
     ENDIF
   ENDIF
 
-  FreeDiskObject(dobj)
+  freeToolTypes(dobj,cfg)
   IF(doMultiCom)
     FOR i:=0 TO nodeCount-1
       sopt:=sopts[i]
