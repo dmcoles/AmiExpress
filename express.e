@@ -141,7 +141,7 @@ DEF bio_err: LONG ->PTR TO BIO
 
 -> User Keys Flags
    /* show new user message */       /* show all users only once */
-ENUM USER_NEWMSG=1,USER_TOCONF1=2, USER_ONETIME_MSG=4,USER_SCRNCLR=8,USER_DONATED=16,USER_ED_FULLSCREEN=32,USER_ED_PROMPT=64
+ENUM USER_NEWMSG=1,USER_TOCONF1=2, USER_ONETIME_MSG=4,USER_SCRNCLR=8,USER_DONATED=16,USER_ED_FULLSCREEN=32,USER_ED_PROMPT=64,USER_BGFILECHECK=128
 
 -> AmiExpress_Node.0 - arexx port for shutdown/suspend messages
 -> ServerRP0 - Send Messages to ACP (create at startup, register with ACP, receive bbs title)
@@ -308,7 +308,7 @@ OBJECT user
   creditTotalToDate: LONG ->  used to store amount paid to date credit account
   creditTotalDate: LONG -> credit total to date date
   creditTracking: CHAR ->  track uploads/downloads flags in credit account
-  unused1: CHAR
+  translatorID: CHAR
   unused2: INT
   confYM9: LONG
   beginLogCall : LONG
@@ -567,6 +567,7 @@ ENDOBJECT
 OBJECT diskObjectCacheItem
   fileName:PTR TO CHAR
   diskObject: LONG
+  ownsToolTypes: CHAR
 ENDOBJECT
 
 DEF masterMsg:acpMessage
@@ -752,7 +753,6 @@ DEF fCheckDir[255]:STRING
 
 DEF hostLanguage[255]:STRING
 DEF userLanguage[255]:STRING
-DEF wordHighlight=0
 
 DEF translatorMode=TRANS_NONE
 DEF translatorLanguage[255]:STRING
@@ -789,6 +789,7 @@ DEF customMsgParam2=0
 DEF customMsgCmd[255]:STRING
 
 DEF transfering=FALSE
+
 DEF cancelTransferOffHook=FALSE
 DEF aeGoodFile=0
 ->download stuff
@@ -838,6 +839,8 @@ DEF bgFileCheck=FALSE
 
 DEF diskObjectCache:PTR TO LONG
 DEF cacheResetOn=CACHE_RESET_NEVER
+DEF cacheTests=0
+DEF cacheHits=0
 
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
@@ -2609,8 +2612,8 @@ PROC aePutChar(c)
   aePuts(str)
 ENDPROC
 
-PROC aePuts(string)
-  aePuts2(string,-1)
+PROC aePuts(string,force=FALSE)
+  aePuts2(string,-1,force)
 ENDPROC
 
 PROC asl(s: PTR TO CHAR) HANDLE
@@ -2659,23 +2662,23 @@ PROC fAEPutStr(string)
   aePuts(string)
 ENDPROC
 
-PROC aePuts2(string,length)
+PROC aePuts2(string,length,force=FALSE)
   DEF str[1023]:STRING
   DEF str2[1023]:STRING
-  
+ 
   IF ((captureFP<>0) OR (ansiColour=FALSE) OR (bitPlanes<3))
     IF length<>-1 THEN StrCopy(str,string,length) ELSE StrCopy(str,string)
     stripAnsi(str,str2,0,0)
   ENDIF
   
   IF (ansiColour=FALSE)
-    IF (ioFlags[IOFLAG_SCR_OUT]) THEN conPuts(str2,length)
-    IF (ioFlags[IOFLAG_SER_OUT]) THEN serPuts(str2,length)
+    IF (ioFlags[IOFLAG_SCR_OUT]) THEN conPuts(str2,length,force)
+    IF (ioFlags[IOFLAG_SER_OUT]) THEN serPuts(str2,length,FALSE,force)
   ELSE
     IF (ioFlags[IOFLAG_SCR_OUT]) 
-      IF bitPlanes<3 THEN conPuts(str2) ELSE conPuts(string,length)
+      IF bitPlanes<3 THEN conPuts(str2) ELSE conPuts(string,length,force)
     ENDIF
-    IF (ioFlags[IOFLAG_SER_OUT]) THEN serPuts(string,length)
+    IF (ioFlags[IOFLAG_SER_OUT]) THEN serPuts(string,length,FALSE,force)
   ENDIF
   
   IF captureFP THEN fileWrite(captureFP,str2)
@@ -2710,9 +2713,9 @@ ENDPROC
 
 ->>> PROC conPuts(string)
 -> Output a NIL-terminated string of characters to a console.
-PROC conPuts(string, putlen=-1)
+PROC conPuts(string, putlen=-1, force=FALSE)
   DEF actlen
-  IF (consoleIO<>NIL) AND (transfering=FALSE)
+  IF (consoleIO<>NIL) AND ((transfering=FALSE) OR (force))
     IF (actlen:=StrLen(string))<putlen THEN putlen:=actlen
     consoleIO.command:=CMD_WRITE
     consoleIO.data:=string
@@ -3251,7 +3254,7 @@ PROC loadTranslator(translator:PTR TO translator,fileName)
   DEF counts[27]:ARRAY OF LONG
   DEF indexes[27]:ARRAY OF LONG
   DEF i,j,n,cnt,fsize
-  DEF wordList
+  DEF wordList:PTR TO LONG
 
   DEF tempstr1[255]:STRING
   DEF tempstr2[255]:STRING
@@ -3822,16 +3825,15 @@ PROC findFirst(path: PTR TO CHAR,buf: PTR TO CHAR)
 ENDPROC returnval
 
 PROC findAcsLevel()
-  DEF ttfile[255]:STRING,do,level
+  DEF ttfile[255]:STRING,found,level
   level:=loggedOnUser.secStatus/5*5
   REPEAT
     getNodeFile(TOOLTYPE_ACCESS,level,ttfile)
-    ->we are intentionally not cachine this - its mainly only called once per call and would fill up the cache with blank entries
-    do:=GetDiskObject(ttfile)
-    IF (do) THEN FreeDiskObject(do) ELSE level:=level-5
-  UNTIL (level=0) OR (do)
+    found:=fileExists(ttfile,TRUE)
+    IF (found=FALSE) THEN level:=level-5
+  UNTIL (level=0) OR (found)
   
-  IF (do=NIL) THEN level:=-1
+  IF (found=FALSE) THEN level:=-1
 ENDPROC level
 
 PROC higherAccess()
@@ -3859,7 +3861,6 @@ PROC readToolTypeInt(toolType,tooltypeSelector,key)
   IF readToolType(toolType,tooltypeSelector,key,value)
     RETURN Val(value)
   ENDIF
-
 ENDPROC -1
 
 PROC checkToolType(toolType,tooltypeSelector,key,testValue)
@@ -3903,10 +3904,14 @@ ENDPROC result
 PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
   DEF i,cnt,found=FALSE
   DEF cacheObj: PTR TO diskObjectCacheItem
-  DEF do=NIL
+  DEF do=NIL:PTR TO diskobject
+  DEF fn2[255]:STRING
+  DEF ownToolTypes
+  DEF toolTypes:PTR TO LONG
+  DEF fh,fileBuf,off,lineCount
 
   IF diskObjectCache<>NIL
-    cnt:=ListLen(diskObjectCache)-1
+    cnt:=ListLen(diskObjectCache)
 
     i:=0
     WHILE (i<cnt) AND (found=FALSE)
@@ -3921,6 +3926,7 @@ PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
     ENDWHILE
   ENDIF
 
+  cacheTests++
   IF found
     ->LRU algorithm, move most recently used to end of list
     i++
@@ -3929,11 +3935,51 @@ PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
       i++
     ENDWHILE
     diskObjectCache[cnt-1]:=cacheObj
+    cacheHits++
   ELSE
     do:=GetDiskObject(fileName)
+    ownToolTypes:=FALSE
+    IF do=NIL
+      StringF(fn2,'\s.cfg',fileName)
+      IF fileExists(fn2)
+        do:=GetDefDiskObject(WBPROJECT)
+        ->do:=NEW do
+
+        IF do<>NIL
+          fileBuf:=New(getFileSize(fn2)+1)     ->allow an extra char in case file does not end in LF
+
+          fh:=Open(fn2,MODE_OLDFILE)
+          IF fh>0
+            off:=0
+            lineCount:=0
+            WHILE(ReadStr(fh,fn2)<>-1) OR (StrLen(fn2)>0)
+              AstrCopy(fileBuf+off,fn2,ALL)
+              lineCount++
+              off:=off+StrLen(fn2)+1
+            ENDWHILE
+            
+            toolTypes:=List(lineCount+1)
+            off:=0
+            FOR i:=1 TO lineCount
+              ListAdd(toolTypes,[fileBuf+off])
+              off:=off+StrLen(fileBuf+off)+1
+            ENDFOR
+            ListAdd(toolTypes,[NIL])
+            do.tooltypes:=toolTypes
+            ownToolTypes:=TRUE
+            Close(fh)
+          ELSE
+            Dispose(fileBuf)
+            FreeDiskObject(do)
+            do:=NIL
+          ENDIF
+        ENDIF
+      ENDIF
+    ENDIF
     IF diskObjectCache<>NIL
       cacheObj:=NEW cacheObj
       cacheObj.fileName:=String(StrLen(fileName))
+      cacheObj.ownsToolTypes:=ownToolTypes
       StrCopy(cacheObj.fileName,fileName)
       cacheObj.diskObject:=do
 
@@ -3954,18 +4000,32 @@ ENDPROC do
 
 PROC clearDiskObjectCache()
   DEF cacheObj: PTR TO diskObjectCacheItem
-  DEF i
+  DEF i, do: PTR TO diskobject
+  DEF mem
+
   IF diskObjectCache=NIL THEN RETURN
   FOR i:=0 TO ListLen(diskObjectCache)-1
     IF diskObjectCache[i] 
       cacheObj:=diskObjectCache[i]
+      IF cacheObj.ownsToolTypes
+        do:=cacheObj.diskObject
+        mem:=do.tooltypes[0]      -> release the file buffer (first string pointer points to start of buffer)
+        Dispose(mem)
+        END do.tooltypes     ->our tooltypes is a list that needs to be freed
+      ENDIF
       DisposeLink(cacheObj.fileName)
-      IF cacheObj.diskObject<>NIL THEN FreeDiskObject(cacheObj.diskObject)
+      IF cacheObj.diskObject<>NIL 
+        do:=cacheObj.diskObject
+        FreeDiskObject(do)
+        ->END do
+      ENDIF
       END cacheObj
     ENDIF
     diskObjectCache[i]:=NIL
   ENDFOR
   SetList(diskObjectCache,0)
+  cacheTests:=0
+  cacheHits:=0
 ENDPROC
 
 PROC startProcess(exestring, stacksize, priority, async, doorTrap)
@@ -4010,7 +4070,7 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
   DEF mp: PTR TO mp
   DEF exestring[100]:STRING
   DEF ximSig,signals
-  DEF msg: PTR TO jhMessage
+  DEF msg: PTR TO jhMessage,msg2: PTR TO jhMessage
   DEF doormsg: PTR TO doorMsg
   DEF charptr: PTR TO CHAR
   DEF temp
@@ -4147,7 +4207,9 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
               msg.command:=IF loggedOnUser<>NIL THEN loggedOnUser.lineLength ELSE 29
               nodes:=nodes+1  
           CASE JH_WRITE
-            aePuts(msg.string)
+            IF transfering=FALSE
+              aePuts(msg.string)
+            ENDIF
           CASE CHAIN
               nodes:=nodes-1
           CASE JH_SHUTDOWN
@@ -7147,7 +7209,7 @@ PROC translateText(textstring)
             cnt:=0
           ENDIF
           cnt:=cnt+StrLen(word)
-          IF (translated=FALSE) AND (wordHighlight)
+          IF (translated=FALSE) AND (loggedOnUser.translatorID AND 128)
             StrAdd(textstring,'[33m')
             StrAdd(textstring,word)
             StrAdd(textstring,'[0m')
@@ -7166,7 +7228,7 @@ PROC translateText(textstring)
     IF StrLen(word)>0
       translated:=translateWord(trans,word)
       IF cnt+StrLen(word)>75 THEN StrAdd(textstring,'\b\n')
-      IF (translated=FALSE) AND (wordHighlight)
+      IF (translated=FALSE) AND (loggedOnUser.translatorID AND 128)
         StrAdd(textstring,'[33m')
         StrAdd(textstring,word)
         StrAdd(textstring,'[0m')
@@ -7562,11 +7624,11 @@ PROC toggleStatusDisplay()
   	dStatBar:=0
 	  closeAEStats()
       IF(bitPlanes)
-        MoveWindow(window,0,-28)
-	      SizeWindow(window,0,28)
+        MoveWindow(window,0,-37)
+	      SizeWindow(window,0,37)
 	    ELSE
-         MoveWindow(window,0,-38)
-         SizeWindow(window,0,38)
+        MoveWindow(window,0,-38)
+        SizeWindow(window,0,38)
       ENDIF
   	  IF (loggedOnUser<>NIL) AND (StrLen(loggedOnUser.name)>0) THEN statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
       ->//SetWindowTitles(MYwindow,titlebar,titlebar)
@@ -7584,7 +7646,7 @@ PROC toggleStatusDisplay()
        WA_LEFT,0,
        WA_TOP,10,
        WA_WIDTH,640,
-       WA_HEIGHT,30,
+       WA_HEIGHT,39,
        WA_DETAILPEN,dp,
        WA_BLOCKPEN,bp,
        WA_FLAGS,
@@ -7593,8 +7655,8 @@ PROC toggleStatusDisplay()
 
       dStatBar:=1
       IF(bitPlanes)
-        SizeWindow(window,0,-28)
-        MoveWindow(window,0,28)
+        SizeWindow(window,0,-37)
+        MoveWindow(window,0,37)
       ELSE
         SizeWindow(window,0,-38)
         MoveWindow(window,0,38)
@@ -8147,6 +8209,12 @@ PROC processInputMessage(timeout, extsig = 0)
       reqState:=REQ_STATE_SHUTDOWN_OFFHOOK
     ENDIF
 
+    ->Shift 10 - clear tooltype cache
+    IF ((wasControl=2) AND (ch="9")) 
+      clearDiskObjectCache()
+    ENDIF
+
+    
     IF ((wasControl=1) AND (ch="?"))
       toggleStatusDisplay()
     ENDIF
@@ -8266,6 +8334,11 @@ PROC processInputMessage(timeout, extsig = 0)
       setEnvStat(ENV_LOGOFF)
     ENDIF
 
+    ->Shift 10 - clear tooltype cache
+    IF ((wasControl=2) AND (ch="9")) 
+      clearDiskObjectCache()
+    ENDIF
+    
     ->HELP
     IF ((wasControl=1) AND (ch="?"))
       servercmd:=-1
@@ -11352,8 +11425,8 @@ redoTrans:
   IF(StrLen(tempstr)=0) THEN RETURN RESULT_SUCCESS
   
   IF (tempstr[0]="H") OR (tempstr[0]="h")
-    wordHighlight:=Not(wordHighlight)
-    IF wordHighlight
+    loggedOnUser.translatorID:=Eor(loggedOnUser.translatorID,128)
+    IF loggedOnUser.translatorID AND 128
       aePuts('WORD HIGHLIGHT ON')
     ELSE
       aePuts('WORD HIGHLIGHT OFF')
@@ -11363,9 +11436,11 @@ redoTrans:
   
   stat:=Val(tempstr)
   IF (stat <= 0) THEN RETURN RESULT_SUCCESS
-  
+
   StringF(tempstr,'LANGUAGE.\d',stat)
-  readToolType(TOOLTYPE_LANGUAGES,'',tempstr,userLanguage)
+  IF readToolType(TOOLTYPE_LANGUAGES,'',tempstr,userLanguage)
+    loggedOnUser.translatorID:=(loggedOnUser.translatorID AND 128) OR stat
+  ENDIF
 ENDPROC RESULT_SUCCESS
 
 PROC findUserFromNumber(start,hoozer:PTR TO userKeys)
@@ -13047,6 +13122,8 @@ PROC regServer()
     sopt.toggles[TOGGLES_MULTICOM]:=FALSE
     sopt.iconify:=FALSE
 
+    cmds.numConf:=4
+
     cmds.openingBaud:=115200
     cmds.taskPri:=240
     RETURN
@@ -13535,6 +13612,13 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
   StringF(string,' \r\s[15]',hostIP)
   statMessage(19,3,string)
 
+  IF (cacheTests>0)
+    RealF(bcdStr,!(cacheHits!*100.0)/(cacheTests!),2)
+  ELSE
+    StrCopy(bcdStr,'0')
+  ENDIF
+  StringF(string,'Tooltype cache: Used \d/\d Hit rate: \d/\d (\s%)                     ',ListLen(diskObjectCache),ListMax(diskObjectCache),cacheHits,cacheTests,bcdStr)
+  statMessage(1,4,string)
 ENDPROC
 
 PROC pGoodbye()
@@ -13675,7 +13759,7 @@ PROC xprfclose()
   debugLog(LOG_DEBUG,tempstr)
   IF fp<>-1
     Close(fp)
-    IF (zModemInfo.downloading=FALSE) AND (zModemInfo.filesize>0) AND (zModemInfo.recPos=zModemInfo.filesize) AND bgFileCheck
+    IF (zModemInfo.downloading=FALSE) AND (zModemInfo.filesize>0) AND (zModemInfo.recPos=zModemInfo.filesize) AND bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
       StringF(tempstr,'bgCheckPort\d',node)
       IF (bgport:=FindPort(tempstr))
         msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
@@ -15011,7 +15095,7 @@ PROC xprReceive(file)
   DEF task:PTR TO tc
   DEF i,time1,time2
   DEF oldshared,bgport
-  DEF msg:PTR TO jhMessage,tags=NIL,count
+  DEF msg:PTR TO jhMessage,tags=NIL,count,ch
   DEF proc:PTR TO process
 
   IF(strCmpi(xprLib[loggedOnUser.xferProtocol],'INTERNAL',ALL))
@@ -15120,6 +15204,7 @@ PROC xprReceive(file)
   time1:=getSystemTime()
   zModemInfo.downloading:=FALSE
   transfering:=TRUE
+
   cancelTransferOffHook:=FALSE
 
   ObtainSemaphore(bgData)
@@ -15127,7 +15212,7 @@ PROC xprReceive(file)
   bgData.checkedBytes:=0
   ReleaseSemaphore(bgData)
 
-  IF bgFileCheck
+  IF bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
     tags:=NEW [NP_ENTRY,{backgroundFileCheckThread},NP_STACKSIZE,10000,0]:LONG
     Forbid()
     proc:=CreateNewProc(tags)
@@ -15140,7 +15225,7 @@ PROC xprReceive(file)
   tTTM:=time2-time1;
   XprotocolCleanup(xprio)
 
-  IF bgFileCheck
+  IF bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
     StringF(tempstr,'bgCheckPort\d',node)
     IF (bgport:=FindPort(tempstr))
       msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
@@ -15152,10 +15237,13 @@ PROC xprReceive(file)
         ->signal background checking to finish
         PutMsg(bgport,msg)
         
-        ->wait for it to finish
-        WHILE FindPort(tempstr)
-          Delay(30)
-        ENDWHILE
+        IF FindPort(tempstr)
+          aePuts('Waiting for background filecheck to complete...\b\n\b\n',TRUE)
+          ->wait for it to finish
+          WHILE FindPort(tempstr)
+            Delay(10)
+          ENDWHILE
+        ENDIF       
       ENDIF
     ENDIF
   ENDIF
@@ -15594,14 +15682,26 @@ updesccont:
     Close(udf)
  
   ENDWHILE
-  aePuts('Okay:   (Enter) to Start, (G)oodbye after transfer, (A)bort? ')
  
+  aePuts('\b\n')
   REPEAT
+    IF bgFileCheck
+      StringF(str,'[1A\bOkay:   (B)ackground filecheck: \s \b\n',IF loggedOnUserKeys.userFlags AND USER_BGFILECHECK THEN '[32mYES[0m' ELSE '[37mNO[0m')
+      aePuts(str)
+      aePuts('(Enter) to Start, (G)oodbye after transfer, (A)bort? ')
+    ELSE
+      aePuts('\bOkay:   (Enter) to Start, (G)oodbye after transfer, (A)bort? ')
+    ENDIF
+
     status:=checkOnlineStatus()
     IF(status<0) THEN RETURN status
     status:=readChar(INPUT_TIMEOUT)
     IF(status<(-1)) THEN RETURN status
 
+    IF bgFileCheck
+      IF (status="B") OR (status="b") THEN loggedOnUserKeys.userFlags:=Eor(loggedOnUserKeys.userFlags,USER_BGFILECHECK)
+    ENDIF
+    
     IF((status=65) OR (status=97))
       aePuts('Abort!\b\n\b\n')
       RETURN RESULT_FAILURE
@@ -16866,7 +16966,7 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
      loggedOnUserKeys.upCPS:=pcps
   ENDIF
 
-  IF bgFileCheck  
+  IF bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
     IF bgCnt>0
       StringF(tempstr,'\b\n\b\n\d files were checked and posted in the background during upload',bgCnt)
       aePuts(tempstr)
@@ -17366,10 +17466,14 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
   DEF fmtstr[255]:STRING
   DEF fcomment[255]:STRING
   DEF status,status2,fsize
-  DEF fh,hold,x2,x3
+  DEF fh,hold,x2,x3,exitLoop
+  
+  DEF dizSysCmd[255]:STRING
   
   IF (StrLen(fname)>0) AND (StrLen(fname)<=12)
 
+    readToolType(TOOLTYPE_BBSCONFIG,'','FILEDIZ_SYSCMD',dizSysCmd)
+  
     IF(StrLen(sopt.ramPen)>0) 
       StringF(path,'\s/',sopt.ramPen) 
       StringF(fileName,'\s/\s',sopt.ramPen,fname)
@@ -17379,15 +17483,20 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
     ENDIF
     
     IF fileExists(fileName)
-    
-      IF runSysCommand('EXAMINE',fileName)
+      StringF(tempstr,'\s\s',nodeWorkDir,fname)
+      StrCopy(tempstr2,'EXAMINE')
+      IF runSysCommand(tempstr2,fileName)
         i:=1
         REPEAT
-          StringF(tempstr,'EXAMINE\d',i)
-          i++
-        UNTIL(runSysCommand(tempstr,fileName))=FALSE
+          ->exit the background check if we just ran the file diz door and no diz was found
+          exitLoop:=strCmpi(tempstr2,dizSysCmd,ALL) AND (fileExists(tempstr)=FALSE)
+          IF exitLoop=FALSE
+            StringF(tempstr2,'EXAMINE\d',i)
+            i++
+            exitLoop:=(runSysCommand(tempstr2,fileName)=FALSE)
+          ENDIF
+        UNTIL(exitLoop)
         
-        StringF(tempstr,'\s\s',nodeWorkDir,fname)
         IF fileExists(tempstr)
   
           fh:=Open(tempstr,MODE_OLDFILE)
@@ -17827,22 +17936,23 @@ PROC downloadAFile(str: PTR TO CHAR, cmdcode: PTR TO CHAR, params)
   ENDIF
   
   aePuts('\b\nLAST CHANCE!   (Enter) to Start, (G)oodbye after transfer, (A)bort? ')
+
   REPEAT
-      mystat:=checkOnlineStatus()
-      IF(mystat<0) THEN RETURN mystat
-      mystat:=readChar(INPUT_TIMEOUT)
+    mystat:=checkOnlineStatus()
+    IF(mystat<0) THEN RETURN mystat
+    mystat:=readChar(INPUT_TIMEOUT)
 
-      IF(mystat<(-1)) THEN RETURN RESULT_NO_CARRIER
-
-      IF((mystat=65) OR (mystat=97))
-        aePuts('Abort!\b\n\b\n')
-        RETURN RESULT_SUCCESS
-      ENDIF
-      IF (((status="l") OR (status="L")) AND (logonType<LOGON_TYPE_REMOTE))
-         localUpload:=TRUE
-         status:=13
-         JUMP breakd
-      ENDIF
+    IF(mystat<(-1)) THEN RETURN RESULT_NO_CARRIER
+    
+    IF((mystat=65) OR (mystat=97))
+      aePuts('Abort!\b\n\b\n')
+      RETURN RESULT_SUCCESS
+    ENDIF
+    IF (((status="l") OR (status="L")) AND (logonType<LOGON_TYPE_REMOTE))
+       localUpload:=TRUE
+       status:=13
+       JUMP breakd
+    ENDIF
   UNTIL (mystat=13) OR (mystat=71) OR (mystat=103)
   breakd:
   
@@ -21839,6 +21949,19 @@ PROC internalCommandW()
         StringF(str,'[34m[[0m 15[34m][35m TRANSLATOR.............. [33m\s[0m\b\n',userLanguage)
         aePuts(str)
       ENDIF
+
+      IF(checkToolTypeExists(TOOLTYPE_NODE,node,'BGFILECHECK'))
+        option:=loggedOnUserKeys.userFlags AND USER_BGFILECHECK
+        IF option
+              StringF(str,'[34m[[0m 16[34m][35m BACKGROUND FILE CHECK... [37mNO[0m\b\n')
+        ELSE
+              StringF(str,'[34m[[0m 16[34m][35m BACKGROUND FILE CHECK... [32mYES[0m\b\n')
+        ENDIF
+        aePuts(str)
+      ELSE
+        aePuts('[34m[[0m 16[34m][31m [DISABLED][0m\b\n')
+      ENDIF
+
       
      aePuts('\b\n')
 
@@ -22007,6 +22130,11 @@ PROC internalCommandW()
          
          stat:=chooseTranslator()
          IF(stat<0) THEN RETURN stat
+       CASE 16
+          ->EDIT BACKGROUND FILECHECK
+         IF(checkToolTypeExists(TOOLTYPE_NODE,node,'BGFILECHECK'))
+           loggedOnUserKeys.userFlags:=Eor(loggedOnUserKeys.userFlags,USER_BGFILECHECK)
+         ENDIF
     ENDSELECT
   
    cant:
@@ -24074,8 +24202,10 @@ PROC processLoggedOnUser()
     DEF currTime
     IF (stateData=0)
         StrCopy(securityFlags,'')
-        StrCopy(userLanguage,hostLanguage)
-        wordHighlight:=0
+        
+        StringF(string,'LANGUAGE.\d',loggedOnUser.translatorID AND 127)
+        IF readToolType(TOOLTYPE_LANGUAGES,'',string,userLanguage)=FALSE THEN StrCopy(userLanguage,hostLanguage)
+        
         blockOLM:=FALSE
         messageMenuChar:=0
         disallowFileAttach:=FALSE
@@ -25381,16 +25511,16 @@ PROC openExpressScreen()
   ->IF (checkToolTypeExists(TOOLTYPE_WINDOW,node,'WINDOW.STATBAR')) THEN toggleStatusDisplay()
 
   /*width:=readToolTypeInt(TOOLTYPE_WINDOW,node,'WINDOW.WIDTH')
-  IF width=-1 THEN width:=640
+  IF width=<1 THEN width:=640
   
   height:=readToolTypeInt(TOOLTYPE_WINDOW,node,'WINDOW.HEIGHT')
-  IF width=-1 THEN width:=640
+  IF height<1 THEN height:=256
   
   top:=readToolTypeInt(TOOLTYPE_WINDOW,node,'WINDOW.TOPEDGE')
-  IF top=-1 THEN top:=12
+  IF top<12 THEN top:=12
   
   left:=readToolTypeInt(TOOLTYPE_WINDOW,node,'WINDOW.LEFTEDGE')
-  IF left=-1 THEN left:=0
+  IF left<0 THEN left:=0
 
   colourcount:=readToolTypeInt(TOOLTYPE_WINDOW,node,'WINDOW.NUM_COLORS')
   SELECT colourcount
@@ -25412,12 +25542,13 @@ PROC openExpressScreen()
   bitPlanes:=sopt.bitPlanes
   
   IF fontHandle=NIL
-    readToolType(TOOLTYPE_NODE,node,'EXPFONT',fontName)
+    IF readToolType(TOOLTYPE_NODE,node,'EXPFONT',fontName)
     defaultfontattr.name:=fontName
     defaultfontattr.ysize:=8
 
     fontHandle:=OpenFont(defaultfontattr)
     IF fontHandle=NIL THEN fontHandle:=OpenDiskFont(defaultfontattr)
+  ENDIF
   ENDIF
 
   IF pub=FALSE
@@ -25512,7 +25643,6 @@ PROC openExpressScreen()
         WA_FLAGS,WFLG_ACTIVATE,NIL]
       window:=OpenWindowTagList(NIL,opentags)
       END opentags
-      UnlockPubScreen(NIL,pubLock)
       IF (window) AND (fontHandle<>NIL) THEN SetFont(window.rport,fontHandle)
     ELSE
       opentags:=NEW [WA_BORDERLESS,1,WA_CUSTOMSCREEN,screen,
@@ -25527,6 +25657,8 @@ PROC openExpressScreen()
       END opentags
     ENDIF
   ENDIF 
+
+  IF pubLock THEN UnlockPubScreen(NIL,pubLock)
   IF window=NIL THEN RETURN ERR_WINDOW
 
   IF zModemInfo.inProgress<>ZMODEM_NONE
@@ -25627,8 +25759,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
    
-  StrCopy(expressVer,'v5.0.0-b15',ALL)
-  StrCopy(expressDate,'29-Oct-2018',ALL)
+  StrCopy(expressVer,'v5.0.0-b16',ALL)
+  StrCopy(expressDate,'01-Nov-2018',ALL)
 
   InitSemaphore(bgData)
  
@@ -25835,8 +25967,9 @@ PROC main() HANDLE
 
   StrCopy(hostLanguage,'')
   readToolType(TOOLTYPE_LANGUAGES,'','HOSTLANGUAGE',hostLanguage)
+  
   StrCopy(userLanguage,hostLanguage)
-
+  
   IF sopt.translation<>NIL
     transptr:=sopt.translation
     
@@ -25869,6 +26002,7 @@ PROC main() HANDLE
   olmBuf:=List(100)
  
   cmds.numConf:=readToolTypeInt(TOOLTYPE_CONFCONFIG,'','NCONFS')
+  IF cmds.numConf<1 THEN cmds.numConf:=1
 
   sysopAvail:=checkToolTypeExists(TOOLTYPE_NODE,node,'CHAT_ON')
 
@@ -26025,7 +26159,7 @@ PROC main() HANDLE
       ListAdd(computerTypes,[msg])
     ENDFOR
   ENDIF
-  IF ListLen(computerTypes)=0
+  IF computerEntries=0
     StrCopy(shutDownMsg,'Computer Types Error')
     Raise(ERR_COMPUTERTYPES)
   ENDIF
@@ -26068,6 +26202,7 @@ PROC main() HANDLE
  
   state:=STATE_AWAIT
   reqState:=REQ_STATE_NONE
+
   WHILE state<>STATE_SHUTDOWN
     IF state=STATE_AWAIT THEN processAwait()
     IF state=STATE_SYSOPLOGON THEN processSysopLogon()
