@@ -21866,7 +21866,7 @@ PROC internalCommandW()
       StringF(str,'[34m[[0m  7[34m][35m LINES PER SCREEN........ [33m\d[0m\b\n',loggedOnUser.lineLength)
       aePuts(str)
 
-      temp:=ListLen(computerEntries)
+      temp:=ListLen(computerTypes)
       IF temp=0
         StringF(str,'[34m[[0m  8[34m][35m COMPUTER................ [33m[0m\b\n')
       ELSEIF(loggedOnUser.secBulletin>=temp)
@@ -22087,7 +22087,7 @@ PROC internalCommandW()
           UNTIL stat=RESULT_SUCCESS
        CASE 8
           ->EDIT COMPUTER
-          IF((ListLen(computerEntries)>0))
+          IF((ListLen(computerTypes)>0))
             IF (stat:=chooseComputer()) 
               IF(stat<0) THEN RETURN stat
             ENDIF 
@@ -25486,7 +25486,7 @@ PROC openExpressScreen()
   DEF penstr[12]:STRING
   DEF debugstr[255]:STRING
   DEF pub=FALSE
-  DEF pubLock
+  DEF pubLock=NIL
   DEF opentags,temp
   DEF pens: PTR TO INT
   
