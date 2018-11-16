@@ -571,7 +571,7 @@ PROC getToolTypes(filename:PTR TO CHAR)
   DEF dobj: PTR TO diskobject,fn[255]:STRING,isCfg
   DEF toolTypes:PTR TO LONG
   DEF fh,fileBuf,off,lineCount
-  DEF i
+  DEF i,len
 
   dobj:=GetDiskObject(filename)
   isCfg:=FALSE
@@ -587,11 +587,23 @@ PROC getToolTypes(filename:PTR TO CHAR)
           off:=0
           lineCount:=0
           WHILE(ReadStr(fh,fn)<>-1) OR (StrLen(fn)>0)
-            AstrCopy(fileBuf+off,fn,ALL)
+            len:=0
+            WHILE (fn[len]<>0) AND (fn[len]<>";")
+              len++
+            ENDWHILE
+
+            ->trim trailing space
+            WHILE (fn[len-1]<=32) AND (len>0)
+              len--
+              EXIT len=0    ->this is just here to prevent the fn2[len-1] causing a buffer underrun in the absence of short circuit evaluation
+            ENDWHILE
+            SetStr(fn,len)
+
+            AstrCopy(fileBuf+off,fn,len+1)
             lineCount++
-            off:=off+StrLen(fn)+1
-          ENDWHILE
-          
+            off:=off+len+1
+          ENDWHILE        
+
           toolTypes:=List(lineCount+1)
           off:=0
           FOR i:=1 TO lineCount
@@ -771,7 +783,7 @@ ENDPROC 1
 PROC getuserstring(ostring:PTR TO CHAR,nl)
   DEF jhmsg: PTR TO jhMessage
 
-  jhmsg:=AllocMem(SIZEOF jhMessage,MEMF_PUBLIC)
+  jhmsg:=AllocMem(SIZEOF jhMessage,MEMF_PUBLIC OR MEMF_CLEAR)
   jhmsg.msg.ln.type:=NT_FREEMSG
   jhmsg.msg.length:=SIZEOF jhMessage
   jhmsg.msg.replyport:=0
@@ -1508,7 +1520,7 @@ PROC restrict(str:PTR TO CHAR)
   DEF fBlock:PTR TO fileinfoblock
 
   IF((fLock:=Lock(str,ACCESS_READ)))<>0
-    IF((fBlock:=AllocMem(SIZEOF fileinfoblock,MEMF_CHIP)))=NIL
+    IF((fBlock:=AllocMem(SIZEOF fileinfoblock,MEMF_CHIP OR MEMF_CLEAR)))=NIL
       bad:=TRUE
     ELSE 
       IF((Examine(fLock,fBlock)))=0

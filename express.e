@@ -3,17 +3,11 @@
 ->
 OPT LARGE,REG=5
 
-/*
-
-
-
-*/
-
-ENUM ERR_NONE, ERR_NOICON, ERR_NO_DISKFONT,ERR_SCREEN, ERR_WINDOW, ERR_MP, ERR_IO, ERR_DEV, ERR_PORT, ERR_ARG, ERR_BRKR, ERR_CXERR, ERR_LIB, ERR_PORT, ERR_ASL, ERR_KICK, ERR_LIB, ERR_SERVERRP, ERR_NOSERIAL, ERR_SSL, ERR_KICKVER, ERR_ALREADYRUNNING,ERR_COMPUTERTYPES
+ENUM ERR_NONE, ERR_NOICON, ERR_NO_DISKFONT,ERR_SCREEN, ERR_WINDOW, ERR_MP, ERR_IO, ERR_DEV, ERR_PORT, ERR_ARG, ERR_BRKR, ERR_CXERR, ERR_LIB, ERR_PORT, ERR_ASL, ERR_KICK, ERR_LIB, ERR_SERVERRP, ERR_NOSERIAL, ERR_SSL, ERR_KICKVER, ERR_ALREADYRUNNING,ERR_COMPUTERTYPES,ERR_NOSERIALLOCK,ERR_NOOWNDEVUNIT
 
 ENUM STATE_AWAIT, STATE_CONNECTING, STATE_SYSOPLOGON, STATE_LOGON, STATE_LOGGEDON, STATE_HANGUP, STATE_LOGGING_OFF, STATE_SHUTDOWN, STATE_CHECK,STATE_SUSPEND
 
-ENUM REQ_STATE_NONE, REQ_STATE_LOGOFF, REQ_STATE_SHUTDOWN, REQ_STATE_SHUTDOWN_OFFHOOK, REQ_STATE_DISPLAY_AWAIT, REQ_STATE_SYSOPLOGON, REQ_STATE_LOGON, REQ_STATE_RESUME
+ENUM REQ_STATE_NONE, REQ_STATE_LOGOFF, REQ_STATE_SHUTDOWN, REQ_STATE_SHUTDOWN_OFFHOOK, REQ_STATE_SYSOPLOGON, REQ_STATE_LOGON, REQ_STATE_RESUME
 
 ENUM SUBSTATE_DISPLAY_AWAIT, SUBSTATE_INPUT, SUBSTATE_DISPLAY_BULL, SUBSTATE_DISPLAY_CONF_BULL, SUBSTATE_DISPLAY_MENU, SUBSTATE_READ_COMMAND,  SUBSTATE_PROCESS_COMMAND
 
@@ -224,7 +218,6 @@ MODULE 'intuition/screens',
        'dos/dosextens',
        'dos/datetime',
        'dos/dostags',
-       'dos/dosextens',
        'graphics/text',
        'libraries/diskfont',
        'diskfont',
@@ -253,7 +246,8 @@ MODULE 'intuition/screens',
        'net/in',
        'amissl',
        'amisslmaster',
-       'fifo'
+       'fifo',
+       'owndevunit'
 
   MODULE '*axcommon'
 
@@ -403,6 +397,7 @@ ENDOBJECT
 
 OBJECT awaitState
   subState
+  redrawScreen
 ENDOBJECT
 
 OBJECT loggedOnState
@@ -624,6 +619,8 @@ DEF nodeScreenDir[255]:STRING
 DEF confScreenDir[255]:STRING
 DEF nodeWorkDir[255]:STRING
 DEF reservedName[255]:STRING
+DEF consoleOutputDeviceName[255]:STRING
+DEF consoleInputDeviceName[255]:STRING
 
 DEF currentConf=0
 DEF relConfNum=0
@@ -841,6 +838,9 @@ DEF diskObjectCache:PTR TO LONG
 DEF cacheResetOn=CACHE_RESET_NEVER
 DEF cacheTests=0
 DEF cacheHits=0
+
+DEF serialLocked=FALSE
+DEF ownDevSignal=0
 
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
@@ -3908,7 +3908,7 @@ PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
   DEF fn2[255]:STRING
   DEF ownToolTypes
   DEF toolTypes:PTR TO LONG
-  DEF fh,fileBuf,off,lineCount
+  DEF fh,fileBuf,off,lineCount,len
 
   IF diskObjectCache<>NIL
     cnt:=ListLen(diskObjectCache)
@@ -3953,9 +3953,21 @@ PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
             off:=0
             lineCount:=0
             WHILE(ReadStr(fh,fn2)<>-1) OR (StrLen(fn2)>0)
-              AstrCopy(fileBuf+off,fn2,ALL)
+              len:=0
+              WHILE (fn2[len]<>0) AND (fn2[len]<>";")
+                len++
+              ENDWHILE
+
+              ->trim trailing space
+              WHILE (fn2[len-1]<=32) AND (len>0)
+                len--
+                EXIT len=0    ->this is just here to prevent the fn2[len-1] causing a buffer underrun in the absence of short circuit evaluation
+              ENDWHILE
+              SetStr(fn2,len)
+
+              AstrCopy(fileBuf+off,fn2,len+1)
               lineCount++
-              off:=off+StrLen(fn2)+1
+              off:=off+len+1
             ENDWHILE
             
             toolTypes:=List(lineCount+1)
@@ -4637,11 +4649,11 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
           CASE PRV_GROUP
             StrCopy(tempstring,msg.string)
               temp:=Val(tempstring)
-              strCpy(cmds.conf1Loc+(temp*54),tempstring+40,54)
+                strCpy(cmds.conf1Loc+(temp*54),tempstring+40,54)
               IF(temp=(currentConf-1)) THEN StrCopy(currentConfDir,tempstring+40)
               tempstring[39]:=0
               stripReturn(tempstring)
-              strCpy(cmds.conf1Name+(temp*54),tempstring+2,54)
+                strCpy(cmds.conf1Name+(temp*54),tempstring+2,54)
               IF(temp=(currentConf-1)) THEN StrCopy(currentConfName,tempstring+2)
           CASE BB_CONFNUM
             StringF(tempstring,'\d',currentConf-1)
@@ -5825,6 +5837,15 @@ PROC processMciCmd(mcidata,len,pos)
       pos:=pos+2+t
       StringF(tempstr,'\d',getCallerCount())
       aePuts2(tempstr,nlen)    
+    ELSEIF (StrCmp(cmd,'VE',ALL))
+      aePuts2(expressVer,nlen)    
+      pos:=pos+2+t
+    ELSEIF (StrCmp(cmd,'VD',ALL))
+      aePuts2(expressDate,nlen)    
+      pos:=pos+2+t
+    ELSEIF (StrCmp(cmd,'AK',ALL))
+      pos:=pos+2+t
+      displayKeys()
     ELSEIF (StrCmp(cmd,'CT',ALL))
       pos:=pos+2+t
       formatLongTime(logonTime,tempstr)
@@ -7027,30 +7048,44 @@ PROC findSecurityScreen(screenDirAndName,screenfileName)
 
 ENDPROC FALSE
 
-PROC suspendBBS()
+PROC suspendBBS(ownDevRequest=FALSE)
   DEF wasopen
-  DEF oldstate
+  DEF oldstate,oldenvstat
   DEF rexxsig
   DEF error[255]:STRING
   DEF tempstr[255]:STRING,tempstr2[255]:STRING
+
 
   wasopen:=scropen
   oldstate:=state
 
   IF rexxmp<>NIL THEN rexxsig:=Shl(1, rexxmp.sigbit)
 
+  oldenvstat:=currentStat
   state:=STATE_SUSPEND
+  setEnvStat(ENV_SUSPEND)
   IF scropen THEN closeExpressScreen()
  
   closeSerial()
+
+  IF ownDevRequest AND serialLocked
+    FreeDevUnit(cmds.serDev,cmds.serDevUnit)
+  ENDIF
 
   formatLongDateTime(getSystemTime(),tempstr)
   StringF(tempstr2,'BBS has been suspended at \s',tempstr)
   startLog(tempstr2)
 
+  StringF(tempstr,'Express Node \d',node)
   WHILE(reqState<>REQ_STATE_RESUME)
-    Wait(rexxsig)
-    processRexxMessage()
+    IF ownDevRequest AND serialLocked
+      IF AttemptDevUnit(cmds.serDev, cmds.serDevUnit, tempstr, ownDevSignal )=FALSE
+        reqState:=REQ_STATE_RESUME
+      ENDIF
+    ELSE
+      Wait(rexxsig)
+      processRexxMessage()
+    ENDIF
   ENDWHILE
   state:=oldstate
   reqState:=REQ_STATE_NONE
@@ -7059,11 +7094,13 @@ PROC suspendBBS()
   StringF(tempstr2,'BBS has received resume @ \s',tempstr)
   startLog(tempstr2)
 
+  
   IF(openSerial(cmds.openingBaud,8,1)<>0)
     StringF(shutDownMsg,'Can''t open \s!',cmds.serDev)
     reqState:=REQ_STATE_SHUTDOWN
     RETURN
   ENDIF
+  setEnvStat(oldenvstat)
 
  IF(wasopen)   /* got msg to LICON this (Uniconify this */
    openExpressScreen()
@@ -7596,7 +7633,7 @@ PROC clearStatusPane()
   statPrint('[0m')     /* and set text to normal */
   statParkCursor()
 
-  StringF(tempStr,'\d[6]',cmds.openingBaud)
+  StringF(tempStr,'\r\d[7]',cmds.openingBaud)
   statMessage(73,1,tempStr)
 ENDPROC
 
@@ -7849,6 +7886,7 @@ PROC processInputMessage(timeout, extsig = 0)
     DEF ch=0,lch,wasControl=0,signals
     DEF doorsig=0,rexxsig=0,serialsig=0,timersig=0,timedout=0
     DEF temp[255]:STRING
+    DEF statePtr: PTR TO awaitState
 
     chatSerFlag:=0
     chatConFlag:=0
@@ -8007,9 +8045,10 @@ PROC processInputMessage(timeout, extsig = 0)
   ENDIF
 
   IF (state=STATE_AWAIT)
+    statePtr:=stateData
     IF servercmd=SV_UNICONIFY
       IF scropen THEN expressToFront() ELSE openExpressScreen()
-      reqState:=REQ_STATE_DISPLAY_AWAIT
+      statePtr.redrawScreen:=TRUE
     ENDIF
 
     ->F1
@@ -8065,7 +8104,7 @@ PROC processInputMessage(timeout, extsig = 0)
 			  ioFlags[IOFLAG_SCR_OUT]:=0
         setEnvStat(ENV_RESERVE)
 			ENDIF
-      IF reqState=REQ_STATE_NONE THEN reqState:=REQ_STATE_DISPLAY_AWAIT
+      IF reqState=REQ_STATE_NONE THEN statePtr.redrawScreen:=TRUE
     ENDIF
     
     ->F5
@@ -8097,7 +8136,7 @@ PROC processInputMessage(timeout, extsig = 0)
       ioFlags[IOFLAG_SER_IN]:=-1
       ioFlags[IOFLAG_SCR_OUT]:=0
       IF(ioFlags[IOFLAG_FIL_IN]) THEN ioFlags[IOFLAG_FIL_IN]:=0
-      IF reqState=REQ_STATE_NONE THEN reqState:=REQ_STATE_DISPLAY_AWAIT
+      IF reqState=REQ_STATE_NONE THEN statePtr.redrawScreen:=TRUE
     ENDIF
 
     ->Shift F5
@@ -8107,13 +8146,14 @@ PROC processInputMessage(timeout, extsig = 0)
       ioFlags[IOFLAG_SCR_OUT]:=-1
       intDoReset(sopt.offHook)
       IF (scropen) THEN expressToFront() ELSE openExpressScreen()
+      setEnvStat(ENV_SHELL)
       sendCLS()
       remoteShell()
       resetSystem(1)
       ioFlags[IOFLAG_SER_IN]:=-1
       ioFlags[IOFLAG_SCR_OUT]:=0
       IF(ioFlags[IOFLAG_FIL_IN]) THEN ioFlags[IOFLAG_FIL_IN]:=0
-      IF reqState=REQ_STATE_NONE THEN reqState:=REQ_STATE_DISPLAY_AWAIT
+      IF reqState=REQ_STATE_NONE THEN statePtr.redrawScreen:=TRUE
     ENDIF
 
     ->F6
@@ -8147,7 +8187,7 @@ PROC processInputMessage(timeout, extsig = 0)
       ioFlags[IOFLAG_SER_IN]:=-1
       ioFlags[IOFLAG_SCR_OUT]:=0
       IF(ioFlags[IOFLAG_FIL_IN]) THEN ioFlags[IOFLAG_FIL_IN]:=0
-      IF reqState=REQ_STATE_NONE THEN reqState:=REQ_STATE_DISPLAY_AWAIT
+      IF reqState=REQ_STATE_NONE THEN statePtr.redrawScreen:=TRUE
     ENDIF
 
     ->Shift F6
@@ -8165,6 +8205,7 @@ PROC processInputMessage(timeout, extsig = 0)
       loggedOnUser:=NEW loggedOnUser
       loggedOnUserKeys:=NEW loggedOnUserKeys
       loggedOnUserMisc:=NEW loggedOnUserMisc
+      setEnvStat(ENV_SYSOP)
       loadAccount(1,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
       masterLoadPointers(loggedOnUser)
       displayCallersLog(temp,FALSE)
@@ -8178,7 +8219,7 @@ PROC processInputMessage(timeout, extsig = 0)
       ioFlags[IOFLAG_SER_IN]:=-1
       ioFlags[IOFLAG_SCR_OUT]:=0
       IF(ioFlags[IOFLAG_FIL_IN]) THEN ioFlags[IOFLAG_FIL_IN]:=0
-      IF reqState=REQ_STATE_NONE THEN reqState:=REQ_STATE_DISPLAY_AWAIT
+      IF reqState=REQ_STATE_NONE THEN statePtr.redrawScreen:=TRUE
     ENDIF
 
     ->F7
@@ -8213,7 +8254,6 @@ PROC processInputMessage(timeout, extsig = 0)
     IF ((wasControl=2) AND (ch="9")) 
       clearDiskObjectCache()
     ENDIF
-
     
     IF ((wasControl=1) AND (ch="?"))
       toggleStatusDisplay()
@@ -9335,6 +9375,80 @@ PROC errorLog(stringout: PTR TO CHAR)
 	  Close(gfp1)
 	ENDIF
 ENDPROC
+
+PROC fileListReverse(filename: PTR TO CHAR)
+  DEF currentPos,readsize,loop,stat,stat2
+  DEF buf:PTR TO CHAR
+  DEF bufptr1:PTR TO CHAR, bufptr2:PTR TO CHAR
+  DEF fh
+  DEF memsize=4096
+  DEF bufend,temp
+  readsize:=memsize
+
+  IF (buf:=New((memsize*2)+2))<>0
+    bufptr1:=buf
+    bufptr2:=buf+memsize+1
+    bufend:=FALSE
+
+    IF(fh:=Open(filename,MODE_OLDFILE))>0
+    
+      Seek(fh,0,OFFSET_END)
+      currentPos:=Seek(fh,0,OFFSET_CURRENT)
+      readsize:=memsize
+      stat:=0
+      REPEAT
+        IF currentPos<memsize
+          readsize:=currentPos
+          currentPos:=0
+        ELSE
+          currentPos:=currentPos-memsize
+        ENDIF
+
+        Seek(fh,currentPos,OFFSET_BEGINNING)
+        Read(fh,bufptr2,readsize)
+        bufptr2[readsize]:=0
+        FOR loop:=readsize-1 TO 0 STEP -1
+          IF (bufptr2[loop]="\n") AND (((bufend) AND (loop=(readsize-1)) AND (bufptr1[0]>" ")) OR (bufptr2[loop+1]>" "))
+            stat:=displayIt3(bufptr2+loop+1)
+            bufptr2[loop+1]:=0
+            IF stat<0
+              Close(fh)
+              END buf
+              RETURN stat
+            ENDIF
+            IF bufend
+              stat:=displayIt3(bufptr1)
+              IF stat<0
+                Close(fh)
+                END buf
+                RETURN stat
+              ENDIF
+            ENDIF
+            bufend:=FALSE
+          ENDIF
+        ENDFOR
+        IF (currentPos>0) THEN bufend:=TRUE
+        temp:=bufptr1
+        bufptr1:=bufptr2
+        bufptr2:=temp
+      UNTIL (currentPos<=0) OR (stat<0)
+      Close(fh)
+      stat:=displayIt3(bufptr1)
+      IF stat<0
+        END buf
+        RETURN stat
+      ENDIF
+      IF bufend
+        stat:=displayIt3(bufptr2)
+        IF stat<0
+          END buf
+          RETURN stat
+        ENDIF
+      ENDIF
+    ENDIF
+    END buf
+  ENDIF
+ENDPROC RESULT_SUCCESS
 
 PROC displayCallersLog(filename: PTR TO CHAR,tf)
 
@@ -12401,7 +12515,7 @@ PROC showFlags()
     aePuts('No file flags\b\n')
   ELSE
       aePuts(flaglist)
-      aePuts('\b\n')
+    aePuts('\b\n')
   ENDIF
 ENDPROC
 
@@ -13335,12 +13449,12 @@ PROC sendMaster()
   IF loggedOnUser<>NIL
     strCpy(masterMsg.user,loggedOnUser.name,ALL)
     strCpy(masterMsg.location,loggedOnUser.location,ALL)
-    StringF(temp,'\d[6]',onlineBaud)
+    StringF(temp,'\r\d[7]',onlineBaud)
     strCpy(masterMsg.baud,temp,ALL)
   ELSE
     strCpy(masterMsg.user,'',ALL)
     strCpy(masterMsg.location,'',ALL)
-    StringF(temp,'\d[6]',cmds.openingBaud)
+    StringF(temp,'\r\d[7]',cmds.openingBaud)
     strCpy(masterMsg.baud,temp,ALL)
   ENDIF
  
@@ -13544,7 +13658,7 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
 
 ->what goes in here? seems blank
 
-  StringF(string,'\d[6]',onlineBaud)
+  StringF(string,'\r\d[7]',onlineBaud)
   statMessage(73,1,string)
 
   StringF(string,'\s[31]',hoozer.location)
@@ -14654,7 +14768,7 @@ PROC updateZDisplay()
      zmodemStatPrint(tempstr)
 
   ENDIF
-  StringF(tempstr,'\d[6]',zModemInfo.cps)
+  StringF(tempstr,'\r\d[7]',zModemInfo.cps)
   sendACPCommand2(tempstr,JH_TRANSFERCPS)
 ENDPROC
 
@@ -21157,6 +21271,12 @@ PROC internalCommandF(params)
   setEnvStat(ENV_FILES) 
 ENDPROC displayFileList(params);
 
+PROC internalCommandFR(params)
+  IF checkSecurity(ACS_FILE_LISTINGS)=FALSE THEN RETURN RESULT_NOT_ALLOWED
+  
+  setEnvStat(ENV_FILES) 
+ENDPROC displayFileList(params,TRUE);
+
 PROC internalCommandFM(params)
   DEF stat,fLLoop,mystat
   DEF str[200]:STRING,ss[80]:STRING,ray[200]:STRING
@@ -23514,7 +23634,7 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
   FreeMem(myzip,25600)
 ENDPROC RESULT_SUCCESS
 
-PROC displayFileList(params)
+PROC displayFileList(params, reverse=FALSE)
   DEF stat,stat2,fLLoop
   DEF str[81]:STRING,ray[200]:STRING
   DEF tempfile[256]:STRING
@@ -23542,15 +23662,23 @@ PROC displayFileList(params)
  
   nonStopDisplayFlag:=paramsContains('NS')
  
-  fLLoop:=startDir
-  WHILE(fLLoop<=dirScan)
+  IF reverse 
+    fLLoop:=dirScan
+  ELSE
+    fLLoop:=startDir
+  ENDIF
+  WHILE(fLLoop<=dirScan) AND (fLLoop>=startDir)
  	  StrCopy(str,currentConfDir)
  	  IF(dirScan<>(-1))
       IF(fLLoop = maxDirs)    /* at upload dir */
         StrAdd(str,'DIR')
  	     	StringF(ray,'\d',fLLoop)
  		    StrAdd(str,ray)
-  		  StringF(ray,'Scanning directory \d\b\n',fLLoop)
+        IF reverse
+          StringF(ray,'Reverse scanning directory \d\b\n',fLLoop)
+        ELSE
+          StringF(ray,'Scanning directory \d\b\n',fLLoop)
+        ENDIF
         aePuts(ray)
  
         /* now copy to T: and use T: copy */
@@ -23575,7 +23703,11 @@ PROC displayFileList(params)
       IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
   	  RETURN stat
     ENDIF
-    stat:=displayIt(str)
+    IF reverse
+      stat:=fileListReverse(str)
+    ELSE
+      stat:=displayIt(str)
+    ENDIF
     IF(fcopy)
       DeleteFile(tempfile) ->(RTS)
       fcopy:=FALSE
@@ -23586,7 +23718,11 @@ PROC displayFileList(params)
     ->if(DirScan == MaxDirs)  return(stat);
  
  	  aePuts('\b\n')
- 	  fLLoop++
+    IF reverse
+      fLLoop--
+    ELSE
+      fLLoop++
+    ENDIF
  	ENDWHILE
   IF(fcopy) THEN DeleteFile(tempfile);  ->(RTS)
 ENDPROC RESULT_SUCCESS
@@ -23612,6 +23748,61 @@ PROC displayIt2(fp)
 
   WHILE(Fgets(fp,str,180)<>NIL)
    	str[181]:=0
+    SetStr(str,StrLen(str))
+ 	  IF(str[StrLen(str)-1]="\n")
+  		IF(nonStopDisplayFlag=FALSE) THEN	lineCount++
+ 	    StrAdd(str,'\b')
+ 		ENDIF
+ 
+    IF(color=1) THEN aePuts('[0m')
+    aePuts(str)
+ 
+ 	  IF(sCheckInput())	
+  		stat:=readChar(1)
+ 	    IF(stat<0) 
+        RETURN stat
+      ENDIF
+ 		  SELECT stat
+        CASE 23  /* Pause */
+          stat:=readChar(INPUT_TIMEOUT)
+          IF(stat<0)
+            RETURN RESULT_NO_CARRIER
+          ENDIF
+        CASE 3 /* ^C */
+          aePuts('**Break\b\n\b\n')
+          RETURN RESULT_FAILURE
+ 			ENDSELECT
+ 		ENDIF
+    IF newFilesPauseFlag
+      moreStat:=checkForPause()
+    ELSE
+      moreStat:=flagPause(0)
+    ENDIF
+ 	  IF(moreStat<0) 
+  		RETURN moreStat
+    ENDIF
+ 	ENDWHILE 
+ENDPROC RESULT_SUCCESS
+
+PROC displayIt3(buffer:PTR TO CHAR)
+  DEF moreStat,stat,color = 0
+  DEF str[200]:STRING
+  DEF count
+  DEF loop=TRUE
+
+  WHILE(loop)
+    count:=0
+    WHILE (buffer[0]<>0) AND (buffer[0]<>"\n") AND (count<180)
+      str[count++]:=buffer[0]
+      buffer++
+    ENDWHILE
+    IF buffer[0]="\n"
+      str[count++]:=buffer[0]
+      buffer++     
+    ELSEIF buffer[0]=0
+      loop:=FALSE
+    ENDIF
+    str[count++]:=0
     SetStr(str,StrLen(str))
  	  IF(str[StrLen(str)-1]="\n")
   		IF(nonStopDisplayFlag=FALSE) THEN	lineCount++
@@ -24102,6 +24293,8 @@ PROC processInternalCommand(cmdcode,cmdparams,privcmd=FALSE)
     res:=internalCommandT()
   ELSEIF (StrCmp(cmdcode,'F'))
     res:=internalCommandF(cmdparams)
+  ELSEIF (StrCmp(cmdcode,'FR'))
+    res:=internalCommandFR(cmdparams)
   ELSEIF (StrCmp(cmdcode,'FM'))
     res:=internalCommandFM(cmdparams)
   ELSEIF (StrCmp(cmdcode,'FS'))
@@ -24568,7 +24761,7 @@ PROC processLogon()
   ENDIF
   aePuts(tempStr)
 
- StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright (C)2018 Darren Coles\b\n',expressVer)
+ StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018 Darren Coles\b\n',expressVer)
  aePuts(tempStr)
  aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
  StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
@@ -24831,6 +25024,16 @@ logonLoop:
   stateData:=0
 ENDPROC
 
+PROC displayKeys()
+  aePuts('         [44;33m F1 [40;35m  }- [33mSysop Login             [44;33m F2 [40;35m  }- [33mLocal Login\b\n')
+  aePuts('         [44;33m F3 [40;35m  }- [33mInstant Remote Logon    [44;33m F4 [40;35m  }- [33mReserve for a user\b\n')
+  aePuts('         [44;33m F5 [40;35m  }- [33mConference Maintenance  [44;33m F6 [40;35m  }- [33mAccount Editing\b\n')
+  aePuts('       [44;33m SH+F5 [40;35m }- [33mOpen Shell            [44;33m SH+F6 [40;35m }- [33mView Callerslog\b\n')
+  aePuts('         [44;33m F7 [40;35m  }- [33mChat Toggle             [44;33m F8 [40;35m  }- [33mReprogram modem\b\n')
+  aePuts('         [44;33m F9 [40;35m  }- [33mExit BBS               [44;33m F10 [40;35m  }- [33mExit BBS [33m([37moff hook[33m)[0m\b\n')
+  aePuts('                                       [44;33m SH+F10 [40;35m }- [33mClear tooltype cache[0m')
+ENDPROC
+
 PROC processAwait()
     DEF obuf[255]:STRING
     DEF tempstr[255]:STRING
@@ -24844,6 +25047,7 @@ PROC processAwait()
         subState:=NEW subState
         serShared:=FALSE
         subState.subState:=SUBSTATE_DISPLAY_AWAIT
+        subState.redrawScreen:=FALSE
         IF(sopt.trapDoor=FALSE) THEN resetSystem(1)
 
         stateData:=subState
@@ -24853,7 +25057,8 @@ PROC processAwait()
         subState:=stateData
     ENDIF
     
-    IF (subState.subState=SUBSTATE_DISPLAY_AWAIT)
+    IF (subState.subState=SUBSTATE_DISPLAY_AWAIT) OR subState.redrawScreen
+        subState.redrawScreen:=FALSE
         ioFlags[IOFLAG_SCR_OUT]:=-1
         ioFlags[IOFLAG_SER_OUT]:=0
         setEnvStat(ENV_AWAITCONNECT)
@@ -24869,7 +25074,7 @@ PROC processAwait()
 
           StringF(tempstr,'\b\n           [33m© 1992-1995 AmiExpress [37mby[35m Light Speed Technologies Inc.[0m\b\n')
           aePuts(tempstr)
-          StringF(tempstr,'\b\n                             [33m Version 5 © 2018[0m\b\n')
+          StringF(tempstr,'\b\n                              [33m Version 5 ©2018[0m\b\n')
           aePuts(tempstr)
 
           StringF(tempstr,'\b\n                       [37m Programming by: [33m Darren Coles')
@@ -24877,12 +25082,7 @@ PROC processAwait()
           aePuts('\b\n  [33m\b\n')
 
           IF displayScreen(SCREEN_AWAIT)=FALSE        
-            aePuts('            [44;33m F1 [40;35m}- [33mSysop Login            [44;33m F2 [40;35m}- [33mLocal Login\b\n')
-            aePuts('            [44;33m F3 [40;35m}- [33mInstant Remote Logon   [44;33m F4 [40;35m}- [33mReserve for a user\b\n')
-            aePuts('            [44;33m F5 [40;35m}- [33mConference Maintenance [44;33m F6 [40;35m}- [33mAccount Editing\b\n')
-            aePuts('            [44;33m F7 [40;35m}- [33mChat Toggle            [44;33m F8 [40;35m}- [33mReprogram modem\b\n')
-            aePuts('            [44;33m F9 [40;35m}- [33mExit BBS               [44;33m F0 [40;35m}- [33mExit BBS [33m([37moff hook[33m)[0m\b\n\b\n')
-
+            displayKeys()
             IF(StrLen(reservedName)>0)
               StringF(tempstr,'         [44;33m     The BBS is reserved for [31m\s[30]  [0m\b\n',reservedName)
               aePuts(tempstr)
@@ -24890,13 +25090,18 @@ PROC processAwait()
           ENDIF
         ENDIF
       
-        subState.subState:=SUBSTATE_INPUT
+        IF subState.subState=SUBSTATE_DISPLAY_AWAIT THEN subState.subState:=SUBSTATE_INPUT
         ioFlags[IOFLAG_SCR_OUT]:=0
         ioFlags[IOFLAG_SER_IN]:=0
     ENDIF
 
     IF (sopt.trapDoor=FALSE)
-      wasControl,ch:=processInputMessage(1)
+      wasControl,ch:=processInputMessage(1,Shl(1,ownDevSignal))
+      IF (ch=RESULT_SIGNALLED)
+        suspendBBS(TRUE)
+        displayInitialisingLogo()
+        reInitModem()
+      ENDIF
       IF dStatBar THEN clearStatusPane()
     ENDIF
     
@@ -24908,11 +25113,6 @@ PROC processAwait()
         logonType:=LOGON_TYPE_REMOTE
         reqState:=REQ_STATE_LOGON
       ENDIF
-    ENDIF
-
-    IF reqState=REQ_STATE_DISPLAY_AWAIT
-      subState.subState:=SUBSTATE_DISPLAY_AWAIT
-      reqState:=REQ_STATE_NONE
     ENDIF
 
     IF reqState<>REQ_STATE_NONE
@@ -25479,7 +25679,6 @@ PROC openZmodemStat()
 ENDPROC
 
 PROC openExpressScreen()
-  DEF error
   DEF width,height,top,left,dispId,colourcount
   DEF blockpen
   DEF pubScreen[255]:STRING
@@ -25489,6 +25688,7 @@ PROC openExpressScreen()
   DEF pubLock=NIL
   DEF opentags,temp
   DEF pens: PTR TO INT
+  DEF statePtr:PTR TO awaitState
   
   IF scropen THEN RETURN
     
@@ -25665,7 +25865,10 @@ PROC openExpressScreen()
     openZmodemStat()
   ENDIF
 
-  IF state=STATE_AWAIT THEN reqState:=REQ_STATE_DISPLAY_AWAIT
+  IF state=STATE_AWAIT
+    statePtr:=stateData
+    statePtr.redrawScreen:=TRUE
+  ENDIF
     
   -> Create reply port and io block for writing to console
   IF consoleMP=NIL THEN consoleMP:=createPort(0, 0)
@@ -25682,10 +25885,23 @@ PROC openExpressScreen()
 
   consoleIO.data:=window
   consoleIO.length:=SIZEOF window
-  IF error:=OpenDevice('console.device', 0, consoleIO, 0) THEN RETURN ERR_DEV
- 
-  consoleReadIO.device:=consoleIO.device  -> Clone required parts
-  consoleReadIO.unit:=consoleIO.unit
+  IF OpenDevice(consoleOutputDeviceName, 0, consoleIO, 0) THEN RETURN ERR_DEV
+
+  IF strCmpi(consoleInputDeviceName,consoleOutputDeviceName,ALL)
+    ->both console devices the same, so share the same device
+    consoleReadIO.device:=consoleIO.device
+    consoleReadIO.unit:=consoleIO.unit
+  ELSE
+    ->open a second device if the input and output devices aren't matching
+    consoleReadIO.data:=window
+    consoleReadIO.length:=SIZEOF window
+    IF OpenDevice(consoleInputDeviceName, 0, consoleReadIO, 0) THEN RETURN ERR_DEV
+    consoleReadIO.command:=CMD_WRITE
+    consoleReadIO.data:='[37m[ s[0 p'
+    consoleReadIO.length:=14
+    DoIO(consoleReadIO)
+  ENDIF
+
   queueRead(consoleReadIO, {ibuf})  -> Send the first console read request
   scropen:=TRUE
   conPuts('[37m[ s')
@@ -25702,6 +25918,16 @@ PROC closeExpressScreen()
     closeAEStats()
     closezModemStats()
     
+  IF consoleReadIO
+    IF CheckIO(consoleReadIO)=FALSE THEN AbortIO(consoleReadIO)
+->    WaitIO(consoleReadIO)
+    IF (consoleReadIO.device<>consoleIO.device) OR (consoleReadIO.unit<>consoleIO.unit)
+      CloseDevice(consoleReadIO)
+    ENDIF
+    deleteExtIO(consoleReadIO)
+  consoleReadIO:=NIL
+  ENDIF  
+
     IF consoleIO
       IF CheckIO(consoleIO)=FALSE THEN AbortIO(consoleIO)
 ->    WaitIO(consoleIO)
@@ -25709,12 +25935,6 @@ PROC closeExpressScreen()
       deleteExtIO(consoleIO)
     consoleIO:=NIL
     ENDIF 
-  IF consoleReadIO
-    IF CheckIO(consoleReadIO)=FALSE THEN AbortIO(consoleReadIO)
-->    WaitIO(consoleReadIO)
-    deleteExtIO(consoleReadIO)
-  consoleReadIO:=NIL
-  ENDIF  
 
   IF consoleMP 
   deletePort(consoleMP)
@@ -25759,8 +25979,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
    
-  StrCopy(expressVer,'v5.0.0-b16',ALL)
-  StrCopy(expressDate,'01-Nov-2018',ALL)
+  StrCopy(expressVer,'v5.0.0-b17',ALL)
+  StrCopy(expressDate,'16-Nov-2018',ALL)
 
   InitSemaphore(bgData)
  
@@ -25942,12 +26162,21 @@ PROC main() HANDLE
   IF fileExists(tempstr)
     StrCopy(fCheckDir,tempstr)
   ENDIF
-  
-  IF(openSerial(cmds.openingBaud,8,1)<>0)
-    StringF(tempstr,'Can''t open \s!',cmds.serDev)
-    debugLog(LOG_ERROR,tempstr)
-    Raise(ERR_NOSERIAL)
+
+  IF checkToolTypeExists(TOOLTYPE_NODE,node,'OWNDEVUNIT') AND (StrLen(cmds.serDev)>0)
+    owndevunitbase:=OpenLibrary('OwnDevUnit.library',0)
+    IF owndevunitbase=NIL THEN Raise(ERR_NOOWNDEVUNIT)
+
+    ownDevSignal:=AllocSignal(-1)
+    StringF(tempstr,'Express Node \d',node)
+    IF AttemptDevUnit(cmds.serDev, cmds.serDevUnit, tempstr, ownDevSignal )
+      Raise(ERR_NOSERIALLOCK)
+    ELSE
+      serialLocked:=TRUE
+    ENDIF
   ENDIF
+
+  IF(openSerial(cmds.openingBaud,8,1)<>0) THEN Raise(ERR_NOSERIAL)
  
   IF(sopt.trapDoor)
     IF (i:=InStr(arg,' '))<>-1
@@ -26030,6 +26259,12 @@ PROC main() HANDLE
   consoleDebugLevel:=readToolTypeInt(TOOLTYPE_NODE,node,'CONSOLE_DEBUG')
   IF checkToolTypeExists(TOOLTYPE_NODE,node,'DEBUG_LOG') THEN debugLogLevel:=LOG_WARN ELSE debugLogLevel:=LOG_NONE
   
+  StrCopy(consoleOutputDeviceName,'console.device')
+  readToolType(TOOLTYPE_NODE,node,'CONSOLE_OUTPUT_DEVICE',consoleOutputDeviceName)
+
+  StrCopy(consoleInputDeviceName,'console.device')
+  readToolType(TOOLTYPE_NODE,node,'CONSOLE_INPUT_DEVICE',consoleInputDeviceName)
+
   confBases:=List(cmds.numConf)
   FOR i:=1 TO cmds.numConf
     cb:=NEW cb
@@ -26349,6 +26584,13 @@ PROC main() HANDLE
   IF resmp THEN deleteResControl()
   IF rexxmp THEN deleteRexxPort()
 
+  IF ownDevSignal<>NIL THEN FreeSignal(ownDevSignal)
+  IF serialLocked
+    FreeDevUnit(cmds.serDev,cmds.serDevUnit)
+    serialLocked:=FALSE
+  ENDIF
+  IF owndevunitbase THEN CloseLibrary(owndevunitbase)
+
   closeSerial()
 
   IF (doorExtSig<>NIL) THEN FreeSignal(doorExtSig)
@@ -26370,6 +26612,15 @@ PROC main() HANDLE
     debugLog(LOG_ERROR,'Error: Could not create message port')
   CASE ERR_ALREADYRUNNING
     debugLog(LOG_ERROR,'Error: Node already running')
+  CASE ERR_NOSERIAL
+    StringF(tempstr,'Can''t open \s!',cmds.serDev)
+    debugLog(LOG_ERROR,tempstr)
+  CASE ERR_NOSERIALLOCK
+    StringF(tempstr,'Can''t get an owndevunit lock on \s!',cmds.serDev)
+    debugLog(LOG_ERROR,tempstr)
+  CASE ERR_NOOWNDEVUNIT
+    StringF(tempstr,'Can''t open owndevunit.library',cmds.serDev)
+    debugLog(LOG_ERROR,tempstr)
   ENDSELECT
 ENDPROC
 
