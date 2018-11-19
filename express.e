@@ -583,7 +583,7 @@ DEF debugLogLevel=LOG_NONE
 
 DEF inac=FALSE
 
-DEF state, stateData, reqState,instantLogon=FALSE
+DEF state=-1, stateData, reqState,instantLogon=FALSE
 DEF windowClose=NIL:PTR TO window
 DEF windowStat=NIL:PTR TO window
 DEF windowZmodem:PTR TO window
@@ -5530,8 +5530,9 @@ PROC joinConf(conf, confScan, auto, skipMailScan=FALSE)
     aePuts('\b\n')
     IF (auto) 
       scanHoldDesc()
-      internalCommandS()
+      processSysCommand('S')
       StringF(string,'Conference \d: \s Auto-ReJoined',relConfNum,currentConfName)
+      aePuts(string)
     ELSE
       StringF(string,'[32mJoining Conference[33m:[0m \s',currentConfName)
       aePuts(string)
@@ -25742,13 +25743,12 @@ PROC openExpressScreen()
   bitPlanes:=sopt.bitPlanes
   
   IF fontHandle=NIL
-    IF readToolType(TOOLTYPE_NODE,node,'EXPFONT',fontName)
-    defaultfontattr.name:=fontName
-    defaultfontattr.ysize:=8
+    readToolType(TOOLTYPE_NODE,node,'EXPFONT',fontName)
+      defaultfontattr.name:=fontName
+      defaultfontattr.ysize:=8
 
-    fontHandle:=OpenFont(defaultfontattr)
-    IF fontHandle=NIL THEN fontHandle:=OpenDiskFont(defaultfontattr)
-  ENDIF
+      fontHandle:=OpenFont(defaultfontattr)
+      IF fontHandle=NIL THEN fontHandle:=OpenDiskFont(defaultfontattr)
   ENDIF
 
   IF pub=FALSE
