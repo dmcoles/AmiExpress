@@ -1,6 +1,6 @@
 -> ACP v5
 
-  OPT LARGE,REG=5
+  OPT LARGE,REG=5,OSVERSION=37
 
   MODULE 'workbench/startup',
        'exec/ports',
@@ -25,10 +25,13 @@
        'amigalib/ports',
        'amigalib/lists',
        'workbench/workbench',
+       'asl',
+       'libraries/asl',
        'wb',
        'icon'
 
-  MODULE '*axcommon'
+  MODULE '*axcommon',
+         '*jsonParser'
 
 /*
 'Setup'
@@ -399,6 +402,8 @@ DEF minNode=NIL: PTR TO mln
 
 DEF lockedNodes=-1
 
+DEF shellMode=FALSE
+
 /* some global variables used to replace the statics from the C version 
 they are prefixed with the procdure name to prevent any name clashes
 */
@@ -498,7 +503,11 @@ PROC initNgAry()
   
   ngAry[0]:=[GLEF_SYSOPLOGIN,topOffset+(theight*11)+GTOP_SYSOPLOGIN,GWID_SYSOPLOGIN,GHEI_SYSOPLOGIN,'Sysop Login',NIL,GAD_SYSOPLOGIN,PLACETEXT_IN OR NG_HIGHLABEL,NIL,NIL]:newgadget
   ngAry[1]:=[GLEF_INSTANTLOGIN,topOffset+(theight*11)+GTOP_INSTANTLOGIN,GWID_INSTANTLOGIN,GHEI_INSTANTLOGIN,'Instant Login',NIL,GAD_INSTANTLOGIN,PLACETEXT_IN OR NG_HIGHLABEL,NIL,NIL]:newgadget
-  ngAry[2]:=[GLEF_AESHELL, topOffset+(theight*11)+GTOP_AESHELL, GWID_AESHELL, GHEI_AESHELL,'AEShell',NIL,GAD_AESHELL,PLACETEXT_IN OR NG_HIGHLABEL,NIL,NIL]:newgadget
+  IF shellMode
+    ngAry[2]:=[GLEF_AESHELL, topOffset+(theight*11)+GTOP_AESHELL, GWID_AESHELL, GHEI_AESHELL,'AEShell',NIL,GAD_AESHELL,PLACETEXT_IN OR NG_HIGHLABEL,NIL,NIL]:newgadget
+  ELSE
+    ngAry[2]:=[GLEF_AESHELL, topOffset+(theight*11)+GTOP_AESHELL, GWID_AESHELL, GHEI_AESHELL,'Config',NIL,GAD_AESHELL,PLACETEXT_IN OR NG_HIGHLABEL,NIL,NIL]:newgadget
+  ENDIF
   ngAry[3]:=[GLEF_TOGGLECHAT, topOffset+(theight*11)+GTOP_TOGGLECHAT, GWID_TOGGLECHAT, GHEI_TOGGLECHAT,'Toggle Chat',NIL,GAD_TOGGLECHAT,PLACETEXT_IN OR NG_HIGHLABEL,NIL,NIL]:newgadget
   ngAry[4]:=[GLEF_EXITNODE, topOffset+(theight*11)+GTOP_EXITNODE, GWID_EXITNODE, GHEI_EXITNODE,'Exit Node',NIL,GAD_EXITNODE,PLACETEXT_IN OR NG_HIGHLABEL,NIL,NIL]:newgadget
   ngAry[5]:=[GLEF_LOCALLOGIN, topOffset+(theight*11)+GTOP_LOCALLOGIN, GWID_LOCALLOGIN, GHEI_LOCALLOGIN,'Local Login',NIL,GAD_LOCALLOGIN,PLACETEXT_IN OR NG_HIGHLABEL,NIL,NIL]:newgadget
@@ -862,8 +871,10 @@ PROC createCustomMenus(nodes)
     maddNodes(nodes)
     maddItem(  NM_ITEM, 'Instant Login',0, 0, 0, 0)
     maddNodes(nodes)
-    maddItem(  NM_ITEM, 'AEShell',0, 0, 0, 0)
-    maddNodes(nodes)
+    IF shellMode
+      maddItem(  NM_ITEM, 'AEShell',0, 0, 0, 0)
+      maddNodes(nodes)
+    ENDIF
     maddItem(  NM_ITEM, 'Toggle Chat',0, 0, 0, 0)
     maddNodes(nodes)
     maddItem(  NM_ITEM, 'Exit Node',0, 0, 0, 0)
@@ -1029,6 +1040,7 @@ ENDPROC eGList
 ->//********************************************************************
 PROC doControl(node)
   DEF cmd[200]:STRING  /*** temporary storage for misc ***/
+  DEF tempstr[255]:STRING
   DEF cd /*** stores the current node action ***/
   
   IF((buttonID>=0) AND (button))
@@ -1104,10 +1116,12 @@ PROC doControl(node)
         DisplayBeep(scr)
       ENDIF
     CASE SV_AESHELL
-      IF(users[node].actionVal=22)
-        callNode(node,SV_AESHELL)
-      ELSE
-        DisplayBeep(scr)
+      IF shellMode
+        IF(users[node].actionVal=22)
+          callNode(node,SV_AESHELL)
+        ELSE
+          DisplayBeep(scr)
+        ENDIF
       ENDIF
     CASE SV_CHATTOGGLE
       cd:=users[node].actionVal
@@ -1266,7 +1280,11 @@ PROC handleEditGadget(im:PTR TO intuimessage,ig)
       IF(button)
         IF(nutton(2)=FALSE) THEN doButton(2,0)
       ELSE
-        IF(control) THEN control:=0 ELSE control:=SV_AESHELL
+        IF shellMode
+          IF(control) THEN control:=0 ELSE control:=SV_AESHELL
+        ELSE
+          selectAndRunConfig('','','')
+        ENDIF
       ENDIF
     CASE GAD_TOGGLECHAT
       IF(button)
@@ -2112,15 +2130,15 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
       IF StrCmp(ext,'.TRN')
         StrCopy(translatorName,fileName)
         SetStr(translatorName,EstrLen(translatorName)-4)
+        StringF(fullFileName,'\s\s',baseLang,fileName)
   
         trans2:=NEW trans2
         AstrCopy(trans2.translatorName,translatorName,80)
-        fsize:=getFileSize(fileName)
+        fsize:=getFileSize(fullFileName)
         workMem:=New(fsize)     ->allocate some memory
         
         trans2.translationText:=New(fsize+2)     ->allocate some memory, two extra bytes for ending colon and space
         
-        StringF(fullFileName,'\s\s',baseLang,fileName)
         fh:=Open(fullFileName,MODE_OLDFILE)
         IF fh>0
           ->read file into workMem
@@ -2576,9 +2594,14 @@ PROC readStartUp(s:PTR TO CHAR)
   
   dobj,cfg:=getToolTypes(s)
   IF (dobj=NIL) 
-    myrequest('Error, can''t locate acp.info')
-    acpError:=1
-    RETURN
+    selectAndRunConfig('','s:','aeicon.json')
+    
+    dobj,cfg:=getToolTypes(s)
+    IF (dobj=NIL) 
+      myrequest('Error, can''t locate acp.info')
+      acpError:=1
+      RETURN
+    ENDIF
   ENDIF
   oldtooltypes:=dobj.tooltypes
   
@@ -2612,6 +2635,8 @@ PROC readStartUp(s:PTR TO CHAR)
     acpError:=1
     RETURN
   ENDIF
+  
+  shellMode:=(FindToolType(oldtooltypes,'AESHELL')<>NIL)
   
   IF(t:=FindToolType(oldtooltypes,'ICONIFIED')) THEN zipOn:=TRUE
   IF(t:=FindToolType(oldtooltypes,'ICONIFY.LEFTEDGE')) THEN zim[0]:=Val(t)
@@ -2875,18 +2900,118 @@ PROC startProcess(s:PTR TO CHAR,stack)
   ENDIF
 ENDPROC
 
+PROC selectAndRunConfig(outpath:PTR TO CHAR,initialFolder:PTR TO CHAR,initialFile:PTR TO CHAR)
+  DEF configFile[255]:STRING
+  DEF fr:PTR TO filerequester
+
+  aslbase:=OpenLibrary('asl.library',37)
+  iconbase:=OpenLibrary('icon.library',33)
+
+  fr:=AllocAslRequest(ASL_FILEREQUEST,
+                       [ASL_HAIL,       'Select /X config file',
+                        ->ASL_WINDOW,window,
+                        ASL_PATTERN,'#?.json',
+                        ASL_FUNCFLAGS, FILF_PATGAD,
+                        ASLFR_INITIALDRAWER, initialFolder,
+                        ASLFR_INITIALFILE, initialFile,
+                        NIL])
+
+  IF AslRequest(fr, NIL)=FALSE
+    myrequest('No file was selected.')
+    RETURN
+  ENDIF
+  AstrCopy(configFile,fr.drawer,255)
+  AddPart(configFile,fr.file,255)
+  FreeAslRequest(fr)
+  runConfig(configFile,outpath)
+ENDPROC
+
+PROC runConfig(infile:PTR TO CHAR,outpath:PTR TO CHAR) HANDLE
+	DEF r
+  DEF p:jsmn_parser
+  DEF tok:PTR TO jsmntok_t
+  DEF tokcount
+  DEF fh,lock
+  DEF fib:PTR TO fileinfoblock
+  DEF filesize,buf
+
+  iconbase:=OpenLibrary('icon.library',33)
+
+	/* Prepare parser */
+	jsmn_init(p)
+  
+  fh:=Open(infile,MODE_OLDFILE)
+  IF fh<1
+    myrequest('Could not open json file.')
+    RETURN
+  ENDIF
+
+  IF ((fib:=(AllocDosObject(DOS_FIB,NIL)))=NIL)
+    myrequest('Could not allocate dos object.')
+    RETURN 4
+  ENDIF
+  
+  IF ExamineFH(fh,fib)=NIL
+    myrequest('Could not examine json file.')
+    FreeDosObject(DOS_FIB,fib)
+    RETURN 5
+  ENDIF
+
+  filesize:=fib.size
+  FreeDosObject(DOS_FIB,fib)
+
+  buf:=New(filesize)
+	IF (buf = NIL)
+    myrequest('Could not allocate enough memory to read json file.')
+		RETURN 6
+	ENDIF
+  
+  /* Read json into memory */
+  r:=Read(fh,buf, filesize)
+  Close(fh)
+  IF (r <> filesize)
+    myrequest('Error reading json config file.')
+    RETURN 1
+  ENDIF
+
+  tokcount:=jsmn_parse(p, buf, filesize, 0, 0)
+
+	tok:=New(SIZEOF jsmntok_t * tokcount)
+	IF (tok = NIL)
+    myrequest('Could not allocate enough memory to parse json file.')
+		RETURN 7
+	ENDIF
+  
+	jsmn_init(p)
+  r:=jsmn_parse(p, buf, filesize, tok, tokcount)
+  IF (r>=0)
+    createdata(outpath, buf, tok, p.toknext,TRUE)
+  ELSE
+    SELECT r
+      CASE JSMN_ERROR_NOMEM
+        myrequest('Error Parsing json file - not enough memory to proceed.')
+      CASE JSMN_ERROR_INVAL
+        myrequest('Error Parsing json file - invalid data found.')
+      CASE JSMN_ERROR_PART
+        myrequest('Error Parsing json file - incomplete data found.')
+    ENDSELECT
+  ENDIF
+EXCEPT DO
+  IF iconbase THEN CloseLibrary(iconbase)
+ENDPROC
+
 PROC main() HANDLE
 
+  DEF iconStartName[200]:STRING
   DEF alzMenu:PTR TO menuitem
   DEF alzMenu2:PTR TO menuitem
 
   DEF oldDirLock=NIL
-  DEF tempstr[255]:ARRAY OF CHAR
+  DEF tempstr[255]:STRING
   DEF argmsg: PTR TO wbstartup
   DEF wb_arg:PTR TO wbarg
   DEF appmsg:PTR TO iostd
 
-  DEF iconStartName[200]:STRING
   DEF ktr
   DEF newscreen=0
   DEF tempscreen:PTR TO screen
@@ -2897,9 +3022,12 @@ PROC main() HANDLE
   DEF windowSig,myappsig
   DEF i,j,class
   DEF n:PTR TO packedCommands
+  DEF newlock=NIL
 
   DEF sopt:PTR TO startOption
  
+  KickVersion(37)  -> E-Note: requires V37
+
   StringF(myVerStr,'v5.0.0')
 
   dim:=[1,1,1,1]:INT  /*** Dimensions of ZIP window default ***/
@@ -2962,8 +3090,13 @@ PROC main() HANDLE
   ELSE
     IF StrLen(arg)>0
       StrCopy(iconStartName,arg)
+      StrCopy(tempstr,iconStartName,PathPart(iconStartName)-iconStartName)
+      newlock:=Lock(tempstr,ACCESS_READ)
+      IF newlock<>NIL THEN oldDirLock:=CurrentDir(newlock)
     ELSE
       StrCopy(iconStartName,'sys:wbstartup/acp')
+      newlock:=Lock('sys:wbstartup',ACCESS_READ)
+      IF newlock<>NIL THEN oldDirLock:=CurrentDir(newlock)
     ENDIF
   ENDIF
   
@@ -3260,6 +3393,7 @@ PROC main() HANDLE
 EXCEPT DO
   shutDownMaster()
   IF oldDirLock THEN CurrentDir(oldDirLock)
+  IF newlock<>NIL THEN UnLock(newlock)
 
   IF fontHandle
     CloseFont(fontHandle)

@@ -1,7 +1,7 @@
 -> Replacement Express Project
 ->
 ->
-OPT LARGE,REG=5
+OPT LARGE,REG=5,OSVERSION=37
 
 ENUM ERR_NONE, ERR_NOICON, ERR_NO_DISKFONT,ERR_SCREEN, ERR_WINDOW, ERR_MP, ERR_IO, ERR_DEV, ERR_PORT, ERR_ARG, ERR_BRKR, ERR_CXERR, ERR_LIB, ERR_PORT, ERR_ASL, ERR_KICK, ERR_LIB, ERR_SERVERRP, ERR_NOSERIAL, ERR_SSL, ERR_KICKVER, ERR_ALREADYRUNNING,ERR_COMPUTERTYPES,ERR_NOSERIALLOCK,ERR_NOOWNDEVUNIT
 
@@ -39,8 +39,6 @@ ENUM UPDATE_RATIO,UPDATE_RATIO_TYPE,UPDATE_MAILSCAN_PTRS,UPDATE_NEW_MAIL_SCAN,UP
 ENUM CACHE_RESET_NEVER, CACHE_RESET_LOGON
 
 ENUM TRANS_NONE,TRANS_HOST_TO_DEFINED,TRANS_DEFINED_TO_HOST
-
-ENUM FORCE_MAILSCAN_NOFORCE, FORCE_MAILSCAN_ALL, FORCE_MAILSCAN_SKIP
 
 CONST DEFAULT_DISK_OBJECT_CACHE_SIZE=100
 
@@ -97,8 +95,8 @@ CONST ED_BATCH_REQUESTED=32768  ->// Flag indicating batch true
 CONST ED_ATTACH_REQUESTED=16384
 
 CONST HISTORY=999
-CONST RIGHTARROW=2
-CONST LEFTARROW=3
+CONST LEFTARROW=2
+CONST RIGHTARROW=3
 CONST UPARROW=4
 CONST DOWNARROW=5
 
@@ -843,8 +841,6 @@ DEF cacheHits=0
 
 DEF serialLocked=FALSE
 DEF ownDevSignal=0
-
-DEF holdAccessLevel=201
 
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
@@ -4287,6 +4283,14 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
             msg.string[0]:=ch
             msg.string[1]:=0
             msg.command:=ximPort /*XIMPort=1 for console,2for serial  */
+          CASE JH_20
+             ch:=readChar(doorTimeout)
+             msg.data:=ch
+             msg.command:=ximPort
+          CASE QUICK_KEY
+             ch:=readChar(doorTimeout)
+             msg.data:=ch
+             msg.command:=ximPort
           CASE JH_MCI
             StrCopy(tempstring,msg.string)
             processMci(tempstring)
@@ -4297,9 +4301,12 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
           CASE JH_SIGBIT
             msg.data:=doorExtSig
           CASE JH_FetchKey
-            IF checkCon()
+            IF checkCon() OR checkSer()
               msg.command:=readChar(doorTimeout)
               IF (msg.command<0)  THEN msg.data:=-1 ELSE msg.data:=1
+            ELSE
+              msg.command:=0
+              msg.data:=1             
             ENDIF
           CASE JH_SG
             IF (findSecurityScreen(msg.string,tempstring)) THEN displayFile(tempstring)
@@ -4666,7 +4673,6 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
             processOlmMessageQueue(TRUE)
             Delay(30)
             modemOffHook()
-            reqState:=REQ_STATE_LOGOFF
           CASE BB_GETTASK
             msg.task:=FindTask(0)
           CASE NODE_BAUD
@@ -5467,7 +5473,7 @@ PROC saveMsgPointers(conf)
   cb.confRead:=lastNewReadConf
 ENDPROC
 
-PROC joinConf(conf, confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFORCE)
+PROC joinConf(conf, confScan, auto, skipMailScan=FALSE)
   DEF string[255]:STRING,tempstr[255]:STRING
   DEF mystat, temp
 
@@ -5572,8 +5578,8 @@ PROC joinConf(conf, confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFORCE)
 
   ENDIF
 
-  IF (auto=FALSE) AND (forceMailScan<>FORCE_MAILSCAN_SKIP)
-    IF (forceMailScan=FORCE_MAILSCAN_ALL) OR (checkMailConfScan(conf))
+  IF (auto=FALSE) AND (skipMailScan=FALSE)
+    IF (checkMailConfScan(conf))
       IF checkToolTypeExists(TOOLTYPE_CONF,conf,'CUSTOM')=FALSE
         mystat:=callMsgFuncs(MAIL_SCAN,conf)
       ELSE
@@ -5597,6 +5603,24 @@ PROC doPause()
   lineCount:=0
   aePuts('\b\n')
 ENDPROC
+
+PROC readRawChar(timeout,extsig = 0)
+  DEF wasControl,ch
+  DEF timedout,signalled
+  DEF temp[1]:STRING
+  
+ conPuts('[ p') /* turn console cursor on */
+ REPEAT
+    wasControl,ch:=processInputMessage(timeout, extsig,TRUE)
+    timedout:=(ch=RESULT_TIMEOUT)
+    signalled:=(ch=RESULT_SIGNALLED)
+  UNTIL ((ch<>0)) OR (reqState<>REQ_STATE_NONE) OR (timedout) OR (signalled)
+  conPuts('[0 p'); /* turn console cursor off */
+
+  IF signalled THEN ch:=0
+  IF timedout THEN ch:=RESULT_TIMEOUT
+  IF reqState<>REQ_STATE_NONE THEN ch:=RESULT_NO_CARRIER
+ENDPROC ch
 
 PROC readChar(timeout, extsig = 0)
   DEF wasControl,ch
@@ -5701,8 +5725,7 @@ PROC processMciCmd(mcidata,len,pos)
   DEF filename[100]:STRING
   DEF screenfilename[100]:STRING
   DEF nlen,nval,res
-  DEF t=0,i
-  DEF flagfilelist: PTR TO LONG
+  DEF t=0
 
   IF (mcidata[pos]="~")
   pos:=pos+1
@@ -5861,31 +5884,6 @@ PROC processMciCmd(mcidata,len,pos)
       pos:=pos+2+t
       formatLongDate(getSystemTime(),tempstr)
       aePuts2(tempstr,nlen)    
-    ELSEIF (StrCmp(cmd,'FF',ALL))
-      pos:=pos+2+t
-      aePuts2(flaglist,nlen)    
-    ELSEIF (StrCmp(cmd,'FC',ALL))
-      pos:=pos+2+t
-      flagfilelist:=List(StrLen(flaglist))
-      parseList(flaglist,flagfilelist)
-      StringF(tempstr,'\d',ListLen(flagfilelist))
-      aePuts(tempstr)
-      FOR i:=0 TO ListLen(flagfilelist)-1
-        DisposeLink(ListItem(flagfilelist,i))
-      ENDFOR
-      END flagfilelist
-    ELSEIF (StrCmp(cmd,'FL',ALL))
-      pos:=pos+2+t
-      flagfilelist:=List(StrLen(flaglist))
-      parseList(flaglist,flagfilelist)
-
-      FOR i:=0 TO ListLen(flagfilelist)-1
-        StringF(tempstr,'                     \s\b\n',flagfilelist[i])
-        aePuts(tempstr)
-        DisposeLink(ListItem(flagfilelist,i))
-      ENDFOR
-      END flagfilelist
-
     ELSEIF (nlen=-1) AND (StrCmp(cmd,'SP',ALL))
       ->PAUSE
       pos:=pos+2+t
@@ -6404,8 +6402,6 @@ PROC tranChat()
 
   aePuts('\b\n')
 
-  runSysCommand('CHATIN','')
-
   StrCopy(chatfile,'')
   IF (loggedOnUser.screenType<ListLen(screenTypeExt))
     StringF(chatfile,'\sNode\d/StartChat.\s',cmds.bbsLoc,node,screenTypeExt[loggedOnUser.screenType]) 
@@ -6573,7 +6569,6 @@ PROC tranChat()
   IF((displayFile(chatfile,TRUE,TRUE)))=FALSE
       aePuts('\b\n\b\nEnding Chat.')
   ENDIF
-  runSysCommand('CHATOUT','')
 ENDPROC*/
 
 PROC tranChat()
@@ -6609,8 +6604,6 @@ PROC tranChat()
   ENDIF
 
   aePuts('\b\n')
-
-  runSysCommand('CHATIN','')
 
   StrCopy(chatfile,'')
   IF (loggedOnUser.screenType<ListLen(screenTypeExt))
@@ -6785,8 +6778,6 @@ PROC tranChat()
   IF((displayFile(chatfile,TRUE,TRUE)))=FALSE
       aePuts('\b\n\b\nEnding Chat.')
   ENDIF
-  runSysCommand('CHATOUT','')
-
 ENDPROC
 
 PROC chat()
@@ -6817,7 +6808,6 @@ PROC chat()
 wx:
   checkOnlineStatus()
   
-  runSysCommand('CHATIN','')
   StrCopy(chatfile,'')
   IF (loggedOnUser.screenType<ListLen(screenTypeExt))
     StringF(chatfile,'\sNode\d/StartChat.\s',cmds.bbsLoc,node,screenTypeExt[loggedOnUser.screenType]) 
@@ -7005,9 +6995,10 @@ chatbrk:
   ENDIF
 
   IF((i:=displayFile(chatfile,TRUE,TRUE)))=FALSE
+  
     aePuts('\b\n\b\nEnding Chat.')
+wz:
   ENDIF
-  runSysCommand('CHATOUT','')
 ENDPROC RESULT_SUCCESS
 
 PROC fileExists(filename, addInfo = FALSE)
@@ -7920,7 +7911,7 @@ reserveRedo:
  StrCopy(reservedName,tempUserKeys.userName)
 ENDPROC
 
-PROC processInputMessage(timeout, extsig = 0)
+PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE)
     DEF consolesig=0,windowsig=0,obuf[255]:STRING
     DEF ch=0,lch,wasControl=0,signals
     DEF doorsig=0,rexxsig=0,serialsig=0,timersig=0,timedout=0
@@ -7996,7 +7987,10 @@ PROC processInputMessage(timeout, extsig = 0)
   ENDIF
   
   IF (ch=0) AND signals AND serialsig
-    IF -1<>(lch:=readMayGetChar(serialReadMP,{serbuff}))
+    IF rawMode
+      lch:=readMayGetChar(serialReadMP,{serbuff})
+      IF lch<>-1 THEN ch:=lch
+    ELSEIF -1<>(lch:=readMayGetChar(serialReadMP,{serbuff}))
       IF (ioFlags[IOFLAG_SER_IN])
         ch:=lch
         wasControl:=FALSE
@@ -8032,7 +8026,11 @@ PROC processInputMessage(timeout, extsig = 0)
   ENDIF
   IF (ch=0) AND signals AND consolesig
   -> If a console signal was received, get the character
-    IF -1<>(lch:=readMayGetChar(consoleReadMP, {ibuf}))
+
+    IF rawMode
+      lch:=readMayGetChar(consoleReadMP, {ibuf})
+      IF lch<>-1 THEN ch:=lch
+    ELSEIF -1<>(lch:=readMayGetChar(consoleReadMP, {ibuf}))
       IF (ioFlags[IOFLAG_KBD_IN])
         ch:=lch
         chatConFlag:=1
@@ -9701,7 +9699,7 @@ PROC remoteShell()
     ENDWHILE
 
     IF done=0
-      ch:=readChar(INPUT_TIMEOUT,pmask)
+      ch:=readRawChar(INPUT_TIMEOUT,pmask)
 
       IF (ch<0) OR (reqState<>REQ_STATE_NONE)
           ->timeout or kill signal
@@ -10112,72 +10110,6 @@ PROC checkAttachedFile(msgnumb,flag)
 
 ENDPROC RESULT_SUCCESS
 
-PROC forwardMSG(gfh)
-  DEF stat,aFlag
-  DEF frm[255]:STRING
-  DEF tempStr[255]:STRING
-  DEF mh: mailHeader
-
-  delMsgNum:=mailHeader.msgNumb
-  StrCopy(frm,mailHeader.toName)
-
-  msgToHeader()
-  stat:=lineInput('','',30,INPUT_TIMEOUT,tempStr)
-  IF (stat<0) THEN RETURN stat
-  aFlag:=getAValidName(tempStr,'ALL',mh.toName)
-
-  IF(StrLen(mh.toName)=0) THEN RETURN 2
-
-  checkToForward(tempStr,mh.toName,1)
-
-  aePuts('[36mSubject[33m: [32m([33mBlank[32m)[0m=[33mabort[32m?[0m ')
-  stat:=lineInput('',mailHeader.subject,30,INPUT_TIMEOUT,tempStr)
-  strCpy(mh.subject,tempStr,31)
-  IF(stat<0)
-    RETURN stat
-  ENDIF
-
-  IF(StrLen(mh.subject)=0)
-    aePuts('\b\n')
-    RETURN RESULT_SUCCESS
-  ENDIF
-
-  aePuts('         [36mPrivate ')
-  stat:=yesNo(2)
-  IF(stat<0)
-     RETURN stat
-  ENDIF
-
-  IF (stat) 
-    mh.status:="R"
-  ELSE
-    IF checkSecurity(ACS_CENSORED) OR (mailHeader.status="p")
-      mh.status:="p"
-    ELSE
-      mh.status:="P"
-    ENDIF
-  ENDIF
-
-  IF checkSecurity(ACS_DELETE_MESSAGE)
-    IF(stringCompare(frm,confMailName)=RESULT_SUCCESS)
-        aePuts('Delete original message ')
-        stat:=yesNo(2)
-        IF(stat<0) THEN RETURN stat
-        IF(stat) THEN deleteMSG(gfh)
-    ENDIF
-  ENDIF
-
- aePuts('\b\nSaving...')
- 
-  StringF(tempStr,'\s\d',msgBaseLocation,mailHeader.msgNumb)
-  IF loadMsg(tempStr)
-    stat:=saveNewMSG(gfh,mh)
-    IF(stat<0)
-      RETURN stat
-    ENDIF
-  ENDIF
-ENDPROC RESULT_SUCCESS
-
 
 PROC replyToMSG(gfh)
   DEF str[255]:STRING
@@ -10271,7 +10203,7 @@ ENDPROC
 PROC setMsgBufItem(n,str)
   DEF c
   WHILE (c:=ListLen(msgBuf))<(n+1)
-    ListAdd(msgBuf,[String(255)])
+    ListAdd(msgBuf,[String(80)])
   ENDWHILE
   StrCopy(msgBuf[n],str)
 ENDPROC
@@ -10296,7 +10228,7 @@ ENDPROC RESULT_SUCCESS
 
 PROC loadMsg(s)
   DEF f, temp
-  DEF loadStr[255]:STRING
+  DEF loadStr[80]:STRING
 
   lines:=0
   clearMsgBuf()
@@ -10375,7 +10307,7 @@ PROC editEmacs(filename: PTR TO CHAR)
   StringF(tempStr,'\tEditor \s',filename)
   callersLog(tempStr)
   
-  runSysCommand('EDITOR',filename)
+  runSysCommand(tempStr,filename)
 ENDPROC
 
 PROC editEMessage(number)
@@ -10981,102 +10913,20 @@ loopHere:
  UNTIL stat<0
 ENDPROC stat
 
-PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
-  DEF msgbaselock
-  DEF f,i,stat
-  DEF rzmsglock
-  DEF string[255]:STRING
-  DEF tempStr[255]:STRING
-  DEF tempStr2[255]:STRING
-  DEF filetags  
-
-  mh.recv:=0
-  mh.msgDate:=getSystemTime()
-  strCpy(mh.fromName,confMailName,31)
-  IF(msgbaselock:=lockMsgBase())
-     getMailStatFile(currentConf)
-     mh.msgNumb:=mailStat.highMsgNum
-     stat:=saveMessageHeader(gfh,mh)
-     IF(stat<>RESULT_FAILURE) 
-         StringF(string,'Message Number \d...',mh.msgNumb)
-         aePuts(string)
-         StringF(tempStr,'\s\d',msgBaseLocation,mh.msgNumb)
-         IF((f:=Open(tempStr,MODE_NEWFILE)))<=0
-             aePuts('Failed!\b\n\b\n')
-             rzmsg:=NIL
-             RETURN RESULT_FAILURE
-         ENDIF
-         FOR i:=0 TO lines-1
-             StringF(tempStr2,'\s\b\n',msgBuf[i])
-             Write(f,tempStr2,StrLen(tempStr2))
-          ENDFOR
-         Close(f)
-         aePuts('done!\b\n\b\n')
-
-         IF(StrLen(attachedFile)<>0)
-             SetComment(tempStr,attachedFile)
-             StrCopy(attachedFile,'',ALL)
-         ENDIF
-     ELSE
-        aePuts('Failed!\b\n\b\n')
-     ENDIF
-     UnLock(msgbaselock)
-
-    IF (tempUser.slotNumber=1)
-      IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_SYSOP_COMMENT',tempStr))
-        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
-        processMci2(tempStr,tempStr2)
-        SystemTagList(tempStr2,filetags)
-        END filetags
-      ENDIF
-      IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_SYSOP_COMMENT',tempStr))
-        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
-        processMci2(tempStr,tempStr2)
-        SystemTagList(tempStr2,filetags)
-        END filetags
-      ENDIF
-      IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_SYSOP_COMMENT')) AND (StrLen(mailOptions.sysopEmail)>0)
-        StringF(tempStr,'\s: Ami-Express sysop message notification',cmds.bbsName)
-        StringF(tempStr2,'This is a notification that \s has sent you a message.\n\nSubject: \s\n\n',mh.fromName,mh.subject)
-        sendMail(tempStr,tempStr2,TRUE, mailOptions.sysopEmail)
-      ENDIF
-    ENDIF
-  
-     IF(rzmsg)
-       StringF(tempStr,'\sF\d',msgBaseLocation,mh.msgNumb)
-       IF(rzmsglock=CreateDir(tempStr))
-         UnLock(rzmsglock)
-       ENDIF
-       setEnvStat(ENV_UPLOADING) 
-       aePuts('\b\n')           /* 11w */
-       bgFileCheck:=FALSE
-       stat:=uploadaFile(0,'','')
-       rzmsg:=NIL
-       StringF(tempStr,'\sF\d',msgBaseLocation,mh.msgNumb)
-       SetProtection(tempStr,FIBF_OTR_DELETE)
-       DeleteFile(tempStr)
-       IF(stat=RESULT_GOODBYE)
-         fileattach:=FALSE
-         reqState:=REQ_STATE_LOGOFF
-         RETURN RESULT_STANDARD_LOGOFF
-       ENDIF
-       
-       IF(stat=RESULT_NO_CARRIER) THEN RETURN RESULT_NO_CARRIER
-       RETURN stat
-      ENDIF
-  ELSE
-     aePuts('ERROR! Another task has the MsgBase locked!\b\nMessage has not been saved!\b\n\b\n')
-  ENDIF
- 
-ENDPROC
-
 PROC enterMSG(gfh)
   DEF aFlag
+  DEF i,i2,i3
+  DEF rzmsglock
   DEF str[255]:STRING
   DEF string[255]:STRING
+  DEF f
+  DEF msgbaselock
   DEF firstparam
   DEF tempStr[255]:STRING
-  DEF exit,i,i2,i3,stat
+  DEF tempStr2[255]:STRING
+  DEF exit
+  DEF stat
+  DEF filetags  
 
   aFlag:=0
 
@@ -11300,11 +11150,83 @@ skipAll:
  ENDIF
    
  aePuts('Saving...')
- stat:=saveNewMSG(gfh,mailHeader)
- IF(stat<0)
-    RETURN stat
- ENDIF
+ mailHeader.recv:=0
+ mailHeader.msgDate:=getSystemTime()
+ strCpy(mailHeader.fromName,confMailName,31)
+ IF(msgbaselock:=lockMsgBase())
+     getMailStatFile(currentConf)
+     mailHeader.msgNumb:=mailStat.highMsgNum
+     stat:=saveMessageHeader(gfh)
+     IF(stat<>RESULT_FAILURE) 
+         StringF(string,'Message Number \d...',mailHeader.msgNumb)
+         aePuts(string)
+         StringF(tempStr,'\s\d',msgBaseLocation,mailHeader.msgNumb)
+         IF((f:=Open(tempStr,MODE_NEWFILE)))<=0
+             aePuts('Failed!\b\n\b\n')
+             rzmsg:=NIL
+             RETURN RESULT_FAILURE
+         ENDIF
+         FOR i:=0 TO lines-1
+             StringF(tempStr2,'\s\b\n',msgBuf[i])
+             Write(f,tempStr2,StrLen(tempStr2))
+          ENDFOR
+         Close(f)
+         aePuts('done!\b\n\b\n')
 
+         IF(StrLen(attachedFile)<>0)
+             SetComment(tempStr,attachedFile)
+             StrCopy(attachedFile,'',ALL)
+         ENDIF
+     ELSE
+        aePuts('Failed!\b\n\b\n')
+     ENDIF
+     UnLock(msgbaselock)
+
+    IF (tempUser.slotNumber=1)
+      IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_SYSOP_COMMENT',tempStr))
+        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+        processMci2(tempStr,tempStr2)
+        SystemTagList(tempStr2,filetags)
+        END filetags
+      ENDIF
+      IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_SYSOP_COMMENT',tempStr))
+        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+        processMci2(tempStr,tempStr2)
+        SystemTagList(tempStr2,filetags)
+        END filetags
+      ENDIF
+      IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_SYSOP_COMMENT')) AND (StrLen(mailOptions.sysopEmail)>0)
+        StringF(tempStr,'\s: Ami-Express sysop message notification',cmds.bbsName)
+        StringF(tempStr2,'This is a notification that \s has sent you a message.\n\nSubject: \s\n\n',mailHeader.fromName,mailHeader.subject)
+        sendMail(tempStr,tempStr2,TRUE, mailOptions.sysopEmail)
+      ENDIF
+    ENDIF
+  
+     IF(rzmsg)
+       StringF(tempStr,'\sF\d',msgBaseLocation,mailHeader.msgNumb)
+       IF(rzmsglock=CreateDir(tempStr))
+         UnLock(rzmsglock)
+       ENDIF
+       setEnvStat(ENV_UPLOADING) 
+       aePuts('\b\n')           /* 11w */
+       bgFileCheck:=FALSE
+       stat:=uploadaFile(0,'','')
+       rzmsg:=NIL
+       StringF(tempStr,'\sF\d',msgBaseLocation,mailHeader.msgNumb)
+       SetProtection(tempStr,FIBF_OTR_DELETE)
+       DeleteFile(tempStr)
+       IF(stat=RESULT_GOODBYE)
+         fileattach:=FALSE
+         reqState:=REQ_STATE_LOGOFF
+         RETURN RESULT_STANDARD_LOGOFF
+       ENDIF
+       
+       IF(stat=RESULT_NO_CARRIER) THEN RETURN RESULT_NO_CARRIER
+       RETURN stat
+      ENDIF
+ ELSE
+     aePuts('ERROR! Another task has the MsgBase locked!\b\nMessage has not been saved!\b\n\b\n')
+ ENDIF
  rzmsg:=NIL
 
 ENDPROC RESULT_SUCCESS
@@ -11326,14 +11248,13 @@ PROC replyPrompt(gfh)
        IF(nonStopMail=FALSE)
         aePuts('\b\n[32mMsg. Options: [33mA[36m')
         IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts(',[33mD')
-        aePuts('[36m,[33mF[36m,[33mR[36m,[33mQ')
+        aePuts('[36m,[33mR[36m,[33mQ')
         StringF(string,'[36m,[33m?[36m,[33m??[36m,[32m<[33mCR[32m> [32m([0m \d[32m )[0m >: ',msgNum)
         aePuts(string)
        ENDIF
     ELSEIF helplist=1
          aePuts('[33mA[32m>[36mgain[0m')
          IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
-         aePuts('\b\n[33mF[32m>[36morward[0m')
          aePuts('\b\n[33mR[32m>[36meply[0m')
          aePuts('\b\n[33mQ[32m>[36muit[0m')
          StringF(string,'\b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m \d[32m )[0m >: ',msgNum)
@@ -11342,7 +11263,6 @@ PROC replyPrompt(gfh)
     ELSE
          aePuts('[33mA[32m>[36mgain[0m')
          IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
-         aePuts('\b\n[33mF[32m>[36morward[0m')
          aePuts('\b\n[33mR[32m>[36meply[0m')
          aePuts('\b\n[33mNS[32m>[36m Non-stop mode[0m')
          IF checkSecurity(ACS_TRANSLATION)
@@ -11484,17 +11404,6 @@ PROC replyPrompt(gfh)
            JUMP contloop
        ENDIF
    ENDIF
-
-   IF(((str[0]="f") OR (str[0]="F")))
-     IF((privateFlag=0) OR ((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)) OR (StrCmp(mailHeader.toName,'EALL',4)))
-         stat:=forwardMSG(gfh)
-         JUMP contloop
-     ELSE
-         aePuts('Not your message.\b\n')
-         JUMP contloop
-     ENDIF
-   ENDIF
-
    IF((str[0]="Q") OR (str[0]="q"))
        aePuts('\b\n')
        RETURN RESULT_FAILURE
@@ -12196,14 +12105,13 @@ PROC readMSG(gfh)
        IF(nonStopMail=FALSE)
          aePuts('\b\n[32mMsg. Options: [33mA[36m')
          IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts(',[33mD')
-         aePuts('[36m,[33mF[36m,[33mR[36m,[33mQ')
+         aePuts('[36m,[33mR[36m,[33mQ')
          StringF(string,'[36m,[33m?[36m,[33m??[36m,[32m<[33mCR[32m> [32m([0m \s[32m )[0m>: ',str)
          aePuts(string)
        ENDIF
       ELSEIF(helplist=1)
          aePuts('[33mA[32m>[36mgain[0m')
          IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
-         aePuts('\b\n[33mF[32m>[36morward[0m')
          aePuts('\b\n[33mR[32m>[36meply[0m')
          aePuts('\b\n[33mQ[32m>[36muit[0m')
          StringF(string,'\b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m \s[32m )[0m? ',str)
@@ -12212,7 +12120,6 @@ PROC readMSG(gfh)
       ELSE
          aePuts('[33mA[32m>[36mgain[0m')
          IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
-         aePuts('\b\n[33mF[32m>[36morward[0m')
          aePuts('\b\n[33mR[32m>[36meply[0m')
          aePuts('\b\n[33mNS[32m>[36m Non-stop mode[0m')
          IF checkSecurity(ACS_TRANSLATION)
@@ -12324,11 +12231,6 @@ PROC readMSG(gfh)
                       noDirF:=1
                       JUMP goNextMsg
                      ENDIF
-                 CASE "f"
-                     stat:=forwardMSG(gfh)
-                     IF(stat<0) THEN RETURN stat
-                     noDirF:=1 
-                     JUMP nextMenu
                  CASE "r"
                      stat:=replyToMSG(gfh)
                      IF(stat<0) THEN RETURN stat
@@ -12561,20 +12463,20 @@ PROC loadMessageHeader(gfh)
  
 ENDPROC RESULT_SUCCESS
 
-PROC saveMessageHeader(gfh,mh:PTR TO mailHeader)
+PROC saveMessageHeader(gfh)
 DEF stat, error
  Seek(gfh,0,OFFSET_END)
 
-  mh.pad:=0
-  error:=Write(gfh,mh,1)    -> STATUS
-  error:=error+Write(gfh,mh+110,1)   ->PAD
-  error:=error+Write(gfh,mh+2,4)   ->MsgNum
-  error:=error+Write(gfh,mh+6,31)   ->toName
-  error:=error+Write(gfh,mh+38,31)   ->fromName
-  error:=error+Write(gfh,mh+70,31)   ->subject
-  error:=error+Write(gfh,mh+110,1)   ->PAD
-  error:=error+Write(gfh,mh+102,9)  ->msgdate, recv & pad
-  error:=error+Write(gfh,mh+110,1)   ->PAD
+  mailHeader.pad:=0
+  error:=Write(gfh,mailHeader,1)    -> STATUS
+  error:=error+Write(gfh,mailHeader+110,1)   ->PAD
+  error:=error+Write(gfh,mailHeader+2,4)   ->MsgNum
+  error:=error+Write(gfh,mailHeader+6,31)   ->toName
+  error:=error+Write(gfh,mailHeader+38,31)   ->fromName
+  error:=error+Write(gfh,mailHeader+70,31)   ->subject
+  error:=error+Write(gfh,mailHeader+110,1)   ->PAD
+  error:=error+Write(gfh,mailHeader+102,9)  ->msgdate, recv & pad
+  error:=error+Write(gfh,mailHeader+110,1)   ->PAD
 
  Seek(gfh,currentSeekPos,OFFSET_BEGINNING)
 
@@ -21655,24 +21557,6 @@ PROC internalCommandM()
   ENDIF
 ENDPROC RESULT_SUCCESS
 
-PROC internalCommandMS()
-  DEF conf,mscan,mystat,oldconf
-
-  oldconf:=currentConf
-  currentConf:=0
-  aePuts('\b\nScanning conferences for mail...\b\n\b\n')
-  mciViewSafe:=FALSE
-  FOR conf:=1 TO cmds.numConf
-    IF (checkConfAccess(conf))
-      mystat:=joinConf(conf,TRUE,FALSE,FORCE_MAILSCAN_ALL)
-    ENDIF
-    EXIT mystat=RESULT_FAILURE
-  ENDFOR
-  mciViewSafe:=TRUE
-  joinConf(oldconf,TRUE,FALSE,FORCE_MAILSCAN_SKIP)
-  currentConf:=oldconf
-ENDPROC RESULT_SUCCESS
-
 PROC internalCommandN(params)
   IF checkSecurity(ACS_FILE_LISTINGS)=FALSE THEN RETURN RESULT_NOT_ALLOWED
   
@@ -22057,15 +21941,6 @@ PROC internalCommandV(cmdcode,params)
   IF ripMode
     aePuts('[2!')
   ENDIF
-ENDPROC RESULT_SUCCESS
-
-PROC internalCommandVER()
-  DEF tempStr[255]:STRING
-  StringF(tempStr,'\b\nAmiExpress \s Copyright Copyright ©2018 Darren Coles\b\n',expressVer)
-  aePuts(tempStr)
-  aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
-  StringF(tempStr,'Registered to \s.\b\n',regKey)
-  aePuts(tempStr)
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandVO()
@@ -23144,7 +23019,7 @@ PROC getDirSpan(pass:PTR TO CHAR)
   DEF dirScan=0,startDir=0
 
   IF(StrLen(pass)=0)
-    IF (loggedOnUser.secStatus>=holdAccessLevel) OR (checkSecurity(ACS_HOLD_ACCESS))
+    IF loggedOnUser.secStatus>200
       StringF(str,'Directories: (1-\d), (A)ll, (U)pload, (H)old, (Enter)=none? ',maxDirs)
     ELSE
       StringF(str,'Directories: (1-\d), (A)ll, (U)pload, (Enter)=none? ',maxDirs)
@@ -23177,7 +23052,7 @@ PROC getDirSpan(pass:PTR TO CHAR)
     startDir:=0
 	  JUMP mNCont
   ENDIF
-  IF(((str[0]="H") OR (str[0]="h")) AND ((loggedOnUser.secStatus>=holdAccessLevel) OR (checkSecurity(ACS_HOLD_ACCESS)))) 
+  IF(((str[0]="H") OR (str[0]="h")) AND (loggedOnUser.secStatus>200)) 
 	  dirScan:=-1
 	  startDir:=-1
 	  JUMP mNCont
@@ -24274,7 +24149,7 @@ PROC confScan()
         ENDIF
         fscan:=checkFileConfScan(conf)
 
-        mystat:=joinConf(conf,TRUE,FALSE,IF mscan=FALSE THEN FORCE_MAILSCAN_SKIP ELSE FORCE_MAILSCAN_NOFORCE)
+        mystat:=joinConf(conf,TRUE,FALSE,mscan=FALSE)
         IF (mystat=RESULT_SUCCESS) AND (fscan)
           newFilesPauseFlag:=TRUE
           runSysCommand('N','S U')
@@ -24284,10 +24159,7 @@ PROC confScan()
         ENDIF
       ENDIF
       EXIT mystat=RESULT_FAILURE
-      IF (mystat=RESULT_TIMEOUT) OR (mystat=RESULT_NO_CARRIER) 
-        mciViewSafe:=TRUE
-        RETURN mystat
-      ENDIF
+      IF (mystat=RESULT_TIMEOUT) OR (mystat=RESULT_NO_CARRIER) THEN RETURN mystat
     ENDFOR
     mciViewSafe:=TRUE
 
@@ -24295,7 +24167,7 @@ PROC confScan()
       ->//AEPutStr("\b\n[35m  --[32mChecking for PartUploads\b\n[0m");
       FOR conf:=1 TO cmds.numConf
         IF (checkConfAccess(conf))
-           mystat:=joinConf(conf,TRUE,FALSE,FORCE_MAILSCAN_SKIP)
+           mystat:=joinConf(conf,TRUE,FALSE,TRUE)
           IF (mystat=RESULT_SUCCESS)
 
             mystat:=partUploadOK(1)
@@ -24490,8 +24362,6 @@ PROC processInternalCommand(cmdcode,cmdparams,privcmd=FALSE)
     res:=internalCommandH(cmdparams)
   ELSEIF (StrCmp(cmdcode,'M'))
     res:=internalCommandM()
-  ELSEIF (StrCmp(cmdcode,'MS'))
-    res:=internalCommandMS()
   ELSEIF (StrCmp(cmdcode,'N'))
     res:=internalCommandN(cmdparams)
   ELSEIF (StrCmp(cmdcode,'NM'))
@@ -24512,8 +24382,6 @@ PROC processInternalCommand(cmdcode,cmdparams,privcmd=FALSE)
     res:=internalCommandRZ(cmdcode,cmdparams)
   ELSEIF (StrCmp(cmdcode,'V'))
     res:=internalCommandV(cmdcode,cmdparams)
-  ELSEIF (StrCmp(cmdcode,'VER'))
-    res:=internalCommandVER()
   ELSEIF (StrCmp(cmdcode,'VS'))
     res:=internalCommandV(cmdcode,cmdparams)
   ELSEIF (StrCmp(cmdcode,'VO'))
@@ -24618,7 +24486,7 @@ PROC processLoggedOnUser()
         captureRealAndInternetNames()
         subState.subState:=SUBSTATE_DISPLAY_CONF_BULL
     ELSEIF subState.subState=SUBSTATE_DISPLAY_CONF_BULL
-      joinConf(loggedOnUser.confRJoin,FALSE,FORCE_MAILSCAN_SKIP)
+      joinConf(loggedOnUser.confRJoin,FALSE,TRUE)
       loadFlagged()
       IF StrLen(historyFolder)>0 THEN loadHistory()
       blockOLM:=FALSE
@@ -24865,54 +24733,6 @@ PROC baudTime()
  	ENDIF
 ENDPROC stat
 
-PROC doSystemPassword()
-  DEF sysprompt[255]:STRING
-  DEF tempStr[255]:STRING
-  DEF tempStr2[255]:STRING
-  DEF stat,tries
-
-  runSysCommand('SYSTEMPW','')
-  IF(logonType>=LOGON_TYPE_REMOTE)
-  	stat:=checkCarrier()
- 	  IF(stat=FALSE)
-      state:=STATE_LOGGING_OFF
-      RETURN RESULT_FAILURE
-    ENDIF
- 	ENDIF
-  IF reqState=REQ_STATE_LOGOFF
-    state:=STATE_LOGGING_OFF
-    RETURN RESULT_FAILURE
-  ENDIF
-  
-  IF (StrLen(cmds.sysPass)=0) THEN RETURN RESULT_SUCCESS
-
-  aePuts('\b\n')
-  IF readToolType(TOOLTYPE_NODE,node,'SYS_PWRD_PROMPT',sysprompt)=FALSE THEN StrCopy(sysprompt,'>: ')
-
-  tries:=1
-  WHILE tries<4
-    displayScreen(SCREEN_PRIVATE)
-    stat:=getPass2(sysprompt,cmds.sysPass,0,30,tempStr)
-    IF(stat<0)
-      state:=STATE_LOGGING_OFF
-      RETURN RESULT_FAILURE
-    ENDIF
-    EXIT stat=RESULT_SUCCESS
-    aePuts('Invalid PassWord\b\n')
-    StringF(tempStr2,'\t**System Password Failure \s **',tempStr)
-    callersLog(tempStr2)
-    tries++
-  ENDWHILE
-
-  IF(tries=4)
-    callersLog('System Password Failure')
-    runSysCommand('SYSPWDFAIL','')
-    state:=STATE_LOGGING_OFF
-    RETURN RESULT_FAILURE
-  ENDIF
-  aePuts('\b\n')
-ENDPROC RESULT_SUCCESS
-
 PROC processLogon()
   DEF tempStr[255]:STRING
   DEF tempStr2[255]:STRING
@@ -24922,7 +24742,8 @@ PROC processLogon()
   DEF userFound
   DEF newUser
   DEF userNum
-  DEF stat
+  DEF tries,stat
+  DEF sysprompt[255]:STRING
   DEF filetags
 
   ripMode:=FALSE
@@ -24936,8 +24757,29 @@ PROC processLogon()
   conCLS()
   conPuts('[0m')
 
-  IF (checkToolTypeExists(TOOLTYPE_NODE,node,'STEALTH_MODE'))
-    IF doSystemPassword()<>RESULT_SUCCESS THEN RETURN
+  IF((StrLen(cmds.sysPass)>0) AND (checkToolTypeExists(TOOLTYPE_NODE,node,'STEALTH_MODE')))
+    IF readToolType(TOOLTYPE_NODE,node,'SYS_PWRD_PROMPT',sysprompt)=FALSE THEN StrCopy(sysprompt,'>: ')
+
+    tries:=1
+    WHILE tries<4
+      displayScreen(SCREEN_PRIVATE)
+      stat:=getPass2(sysprompt,cmds.sysPass,0,30,tempStr)
+		  IF(stat<0)
+        state:=STATE_LOGGING_OFF
+        RETURN
+      ENDIF
+	    EXIT stat=RESULT_SUCCESS
+      StringF(tempStr2,'\t**System Password Failure \s **',tempStr)
+		  callersLog(tempStr2)
+      tries++
+		ENDWHILE
+
+	  IF(tries=4)
+		  callersLog('System Password Failure')
+      state:=STATE_LOGGING_OFF
+		  RETURN
+    ENDIF
+    aePuts('\b\n')
 	ENDIF
 
   conPuts('[ p',-1)
@@ -24993,8 +24835,30 @@ PROC processLogon()
      IF (InStr(tempStr,'R',0)>=0) THEN ripMode:=TRUE
   ENDIF
  
-  IF (Not(checkToolTypeExists(TOOLTYPE_NODE,node,'STEALTH_MODE')))
-    IF doSystemPassword()<>RESULT_SUCCESS THEN RETURN
+  IF((StrLen(cmds.sysPass)>0) AND (Not(checkToolTypeExists(TOOLTYPE_NODE,node,'STEALTH_MODE'))))
+    aePuts('\b\n')
+    IF readToolType(TOOLTYPE_NODE,node,'SYS_PWRD_PROMPT',sysprompt)=FALSE THEN StrCopy(sysprompt,'>: ')
+
+    tries:=1
+    WHILE tries<4
+      displayScreen(SCREEN_PRIVATE)
+      stat:=getPass2(sysprompt,cmds.sysPass,0,30,tempStr)
+		  IF(stat<0)
+        state:=STATE_LOGGING_OFF
+        RETURN
+      ENDIF
+	    EXIT stat=RESULT_SUCCESS
+      StringF(tempStr2,'\t**System Password Failure \s **',tempStr)
+		  callersLog(tempStr2)
+      tries++
+		ENDWHILE
+
+	  IF(tries=4)
+		  callersLog('System Password Failure')
+      state:=STATE_LOGGING_OFF
+		  RETURN
+    ENDIF
+    aePuts('\b\n')
 	ENDIF
 
   displayScreen(SCREEN_BBSTITLE)
@@ -25016,9 +24880,9 @@ PROC processLogon()
 logonLoop:
  REPEAT
 
-  StringF(tempStr,'\b\nEnter your \s: ',sopt.namePrompt)
+  StringF(sysprompt,'\b\nEnter your \s: ',sopt.namePrompt)
  
- stat:=lineInput(tempStr,'',28,INPUT_TIMEOUT/2,userName)
+ stat:=lineInput(sysprompt,'',28,INPUT_TIMEOUT/2,userName)
  IF stat<>RESULT_SUCCESS
    state:=STATE_LOGGING_OFF
    RETURN
@@ -25341,7 +25205,6 @@ PROC newUserAccount(userName: PTR TO CHAR)
         tries++   
 		    IF(tries>2)
 			    aePuts('\b\nExcessive Password Failure\b\n')
-          runSysCommand('NUPFAIL','')
 			    RETURN RESULT_SLEEP_LOGOFF
 			  ENDIF
       ENDIF
@@ -26152,8 +26015,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
    
-  StrCopy(expressVer,'v5.0.0-b18',ALL)
-  StrCopy(expressDate,'22-Nov-2018',ALL)
+  StrCopy(expressVer,'v5.0.0-b19',ALL)
+  StrCopy(expressDate,'26-Nov-2018',ALL)
 
   InitSemaphore(bgData)
  
@@ -26174,7 +26037,7 @@ PROC main() HANDLE
      'ACS.CUSTOMCOMMANDS','ACS.JOIN_SUB_CONFERENCE','ACS.ZOOM_MAIL','ACS.MCI_MESSAGE','ACS.EDIT_DIRS','ACS.EDIT_FILES','ACS.BREAK_CHAT','ACS.QUIET_NODE','ACS.SYSOP_COMMANDS','ACS.WHO_IS_ONLINE',
      'ACS.RELOGON','ACS.ULSTATS','ACS.XPR_RECEIVE','ACS.XPR_SEND','ACS.WILDCARDS','ACS.CONFERENCE_ACCOUNTING','ACS.PRI_MSGFILES','ACS.PUB_MSGFILES','ACS.FULL_EDIT','ACS.CONFFLAGS',
      'ACS.OLM','ACS.HIDE_FILES','ACS.SHOW_PAYMENTS','ACS.CREDIT_ACCESS','ACS.VOTE','ACS.MODIFY_VOTE','ACS.FILE_EXPANSION','ACS.EDIT_REAL_NAME','ACS.EDIT_USER_NAME','ACS.CENSORED',
-     'ACS.ACCOUNT_VIEW','ACS.TRANSLATION','ACS.UNKNOWN','ACS.CREATE_CONFERENCE','ACS.LOCAL_DOWNLOADS','ACS.MAX_PAGES','ACS.OVERRIDE_DEFAULTS','ACS.HOLD_ACCESS']
+     'ACS.ACCOUNT_VIEW','ACS.TRANSLATION','ACS.UNKNOWN','ACS.CREATE_CONFERENCE','ACS.LOCAL_DOWNLOADS','ACS.MAX_PAGES','ACS.OVERRIDE_DEFAULTS']
 
     
     my_struct.zoom_mailcnt:=0
@@ -26410,9 +26273,6 @@ PROC main() HANDLE
 
   StrCopy(historyFolder,'')
   readToolType(TOOLTYPE_BBSCONFIG,'','HISTORY',historyFolder)
-
-  i:=readToolTypeInt(TOOLTYPE_BBSCONFIG,node,'HOLD_ACCESS_LEVEL')
-  IF i<>-1 THEN holdAccessLevel:=i
   
   IF checkToolTypeExists(TOOLTYPE_NODE,node,'NO_EMAILS')=FALSE
     mailOptions.smtpPort:=readToolTypeInt(TOOLTYPE_BBSCONFIG,0,'SMTP_PORT')
