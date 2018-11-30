@@ -613,7 +613,7 @@ DEF loggedOnUserMisc: PTR TO userMisc
 DEF tempAccess: tempAccess
 DEF tempAccessGranted=FALSE
 DEF my_struct:myst
-DEF sopt: startOption
+DEF sopt=NIL: PTR TO startOption
 DEF mailOptions: mailConfig
 DEF node
 DEF ringCount
@@ -810,7 +810,7 @@ DEF dStatBar=NIL
 DEF consoleMP=NIL: PTR TO mp
 DEF consoleReadIO=NIL: PTR TO iostd
 DEF rawArrow=FALSE
-DEF broker=NIL, broker_mp=NIL:PTR TO mp, cxsigflag
+DEF broker=NIL, broker_mp=NIL:PTR TO mp, cxsigflag=0
 
 DEF securityNames
 DEF securityFlags[255]:STRING
@@ -909,7 +909,7 @@ PROC stcsma(s: PTR TO CHAR,p: PTR TO CHAR)
       ret:=MatchPatternNoCase(buf, s)
      ENDIF
   ENDIF
-  END buf
+  Dispose(buf)
 ENDPROC ret
 
 PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, toemail:PTR TO CHAR)
@@ -1597,7 +1597,6 @@ PROC reInitModem()
 ENDPROC
 
 PROC openSerial(baud, dataLen, stopBits)
-  DEF cia_ptr=12570624 ->0xBFD000
   DEF flags,rcount=0,error
   DEF errorstr[255]:STRING
 
@@ -2616,6 +2615,26 @@ PROC aePutChar(c)
   aePuts(str)
 ENDPROC
 
+PROC countSpaces(str:PTR TO CHAR)
+  DEF i,count=0
+
+  FOR i:=0 TO StrLen(str)-1
+    IF str[i]=" "
+      count++
+    ENDIF
+  ENDFOR
+ENDPROC count
+
+PROC freeList(list:PTR TO LONG)
+  DEF i
+  IF list<>NIL
+    FOR i:=0 TO ListLen(list)-1
+      DisposeLink(ListItem(list,i))
+    ENDFOR
+    END list
+  ENDIF
+ENDPROC
+
 PROC aePuts(string,force=FALSE)
   aePuts2(string,-1,force)
 ENDPROC
@@ -2879,9 +2898,8 @@ PROC yesNo(flag)
   DEF ch
 
  IF(flag) 
-     ch:=Not(flag)
 ->     AEPutStr((ch?"(y/N)?)
-     IF(ch)
+     IF(flag=2)
        aePuts('[32m([33my[32m/[33mN[32m)[32m?[0m ')
      ELSE
        aePuts('[32m([33mY[32m/[33mn[32m)[32m?[0m ')
@@ -4086,20 +4104,18 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
   DEF mp: PTR TO mp
   DEF exestring[100]:STRING
   DEF ximSig,signals
-  DEF msg: PTR TO jhMessage,msg2: PTR TO jhMessage
+  DEF msg: PTR TO jhMessage
   DEF doormsg: PTR TO doorMsg
-  DEF charptr: PTR TO CHAR
   DEF temp
   DEF async,ch
   DEF i,f
   DEF nodes = 0,msgcmd
   DEF tempstring[255]:STRING
-  DEF tempstring2[255]:STRING
   DEF runOnExit[255]:STRING
   DEF exit=0
   DEF alreadyActive=FALSE
   DEF tuserdata:PTR TO user,tuserkeys:PTR TO userKeys, tusermisc: PTR TO userMisc
-  DEF filetags,oldViewSafe
+  DEF oldViewSafe
 
   StringF(tempstring,'run door: \s',cmd)
   debugLog(LOG_DEBUG,tempstring)
@@ -5895,7 +5911,7 @@ PROC processMciCmd(mcidata,len,pos)
       aePuts2(flaglist,nlen)    
     ELSEIF (StrCmp(cmd,'FC',ALL))
       pos:=pos+2+t
-      flagfilelist:=List(StrLen(flaglist))
+      flagfilelist:=List(countSpaces(flaglist)+1)
       parseList(flaglist,flagfilelist)
       StringF(tempstr,'\d',ListLen(flagfilelist))
       aePuts(tempstr)
@@ -5905,7 +5921,7 @@ PROC processMciCmd(mcidata,len,pos)
       END flagfilelist
     ELSEIF (StrCmp(cmd,'FL',ALL))
       pos:=pos+2+t
-      flagfilelist:=List(StrLen(flaglist))
+      flagfilelist:=List(countSpaces(flaglist)+1)
       parseList(flaglist,flagfilelist)
 
       FOR i:=0 TO ListLen(flagfilelist)-1
@@ -6400,7 +6416,6 @@ ENDPROC
 
 /*
 PROC tranChat()
-  DEF conXpos=0,serYpos=0
   DEF whichCon,whichSer
   
   DEF tempstr1[255]:STRING
@@ -6606,7 +6621,6 @@ PROC tranChat()
 ENDPROC*/
 
 PROC tranChat()
-  DEF conXpos=0,serYpos=0
   DEF whichCon,whichSer
   
   DEF tempstr1[255]:STRING
@@ -7053,7 +7067,6 @@ ENDPROC FALSE
 
 PROC findSecurityScreen(screenDirAndName,screenfileName)
   DEF secLevel
-  DEF errorStr[255]:STRING
   DEF minLevel=5
   DEF defscr=FALSE
 
@@ -9200,6 +9213,7 @@ PROC parseList(liststring,list)
   DEF tempstr[255]:STRING
   
   SetList(list,0)
+
   IF StrLen(liststring)=0 THEN RETURN
   
   startpos:=0
@@ -9231,6 +9245,10 @@ PROC parseList(liststring,list)
 ENDPROC
 
 PROC parseParams(paramstring)
+  DEF i
+  FOR i:=0 TO ListLen(parsedParams)-1
+    DisposeLink(ListItem(parsedParams,i))
+  ENDFOR
   parseList(paramstring,parsedParams)
 ENDPROC
 
@@ -9452,7 +9470,7 @@ PROC errorLog(stringout: PTR TO CHAR)
 ENDPROC
 
 PROC fileListReverse(filename: PTR TO CHAR)
-  DEF currentPos,readsize,loop,stat,stat2
+  DEF currentPos,readsize,loop,stat
   DEF buf:PTR TO CHAR
   DEF bufptr1:PTR TO CHAR, bufptr2:PTR TO CHAR
   DEF fh
@@ -9510,18 +9528,18 @@ PROC fileListReverse(filename: PTR TO CHAR)
       Close(fh)
       stat:=displayIt3(bufptr1)
       IF stat<0
-        END buf
+        Dispose(buf)
         RETURN stat
       ENDIF
       IF bufend
         stat:=displayIt3(bufptr2)
         IF stat<0
-          END buf
+          Dispose(buf)
           RETURN stat
         ENDIF
       ENDIF
     ENDIF
-    END buf
+    Dispose(buf)
   ENDIF
 ENDPROC RESULT_SUCCESS
 
@@ -11109,7 +11127,6 @@ ENDPROC
 PROC enterMSG(gfh)
   DEF aFlag
   DEF str[255]:STRING
-  DEF string[255]:STRING
   DEF firstparam
   DEF tempStr[255]:STRING
   DEF exit,i,i2,i3,stat
@@ -12698,7 +12715,7 @@ PROC isInList(testflaglist,s)
 
   IF StrLen(testflaglist)=0 THEN RETURN FALSE
 
-  flagfilelist:=List(StrLen(testflaglist))
+  flagfilelist:=List(countSpaces(testflaglist)+1)
 
   parseList(testflaglist,flagfilelist)
 
@@ -13391,6 +13408,8 @@ PROC regServer()
     strCpy(cmds.sysopName,tempUser.name,31)
 
     StringF(mybbsLoc,'\s','someplace')
+    
+    sopt:=NEW sopt
 
     sopt.leftEdge:=0
     sopt.topEdge:=0
@@ -13498,28 +13517,28 @@ PROC setEnvStat(statCode)
   DEF status[200]:STRING
   
   currentStat:=statCode
-  IF (sopt.toggles[TOGGLES_MULTICOM]<>0)
-    IF (singleNode<>0) 
-      ObtainSemaphore(singleNode)
+  IF sopt<>NIL
+    IF (sopt.toggles[TOGGLES_MULTICOM]<>0)
+      IF (singleNode<>0) 
+        ObtainSemaphore(singleNode)
 
-      IF loggedOnUser<>NIL
-        strCpy(singleNode.handle,loggedOnUser.name,ALL)
-        strCpy(singleNode.location-1,loggedOnUser.location,ALL)
-      ELSE
-        strCpy(singleNode.handle,'',ALL)
-        strCpy(singleNode.location-1,'',ALL)
+        IF loggedOnUser<>NIL
+          strCpy(singleNode.handle,loggedOnUser.name,ALL)
+          strCpy(singleNode.location-1,loggedOnUser.location,ALL)
+        ELSE
+          strCpy(singleNode.handle,'',ALL)
+          strCpy(singleNode.location-1,'',ALL)
+        ENDIF
+
+        strCpy(singleNode.misc1,'',ALL)
+        strCpy(singleNode.misc2,'',ALL)
+        
+        currentStat:=statCode
+        IF(quietFlag) THEN singleNode.status:=0-(statCode+2) ELSE singleNode.status:=currentStat
+        singleNode.misc2[0]:=IF blockOLM THEN 1 ELSE 0
+        ReleaseSemaphore(singleNode)
       ENDIF
-
-      strCpy(singleNode.misc1,'',ALL)
-      strCpy(singleNode.misc2,'',ALL)
-      
-      currentStat:=statCode
-      IF(quietFlag) THEN singleNode.status:=0-(statCode+2) ELSE singleNode.status:=currentStat
-      singleNode.misc2[0]:=IF blockOLM THEN 1 ELSE 0
-      ReleaseSemaphore(singleNode)
     ENDIF
-  ELSE
-    currentStat:=statCode
   ENDIF
 
   StringF(environ,'STATS@\d',node)
@@ -13807,24 +13826,24 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
   ENDIF
 
 /* if user hit chat & window is no color, add * infront of user name */
-  IF((bitPlanes=1) AND (pagedFlag)) THEN StringF(string,'*\s[14]',hoozer.name) ELSE StringF(string,'\s[15]',hoozer.name)
+  IF((bitPlanes=1) AND (pagedFlag)) THEN StringF(string,'*\l\s[14]',hoozer.name) ELSE StringF(string,'\l\s[15]',hoozer.name)
   statMessage(1,1,string)
   ->statChatFlag()
   updateTitle(hoozer)
 
-  StringF(string,'\s[15]',hoozer3.realName)
+  StringF(string,'\l\s[15]',hoozer3.realName)
   statMessage(17,1,string)
 
-  StringF(string,'\d[3]',hoozer.slotNumber)
+  StringF(string,'\l\d[3]',hoozer.slotNumber)
   statMessage(33,1,string)
 
-  StringF(string,'\d[3]',hoozer.secStatus)
+  StringF(string,'\l\d[3]',hoozer.secStatus)
   statMessage(37,1,string)
 
-  StringF(string,'\s[9]',hoozer.conferenceAccess)
+  StringF(string,'\l\s[9]',hoozer.conferenceAccess)
   statMessage(41,1,string)
 
-  StringF(string,'\s[12]',hoozer.phoneNumber)
+  StringF(string,'\l\s[12]',hoozer.phoneNumber)
   statMessage(51,1,string)
 
 ->what goes in here? seems blank
@@ -13832,21 +13851,21 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
   StringF(string,'\r\d[7]',onlineBaud)
   statMessage(73,1,string)
 
-  StringF(string,'\s[31]',hoozer.location)
+  StringF(string,'\l\s[31]',hoozer.location)
   statMessage(1,2,string)
 
 
   ->statChatFlag()
-  StringF(string,'\d[2]',hoozer.secLibrary)
+  StringF(string,'\l\d[2]',hoozer.secLibrary)
   statMessage(36,2,string)
 
-  StringF(string,'\d[2]',hoozer.secBoard)
+  StringF(string,'\l\d[2]',hoozer.secBoard)
   statMessage(33,2,string)
 
-  StringF(string,'\d[5]',hoozer.downloads AND $FFFF)
+  StringF(string,'\l\d[5]',hoozer.downloads AND $FFFF)
   statMessage(39,2,string)
 
-  StringF(string,'\d[5]',hoozer.uploads AND $FFFF)
+  StringF(string,'\l\d[5]',hoozer.uploads AND $FFFF)
   statMessage(45,2,string)
 
   formatBCD(loggedOnUserMisc.downloadBytesBCD,bcdStr)
@@ -13855,8 +13874,8 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
     StrAdd(bcdStr,'K')
   ENDIF
 
-  ->StringF(string,'\d[12]',hoozer.bytesDownload)
-  StringF(string,'\s[12]',bcdStr)
+  ->StringF(string,'\l\d[12]',hoozer.bytesDownload)
+  StringF(string,'\l\s[12]',bcdStr)
   statMessage(51,2,string)
 
   formatBCD(loggedOnUserMisc.uploadBytesBCD,bcdStr)
@@ -13865,17 +13884,17 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
     StrAdd(bcdStr,'K')
   ENDIF
 
-  ->StringF(string,'\d[12]',hoozer.bytesUpload)
-  StringF(string,'\s[12]',bcdStr)
+  ->StringF(string,'\l\d[12]',hoozer.bytesUpload)
+  StringF(string,'\l\s[12]',bcdStr)
   statMessage(64,2,string)
 
   StringF(string,'\r\z\d[3]',currentConf)
   statMessage(77,2,string)
 
-  StringF(string,'\d[8]',hoozer.dailyBytesLimit)
+  StringF(string,'\l\d[8]',hoozer.dailyBytesLimit)
   statMessage(36,3,string)
 
-  StringF(string,'\d[5]',hoozer.timesCalled AND $FFFF)
+  StringF(string,'\l\d[5]',hoozer.timesCalled AND $FFFF)
   statMessage(45,3,string)
 
   statMessage(51,3,'                           ')
@@ -15675,7 +15694,7 @@ ENDPROC
 PROC stripReturn(str: PTR TO CHAR)
   DEF i,t
   i:=StrLen(str)-1
-  WHILE(i>0)
+  WHILE(i>=0)
     t:=str[i]
     IF(t<=32) THEN str[i]:=0 ELSE RETURN
     i--
@@ -15857,7 +15876,6 @@ PROC uploadDesc()
   DEF str[255]:STRING,str2[255]:STRING,odate[50]:STRING,str3[200]:STRING,str4[200]:STRING,buff[255]:STRING
   DEF udf
   DEF brk=0
-  DEF seglist=0
  
   cleanItUp()
   aePuts('Batch UpLoading.....\b\n')
@@ -16343,7 +16361,7 @@ PROC getUN(sa: PTR TO CHAR)
   ENDIF
 ENDPROC 0
 
-PROC resumeStuff(tfs,fsuploading)
+PROC resumeStuff(tfs)
   DEF status,ch
   DEF string[256]:STRING,path[256]:STRING,ray2[256]:STRING,ray[256]:STRING,str[256]:STRING
   DEF fBlock:PTR TO fileinfoblock
@@ -16491,7 +16509,6 @@ PROC cleanPlayPen()
   DEF s: PTR TO CHAR
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
-  DEF tempstr3[255]:STRING
   DEF cnt = 0
  
   IF(StrLen(sopt.ramPen)>0) THEN StringF(tempstr,'\s/',sopt.ramPen) ELSE StringF(tempstr,'\sNode\d/Playpen/',cmds.bbsLoc,node)
@@ -17189,7 +17206,7 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
  
       SELECT protocol
           CASE "Z"
-              zresume:=resumeStuff(tFS,fSUploading)
+              zresume:=resumeStuff(tFS)
               IF(zresume<0) THEN RETURN zresume
               IF((zresume=0) AND strCmpi(cmd,'RG',ALL))
                   aePuts('\b\nThere are no more files to resume on.\b\n\b\n')
@@ -18766,7 +18783,6 @@ PROC vote()
   DEF found=0
   DEF i,confbyte,confbit
   DEF tempstr[255]:STRING
-  DEF questNum
   DEF cb: PTR TO confBase
   DEF voted,stat
   
@@ -18888,7 +18904,6 @@ PROC topicVote(topicNum)
   DEF votefile[255]:STRING
   DEF tempstr[255]:STRING
   DEF tempstr2[10]:STRING
-  DEF tempstr3[10]:STRING
   DEF ans,ch
   DEF cnt1,cnt2
   DEF fh,lock
@@ -20068,7 +20083,6 @@ PROC deleteConfAccess(slot)
   DEF t:confBase
   DEF i,j
   DEF temp[100]:STRING
-  DEF conferenceLocation[100]:STRING
   
   FOR i:=0 TO cmds.numConf-1
   
@@ -21049,7 +21063,6 @@ ENDPROC
 PROC sendOlmPacket(nodenum,msg:PTR TO CHAR,last)
   DEF np: PTR TO mp
   DEF olmMsg:PTR TO jhMessage
-  DEF singleNode: PTR TO singlePort
   DEF nodeserverport[15]:STRING
 
   StringF(nodeserverport,'AEServer.\d',nodenum)
@@ -21449,18 +21462,22 @@ PROC internalCommandFR(params)
 ENDPROC displayFileList(params,TRUE);
 
 PROC internalCommandFM(params)
-  DEF stat,fLLoop,mystat
+  DEF stat,fLLoop,i,useflagged=FALSE,dirloop
   DEF str[200]:STRING,ss[80]:STRING,ray[200]:STRING
   DEF tempfile[256]:STRING
   DEF fcopy = FALSE
   DEF startDir,dirScan,action
   DEF foundfile[12]:STRING
   DEF foundDateStr[20]:STRING
+  DEF flagfilelist:PTR TO LONG
+  DEF matchpos,matchend
 
   IF checkSecurity(ACS_EDIT_FILES)=FALSE THEN RETURN RESULT_NOT_ALLOWED
   
   setEnvStat(ENV_FILES) 
-  
+
+  parseParams(params)
+
   lineCount:=0
   nonStopDisplayFlag:=FALSE
 
@@ -21469,34 +21486,49 @@ PROC internalCommandFM(params)
  	  myError(5); ->Sorry();
  	  RETURN RESULT_FAILURE
  	ENDIF
-
-  parseParams(params)
-
+ 
   IF(ListLen(parsedParams)>0)
-  	StrCopy(ss,parsedParams[0])
+    flagfilelist:=List(ListLen(parsedParams))
+    
+    FOR i:=0 TO ListLen(parsedParams)-1
+      ListAdd(flagfilelist,[ListItem(parsedParams,i)])
+    ENDFOR
     JUMP fmSkip1
   ENDIF
+
+  IF StrLen(flaglist)>0
+    aePuts('You have flagged files, do you wish to work with these files ')
+    stat:=yesNo(1)  
+    IF(stat<0) THEN RETURN stat
+    aePuts('\b\n')
+    IF stat
+      useflagged:=TRUE
+      flagfilelist:=List(countSpaces(flaglist)+1)
+      parseList(flaglist,flagfilelist)
+      JUMP fmSkip1
+    ENDIF
+  ENDIF
  
-  aePuts('Enter filename to search for: ')
+  aePuts('Enter filename(s) to search for (wildcards are permitted): ')
   stat:=lineInput('','',78,INPUT_TIMEOUT,ss)
   IF(stat<0) THEN RETURN RESULT_NO_CARRIER
+    
+  aePuts('\b\n')
   IF(StrLen(ss)=0)
-    aePuts('\b\n')
     RETURN RESULT_SUCCESS
   ENDIF
 
+  flagfilelist:=List(countSpaces(ss)+1)
+  parseList(ss,flagfilelist)
+
 fmSkip1:
-  UpperStr(ss)
   
-  IF(ListLen(parsedParams)>1)
- 		stat,startDir,dirScan:=getDirSpan(parsedParams[1])
-  ELSE
-    stat,startDir,dirScan:=getDirSpan('');      /* chg to "A' to search all dirs */
-  ENDIF
- 
+  stat,startDir,dirScan:=getDirSpan('');      /* chg to "A' to search all dirs */
   IF(stat=RESULT_FAILURE) THEN RETURN RESULT_SUCCESS
  
-  IF(StrLen(ss)>0)
+  aePuts('\b\n')
+
+  IF(ListLen(flagfilelist)>0)
  
  	  fLLoop:=startDir
  	  WHILE(fLLoop<=dirScan)
@@ -21528,42 +21560,65 @@ fmSkip1:
  			  StrAdd(str,'hold/held')
  			  aePuts('\b\nScanning directory HOLD\b\n')
  			ENDIF
- 		  stat,action:=maintenanceFileSearch(dirScan=-1,str,ss,foundfile,foundDateStr)
- 		  IF(stat<0)
- 			  aePuts('\b\n')
-        IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
- 			  RETURN stat
- 			ENDIF
 
-      IF (stat<>RESULT_NOT_FOUND)
+      dirloop:=TRUE
+
+      matchpos:=0
+      WHILE dirloop
+
+        stat,action,matchpos:=maintenanceFileSearch(dirScan=-1,str,flagfilelist,foundfile,foundDateStr,matchpos)
+        IF(stat<0)
+          aePuts('\b\n')
+          IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+          RETURN stat
+        ENDIF
+
+        IF (stat=RESULT_NOT_FOUND)
+          dirloop:=FALSE
+        ELSE
           aePuts('\b\n')
           IF (action="D") OR (action="d")
-            maintenanceFileDelete(str,dirScan=-1,foundfile)
-            IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
-            RETURN RESULT_SUCCESS
+            IF maintenanceFileDelete(str,dirScan=-1,foundfile,matchpos)<>RESULT_SUCCESS
+              IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+              freeList(flagfilelist)
+              RETURN RESULT_SUCCESS
+            ENDIF
           ELSEIF (action="M") OR (action="m")
-            maintenanceFileMove(str,dirScan=-1,foundfile,foundDateStr)
-            IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
-            RETURN RESULT_SUCCESS
+            IF maintenanceFileMove(str,dirScan=-1,foundfile,foundDateStr,matchpos)<>RESULT_SUCCESS
+              IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+              freeList(flagfilelist)
+              RETURN RESULT_SUCCESS
+            ENDIF
           ELSEIF (action="V") OR (action="v")
-            IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
             IF dirScan=-1
               aePuts('\b\nView option is not available for hold directory\b\n')
             ELSE
               internalCommandV('V',foundfile)
             ENDIF
-            RETURN RESULT_SUCCESS
           ELSEIF (action="q") OR (action="q")
             IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+            freeList(flagfilelist)
             RETURN RESULT_SUCCESS
           ENDIF      
-      ENDIF
-           
+          IF useflagged
+            aePuts('\b\nRemove from flagged list')
+            stat:=yesNo(1)
+            IF(stat<0) 
+              freeList(flagfilelist)
+              RETURN stat
+            ENDIF
+            IF stat THEN removeFileList(foundfile)
+          ENDIF
+        ENDIF
+      ENDWHILE
+      IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+   
       fLLoop++
  		  ->if(DirScan!=-1) FLLoop+=1;
  		ENDWHILE
  	ENDIF
   aePuts('\b\n')
+  freeList(flagfilelist)
   IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
 ENDPROC RESULT_SUCCESS
 
@@ -21692,7 +21747,7 @@ PROC internalCommandM()
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandMS()
-  DEF conf,mscan,mystat,oldconf
+  DEF conf,mystat,oldconf
 
   oldconf:=currentConf
   currentConf:=0
@@ -21811,7 +21866,6 @@ ENDPROC RESULT_SUCCESS
 PROC internalCommandO()
   DEF result
   DEF string[255]:STRING
-  DEF string2[255]:STRING
 
   IF(pagesAllowed=0)
     setEnvStat(ENV_MAIL)
@@ -22489,7 +22543,7 @@ PROC internalCommandX()
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandZ(params)
-  DEF stat,fLLoop,mystat
+  DEF stat,fLLoop
   DEF str[200]:STRING,ss[80]:STRING,ray[200]:STRING
   DEF tempfile[256]:STRING
   DEF fcopy = FALSE
@@ -22519,8 +22573,9 @@ PROC internalCommandZ(params)
   aePuts('Enter string to search for: ')
   stat:=lineInput('','',78,INPUT_TIMEOUT,ss)
   IF(stat<0) THEN RETURN RESULT_NO_CARRIER
+
+  aePuts('\b\n')
   IF(StrLen(ss)=0)
-    aePuts('\b\n')
     RETURN RESULT_SUCCESS
   ENDIF
 
@@ -22537,6 +22592,8 @@ zSkip1:
  
   nonStopDisplayFlag:=paramsContains('NS')
  
+  aePuts('\b\n')
+
   IF(StrLen(ss)>0)
  
  	  fLLoop:=startDir
@@ -22897,7 +22954,7 @@ PROC asciiZoom()
 ENDPROC RESULT_SUCCESS
 
 PROC qwkZoomConf(confNum,recNum,confNameType)
-  DEF mystat,fi,fo,fo2,fi1,count,timeVar
+  DEF mystat,fi,fo,fo2,count
   DEF cb:PTR TO confBase
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
@@ -23181,9 +23238,9 @@ PROC getDirSpan(pass:PTR TO CHAR)
 
   IF(StrLen(pass)=0)
     IF (loggedOnUser.secStatus>=holdAccessLevel) OR (checkSecurity(ACS_HOLD_ACCESS))
-      StringF(str,'Directories: (1-\d), (A)ll, (U)pload, (H)old, (Enter)=none? ',maxDirs)
+      StringF(str,'[36mDirectories: [32m([33m1-\d[32m)[36m, [32m([33mA[32m)[36mll, [32m([33mU[32m)[36mpload, [32m([33mH[32m)[36mold, [32m([33mEnter[32m)[36m=none? [0m',maxDirs)
     ELSE
-      StringF(str,'Directories: (1-\d), (A)ll, (U)pload, (Enter)=none? ',maxDirs)
+      StringF(str,'[36mDirectories: [32m([33m1-\d[32m)[36m, [32m([33mA[32m)[36mll, [32m([33mU[32m)[36mpload, [32m([33mEnter[32m[32m)[36m=none? [0m',maxDirs)
     ENDIF
  	  aePuts(str)
 	  mystat:=lineInput('','',8,INPUT_TIMEOUT,str)
@@ -23222,7 +23279,7 @@ PROC getDirSpan(pass:PTR TO CHAR)
   dirScan:=Val(str)
   ->sscanf(str,"%d",&DirScan);
   IF((dirScan>maxDirs) OR (dirScan<1))
-	  aePuts('No such directory.\b\n\b\n')
+	  aePuts('\b\nNo such directory.\b\n\b\n')
 	  RETURN RESULT_FAILURE
  	ENDIF
   startDir:=dirScan
@@ -23231,14 +23288,14 @@ mNCont:
 ->  nonStopDisplayFlag:=CheckForNS(str);
 ENDPROC RESULT_SUCCESS,startDir,dirScan
 
-PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR)
+PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,matchposition)
   DEF oldDirName[255]:STRING
   DEF fh1,fh2
   DEF dirline[255]:STRING
   DEF compareFname[255]:STRING
   DEF padfname[255]:STRING
   DEF path[255]:STRING
-  DEF found,drivenum
+  DEF found,drivenum,currpos,foundit
 
     StrCopy(padfname,fname)
     UpperStr(padfname)
@@ -23260,26 +23317,46 @@ PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR)
 
     IF Rename(dirname,oldDirName) = FALSE
       aePuts('\b\nError during operation, delete operation aborted.\b\n')
-      RETURN
+      RETURN RESULT_FAILURE
     ENDIF
     
+    foundit:=FALSE
+
     IF (fh1:=Open(dirname,MODE_NEWFILE))>0
       IF (fh2:=Open(oldDirName,MODE_OLDFILE))>0
         found:=0
+        currpos:=Seek(fh2,0,OFFSET_CURRENT)
         WHILE(Fgets(fh2,dirline,255)<>NIL)
           IF(dirline[0]<>" ")
             StrCopy(compareFname,dirline,12)
             UpperStr(compareFname)
-            IF(StrCmp(compareFname,padfname)) THEN found:=1 ELSE found:=0
+            IF(StrCmp(compareFname,padfname)) AND (currpos=matchposition)
+              found:=1
+              foundit:=TRUE
+            ELSE
+              found:=0
+            ENDIF
           ENDIF
 
           IF found=0
             Fputs(fh1,dirline)
           ENDIF
+          currpos:=Seek(fh2,0,OFFSET_CURRENT)
         ENDWHILE
 
         Close(fh1)
         Close(fh2)
+
+        IF foundit=FALSE
+          DeleteFile(dirname)
+  
+          ->put the old file back
+          Rename(oldDirName,dirname)
+
+          aePuts('\b\nError updating directory list, delete operation aborted.\b\n')
+          RETURN RESULT_FAILURE
+        ENDIF
+
         DeleteFile(oldDirName)
 
         IF srchold
@@ -23297,7 +23374,6 @@ PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR)
           ENDWHILE
         ENDIF
         aePuts('\b\n\b\nDelete operation complete \b\n')
-
       ELSE
         Close(fh1)
         DeleteFile(dirname)
@@ -23305,16 +23381,18 @@ PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR)
         ->put the old file back
         Rename(oldDirName,dirname)
         aePuts('\b\nError reading directory list, delete operation aborted.\b\n')
+        RETURN RESULT_FAILURE
       ENDIF
     ELSE
       ->put the old file back
       Rename(oldDirName,dirname)
       aePuts('\b\nError creating the new directory list, delete operation aborted.\b\n')
+      RETURN RESULT_FAILURE
     ENDIF
 
-ENDPROC
+ENDPROC RESULT_SUCCESS
 
-PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr:PTR TO CHAR)
+PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr:PTR TO CHAR,matchposition)
   DEF oldDirName[255]:STRING
   DEF oldDestDirName[255]:STRING
   DEF fh1,fh2,fh3,fh4
@@ -23331,6 +23409,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
   DEF destDirStr[255]:STRING
   DEF d1,d2,brk,filemoved,status,n
   DEF destConf,destDir,stat,maxConfDir
+  DEF currpos
 
   REPEAT
     stat:=lineInput('\b\nConference Number to move to (L to List): ','',5,INPUT_TIMEOUT,destConfStr)
@@ -23425,19 +23504,21 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
   StrCopy(oldDestDirName,destDirStr)
   StrAdd(oldDestDirName,'.old')
 
+  filemoved:=FALSE
+
   aePuts('\b\nUpdating directory list, please wait..')
 
   DeleteFile(oldDirName)
   IF Rename(dirname,oldDirName)=FALSE
     aePuts('\b\nError accessing the directory list, move operation aborted.\b\n')
-    RETURN
+    RETURN RESULT_FAILURE
   ENDIF
 
   DeleteFile(oldDestDirName)
   IF Rename(destDirStr,oldDestDirName)=FALSE
     Rename(oldDirName,dirname)
     aePuts('\b\nError accessing the destination directory list, move operation aborted.\b\n')
-    RETURN
+    RETURN RESULT_FAILURE
   ENDIF
    
   IF (fh1:=Open(dirname,MODE_NEWFILE))>0
@@ -23445,12 +23526,14 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
       IF (fh3:=Open(destDirStr,MODE_NEWFILE))>0
         IF (fh4:=Open(oldDestDirName,MODE_OLDFILE))>0
           found:=0
+          currpos:=Seek(fh2,0,OFFSET_CURRENT)
           WHILE(Fgets(fh2,dirline,255)<>NIL)
             IF(dirline[0]<>" ")
               StrCopy(compareFname,dirline,12)
               UpperStr(compareFname)
-              IF(StrCmp(compareFname,padfname))
+              IF(StrCmp(compareFname,padfname)) AND (currpos=matchposition)
                 found:=1
+                filemoved:=TRUE
                 brk:=FALSE
                 ->we've found our file in the source dir, scan the dest dir for the correct position to put it
                 WHILE(Fgets(fh4,dirline2,255)<>NIL)
@@ -23491,6 +23574,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
               ->copy the line back to the new source dir
               Fputs(fh1,dirline)
             ENDIF
+            currpos:=Seek(fh2,0,OFFSET_CURRENT)
           ENDWHILE
 
           IF (found=1)
@@ -23510,7 +23594,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
           drivenum:=1
           StringF(path,'ULPATH.\d',drivenum)          
           
-          IF(readToolType(TOOLTYPE_CONF,destConf,path,tempstr))=FALSE
+          IF((readToolType(TOOLTYPE_CONF,destConf,path,tempstr))=FALSE) OR (filemoved=FALSE)
             DeleteFile(dirname)
 
             ->put the old file back
@@ -23521,8 +23605,12 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
             ->put the old file back
             Rename(oldDestDirName,destDirStr)
 
-            aePuts('\b\n Error reading upload directory, move operation aborted.\b\n')
-            
+            IF filemoved=FALSE
+              aePuts('\b\n failed to update directory list, move operation aborted.\b\n')
+            ELSE
+              aePuts('\b\n Error reading upload directory, move operation aborted.\b\n')
+            ENDIF
+            RETURN RESULT_FAILURE
           ENDIF
 
           aePuts('\b\nMoving file, please wait..')
@@ -23604,6 +23692,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
             Rename(oldDestDirName,destDirStr)
 
             aePuts('\b\n\b\nMove operation failed, restoring directories \b\n')
+            RETURN RESULT_FAILURE
           ENDIF
 
         ELSE
@@ -23622,6 +23711,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
           Rename(oldDestDirName,destDirStr)
 
           aePuts('\b\n Error reading directory list, move operation aborted.\b\n')
+          RETURN RESULT_FAILURE
         ENDIF
       ELSE
         Close(fh2)
@@ -23635,6 +23725,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
         ->put the old file back
         Rename(oldDestDirName,destDirStr)
         aePuts('\b\n Error creating the new directory list, move operation aborted.\b\n')
+        RETURN RESULT_FAILURE
       ENDIF
     ELSE
       Close(fh1)
@@ -23643,30 +23734,33 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
       ->put the old file back
       Rename(oldDirName,dirname)
       aePuts('\b\nError reading directory list, delete operation aborted.\b\n')
+      RETURN RESULT_FAILURE
     ENDIF
   ELSE
     ->put the old file back
     Rename(oldDirName,dirname)
     aePuts('\b\nError creating the new directory list, delete operation aborted.\b\n')
+    RETURN RESULT_FAILURE
   ENDIF
 
-ENDPROC
+ENDPROC RESULT_SUCCESS
 
-PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,search_string: PTR TO CHAR,outfname: PTR TO CHAR, outfiledate: PTR TO CHAR)
+PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,searchList: PTR TO LONG,outfname: PTR TO CHAR, outfiledate: PTR TO CHAR,startposition)
   DEF fi,found=FALSE
   DEF image[258]:ARRAY OF CHAR
   DEF dirfname[12]:STRING
-  DEF gi1,count=0,loop,ch
+  DEF gi1,count=0,loop,ch,i
   DEF datestr[20]:STRING
   DEF test:PTR TO CHAR
   DEF viewAllowed
 
-  UpperStr(search_string);
 
   fi:=Open(fname,MODE_OLDFILE)
   IF(fi<=0)
-    RETURN RESULT_SUCCESS
+    RETURN RESULT_NOT_FOUND,0,0
   ENDIF
+
+  Seek(fi,startposition,OFFSET_BEGINNING)
 
   viewAllowed:=checkSecurity(ACS_VIEW_A_FILE)
   IF holddir THEN viewAllowed:=FALSE
@@ -23678,23 +23772,29 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,search_string: PTR TO CHAR,
       IF gi1=3	/*  ctrl-c */
           Close(fi)
           aePuts('**Break\b\n')
-          RETURN RESULT_FAILURE
+          RETURN RESULT_FAILURE,0,0
       ENDIF
     ENDIF
-    IF(image[0]<>" ")
+    IF(StrLen(image)>0) AND (image[0]<>" ")
       StrCopy(dirfname,image,12)
-      UpperStr(dirfname)
-      IF(InStr(dirfname,search_string))>=0 THEN found:=1
-      parseParams(image)
-      FOR count:=2 TO 4
-        test:=parsedParams[count]
-        IF (StrLen(test)=8) AND (test[2]="-") AND (test[5]="-")
-          StrCopy(datestr,parsedParams[count])
-        ENDIF
+
+      FOR i:=0 TO ListLen(searchList)-1
+        IF stcsma(dirfname,searchList[i]) THEN found:=1
       ENDFOR
     ENDIF
 
     IF found
+      parseParams(image)
+      count:=2
+      WHILE count<ListLen(parsedParams)
+        test:=parsedParams[count]
+        IF (StrLen(test)=8) AND (test[2]="-") AND (test[5]="-")
+          StrCopy(datestr,test)
+          count:=100    ->force loop exit
+        ENDIF
+        count++
+      ENDWHILE
+
       count:=0
       aePuts('\b\n')
       aePuts(image)
@@ -23715,7 +23815,8 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,search_string: PTR TO CHAR,
       WHILE(loop)
         ch:=readChar(INPUT_TIMEOUT)
         IF(ch<0) 
-          RETURN ch
+          Close(fi)
+          RETURN ch,0,0
         ENDIF
         IF (ch="C") OR (ch="c")
           aePuts('\b\n')
@@ -23726,13 +23827,14 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,search_string: PTR TO CHAR,
           StrCopy(outfname,dirfname)
           IF (count:=InStr(dirfname,' '))>=0 THEN SetStr(outfname,count)
           StrCopy(outfiledate,datestr)
-          RETURN RESULT_SUCCESS,ch
+          RETURN RESULT_SUCCESS,ch,startposition
         ENDIF
       ENDWHILE
     ENDIF
+    startposition:=Seek(fi,0,OFFSET_CURRENT)
   ENDWHILE
   Close(fi)
-ENDPROC RESULT_NOT_FOUND,0
+ENDPROC RESULT_NOT_FOUND,0,0
 
 PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
   DEF fi;
@@ -23774,7 +23876,7 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
       ENDSELECT
     ENDIF
     stripReturn(image)
-    IF(image[0]<>" ")
+    IF (StrLen(image)>0) AND (image[0]<>" ")
       IF (x<100)
         current:=myzip+Shl(x,8)+1   ->ln(1,x)
         current[0]:=0
@@ -23828,12 +23930,11 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
   ENDIF
    
   Close(fi)
-  aePuts('\b\n')
   FreeMem(myzip,25600)
 ENDPROC RESULT_SUCCESS
 
 PROC displayFileList(params, reverse=FALSE)
-  DEF stat,stat2,fLLoop
+  DEF stat,fLLoop
   DEF str[81]:STRING,ray[200]:STRING
   DEF tempfile[256]:STRING
   DEF fcopy = FALSE
@@ -25244,7 +25345,6 @@ PROC displayKeys()
 ENDPROC
 
 PROC processAwait()
-    DEF obuf[255]:STRING
     DEF tempstr[255]:STRING
     DEF wasControl,ch
     DEF subState: PTR TO awaitState
@@ -25611,7 +25711,6 @@ PROC doNewUserQuestions()
   DEF p: PTR TO CHAR
   DEF fp2,fp1
   DEF temp1[255]:STRING
-  DEF temp2[255]:STRING
 
   StringF(filename,'\sNode\d/Script\d',cmds.bbsLoc,node,onlineBaud)
   StringF(afilename,'\sNode\d/Answers',cmds.bbsLoc,node)
@@ -26188,8 +26287,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
    
-  StrCopy(expressVer,'v5.0.0-b19',ALL)
-  StrCopy(expressDate,'26-Nov-2018',ALL)
+  StrCopy(expressVer,'v5.0.0-b20',ALL)
+  StrCopy(expressDate,'29-Nov-2018',ALL)
 
   InitSemaphore(bgData)
  
@@ -26258,29 +26357,6 @@ PROC main() HANDLE
 
    IF (diskfontbase:=OpenLibrary('diskfont.library', 37))=NIL THEN Raise(ERR_NO_DISKFONT)
 
-  IF (cxbase:=OpenLibrary('commodities.library', 37))=NIL THEN Raise(ERR_LIB)
-  
-  -> Commodities talks to a Commodities application through an Exec Message
-  -> port, which the application provides
-  broker_mp:=CreateMsgPort()
-
-  StringF(tempstr,'Express Node \d',node)
-  
-  broker:=CxBroker(
-           [NB_VERSION,   -> Version of the NewBroker object
-            0,  -> E-Note: pad byte
-           tempstr,  -> Name: commodities uses for this commodity
-           'Express',      -> Title of commodity that appears in CXExchange
-           'Broker for express',  -> Description
-            0,  -> Unique: tells CX not to launch a commodity with the same name
-            COF_SHOW_HIDE,  -> Flags: tells CX if this commodity has a window
-            0,  -> Pri: this commodity's priority
-            0,  -> E-Note: pad byte
-            broker_mp, -> Port: mp CX talks to
-            0   -> ReservedChannel: reserved for later use
-           ]:newbroker, NIL)
-  cxsigflag:=Shl(1, broker_mp.sigbit)
-
   historyBuf:=List(20)
   historyNum:=0
   historyCycle:=0
@@ -26300,9 +26376,6 @@ PROC main() HANDLE
   StrCopy(securityFlags,'')
 
   parsedParams:=List(100)
-
-  -> After it's set up correctly, the broker has to be activated
-  ActivateCxObj(broker, TRUE)
   
   ioFlags[IOFLAG_FIL_IN]:=0
   ioFlags[IOFLAG_KBD_IN]:=-1
@@ -26385,6 +26458,35 @@ PROC main() HANDLE
     ENDIF
   ENDIF
 
+  IF checkToolTypeExists(TOOLTYPE_NODE,node,'NO_CX')=FALSE
+    IF (cxbase:=OpenLibrary('commodities.library', 37))=NIL THEN Raise(ERR_LIB)
+    
+    -> Commodities talks to a Commodities application through an Exec Message
+    -> port, which the application provides
+    broker_mp:=CreateMsgPort()
+
+    StringF(tempstr,'Express Node \d',node)
+  
+    broker:=CxBroker(
+             [NB_VERSION,   -> Version of the NewBroker object
+              0,  -> E-Note: pad byte
+             tempstr,  -> Name: commodities uses for this commodity
+             'Express',      -> Title of commodity that appears in CXExchange
+             'Node Broker for Ami-Express',  -> Description
+              0,  -> Unique: tells CX not to launch a commodity with the same name
+              COF_SHOW_HIDE,  -> Flags: tells CX if this commodity has a window
+              0,  -> Pri: this commodity's priority
+              0,  -> E-Note: pad byte
+              broker_mp, -> Port: mp CX talks to
+              0   -> ReservedChannel: reserved for later use
+             ]:newbroker, NIL)
+    cxsigflag:=Shl(1, broker_mp.sigbit)
+
+      -> After it's set up correctly, the broker has to be activated
+    ActivateCxObj(broker, TRUE)
+  ENDIF
+
+  
   IF(openSerial(cmds.openingBaud,8,1)<>0) THEN Raise(ERR_NOSERIAL)
  
   IF(sopt.trapDoor)
@@ -26675,18 +26777,20 @@ PROC main() HANDLE
   ENDIF
   
  EXCEPT DO
-  setEnvStat(ENV_SHUTDOWN)
+  IF sopt<>NIL
+    setEnvStat(ENV_SHUTDOWN)
 
-  StringF(tempstr,'####### BBS Node \d shutdown @ \s#######\n',node,shutDownMsg)
-  startLog(tempstr)
-  IF(StrLen(sopt.shutDown)>0)
-    StringF(tempstr,'execute \s \d',sopt.shutDown,node)
-    IF(tempfh:=Open('NIL:',MODE_OLDFILE))
-      Execute(tempstr,tempfh,tempfh)
-      Close(tempfh)
+    StringF(tempstr,'####### BBS Node \d shutdown @ \s#######\n',node,shutDownMsg)
+    startLog(tempstr)
+    IF(StrLen(sopt.shutDown)>0)
+      StringF(tempstr,'execute \s \d',sopt.shutDown,node)
+      IF(tempfh:=Open('NIL:',MODE_OLDFILE))
+        Execute(tempstr,tempfh,tempfh)
+        Close(tempfh)
+      ENDIF
     ENDIF
   ENDIF
-
+    
   IF(captureFP)
     Close(captureFP)
     captureFP:=NIL
@@ -26694,74 +26798,30 @@ PROC main() HANDLE
 
   unloadTranslators()
 
-  FOR i:=0 TO ListLen(scomment)-1
-    DisposeLink(ListItem(scomment,i))
-  ENDFOR
-  END scomment
+  freeList(scomment)
+  freeList(parsedParams)
+  freeList(computerTypes)
+  freeList(historyBuf)
+  freeList(msgBuf)
 
-  FOR i:=0 TO ListLen(parsedParams)-1
-    DisposeLink(ListItem(parsedParams,i))
-  ENDFOR
-  END parsedParams
+  IF confBases
+    FOR i:=0 TO ListLen(confBases)-1
+      cb:=ListItem(confBases,i)
+      END cb
+    ENDFOR
+    END confBases
+  ENDIF
 
-  FOR i:=0 TO ListLen(computerTypes)-1
-    DisposeLink(ListItem(computerTypes,i))
-  ENDFOR
-  END computerTypes
+  freeList(confNames)
+  freeList(confDirs)
+  freeList(olmBuf)
+  freeList(olmQueue)
 
-  FOR i:=0 TO ListLen(historyBuf)-1
-    DisposeLink(ListItem(historyBuf,i))
-  ENDFOR
-  END historyBuf
+  freeList(xprLib)
+  freeList(xprTitle)
 
-  clearMsgBuf()
-  END msgBuf
-
-  FOR i:=0 TO ListLen(confBases)-1
-    cb:=ListItem(confBases,i)
-    END cb
-  ENDFOR
-  END confBases
-
-  FOR i:=0 TO ListLen(confNames)-1
-    DisposeLink(ListItem(confNames,i))
-  ENDFOR
-  END confNames
-
-  FOR i:=0 TO ListLen(confDirs)-1
-    DisposeLink(ListItem(confDirs,i))
-  ENDFOR
-  END confDirs
-
-  FOR i:=0 TO ListLen(olmBuf)-1
-    DisposeLink(ListItem(olmBuf,i))
-  ENDFOR
-  END olmBuf
-
-  FOR i:=0 TO ListLen(olmQueue)-1
-    DisposeLink(ListItem(olmQueue,i))
-  ENDFOR
-  END olmQueue
-
-  FOR i:=0 TO ListLen(xprLib)-1
-    DisposeLink(ListItem(xprLib,i))
-  ENDFOR
-  END xprLib
-
-  FOR i:=0 TO ListLen(xprTitle)-1
-    DisposeLink(ListItem(xprTitle,i))
-  ENDFOR
-  END xprTitle
-
-  FOR i:=0 TO ListLen(screenTypeTitle)-1
-    DisposeLink(ListItem(screenTypeTitle,i))
-  ENDFOR
-  END screenTypeTitle
-
-  FOR i:=0 TO ListLen(screenTypeExt)-1
-    DisposeLink(ListItem(screenTypeExt,i))
-  ENDFOR
-  END screenTypeExt
+  freeList(screenTypeTitle)
+  freeList(screenTypeExt)
   
   clearDiskObjectCache()
   IF diskObjectCache<>NIL THEN END diskObjectCache

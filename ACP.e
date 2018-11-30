@@ -12,6 +12,8 @@
        'exec/lists',
        'dos/dos',
        'dos/dosextens',
+       'commodities',
+       'libraries/commodities',
        'dos/dostags',
        'intuition/screens',
        'gadtools',
@@ -287,7 +289,6 @@ DEF acpError=FALSE
 
 DEF nport=NIL:PTR TO mp
 
-DEF aLine=0
 DEF dim:PTR TO INT   /*** Dimensions of ZIP window default ***/
 DEF zim:PTR TO INT
 /*  main function to test gadgets  */
@@ -404,6 +405,10 @@ DEF lockedNodes=-1
 
 DEF shellMode=FALSE
 
+DEF commodityEnabled=TRUE
+
+DEF broker=NIL, broker_mp=NIL:PTR TO mp, cxsigflag=0
+
 /* some global variables used to replace the statics from the C version 
 they are prefixed with the procdure name to prevent any name clashes
 */
@@ -499,7 +504,6 @@ ENDPROC
 PROC initNgAry()
   DEF i
   DEF nodetext:PTR TO CHAR
-  DEF newg:PTR TO newgadget
   
   ngAry[0]:=[GLEF_SYSOPLOGIN,topOffset+(theight*11)+GTOP_SYSOPLOGIN,GWID_SYSOPLOGIN,GHEI_SYSOPLOGIN,'Sysop Login',NIL,GAD_SYSOPLOGIN,PLACETEXT_IN OR NG_HIGHLABEL,NIL,NIL]:newgadget
   ngAry[1]:=[GLEF_INSTANTLOGIN,topOffset+(theight*11)+GTOP_INSTANTLOGIN,GWID_INSTANTLOGIN,GHEI_INSTANTLOGIN,'Instant Login',NIL,GAD_INSTANTLOGIN,PLACETEXT_IN OR NG_HIGHLABEL,NIL,NIL]:newgadget
@@ -781,7 +785,7 @@ PROC callNode(node,code)
     ENDIF
   ENDIF
   IF(register(node))
-    getuserstring(response,code)
+    sendMessage(code)
   ENDIF
 ENDPROC
 
@@ -789,7 +793,7 @@ PROC putToPort(message)
   PutMsg(nport,message)
 ENDPROC 1
 
-PROC getuserstring(ostring:PTR TO CHAR,nl)
+PROC sendMessage(nl)
   DEF jhmsg: PTR TO jhMessage
 
   jhmsg:=AllocMem(SIZEOF jhMessage,MEMF_PUBLIC OR MEMF_CLEAR)
@@ -1040,7 +1044,6 @@ ENDPROC eGList
 ->//********************************************************************
 PROC doControl(node)
   DEF cmd[200]:STRING  /*** temporary storage for misc ***/
-  DEF tempstr[255]:STRING
   DEF cd /*** stores the current node action ***/
   
   IF((buttonID>=0) AND (button))
@@ -1566,7 +1569,6 @@ ENDPROC
 PROC maddItem(type,label:PTR TO CHAR,commKey:PTR TO CHAR,flags,mutual,user)
    ->DEF i=0   was static
    DEF t:PTR TO newmenu
-   DEF temp[200]:STRING
    DEF s:PTR TO CHAR
    IF(menuset=1)
      eWinMenu:=AllocMem((SIZEOF newmenu)*maddItemi,MEMF_PUBLIC OR MEMF_CLEAR)
@@ -2112,7 +2114,6 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
   DEF i,j,n,cnt
   DEF wordList:PTR TO LONG,transCount=0
 
-
   FOR i:=0 TO 26
     counts[i]:=0
   ENDFOR
@@ -2135,9 +2136,9 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
         trans2:=NEW trans2
         AstrCopy(trans2.translatorName,translatorName,80)
         fsize:=getFileSize(fullFileName)
-        workMem:=New(fsize)     ->allocate some memory
-        
-        trans2.translationText:=New(fsize+2)     ->allocate some memory, two extra bytes for ending colon and space
+
+        workMem:=New(fsize+2)     ->allocate some memory (two extra bytes in case there is no newline at the end of the file)
+        trans2.translationText:=New(fsize+4)     ->allocate some memory, two extra bytes for ending colon and space and some in case there is no newline
         
         fh:=Open(fullFileName,MODE_OLDFILE)
         IF fh>0
@@ -2397,7 +2398,6 @@ PROC getIconBBSInfo(maxNodes)
   DEF sopt:PTR TO startOption 
   DEF cmd:PTR TO packedCommands
 
-  DEF j
   DEF i
   DEF def
   DEF temp[100]:STRING
@@ -2576,7 +2576,6 @@ PROC readStartUp(s:PTR TO CHAR)
   DEF sopt:PTR TO startOption
   DEF oldtooltypes,cfg
   DEF t:  PTR TO CHAR
-  DEF p: pstr
   DEF i
   DEF nodeCount
   DEF buttonnum=0
@@ -2637,6 +2636,7 @@ PROC readStartUp(s:PTR TO CHAR)
   ENDIF
   
   shellMode:=(FindToolType(oldtooltypes,'AESHELL')<>NIL)
+  commodityEnabled:=(FindToolType(oldtooltypes,'NO_CX')=NIL)
   
   IF(t:=FindToolType(oldtooltypes,'ICONIFIED')) THEN zipOn:=TRUE
   IF(t:=FindToolType(oldtooltypes,'ICONIFY.LEFTEDGE')) THEN zim[0]:=Val(t)
@@ -2882,6 +2882,7 @@ PROC do_appicon(myport: PTR TO mp)
   ELSE
     do_appiconi:=0
     RemoveAppIcon(appicon)
+    appicon:=NIL
     FreeDiskObject(dobj)
     CloseLibrary(workbenchbase)
   ENDIF
@@ -2931,7 +2932,7 @@ PROC runConfig(infile:PTR TO CHAR,outpath:PTR TO CHAR) HANDLE
   DEF p:jsmn_parser
   DEF tok:PTR TO jsmntok_t
   DEF tokcount
-  DEF fh,lock
+  DEF fh
   DEF fib:PTR TO fileinfoblock
   DEF filesize,buf
 
@@ -3000,6 +3001,60 @@ EXCEPT DO
   IF iconbase THEN CloseLibrary(iconbase)
 ENDPROC
 
+PROC processCommodityMessages()
+  DEF msg, msgid, msgtype
+
+  WHILE msg:=GetMsg(broker_mp)
+    -> Extract any necessary information from the CxMessage and return it
+    msgid:=CxMsgID(msg)
+    msgtype:=CxMsgType(msg)
+    ReplyMsg(msg)
+
+    SELECT msgtype
+    CASE CXM_IEVENT
+      -> Shouldn't get any of these in this example
+    CASE CXM_COMMAND
+      -> Commodities has sent a command
+      SELECT msgid
+      CASE CXCMD_APPEAR
+        IF do_appiconi  THEN ZipWindow(eWin)
+      CASE CXCMD_DISAPPEAR
+        IF do_appiconi=0 THEN ZipWindow(eWin)
+      CASE CXCMD_DISABLE
+        -> The user clicked CX Exchange disable gadget, better disable
+        ActivateCxObj(broker, FALSE)
+      CASE CXCMD_ENABLE
+        -> User clicked enable gadget
+        ActivateCxObj(broker, TRUE)
+      CASE CXCMD_KILL
+        -> User clicked kill gadget, better quit
+        attemptShutdown()
+        
+      ENDSELECT
+    ENDSELECT
+  ENDWHILE
+ENDPROC
+
+PROC attemptShutdown()
+  DEF i
+  
+  IF(activeNodeCount=0)
+    notDone:=0
+  ELSE
+    FOR i:=0 TO MAX_NODES-1
+      IF(StrLen(startNode[i])>0)
+        IF((users[i].actionVal=22) AND (down[i])=FALSE)
+          control:=SV_NODEOFFHOOK
+          down[i]:=TRUE
+          doControl(i)
+        ENDIF                     
+      ELSE
+        IF(users[i].actionVal<>24) THEN notDone:=1 
+      ENDIF
+    ENDFOR
+  ENDIF
+ENDPROC
+
 PROC main() HANDLE
 
   DEF iconStartName[200]:STRING
@@ -3021,7 +3076,6 @@ PROC main() HANDLE
   DEF version[200]:STRING
   DEF windowSig,myappsig
   DEF i,j,class
-  DEF n:PTR TO packedCommands
   DEF newlock=NIL
 
   DEF sopt:PTR TO startOption
@@ -3122,7 +3176,7 @@ PROC main() HANDLE
     myrequest('ACP is already running.')
     Raise(ERR_ALREADY_RUNNING)
   ENDIF
-
+  
   openMaster()
   clearUsers()
   initCycles()
@@ -3133,7 +3187,33 @@ PROC main() HANDLE
 
   readStartUp(iconStartName)
   IF acpError THEN Raise(ERR_STARTUP)
-  
+
+  IF commodityEnabled  
+    cxbase:=OpenLibrary('commodities.library', 37)
+    broker_mp:=CreateMsgPort()
+    IF broker_mp
+      broker:=CxBroker(
+               [NB_VERSION,   -> Version of the NewBroker object
+                0,  -> E-Note: pad byte
+               'ACP',  -> Name: commodities uses for this commodity
+               'ACP',      -> Title of commodity that appears in CXExchange
+               'ACP Broker for Ami-Express',  -> Description
+                0,  -> Unique: tells CX not to launch a commodity with the same name
+                COF_SHOW_HIDE,  -> Flags: tells CX if this commodity has a window
+                0,  -> Pri: this commodity's priority
+                0,  -> E-Note: pad byte
+                broker_mp, -> Port: mp CX talks to
+                0   -> ReservedChannel: reserved for later use
+               ]:newbroker, NIL)
+        cxsigflag:=Shl(1, broker_mp.sigbit)
+      
+        -> After it's set up correctly, the broker has to be activated
+      ActivateCxObj(broker, TRUE)
+
+    ENDIF
+  ENDIF
+
+
   defaultfontattr.name:=fontName
   defaultfontattr.ysize:=8
 
@@ -3281,27 +3361,16 @@ PROC main() HANDLE
           ENDFOR
         ENDIF
         WHILE (notDone)
-          signals:=Wait(masterSig OR windowSig OR myappsig)
+          signals:=Wait(masterSig OR windowSig OR myappsig OR cxsigflag)
+          
+          IF(signals AND cxsigflag) THEN processCommodityMessages()
+          
           IF(signals AND windowSig)
             WHILE (im:=Gt_GetIMsg(eWin.userport))
               class:=im.class
               SELECT class
                 CASE IDCMP_CLOSEWINDOW
-                  IF(activeNodeCount=0)
-                    notDone:=0
-                  ELSE
-                    FOR i:=0 TO MAX_NODES-1
-                      IF(StrLen(startNode[i])>0)
-                        IF((users[i].actionVal=22) AND (down[i])=FALSE)
-                          control:=SV_NODEOFFHOOK
-                          down[i]:=TRUE
-                          doControl(i)
-                        ENDIF                     
-                      ELSE
-                        IF(users[i].actionVal<>24) THEN notDone:=1 
-                      ENDIF
-                    ENDFOR
-                  ENDIF
+                  attemptShutdown()
                 CASE IDCMP_NEWSIZE
                   IF(shorten=FALSE) THEN do_appicon(myappport)
                   shorten:=0
@@ -3391,6 +3460,8 @@ PROC main() HANDLE
   ENDFOR
   
 EXCEPT DO
+  IF appicon THEN do_appicon(myappport)
+  
   shutDownMaster()
   IF oldDirLock THEN CurrentDir(oldDirLock)
   IF newlock<>NIL THEN UnLock(newlock)
@@ -3421,6 +3492,15 @@ EXCEPT DO
     ENDFOR
   ENDFOR
 
+  
+  IF broker THEN DeleteCxObj(broker)
+  IF broker_mp
+    -> Empty the port of CxMsgs
+    WHILE msg:=GetMsg(broker_mp) DO ReplyMsg(msg)
+    DeleteMsgPort(broker_mp) -> E-Note: C version incorrectly uses DeletePort()
+  ENDIF
+
+  IF cxbase THEN CloseLibrary(cxbase)
   IF iconbase THEN CloseLibrary(iconbase)
   IF gadtoolsbase THEN CloseLibrary(gadtoolsbase)
   IF diskfontbase THEN CloseLibrary(diskfontbase)
