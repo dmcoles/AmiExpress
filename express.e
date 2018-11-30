@@ -22151,7 +22151,7 @@ ENDPROC RESULT_SUCCESS
 
 PROC internalCommandVER()
   DEF tempStr[255]:STRING
-  StringF(tempStr,'\b\nAmiExpress \s Copyright Copyright ©2018 Darren Coles\b\n',expressVer)
+  StringF(tempStr,'\b\nAmiExpress \s Copyright (c)2018 Darren Coles\b\n',expressVer)
   aePuts(tempStr)
   aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   StringF(tempStr,'Registered to \s.\b\n',regKey)
@@ -25093,7 +25093,7 @@ PROC processLogon()
   ENDIF
   aePuts(tempStr)
 
- StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018 Darren Coles\b\n',expressVer)
+ StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright (c)2018 Darren Coles\b\n',expressVer)
  aePuts(tempStr)
  aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
  StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
@@ -26288,7 +26288,7 @@ PROC main() HANDLE
   DEF transptr:PTR TO mln
    
   StrCopy(expressVer,'v5.0.0-b20',ALL)
-  StrCopy(expressDate,'29-Nov-2018',ALL)
+  StrCopy(expressDate,'30-Nov-2018',ALL)
 
   InitSemaphore(bgData)
  
