@@ -7,8 +7,8 @@ IF you are saving icons you must open icon library in advance
 OPT OSVERSION=37
 OPT MODULE
 
-  MODULE 'dos/dos','workbench/workbench','icon','wb'
-
+  MODULE 'dos/dos','workbench/workbench','icon','wb','dos/dosextens'
+  MODULE '*miscfuncs'
 
 
 CONST JSMN_PARENT_LINKS=0
@@ -416,6 +416,7 @@ EXPORT PROC createdata(folderpath: PTR TO CHAR, js:PTR TO CHAR, t, count,doit,ic
 	DEF i, j, k,s,n,s2,s3,l1,l2,tot,dobj:PTR TO diskobject
   DEF fh,lock,toolTypes
   DEF tempstr[255]:STRING
+  DEF tempstr2[255]:STRING
   DEF folderpath2[255]:ARRAY OF CHAR
   DEF tok:PTR TO jsmntok_t,tok2:PTR TO jsmntok_t
 	IF (count = 0)
@@ -507,7 +508,31 @@ EXPORT PROC createdata(folderpath: PTR TO CHAR, js:PTR TO CHAR, t, count,doit,ic
               UNTIL tot=0
               ListAdd(toolTypes,[NIL])
 
-              dobj:=GetDefDiskObject(WBPROJECT)
+              dobj:=GetDiskObject(folderpath2)
+              IF dobj=NIL 
+                IF findAssign('BBS:')=FALSE
+                  StringF(tempstr2,'bbs:storage/icons/\s',tempstr)
+                  dobj:=GetDiskObject(tempstr2)
+                  IF dobj=NIL
+                    IF dirExists(folderpath2)
+                      StrCopy(tempstr,'bbs:storage/icons/drawer')
+                    ELSE
+                      StrCopy(tempstr,'bbs:storage/icons/default')
+                    ENDIF
+                    dobj:=GetDiskObject(tempstr)
+                  ENDIF
+                ENDIF
+                IF dobj=NIL
+                  IF dirExists(folderpath2)
+                    dobj:=GetDefDiskObject(WBDRAWER)
+                  ELSE
+                    dobj:=GetDefDiskObject(WBTOOL)
+                  ENDIF
+                ENDIF
+                IF dobj=NIL
+                  WriteF('Could not create an icon for file \s.info\n',folderpath2)
+                ENDIF
+              ENDIF
               IF dobj<>NIL
                 dobj.tooltypes:=toolTypes
                 IF PutDiskObject(folderpath2,dobj)=FALSE

@@ -33,7 +33,8 @@
        'icon'
 
   MODULE '*axcommon',
-         '*jsonParser'
+         '*jsonParser',
+         '*miscfuncs'
 
 /*
 'Setup'
@@ -570,7 +571,6 @@ PROC tLock(str:PTR TO CHAR)
     UnLock(lock)
     RETURN 1
   ENDIF
-  
 ENDPROC 0
 
 PROC free_pdir()
@@ -680,32 +680,6 @@ PROC getFileName(path:PTR TO CHAR,buf:PTR TO CHAR)
   free_pdir()
   FreeDosObject(DOS_FIB,dir_info)
 ENDPROC returnval
-
-PROC fileExists(filename)
-  DEF lh
-  IF lh:=Lock(filename,ACCESS_READ)
-    UnLock(lh)
-    RETURN TRUE
-  ENDIF
-ENDPROC FALSE
-
-PROC getFileSize(s: PTR TO CHAR)
-  DEF fBlock: fileinfoblock
-  DEF fLock
-  DEF fsize=8192
-
-  IF((fLock:=Lock(s,ACCESS_READ)))=NIL
-    RETURN 8192
-  ENDIF
-
-  IF((fBlock:=AllocDosObject(DOS_FIB,NIL)))=NIL
-    UnLock(fLock)
-    RETURN 8192
-  ENDIF
-  IF(Examine(fLock,fBlock)) THEN fsize:=fBlock.size
-  UnLock(fLock)
-  FreeDosObject(DOS_FIB,fBlock)
-ENDPROC fsize
 
 PROC findFirst(path: PTR TO CHAR,buf: PTR TO CHAR)
   DEF returnval=0

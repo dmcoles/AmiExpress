@@ -251,7 +251,8 @@ MODULE 'intuition/screens',
        'fifo',
        'owndevunit'
 
-  MODULE '*axcommon'
+  MODULE '*axcommon',
+         '*miscfuncs'
 
 OBJECT user
   name[30]:ARRAY OF CHAR
@@ -429,41 +430,6 @@ OBJECT mailStat
  pad[6]:ARRAY OF CHAR
 ENDOBJECT
 
-OBJECT myst
- zoom_mailcnt:LONG
- zoom_mailfile: PTR TO CHAR
- zoom_path: PTR TO CHAR
- sessiondbytes: LONG
- newuser:INT
- times_on: LONG
- ansiColor:INT
- startchatfile: PTR TO CHAR
- stopchatfile: PTR TO CHAR
- quotefile: PTR TO CHAR
- startchatnum: INT
- stopchatnum: INT
- quotenum: INT
- numlastcallers:INT
- lastcallerlevel:INT
- callerlist: PTR TO txt
- newuserfile: PTR TO CHAR
- max_desclines: INT
- uPcps: INT
- dNcps: INT
- uPcps_name: PTR TO CHAR
- uPcps_place: PTR TO CHAR
- dNcps_name: PTR TO CHAR
- dNcps_place: PTR TO CHAR
- flags: LONG
- cosysop_level: CHAR
- countryname: PTR TO CHAR
- notallowedfiles: PTR TO CHAR
- skiplcaller: PTR TO CHAR
- menu_say: PTR TO rndsay
- nozoom[9]: ARRAY OF CHAR
- zoommax: INT
-ENDOBJECT
-
 OBJECT txt
   next:PTR TO txt
   txt: PTR TO CHAR
@@ -612,7 +578,6 @@ DEF loggedOnUserKeys: PTR TO userKeys
 DEF loggedOnUserMisc: PTR TO userMisc
 DEF tempAccess: tempAccess
 DEF tempAccessGranted=FALSE
-DEF my_struct:myst
 DEF sopt=NIL: PTR TO startOption
 DEF mailOptions: mailConfig
 DEF node
@@ -846,6 +811,8 @@ DEF ownDevSignal=0
 
 DEF holdAccessLevel=201
 
+DEF max_desclines=15
+
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
       ERR_ASL  IF AllocAslRequest()=NIL
@@ -907,7 +874,7 @@ PROC stcsma(s: PTR TO CHAR,p: PTR TO CHAR)
       ret:=0
     ELSE
       ret:=MatchPatternNoCase(buf, s)
-     ENDIF
+    ENDIF
   ENDIF
   Dispose(buf)
 ENDPROC ret
@@ -2508,21 +2475,6 @@ PROC fileWrite(fh,str: PTR TO CHAR)
   s:=Write(fh,str,StrLen(str))
   IF s<>StrLen(str) THEN RETURN RESULT_FAILURE
 ENDPROC RESULT_SUCCESS
-
-PROC strCmpi(test1: PTR TO CHAR, test2: PTR TO CHAR, len)
-  DEF i,l1,l2
-
-  IF len=ALL
-    l1:=StrLen(test1)
-    l2:=StrLen(test2)
-    IF l1<>l2 THEN RETURN FALSE
-    len:=l1
-  ENDIF
-
-  FOR i:=0 TO len-1
-    IF charToLower(test1[i])<>charToLower(test2[i]) THEN RETURN FALSE
-  ENDFOR
-ENDPROC TRUE
 
 PROC stripAnsi(s: PTR TO CHAR, d: PTR TO CHAR, resetit, strip)
   DEF i,j,k,p,c
@@ -6837,25 +6789,6 @@ PROC chat()
   DEF str[100]:STRING,str2[10]:STRING,space[90]:STRING,buff[256]:STRING
   DEF chatfile[255]:STRING
   DEF fp
- /* check for out cycled chat start sayings */
-  IF(my_struct.startchatnum > 0)  /* do we have a chat file ?? */
-     IF((fp:=Open(my_struct.startchatfile,MODE_OLDFILE)))>0 THEN JUMP wx
-
-     StrCopy(buff,'')
-     j:= Rnd(my_struct.startchatnum)
-     i:=0
-     WHILE(ReadStr(fp,buff)<>-1) OR (StrLen(buff)>0)
-       EXIT (i >= j)
-       i++
-     ENDWHILE
-     Close(fp)
-     i:=0
-     IF(StrLen(buff)=0) THEN JUMP wx
-     aePuts('\b\n\b\n')
-     aePuts(buff)
-     aePuts('\b\n\b\n')
-     JUMP sx
-  ENDIF
 
 wx:
   checkOnlineStatus()
@@ -7017,25 +6950,6 @@ chatbrk:
   statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
   IF(ansiColour)	THEN aePuts('[0m')
   
-  /*---------------- check for our cycled chat stop sayings ------------*/
-  IF(my_struct.stopchatnum > 0)    /* do we have a chat file ?? */
-      IF((fp:=Open(my_struct.stopchatfile,MODE_OLDFILE)))<=0 THEN JUMP wy
-      StrCopy(buff,'')
-      j:=Rnd(my_struct.stopchatnum)
-      i:=0
-      WHILE((ReadStr(fp,buff)<>-1) OR (StrLen(buff)>0))
-        EXIT (i >= j)
-        i++
-      ENDWHILE
-      Close(fp)
-      i:=0
-      IF StrLen(buff)=0 THEN JUMP wy
-      aePuts('\b\n\b\n')
-      aePuts(buff)
-      aePuts('\b\n\b\n')
-      RETURN RESULT_SUCCESS
-  ENDIF
-
  wy:
 
   StrCopy(chatfile,'')
@@ -7052,18 +6966,6 @@ chatbrk:
   ENDIF
   runSysCommand('CHATOUT','')
 ENDPROC RESULT_SUCCESS
-
-PROC fileExists(filename, addInfo = FALSE)
-  DEF lh
-  DEF fn[255]:STRING
-  
-  StrCopy(fn,filename)
-  IF addInfo THEN StrAdd(fn,'.info')
-  IF lh:=Lock(fn,ACCESS_READ)
-    UnLock(lh)
-    RETURN TRUE
-  ENDIF
-ENDPROC FALSE
 
 PROC findSecurityScreen(screenDirAndName,screenfileName)
   DEF secLevel
@@ -8812,7 +8714,6 @@ PROC processLoggingOff()
   quickFlag:=FALSE
   ansiColour:=TRUE
   ripMode:=FALSE
-  my_struct.ansiColor:=-1
   mcioff:=FALSE
   mciViewSafe:=TRUE
 
@@ -9224,7 +9125,7 @@ PROC parseList(liststring,list)
       UpperStr(tempstr)
       newitem:=String(StrLen(TrimStr(tempstr)))
       StrCopy(newitem,TrimStr(tempstr),ALL)
-      ListAdd(list,[newitem])
+      IF StrLen(newitem)>0 THEN ListAdd(list,[newitem])
       startpos:=spacepos+1
       WHILE ((startpos<StrLen(liststring)) AND (liststring[startpos]=" ")) DO startpos:=startpos+1
       spacepos:=InStr(liststring,' ',startpos)
@@ -9234,13 +9135,13 @@ PROC parseList(liststring,list)
       UpperStr(tempstr)
       newitem:=String(StrLen(TrimStr(tempstr)))
       StrCopy(newitem,TrimStr(tempstr),ALL)
-      ListAdd(list,[newitem])
+      IF StrLen(newitem)>0 THEN ListAdd(list,[newitem])
     ENDIF
   ELSE
     newitem:=String(StrLen(liststring))
     StrCopy(newitem,liststring,ALL)
     UpperStr(newitem)
-    ListAdd(list,[newitem])
+    IF StrLen(newitem)>0 THEN ListAdd(list,[newitem])
   ENDIF
 ENDPROC
 
@@ -9310,18 +9211,6 @@ PROC isDigit(teststring)
   d,n:=Val(teststring)
   IF (n>0) THEN RETURN TRUE
 ENDPROC FALSE
-
-PROC charToLower(c)
-  DEF str[1]:STRING
-  str[0]:=c
-  LowerStr(str)
-ENDPROC str[0]
-
-PROC charToUpper(c)
-  DEF str[1]:STRING
-  str[0]:=c
-  UpperStr(str)
-ENDPROC str[0]
 
 PROC firstChar(teststring)
 ENDPROC TrimStr(teststring)-teststring
@@ -12918,58 +12807,6 @@ PROC displayULStats(u: PTR TO user, um:PTR TO userMisc)
   aePuts(string)
 ENDPROC
 
-PROC bStrC(bstr: PTR TO CHAR,buf: PTR TO CHAR)
- DEF str: PTR TO CHAR
- DEF loop,counter
-
-  counter:=0
-  str:=Shl(bstr,2)
-  SetStr(buf,str[0])
-  FOR loop:=1 TO str[0]
-    buf[counter]:=str[loop]
-    counter++
-  ENDFOR
-ENDPROC
-
-
-PROC findAssign(name: PTR TO CHAR)
-  DEF db: doslibrary
-  DEF rootnode: PTR TO rootnode
-  DEF dosinfo: PTR TO dosinfo
-  DEF devicelist: PTR TO devlist
-  DEF temp[256]:STRING
-  DEF temp2[256]:STRING
-  DEF i=0
- 
-  StrCopy(temp,name)
-  WHILE temp[i]
-   IF(temp[i]=":")
-     SetStr(temp,i)
-     i:=-1
-     JUMP bk
-   ENDIF
-   i++
-  ENDWHILE
- bk:
- 
-  IF i<>-1 THEN RETURN 20
-
- db:=dosbase
- rootnode:=db.root
- dosinfo:=Shl(rootnode.info,2)
- devicelist:=Shl(dosinfo.devinfo,2)
- Forbid()
- WHILE(devicelist.next)
-   bStrC(devicelist.name,temp2)
-   IF(strCmpi(temp2,temp,ALL)/* && devicelist->dl_Type!=DLT_DEVICE*/)
-     Permit()
-     RETURN 0
-   ENDIF 
-   devicelist:=Shl(devicelist.next,2)
- ENDWHILE
- Permit()
-ENDPROC 20
-
 PROC checkForFileSize(fn: PTR TO CHAR, cfn:PTR TO CHAR, z)
 
   DEF stat,pstat=1
@@ -15181,11 +15018,9 @@ PROC displayUserToCallersLog(udonly)
   formatLongDate(calltime,tempStr)
   formatLongTime(calltime,tempStr2)
   IF(loggedOnUser.timesCalled=0)
-    my_struct.newuser:=TRUE
     StringF(tempStr,'\s (\s) NEW [\d] \s (\s) \s',tempStr,tempStr2,loggedOnUser.slotNumber,loggedOnUser.name,connectString,loggedOnUser.location)
   ELSE
     StringF(tempStr,'\s (\s) [\d] \s (\s) \s',tempStr,tempStr2,loggedOnUser.slotNumber,loggedOnUser.name,connectString,loggedOnUser.location)
-    my_struct.newuser:=FALSE
   ENDIF
  
   IF(udonly=FALSE)
@@ -15203,24 +15038,6 @@ ENDPROC
 
 PROC isascii(n)
 ENDPROC n<=127
-
-PROC getFileSize(s: PTR TO CHAR)
-  DEF fBlock: fileinfoblock
-  DEF fLock
-  DEF fsize=8192
-
-  IF((fLock:=Lock(s,ACCESS_READ)))=NIL
-    RETURN 8192
-  ENDIF
-
-  IF((fBlock:=AllocDosObject(DOS_FIB,NIL)))=NIL
-    UnLock(fLock)
-    RETURN 8192
-  ENDIF
-  IF(Examine(fLock,fBlock)) THEN fsize:=fBlock.size
-  UnLock(fLock)
-  FreeDosObject(DOS_FIB,fBlock)
-ENDPROC fsize
 
 ->gets the actual name of a file (eg. you pass it a filename and it finds the correct case for it, so you can preserve the case)
 PROC getFileName(s: PTR TO CHAR)
@@ -15942,7 +15759,7 @@ updesccont:
     ENDIF
     formatLongDate(getSystemTime(),odate)
   
-    StringF(buff,'\b\nPlease enter a description, you only have \d lines.',my_struct.max_desclines)
+    StringF(buff,'\b\nPlease enter a description, you only have \d lines.',max_desclines)
     aePuts(buff)
  /* renamed Spazm to sysops */ ->//JOE 26-Jun
     aePuts('\b\nPress return alone to end.  Begin  with (/) to make upload ''Private'' to Sysop.\b\n')
@@ -15981,7 +15798,7 @@ updesccont:
       ENDIF
       IF(StrLen(str2)<>0) THEN fileWriteLn(udf,str2)
       x++
-    UNTIL ((StrLen(str2)=0) OR (x>=(my_struct.max_desclines-1)))
+    UNTIL ((StrLen(str2)=0) OR (x>=(max_desclines-1)))
     Close(udf)
  
   ENDWHILE
@@ -17127,6 +16944,33 @@ PROC sysopUpload()
   cleanPlayPen()
 ENDPROC RESULT_SUCCESS
 
+PROC formatFileSizeForDirList(fsize,fsstr:PTR TO CHAR)
+  DEF tmpSize
+  WriteF('calculate dir filesize: \d\n',fsize)
+  IF sopt.toggles[TOGGLES_CREDITBYKB]
+    tmpSize:=Shr(fsize,10)
+    IF tmpSize<=999999
+      StringF(fsstr,'\r\d[6]K',tmpSize)
+    ELSE
+      IF checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'CONVERT_TO_MB')=FALSE
+        StringF(fsstr,'\dK',tmpSize)
+      ELSE
+        StringF(fsstr,'\r\d[4].\dM',Shr(fsize,20),Div(fsize-Shl(Shr(fsize,20),20),104858))
+      ENDIF
+    ENDIF
+  ELSE
+    IF fsize<=9999999
+      StringF(fsstr,'\r\d[7]',fsize)
+    ELSE
+      IF checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'CONVERT_TO_MB')=FALSE
+        StringF(fsstr,'\d',fsize)
+      ELSE
+        StringF(fsstr,'\r\d[4].\dM',Shr(fsize,20),Div(fsize-Shl(Shr(fsize,20),20),104858))
+      ENDIF
+    ENDIF
+  ENDIF
+ENDPROC
+
 PROC uploadaFile(uLFType,cmd,params)            -> JOE
   DEF fBlock: fileinfoblock
   DEF fLock
@@ -17453,22 +17297,9 @@ ax:
             RETURN RESULT_FAILURE
         ENDIF
         IF( Examine(fLock,fBlock) ) THEN fsize:=fBlock.size
-        IF sopt.toggles[TOGGLES_CREDITBYKB]
-          StringF(fsstr,'\r\d[6]k',Shr(fsize,10))
-        ELSE
-          IF fsize<=9999999
-            StringF(fsstr,'\r\d[7]',fsize)
-          ELSEIF fsize<=99999999
-            StringF(fsstr,'\d',fsize)
-          ELSE
-            IF checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'CONVERT_TO_MB')=FALSE
-              StringF(fsstr,'\d',fsize)
-            ELSE
-              StringF(fsstr,'\r\d[4].\dM',Shr(fsize,20),Div(fsize-Shl(Shr(fsize,20),20),104858))
-            ENDIF
-          ENDIF
-        ENDIF
-
+        
+        formatFileSizeForDirList(fsize,fsstr)
+        
         UnLock(fLock)
         FreeDosObject(DOS_FIB,fBlock)
 
@@ -17502,7 +17333,7 @@ cinpAgain:
 ->             aePuts('                                [--------------------------------------------]\b\n')
 ->#else
 
-          StringF(buff,'\b\nEnter a description, you only have \d lines.',my_struct.max_desclines)
+          StringF(buff,'\b\nEnter a description, you only have \d lines.',max_desclines)
           aePuts(buff)
 
           aePuts('\b\nPress return alone to end.  Begin description with (/) to make upload ''Private''.\b\n')
@@ -17551,13 +17382,13 @@ cinpAgain:
               JUMP cNext
             ENDIF
             x2:=x2+1
-          UNTIL ((StrLen(scomment[x2-1])=0) OR (x2>= (my_struct.max_desclines-1)))
+          UNTIL ((StrLen(scomment[x2-1])=0) OR (x2>= (max_desclines-1)))
         ELSE
           ReadStr(uaf,fcomment)
           x2:=0
           WHILE(ReadStr(uaf,scomment[x2])<>-1) OR (StrLen(scomment[x2])>0)
             x2:=x2+1
-            EXIT (x2>=(my_struct.max_desclines-1))
+            EXIT (x2>=(max_desclines-1))
           ENDWHILE
           IF(uaf>0) THEN Close(uaf)
         ENDIF
@@ -17807,7 +17638,7 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
             ReadStr(fh,fcomment)
             WHILE(ReadStr(fh,scomment[x2])<>-1) OR (StrLen(scomment[x2])>0)
               x2:=x2+1
-              EXIT (x2>=(my_struct.max_desclines-1))
+              EXIT (x2>=(max_desclines-1))
             ENDWHILE
             IF(fh>0) THEN Close(fh)
           ENDIF
@@ -17890,22 +17721,7 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
            ENDIF
           ENDIF
 
-          IF sopt.toggles[TOGGLES_CREDITBYKB]
-            StringF(tempstr,'\r\d[6]k',Shr(fsize,10))
-          ELSE
-            IF fsize<=9999999
-              StringF(tempstr,'\r\d[7]',fsize)
-            ELSEIF fsize<=99999999
-              StringF(tempstr,'\d',fsize)
-            ELSE
-              IF checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'CONVERT_TO_MB')=FALSE
-                StringF(tempstr,'\d',fsize)
-              ELSE
-                StringF(tempstr,'\r\d[4].\dM',Shr(fsize,20),Div(fsize-Shl(Shr(fsize,20),20),104858))
-              ENDIF
-            ENDIF
-          ENDIF
-
+          formatFileSizeForDirList(fsize,tempstr)
           formatLongDate(getSystemTime(),tempstr2)
           
           /* Build the first line to send to upload dir */
@@ -18315,7 +18131,6 @@ sysopDL:
   ENDIF
 
   IF(freeDownloads=FALSE)
-    my_struct.sessiondbytes:=my_struct.sessiondbytes+dTBT   /* add dnloaded bytes to totalsession bytes */
     IF creditAccountTrackDownloads(loggedOnUser)
       
       ->loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+tempsize
@@ -22151,7 +21966,7 @@ ENDPROC RESULT_SUCCESS
 
 PROC internalCommandVER()
   DEF tempStr[255]:STRING
-  StringF(tempStr,'\b\nAmiExpress \s Copyright (c)2018 Darren Coles\b\n',expressVer)
+  StringF(tempStr,'\b\nAmiExpress \s Copyright Copyright ©2018 Darren Coles\b\n',expressVer)
   aePuts(tempStr)
   aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   StringF(tempStr,'Registered to \s.\b\n',regKey)
@@ -23462,16 +23277,17 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
       StringF(path,'\sDIR\d',getConfLocation(destConf),stat)
       IF (fh1:=Open(path,MODE_OLDFILE))>0
         Fgets(fh1,dirline,255)
+        dirline[13]:=" "
         parseParams(dirline)
-        FOR n:=2 TO 4
-          StrCopy(destDate,parsedParams[n])
+        IF ListLen(parsedParams)>2
+          StrCopy(destDate,parsedParams[2])
           IF (StrLen(destDate)=8) AND (destDate[2]="-") AND (destDate[5]="-")
             destDate[2]:=" "
             destDate[5]:=" "
             d2:=getDateCompareVal(destDate)
+            IF d1>=d2 THEN destDir:=stat
           ENDIF
-        ENDFOR
-        IF d1>=d2 THEN destDir:=stat
+        ENDIF
 
         Close(fh1)
       ENDIF
@@ -23538,18 +23354,19 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
                 ->we've found our file in the source dir, scan the dest dir for the correct position to put it
                 WHILE(Fgets(fh4,dirline2,255)<>NIL)
                   IF(dirline2[0]<>" ")
-
-                    parseParams(dirline2)
+                    StrCopy(tempstr,dirline2)
+                    tempstr[13]:=" "
+                    parseParams(tempstr)
                     
-                    FOR n:=2 TO 4
-                      StrCopy(destDate,parsedParams[n])
+                    IF ListLen(parsedParams)>2
+                      StrCopy(destDate,parsedParams[2])
                       IF (StrLen(destDate)=8) AND (destDate[2]="-") AND (destDate[5]="-")
                         destDate[2]:=" "
                         destDate[5]:=" "
                         d2:=getDateCompareVal(destDate)
+                        brk:=(d2>=d1)
                       ENDIF
-                    ENDFOR
-                    brk:=(d2>=d1)
+                    ENDIF
                   ENDIF
                   EXIT brk
                   ->copy the line from the old dest dir to the new dest dir
@@ -23748,9 +23565,10 @@ ENDPROC RESULT_SUCCESS
 PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,searchList: PTR TO LONG,outfname: PTR TO CHAR, outfiledate: PTR TO CHAR,startposition)
   DEF fi,found=FALSE
   DEF image[258]:ARRAY OF CHAR
+  DEF tempStr[258]:STRING
   DEF dirfname[12]:STRING
   DEF gi1,count=0,loop,ch,i
-  DEF datestr[20]:STRING
+  DEF datestr[258]:STRING
   DEF test:PTR TO CHAR
   DEF viewAllowed
 
@@ -23777,29 +23595,33 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,searchList: PTR TO LONG,out
     ENDIF
     IF(StrLen(image)>0) AND (image[0]<>" ")
       StrCopy(dirfname,image,12)
+      StrCopy(tempStr,image,12)
+      i:=0
+      WHILE tempStr[i]<>" "
+        i++
+      ENDWHILE
+      SetStr(tempStr,i)
 
       FOR i:=0 TO ListLen(searchList)-1
-        IF stcsma(dirfname,searchList[i]) THEN found:=1
+        IF stcsma(tempStr,searchList[i]) THEN found:=1
       ENDFOR
     ENDIF
 
     IF found
-      parseParams(image)
-      count:=2
-      WHILE count<ListLen(parsedParams)
-        test:=parsedParams[count]
-        IF (StrLen(test)=8) AND (test[2]="-") AND (test[5]="-")
-          StrCopy(datestr,test)
-          count:=100    ->force loop exit
-        ENDIF
-        count++
-      ENDWHILE
+      StrCopy(datestr,image)
+      datestr[13]:=" "
+      parseParams(datestr)
+      
+      test:=parsedParams[2]
+      IF (StrLen(test)=8) AND (test[2]="-") AND (test[5]="-")
+        StrCopy(datestr,test)
+      ENDIF
 
       count:=0
       aePuts('\b\n')
       aePuts(image)
       aePuts('\b\n')
-      WHILE(Fgets(fi,image,252)<>NIL) AND (image[0]=" ") AND (count<my_struct.max_desclines)
+      WHILE(Fgets(fi,image,252)<>NIL) AND (image[0]=" ") AND (count<max_desclines)
         stripReturn(image)
         aePuts(image)
         aePuts('\b\n')
@@ -24729,7 +24551,6 @@ PROC processLoggedOnUser()
           debugLog(LOG_WARN,string)
         ENDIF
 
-        my_struct.sessiondbytes:= 0    /* DOwnloaded Bytes for this user, this session */
         timeLimit:=loggedOnUser.timeTotal-loggedOnUser.timeUsed
         bytesADL:=loggedOnUser.dailyBytesLimit
         updateTimeUsed()
@@ -25093,7 +24914,7 @@ PROC processLogon()
   ENDIF
   aePuts(tempStr)
 
- StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright (c)2018 Darren Coles\b\n',expressVer)
+ StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018 Darren Coles\b\n',expressVer)
  aePuts(tempStr)
  aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
  StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
@@ -25123,7 +24944,6 @@ PROC processLogon()
 
      IF (InStr(tempStr,'N',0)>=0)
        ansiColour:=FALSE
-       my_struct.ansiColor:=0
      ENDIF
 
      IF (InStr(tempStr,'Q',0)>=0) AND (sopt.qLogon<>0) THEN quickFlag:=TRUE
@@ -26300,58 +26120,23 @@ PROC main() HANDLE
 
   stripAnsi(0,0,1,0)
   
-    securityNames:=[
-     'ACS.ACCOUNT_EDITING','ACS.READ_BULLETINS','ACS.COMMENT_TO_SYSOP','ACS.DOWNLOAD','ACS.UPLOAD','ACS.ENTER_MESSAGE','ACS.FILE_LISTINGS','ACS.JOIN_CONFERENCE','ACS.NEW_FILES_SINCE',
-     'ACS.PAGE_SYSOP','ACS.READ_MESSAGE','ACS.REMOTE_SHELL','ACS.DISPLAY_USER_STATS','ACS.VIEW_A_FILE','ACS.EDIT_USER_INFO','ACS.EDIT_INTERNET_NAME','ACS.EDIT_USER_LOCATION',
-     'ACS.EDIT_PHONE_NUMBER','ACS.EDIT_PASSWORD','ACS.ZIPPY_TEXT_SEARCH','ACS.OVERRIDE_CHAT','ACS.SYSOP_DOWNLOAD','ACS.SYSOP_VIEW','ACS.SYSOP_READ','ACS.KEEP_UPLOAD_CREDIT',
-     'ACS.OVERRIDE_TIMES','ACS.CLEAR_SCREEN_MSG','ACS.FREE_RESUMING','ACS.ONE_TIME_BULLETINS','ACS.DO_CALLERSLOG','ACS.SENTBY_FILES','ACS.DO_UD_LOG','ACS.SCREEN_TO_FRONT',
-     'ACS.DEFAULT_CHAT_ON','ACS.EALL_MESSAGES','ACS.DUPE_FILECHECK','ACS.MESSAGE_EDIT','ACS.LIST_NODES','ACS.MSG_LEVEL','ACS.MSG_EXPERATION','ACS.DELETE_MESSAGE','ACS.ATTACH_FILES',
-     'ACS.CUSTOMCOMMANDS','ACS.JOIN_SUB_CONFERENCE','ACS.ZOOM_MAIL','ACS.MCI_MESSAGE','ACS.EDIT_DIRS','ACS.EDIT_FILES','ACS.BREAK_CHAT','ACS.QUIET_NODE','ACS.SYSOP_COMMANDS','ACS.WHO_IS_ONLINE',
-     'ACS.RELOGON','ACS.ULSTATS','ACS.XPR_RECEIVE','ACS.XPR_SEND','ACS.WILDCARDS','ACS.CONFERENCE_ACCOUNTING','ACS.PRI_MSGFILES','ACS.PUB_MSGFILES','ACS.FULL_EDIT','ACS.CONFFLAGS',
-     'ACS.OLM','ACS.HIDE_FILES','ACS.SHOW_PAYMENTS','ACS.CREDIT_ACCESS','ACS.VOTE','ACS.MODIFY_VOTE','ACS.FILE_EXPANSION','ACS.EDIT_REAL_NAME','ACS.EDIT_USER_NAME','ACS.CENSORED',
-     'ACS.ACCOUNT_VIEW','ACS.TRANSLATION','ACS.UNKNOWN','ACS.CREATE_CONFERENCE','ACS.LOCAL_DOWNLOADS','ACS.MAX_PAGES','ACS.OVERRIDE_DEFAULTS','ACS.HOLD_ACCESS']
+  securityNames:=[
+   'ACS.ACCOUNT_EDITING','ACS.READ_BULLETINS','ACS.COMMENT_TO_SYSOP','ACS.DOWNLOAD','ACS.UPLOAD','ACS.ENTER_MESSAGE','ACS.FILE_LISTINGS','ACS.JOIN_CONFERENCE','ACS.NEW_FILES_SINCE',
+   'ACS.PAGE_SYSOP','ACS.READ_MESSAGE','ACS.REMOTE_SHELL','ACS.DISPLAY_USER_STATS','ACS.VIEW_A_FILE','ACS.EDIT_USER_INFO','ACS.EDIT_INTERNET_NAME','ACS.EDIT_USER_LOCATION',
+   'ACS.EDIT_PHONE_NUMBER','ACS.EDIT_PASSWORD','ACS.ZIPPY_TEXT_SEARCH','ACS.OVERRIDE_CHAT','ACS.SYSOP_DOWNLOAD','ACS.SYSOP_VIEW','ACS.SYSOP_READ','ACS.KEEP_UPLOAD_CREDIT',
+   'ACS.OVERRIDE_TIMES','ACS.CLEAR_SCREEN_MSG','ACS.FREE_RESUMING','ACS.ONE_TIME_BULLETINS','ACS.DO_CALLERSLOG','ACS.SENTBY_FILES','ACS.DO_UD_LOG','ACS.SCREEN_TO_FRONT',
+   'ACS.DEFAULT_CHAT_ON','ACS.EALL_MESSAGES','ACS.DUPE_FILECHECK','ACS.MESSAGE_EDIT','ACS.LIST_NODES','ACS.MSG_LEVEL','ACS.MSG_EXPERATION','ACS.DELETE_MESSAGE','ACS.ATTACH_FILES',
+   'ACS.CUSTOMCOMMANDS','ACS.JOIN_SUB_CONFERENCE','ACS.ZOOM_MAIL','ACS.MCI_MESSAGE','ACS.EDIT_DIRS','ACS.EDIT_FILES','ACS.BREAK_CHAT','ACS.QUIET_NODE','ACS.SYSOP_COMMANDS','ACS.WHO_IS_ONLINE',
+   'ACS.RELOGON','ACS.ULSTATS','ACS.XPR_RECEIVE','ACS.XPR_SEND','ACS.WILDCARDS','ACS.CONFERENCE_ACCOUNTING','ACS.PRI_MSGFILES','ACS.PUB_MSGFILES','ACS.FULL_EDIT','ACS.CONFFLAGS',
+   'ACS.OLM','ACS.HIDE_FILES','ACS.SHOW_PAYMENTS','ACS.CREDIT_ACCESS','ACS.VOTE','ACS.MODIFY_VOTE','ACS.FILE_EXPANSION','ACS.EDIT_REAL_NAME','ACS.EDIT_USER_NAME','ACS.CENSORED',
+   'ACS.ACCOUNT_VIEW','ACS.TRANSLATION','ACS.UNKNOWN','ACS.CREATE_CONFERENCE','ACS.LOCAL_DOWNLOADS','ACS.MAX_PAGES','ACS.OVERRIDE_DEFAULTS','ACS.HOLD_ACCESS']
 
-    
-    my_struct.zoom_mailcnt:=0
-    my_struct.zoom_mailfile:=NIL
-    my_struct.zoom_path:=NIL
-    my_struct.sessiondbytes:=0
-    my_struct.newuser:=0
-    my_struct.times_on:=0
-    my_struct.ansiColor:=0
-    my_struct.startchatfile:=NIL
-    my_struct.stopchatfile:=NIL
-    my_struct.quotefile:=NIL
-    my_struct.startchatnum:=0
-    my_struct.stopchatnum:=0
-    my_struct.quotenum:=0
-    my_struct.numlastcallers:=0
-    my_struct.lastcallerlevel:=255
-    my_struct.callerlist:=NIL
-    my_struct.newuserfile:=NIL
-    my_struct.max_desclines:=12
-    my_struct.uPcps:=0
-    my_struct.dNcps:=0
-    my_struct.uPcps_name:=NIL
-    my_struct.uPcps_place:=NIL
-    my_struct.dNcps_name:=NIL
-    my_struct.dNcps_place:=NIL
-    my_struct.flags:=0
-    my_struct.cosysop_level:=250
-    my_struct.countryname:=NIL
-    my_struct.notallowedfiles:=NIL
-    my_struct.skiplcaller:=NIL
-    my_struct.menu_say:=NIL
-    my_struct.nozoom[0]:=0;my_struct.nozoom[1]:=0;my_struct.nozoom[2]:=0;my_struct.nozoom[3]:=0;my_struct.nozoom[4]:=0
-    my_struct.nozoom[5]:=0;my_struct.nozoom[6]:=0;my_struct.nozoom[7]:=0;my_struct.nozoom[8]:=0
-    
-    my_struct.zoommax:=0
-    
-    StringF(tempstr,'AmiExpress_Node.\d',node)
-    IF FindPort(tempstr) 
-      StringF(shutDownMsg,'Node	\d already running!',node)
-      Raise(ERR_ALREADYRUNNING)
-    ENDIF
+     
+  StringF(tempstr,'AmiExpress_Node.\d',node)
+  IF FindPort(tempstr) 
+    StringF(shutDownMsg,'Node	\d already running!',node)
+    Raise(ERR_ALREADYRUNNING)
+  ENDIF
 
   IF (iconbase:=OpenLibrary('icon.library',33))=NIL THEN Raise(ERR_NOICON)
 
@@ -26361,8 +26146,8 @@ PROC main() HANDLE
   historyNum:=0
   historyCycle:=0
 
-  scomment:=List(my_struct.max_desclines)
-  FOR i:=1 TO my_struct.max_desclines
+  scomment:=List(max_desclines)
+  FOR i:=1 TO max_desclines
     msg:=String(200)
     ListAdd(scomment,[msg])
   ENDFOR
@@ -26548,6 +26333,9 @@ PROC main() HANDLE
 
   StrCopy(historyFolder,'')
   readToolType(TOOLTYPE_BBSCONFIG,'','HISTORY',historyFolder)
+
+  i:=readToolTypeInt(TOOLTYPE_BBSCONFIG,node,'MAX_DESCLINES')
+  IF i<>-1 THEN max_desclines:=i
 
   i:=readToolTypeInt(TOOLTYPE_BBSCONFIG,node,'HOLD_ACCESS_LEVEL')
   IF i<>-1 THEN holdAccessLevel:=i
