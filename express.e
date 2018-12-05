@@ -8250,7 +8250,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE)
     ENDIF
   ENDIF
 
-  IF ((state=STATE_LOGGEDON) OR (state=STATE_CONNECTING)) AND (nofkeys=FALSE)
+  IF ((state=STATE_LOGGEDON) OR (state=STATE_CONNECTING) OR (state=STATE_SYSOPLOGON)) AND (nofkeys=FALSE)
     IF servercmd=SV_UNICONIFY
       servercmd:=-1
       IF scropen THEN expressToFront() ELSE openExpressScreen()
@@ -24640,6 +24640,9 @@ PROC processSysopLogon()
     loggedOnUserKeys:=NEW loggedOnUserKeys
     loggedOnUserMisc:=NEW loggedOnUserMisc
     IF cacheResetOn=CACHE_RESET_LOGON THEN clearDiskObjectCache()
+
+    sendCLS()
+
     -> load sysop user data
     IF loadAccount(1,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)<>RESULT_SUCCESS
       IF newUserAccount(cmds.sysopName)<>RESULT_SUCCESS
@@ -24662,7 +24665,6 @@ PROC processSysopLogon()
     ximPort:=CONSOLE_PORT
     state:=STATE_LOGGEDON
     setEnvStat(ENV_LOGGINGON)
-    sendCLS()
     lostCarrier:=FALSE
     ripMode:=FALSE
     ansiColour:=TRUE
@@ -26108,7 +26110,7 @@ PROC main() HANDLE
   DEF transptr:PTR TO mln
    
   StrCopy(expressVer,'v5.0.0-b20',ALL)
-  StrCopy(expressDate,'30-Nov-2018',ALL)
+  StrCopy(expressDate,'29-Nov-2018',ALL)
 
   InitSemaphore(bgData)
  
