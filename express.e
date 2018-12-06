@@ -4064,6 +4064,7 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
   DEF nodes = 0,msgcmd
   DEF tempstring[255]:STRING
   DEF runOnExit[255]:STRING
+  DEF runOnExit2[255]:STRING
   DEF exit=0
   DEF alreadyActive=FALSE
   DEF tuserdata:PTR TO user,tuserkeys:PTR TO userKeys, tusermisc: PTR TO userMisc
@@ -4075,6 +4076,7 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
   IF serShared=FALSE THEN purgeLine()
 
   StrCopy(runOnExit,'')
+  StrCopy(runOnExit2,'')
 
   IF resident=FALSE
     IF (fileExists(cmd)=FALSE)
@@ -4826,7 +4828,7 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
           CASE REL_CONF
             msg.data:=relConf(msg.data)
           CASE RETURNCOMMAND2
-            StrCopy(runOnExit,msg.string,200)
+            StrCopy(runOnExit2,msg.string,200)
           CASE CHECK_PLAYPEN_EXISTS
             msg.data:=checkForFile(msg.string)
             IF msg.data=0 THEN msg.data:=checkInPlaypens(msg.string)
@@ -5047,6 +5049,9 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
 
   IF (StrLen(runOnExit)>0)
     processCommand(runOnExit,TRUE)
+  ENDIF
+  IF (StrLen(runOnExit2)>0)
+    processCommand(runOnExit2)
   ENDIF
 ENDPROC
 
@@ -5972,7 +5977,7 @@ PROC processMciCmd(mcidata,len,pos)
       pos:=pos+3
       nval:=EstrLen(cmd)-3
       MidStr(cmd,mcidata,pos,nval)
-      processSysCommand(cmd)
+      processSysCommand(cmd,TRUE)
       pos:=pos+EstrLen(cmd)+t
     ELSEIF StrCmp(cmd,'CR_',3)
       ->promted keypress
@@ -24369,7 +24374,7 @@ PROC processCommand(cmdtext,internalOnly=FALSE)
   ENDIF
 ENDPROC processInternalCommand(cmdcode,cmdparams)
 
-PROC processSysCommand(cmdtext)
+PROC processSysCommand(cmdtext, allowBBSCmd=FALSE)
   DEF cmdcode[255]:STRING
   DEF cmdparams[255]:STRING
   DEF spacepos
@@ -24387,8 +24392,10 @@ PROC processSysCommand(cmdtext)
   -> try running it as a syscommand first
   IF runSysCommand(cmdcode,cmdparams) THEN RETURN TRUE
 
-  -> try running it as a bbscommand next
-  IF runBbsCommand(cmdcode,cmdparams,TRUE) THEN RETURN TRUE
+  IF allowBBSCmd
+    -> try running it as a bbscommand next
+    IF runBbsCommand(cmdcode,cmdparams,TRUE) THEN RETURN TRUE
+  ENDIF
 
 ENDPROC processInternalCommand(cmdcode,cmdparams,TRUE)
 

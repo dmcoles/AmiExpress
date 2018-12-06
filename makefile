@@ -1,13 +1,13 @@
 # Compile ACP and EXPRESS and any dependencies
 
-options=
+options=DEBUG
 
 all:					acp express5 jsonimport icon2cfg
 
-debug:				options += DEBUG
-debug:				acp express5 jsonimport icon2cfg
+release:				options = 
+release:				acp express5 jsonimport icon2cfg
 
-acp:					acp.e axcommon.m miscfuncs.m
+acp:					acp.e axcommon.m miscfuncs.m jsonparser.m
 							ec acp $(options)
 
 express5:			express.e axcommon.m
@@ -17,7 +17,6 @@ express5:			express.e axcommon.m
 
 icon2cfg:			icon2cfg.e miscfuncs.m
 							ec icon2cfg $(options)
-
 
 jsonimport:		jsonimport.e jsonparser.m 
 							ec jsonimport $(options)
