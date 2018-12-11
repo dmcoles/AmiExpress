@@ -642,7 +642,7 @@ DEF dTBT=0
 DEF beenUDd=0
 DEF numSkipd=0
 DEF lcFileXfr=0
-DEF recFileNames[1024]:STRING
+DEF recFileNames:PTR TO LONG
 DEF skipdFiles=0
 DEF checksym=0
 DEF purgeScanNM[31]:STRING
@@ -2577,12 +2577,30 @@ PROC countSpaces(str:PTR TO CHAR)
   ENDFOR
 ENDPROC count
 
-PROC freeList(list:PTR TO LONG)
+PROC reAllocList(list:PTR TO LONG, increaseBy)
+  DEF newList:PTR TO LONG
+  DEF i,cnt
+  cnt:=ListMax(list)
+  newList:=List(cnt+increaseBy)
+  FOR i:=0 TO cnt-1
+    ListAdd(newList,[ListItem(list,i)])
+  ENDFOR
+  END list
+ENDPROC newList
+
+PROC clearList(list:PTR TO LONG)
   DEF i
   IF list<>NIL
     FOR i:=0 TO ListLen(list)-1
       DisposeLink(ListItem(list,i))
     ENDFOR
+    SetList(list,0)
+  ENDIF
+ENDPROC
+
+PROC freeList(list:PTR TO LONG)
+  IF list<>NIL
+    clearList(list)
     END list
   ENDIF
 ENDPROC
@@ -7607,11 +7625,11 @@ ENDPROC
 
 PROC clearStatusPane()
   DEF tempStr[255]:STRING,tempstr2[25]:STRING
-  statMessage(1,1,'[37m[ s[0 p')
+  ->statMessage(1,1,'[37m[ s[0 p')
 
   statCursorTo(1,1)
 
-  statPrint('0mLOGIN NAME     [34m|[0mREAL NAME      [34m|[0m  1[34m|[0m255[34m|[0mXXXXXXXXX[34m|[0m800-555-1212[34m|     |')
+  statPrint('[0mLOGIN NAME     [34m|[0mREAL NAME      [34m|[0m  1[34m|[0m255[34m|[0mXXXXXXXXX[34m|[0m800-555-1212[34m|     |')
   statCursorTo(1,2)
   statPrint('[0mLOCATION                       [34m|[0m 0[34m|[0m 0[34m|[0m    0[34m|[0m    0[34m|[0m           0[34m|[0m           0[34m|   ')
   statCursorTo(1,3)
@@ -8721,6 +8739,9 @@ PROC processLoggingOff()
   ripMode:=FALSE
   mcioff:=FALSE
   mciViewSafe:=TRUE
+
+  freeList(recFileNames)
+  recFileNames:=List(1024)
 
   IF (relogon=FALSE)
     state:=STATE_AWAIT
@@ -13660,11 +13681,14 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
     RETURN
   ENDIF
   
-  statMessage(1,1,'[37m')
-
-  ->statMessage(1,1,'                               ')
   IF(pagedFlag)
-    IF(bitPlanes<>1)  THEN statMessage(1,1,'[31m')
+    IF KickVersion(40) OR (bitPlanes<3)
+      statMessage(1,1,'[31m')
+    ELSE
+      statMessage(1,1,'[37m')
+    ENDIF
+  ELSE
+    statMessage(1,1,'[0m')
   ENDIF
 
 /* if user hit chat & window is no color, add * infront of user name */
@@ -16099,7 +16123,7 @@ PROC receivePlayPen()
   
   onlineNFiles:=0
   tBT:=0
-  StrCopy(recFileNames,'')
+  clearList(recFileNames)
   
   IF(StrLen(sopt.ramPen)>0) THEN StringF(tempstr,'\s/',sopt.ramPen) ELSE StringF(tempstr,'\sNode\d/Playpen',cmds.bbsLoc,node)
  
@@ -16149,8 +16173,11 @@ PROC receivePlayPen()
         udLog(tempstr)
         callersLog(tempstr)
 
-        StrAdd(recFileNames,fib.filename)
-        StrAdd(recFileNames,' ')
+        cnt:=ListLen(recFileNames)
+        IF cnt=ListMax(recFileNames) THEN recFileNames:=reAllocList(recFileNames,1024)
+
+        ListAdd(recFileNames,[String(StrLen(fib.filename))])
+        StrCopy(ListItem(recFileNames,cnt),fib.filename)
       ENDIF                    /* end if(Fib->fib_DirEntryType < 0)  */
     ENDWHILE                      /* end while(ExNext(FLock,Fib))       */
   ENDIF                               /* end if(Fib->fib_DirEntryType > 0)  */
@@ -16333,6 +16360,8 @@ PROC cleanPlayPen()
   DEF tempstr2[255]:STRING
   DEF cnt = 0
  
+  clearList(recFileNames)
+
   IF(StrLen(sopt.ramPen)>0) THEN StringF(tempstr,'\s/',sopt.ramPen) ELSE StringF(tempstr,'\sNode\d/Playpen/',cmds.bbsLoc,node)
 
   IF tempstr[StrLen(tempstr)-1]="/"
@@ -16814,7 +16843,6 @@ PROC sysopUpload()
   DEF destpath[255]:STRING
   DEF string[255]:STRING
   DEF str[255]:STRING
-  DEF list[1024]:STRING
   DEF stat,cnt
   DEF space,space2
   DEF path[255]:STRING
@@ -16892,59 +16920,51 @@ PROC sysopUpload()
     ENDIF
   ENDIF
   
-  StrCopy(list,recFileNames)
+  FOR x:=0 TO ListLen(recFileNames)-1
+    StrCopy(str,ListItem(recFileNames,x))
 
-  FOR x:=0 TO StrLen(list)-1
- 
-    IF(list[x]<>" ")
-        str[cnt]:=list[x]
-        cnt++
+    IF(StrLen(sopt.ramPen)>0)
+      StringF(tempstr,'\s/\s',sopt.ramPen,str)
     ELSE
-      SetStr(str,cnt)
-
-      IF(StrLen(sopt.ramPen)>0)
-        StringF(tempstr,'\s/\s',sopt.ramPen,str)
-      ELSE
-        StringF(tempstr,'\sNode\d/PLAYPEN/\s',cmds.bbsLoc,node,str)
-      ENDIF
-      StringF(tempstr2,'copying \s to \s',str,destpath)
-      aePuts(tempstr2)
-
-      ch:=tempstr2[StrLen(tempstr2)-1];
-      IF((ch<>":") AND (ch<>"/"))
-        StringF(tempstr2,'\s/\s',destpath,str)
-      ELSE
-        StringF(tempstr2,'\s\s',destpath,str)
-      ENDIF
-      
-      IF fileExists(tempstr2)
-        StringF(string,' - file exists, do you wish to overwrite? ',FilePart(tempstr2))
-        aePuts(string)
-        ch:=readChar(INPUT_TIMEOUT)
-        IF(ch<0) THEN RETURN ch
-        IF((ch="Y") OR (ch="y"))
-          aePuts('Yes\b\n')
-          DeleteFile(tempstr2) 
-        ELSE
-          aePuts('No\b\n')
-        ENDIF
-      ELSE
-        aePuts('\b\n')
-      ENDIF
-
-      status:=0
-      WHILE((StrLen(FilePart(tempstr2))<35) AND (status=FALSE))
-        status:=Rename(tempstr,tempstr2)
-        IF(status=FALSE)
-          status:=fileCopy(tempstr,tempstr2)
-          IF(status=FALSE) THEN StrAdd(tempstr2,'_')
-          IF(status)
-            SetProtection(tempstr,FIBF_OTR_DELETE)
-            DeleteFile(tempstr) 
-          ENDIF
-        ENDIF
-      ENDWHILE
+      StringF(tempstr,'\sNode\d/PLAYPEN/\s',cmds.bbsLoc,node,str)
     ENDIF
+    StringF(tempstr2,'copying \s to \s',str,destpath)
+    aePuts(tempstr2)
+
+    ch:=tempstr2[StrLen(tempstr2)-1];
+    IF((ch<>":") AND (ch<>"/"))
+      StringF(tempstr2,'\s/\s',destpath,str)
+    ELSE
+      StringF(tempstr2,'\s\s',destpath,str)
+    ENDIF
+    
+    IF fileExists(tempstr2)
+      StringF(string,' - file exists, do you wish to overwrite? ',FilePart(tempstr2))
+      aePuts(string)
+      ch:=readChar(INPUT_TIMEOUT)
+      IF(ch<0) THEN RETURN ch
+      IF((ch="Y") OR (ch="y"))
+        aePuts('Yes\b\n')
+        DeleteFile(tempstr2) 
+      ELSE
+        aePuts('No\b\n')
+      ENDIF
+    ELSE
+      aePuts('\b\n')
+    ENDIF
+
+    status:=0
+    WHILE((StrLen(FilePart(tempstr2))<35) AND (status=FALSE))
+      status:=Rename(tempstr,tempstr2)
+      IF(status=FALSE)
+        status:=fileCopy(tempstr,tempstr2)
+        IF(status=FALSE) THEN StrAdd(tempstr2,'_')
+        IF(status)
+          SetProtection(tempstr,FIBF_OTR_DELETE)
+          DeleteFile(tempstr) 
+        ENDIF
+      ENDIF
+    ENDWHILE
   ENDFOR
   cleanPlayPen()
 ENDPROC RESULT_SUCCESS
@@ -16983,7 +17003,7 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   DEF status2,gstat
   DEF peff,pcps,tFS,fSUploading
   DEF path[256]:STRING,str[255]:STRING,istr[255]:STRING,str2[255]:STRING
-  DEF list[1024]:STRING,fmtstr[256]:STRING
+  DEF fmtstr[256]:STRING
   DEF odate[20]:STRING,fcomment[256]:STRING
   DEF ray[256]:STRING,ray2[256]:STRING,temp[256]:STRING,string[256]:STRING
   DEF buff[255]:STRING
@@ -17191,8 +17211,6 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   moveToLCFILES:=0
   hold:=0
   lcfile:=0
-  StrCopy(list,recFileNames)
-  IF(cmds.acLvl[LVL_CAPITOLS_in_FILE]=1) THEN UpperStr(list)
   
   noF:=0
   cnt:=0
@@ -17200,367 +17218,363 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   /* loop thru uploaded (ing) list of files & move to where they belong*/
  /* this gets the list of files uploaded */
  
-  FOR x:=0 TO StrLen(list)-1
+  FOR x:=0 TO ListLen(recFileNames)-1
  nx:  
- 
-    IF(list[x]<>" ")
-        str[cnt]:=list[x]
-        cnt++
-    ELSE
-      SetStr(str,cnt)
-      noF:=noF+1
-      moveToLCFILES:=0
-      hold:=0
-      lcfile:=0
-      IF(noF>onlineNFiles) THEN JUMP eit
-     
-      cnt:=0;   /* reset to zero */
+    StrCopy(str,ListItem(recFileNames,x))
+    IF(cmds.acLvl[LVL_CAPITOLS_in_FILE]=1) THEN UpperStr(str)
 
-      IF(StrLen(str)>0)
-        IF((StrLen(str)>12) AND (moveToLCFILES=NIL))
-          /* if we loose carrier here with a +++, it will show up as
-          the file name so check for carrier now */
+    noF:=noF+1
+    moveToLCFILES:=0
+    hold:=0
+    lcfile:=0
+    IF(noF>onlineNFiles) THEN JUMP eit
+   
+    cnt:=0;   /* reset to zero */
 
-          StringF(fmtstr,'\s is too long a name, please rename.\b\n\b\n',str)
-          aePuts(fmtstr)
-          aePuts('             [------------]')
+    IF(StrLen(str)>0)
+      IF((StrLen(str)>12) AND (moveToLCFILES=NIL))
+        /* if we loose carrier here with a +++, it will show up as
+        the file name so check for carrier now */
+
+        StringF(fmtstr,'\s is too long a name, please rename.\b\n\b\n',str)
+        aePuts(fmtstr)
+        aePuts('             [------------]')
 inpAgain:
-          IF(logonType>=LOGON_TYPE_REMOTE)
-              cstat:=checkCarrier()
-              IF(cstat=FALSE)
-                modemOffHook()
-                moveToLCFILES:=handleLCFiles(istr,fcomment)
-                JUMP cNext
-              ENDIF
-          ENDIF
-          aePuts('\b\nNew Filename: ')
-          status:=lineInput('','',12,INPUT_TIMEOUT,istr)
-          IF(status<0)
-            modemOffHook()
-            moveToLCFILES:=handleLCFiles(istr,fcomment)
-           JUMP cNext
-          ENDIF
-          IF(StrLen(istr)=0) THEN JUMP inpAgain 
-          IF( ((istr[0]="R") AND (istr[1]="Z")) AND (StrLen(istr)= 2))
-            aePuts('\b\nRZ is an invalid name for a file\b\n')
-            JUMP inpAgain
-          ENDIF
-
-          x2:=0
-          REPEAT          /* CHECK THE STRING */
-            IF((istr[x2]=":") OR (istr[x2]="/") OR (istr[x2]="*") OR (istr[x2]=" ") OR (istr[x2]="#") OR (istr[x2] = "+") OR (istr[x2] = "?"))
-               myError(10)  -> aePuts("\b\nYou may not include any special symbols\b\n");
-               JUMP inpAgain
+        IF(logonType>=LOGON_TYPE_REMOTE)
+            cstat:=checkCarrier()
+            IF(cstat=FALSE)
+              modemOffHook()
+              moveToLCFILES:=handleLCFiles(istr,fcomment)
+              JUMP cNext
             ENDIF
-            x2:=x2+1
-          UNTIL x2>=StrLen(istr)
+        ENDIF
+        aePuts('\b\nNew Filename: ')
+        status:=lineInput('','',12,INPUT_TIMEOUT,istr)
+        IF(status<0)
+          modemOffHook()
+          moveToLCFILES:=handleLCFiles(istr,fcomment)
+         JUMP cNext
+        ENDIF
+        IF(StrLen(istr)=0) THEN JUMP inpAgain 
+        IF( ((istr[0]="R") AND (istr[1]="Z")) AND (StrLen(istr)= 2))
+          aePuts('\b\nRZ is an invalid name for a file\b\n')
+          JUMP inpAgain
+        ENDIF
 
-          status:=checkForFile(istr) /* should include RZ */
-          IF(status=RESULT_FAILURE)
-            StringF(tempstr,'The name \s is used, please rename.\b\n',istr)
-            aePuts(tempstr)
-            JUMP inpAgain
+        x2:=0
+        REPEAT          /* CHECK THE STRING */
+          IF((istr[x2]=":") OR (istr[x2]="/") OR (istr[x2]="*") OR (istr[x2]=" ") OR (istr[x2]="#") OR (istr[x2] = "+") OR (istr[x2] = "?"))
+             myError(10)  -> aePuts("\b\nYou may not include any special symbols\b\n");
+             JUMP inpAgain
           ENDIF
+          x2:=x2+1
+        UNTIL x2>=StrLen(istr)
 
-          IF(StrLen(sopt.ramPen)>0)                       /* check Ram dir */
-              StringF(tempstr,'\s/\s',sopt.ramPen,istr)
-              StringF(tempstr2,'\s/\s',sopt.ramPen,str)
-          ELSE
-              StringF(tempstr,'\sNode\d/PlayPen/\s',cmds.bbsLoc,node,istr)
-              StringF(tempstr2,'\sNode\d/PlayPen/\s',cmds.bbsLoc,node,str)
-          ENDIF
+        status:=checkForFile(istr) /* should include RZ */
+        IF(status=RESULT_FAILURE)
+          StringF(tempstr,'The name \s is used, please rename.\b\n',istr)
+          aePuts(tempstr)
+          JUMP inpAgain
+        ENDIF
 
-          status:=Rename(tempstr2,tempstr)        /* oldstr, newstr */
-          IF(status=NIL)
-            StringF(tempstr2,'The name \s is used, please rename.\b\n',istr)
-            aePuts(tempstr2)
-            JUMP inpAgain
-          ENDIF
-          StrCopy(str,istr)
-          IF(cmds.acLvl[LVL_CAPITOLS_in_FILE]=1) THEN UpperStr(str)  /* use upper case only */
+        IF(StrLen(sopt.ramPen)>0)                       /* check Ram dir */
+            StringF(tempstr,'\s/\s',sopt.ramPen,istr)
+            StringF(tempstr2,'\s/\s',sopt.ramPen,str)
+        ELSE
+            StringF(tempstr,'\sNode\d/PlayPen/\s',cmds.bbsLoc,node,istr)
+            StringF(tempstr2,'\sNode\d/PlayPen/\s',cmds.bbsLoc,node,str)
+        ENDIF
 
-          aePuts('\b\n')
-        ENDIF    /* end if str > 12 */
+        status:=Rename(tempstr2,tempstr)        /* oldstr, newstr */
+        IF(status=NIL)
+          StringF(tempstr2,'The name \s is used, please rename.\b\n',istr)
+          aePuts(tempstr2)
+          JUMP inpAgain
+        ENDIF
+        StrCopy(str,istr)
+        IF(cmds.acLvl[LVL_CAPITOLS_in_FILE]=1) THEN UpperStr(str)  /* use upper case only */
 
-        /*===================== jump here if we also lost carrier ========*/
+        aePuts('\b\n')
+      ENDIF    /* end if str > 12 */
+
+      /*===================== jump here if we also lost carrier ========*/
 ax:
-        formatLongDate(getSystemTime(),fmtstr)
+      formatLongDate(getSystemTime(),fmtstr)
 
-        StrCopy(odate,fmtstr)
+      StrCopy(odate,fmtstr)
 
-        /* add our check for ram playpen */
-        IF(StrLen(sopt.ramPen)>0) THEN StringF(str2,'\s/\s',sopt.ramPen,str) ELSE StringF(str2,'\sNode\d/Playpen/\s',cmds.bbsLoc,node,str)
+      /* add our check for ram playpen */
+      IF(StrLen(sopt.ramPen)>0) THEN StringF(str2,'\s/\s',sopt.ramPen,str) ELSE StringF(str2,'\sNode\d/Playpen/\s',cmds.bbsLoc,node,str)
 
-        IF((fLock:=Lock(str2,ACCESS_READ))=NIL) 
-            myError(8)
-            JUMP nx
-        ENDIF
+      IF((fLock:=Lock(str2,ACCESS_READ))=NIL) 
+          myError(8)
+          JUMP nx
+      ENDIF
 
-        IF(fBlock:=(AllocDosObject(DOS_FIB,NIL))) = NIL
-            myError(11)
-            UnLock(fLock)
-            RETURN RESULT_FAILURE
-        ENDIF
-        IF( Examine(fLock,fBlock) ) THEN fsize:=fBlock.size
-        
-        formatFileSizeForDirList(fsize,fsstr)
-        
-        UnLock(fLock)
-        FreeDosObject(DOS_FIB,fBlock)
+      IF(fBlock:=(AllocDosObject(DOS_FIB,NIL))) = NIL
+          myError(11)
+          UnLock(fLock)
+          RETURN RESULT_FAILURE
+      ENDIF
+      IF( Examine(fLock,fBlock) ) THEN fsize:=fBlock.size
+      
+      formatFileSizeForDirList(fsize,fsstr)
+      
+      UnLock(fLock)
+      FreeDosObject(DOS_FIB,fBlock)
 
-        IF runSysCommand('EXAMINE',str2)
-          i:=1
-          REPEAT
-            StringF(tempstr,'EXAMINE\d',i)
-            i++
-          UNTIL(runSysCommand(tempstr,str2))=FALSE
-        ENDIF
+      IF runSysCommand('EXAMINE',str2)
+        i:=1
+        REPEAT
+          StringF(tempstr,'EXAMINE\d',i)
+          i++
+        UNTIL(runSysCommand(tempstr,str2))=FALSE
+      ENDIF
 
 cinpAgain:
-        IF(logonType>=LOGON_TYPE_REMOTE)
-          cstat:=checkCarrier()
-          IF(cstat=FALSE) 
-            modemOffHook()
-            moveToLCFILES:=handleLCFiles(istr,fcomment)
-            JUMP cNext
-          ENDIF
-        ENDIF      
+      IF(logonType>=LOGON_TYPE_REMOTE)
+        cstat:=checkCarrier()
+        IF(cstat=FALSE) 
+          modemOffHook()
+          moveToLCFILES:=handleLCFiles(istr,fcomment)
+          JUMP cNext
+        ENDIF
+      ENDIF      
 
-        StringF(fmtstr,'\s\s',nodeWorkDir,str)   /* 11w */
+      StringF(fmtstr,'\s\s',nodeWorkDir,str)   /* 11w */
 
-        uaf:=Open(fmtstr,MODE_OLDFILE)
-        IF(uaf<=0) 
-                
-        
+      uaf:=Open(fmtstr,MODE_OLDFILE)
+      IF(uaf<=0) 
+              
+      
 ->#ifdef JOE_AECODE
 ->             aePuts('\b\nPlease enter a description, you have eight lines for your description.')
 ->             aePuts('\b\nPress return alone to end.  Begin description with (/) to make upload 'Private'.\b\n')
 ->             aePuts('                                [--------------------------------------------]\b\n')
 ->#else
 
-          StringF(buff,'\b\nEnter a description, you only have \d lines.',max_desclines)
-          aePuts(buff)
+        StringF(buff,'\b\nEnter a description, you only have \d lines.',max_desclines)
+        aePuts(buff)
 
-          aePuts('\b\nPress return alone to end.  Begin description with (/) to make upload ''Private''.\b\n')
-          IF readToolType(TOOLTYPE_CONF,currentConf,'ULPROMPT',fmtstr)
-            aePuts(fmtstr)
-            aePuts('\b\n')
-          ENDIF
-
-          aePuts('                                [--------------------------------------------]\b\n')
-->#endif
-          StringF(fmtstr,'\l\s[13] \s  \s :',str,fsstr,odate)
+        aePuts('\b\nPress return alone to end.  Begin description with (/) to make upload ''Private''.\b\n')
+        IF readToolType(TOOLTYPE_CONF,currentConf,'ULPROMPT',fmtstr)
           aePuts(fmtstr)
+          aePuts('\b\n')
+        ENDIF
 
-          status:=lineInput('','',44,INPUT_TIMEOUT,fcomment)
+        aePuts('                                [--------------------------------------------]\b\n')
+->#endif
+        StringF(fmtstr,'\l\s[13] \s  \s :',str,fsstr,odate)
+        aePuts(fmtstr)
+
+        status:=lineInput('','',44,INPUT_TIMEOUT,fcomment)
+        IF(status<0)
+          modemOffHook()
+          moveToLCFILES:=handleLCFiles(istr,fcomment)
+          JUMP cNext
+        ENDIF
+
+        IF(StrLen(fcomment)=0) THEN JUMP cinpAgain
+
+        IF( ((fcomment[0]) = "R" OR (fcomment[0] = "r")) AND ((fcomment[1] = "Z") OR (fcomment[1] = "z")) AND (StrLen(fcomment) < 4) ) THEN JUMP cinpAgain
+
+        /* stop that B0 shit */
+        IF((fcomment[0] = "B") AND (fcomment[1] ="0")) THEN JUMP cinpAgain
+
+        s:=fcomment
+        cnt1:=0
+        WHILE(s[0] AND (cnt1 < 20))
+          IF((isascii((s[0])))=FALSE) THEN JUMP cinpAgain
+          cnt1++
+          s++
+        ENDWHILE
+
+        x2:=0
+        REPEAT
+          aePuts('                                :')
+          status:=lineInput('','',44,INPUT_TIMEOUT,scomment[x2])
           IF(status<0)
             modemOffHook()
             moveToLCFILES:=handleLCFiles(istr,fcomment)
+            FOR i:=0 TO x2
+              StrCopy(scomment[i],'')
+            ENDFOR 
             JUMP cNext
           ENDIF
-
-          IF(StrLen(fcomment)=0) THEN JUMP cinpAgain
-
-          IF( ((fcomment[0]) = "R" OR (fcomment[0] = "r")) AND ((fcomment[1] = "Z") OR (fcomment[1] = "z")) AND (StrLen(fcomment) < 4) ) THEN JUMP cinpAgain
-
-          /* stop that B0 shit */
-          IF((fcomment[0] = "B") AND (fcomment[1] ="0")) THEN JUMP cinpAgain
-
-          s:=fcomment
-          cnt1:=0
-          WHILE(s[0] AND (cnt1 < 20))
-            IF((isascii((s[0])))=FALSE) THEN JUMP cinpAgain
-            cnt1++
-            s++
-          ENDWHILE
-
-          x2:=0
-          REPEAT
-            aePuts('                                :')
-            status:=lineInput('','',44,INPUT_TIMEOUT,scomment[x2])
-            IF(status<0)
-              modemOffHook()
-              moveToLCFILES:=handleLCFiles(istr,fcomment)
-              FOR i:=0 TO x2
-                StrCopy(scomment[i],'')
-              ENDFOR 
-              JUMP cNext
-            ENDIF
-            x2:=x2+1
-          UNTIL ((StrLen(scomment[x2-1])=0) OR (x2>= (max_desclines-1)))
-        ELSE
-          ReadStr(uaf,fcomment)
-          x2:=0
-          WHILE(ReadStr(uaf,scomment[x2])<>-1) OR (StrLen(scomment[x2])>0)
-            x2:=x2+1
-            EXIT (x2>=(max_desclines-1))
-          ENDWHILE
-          IF(uaf>0) THEN Close(uaf)
-        ENDIF
+          x2:=x2+1
+        UNTIL ((StrLen(scomment[x2-1])=0) OR (x2>= (max_desclines-1)))
+      ELSE
+        ReadStr(uaf,fcomment)
+        x2:=0
+        WHILE(ReadStr(uaf,scomment[x2])<>-1) OR (StrLen(scomment[x2])>0)
+          x2:=x2+1
+          EXIT (x2>=(max_desclines-1))
+        ENDWHILE
+        IF(uaf>0) THEN Close(uaf)
+      ENDIF
 cNext:
-        status2:=RESULT_NOT_ALLOWED
-        IF((moveToLCFILES=FALSE) AND (rzmsg=FALSE))
-          StringF(fmtstr,'\b\nTesting... \s...\b\n',str)
-          status2:=testFile(str,path)
-          IF((status2=RESULT_NOT_ALLOWED) OR (status2=RESULT_SUCCESS)) THEN aePuts('\b\nTested Ok...')
-        ENDIF
-        status:=checkForFile(str)
+      status2:=RESULT_NOT_ALLOWED
+      IF((moveToLCFILES=FALSE) AND (rzmsg=FALSE))
+        StringF(fmtstr,'\b\nTesting... \s...\b\n',str)
+        status2:=testFile(str,path)
+        IF((status2=RESULT_NOT_ALLOWED) OR (status2=RESULT_SUCCESS)) THEN aePuts('\b\nTested Ok...')
+      ENDIF
+      status:=checkForFile(str)
 
-        IF(moveToLCFILES=1) 
-          status:=RESULT_LCFILES
-        ELSE
-          IF((fcomment[0]="/") AND (rzmsg=NIL)) THEN status:=RESULT_PRIVATE
-        ENDIF
+      IF(moveToLCFILES=1) 
+        status:=RESULT_LCFILES
+      ELSE
+        IF((fcomment[0]="/") AND (rzmsg=NIL)) THEN status:=RESULT_PRIVATE
+      ENDIF
 
-        IF(status2=RESULT_FAILURE)            /* Move to a Hold AREA */
-            hold:=1
-            StringF(tempstr,'Requires review, possibly bad format\b\n\t  Moving to \s''s private Directory.\b\n\b\n',cmds.sysopName)
-            aePuts(tempstr)
-            JUMP move_It
-        ENDIF
-
-        IF(status=RESULT_FAILURE)             /* Move to a Hold AREA */
-            IF(foundDupe)              /* 11w */
-                StringF(tempstr,'\b\nFile already exists, moving to \s''s private directory\b\n',cmds.sysopName)
-                aePuts(tempstr)
-                hold:=1
-            ENDIF
-        ENDIF
-        
-        IF(status=RESULT_SUCCESS)            /* Move to Upload AREA */
-          hold:=NIL
-          IF creditAccountTrackUploads(loggedOnUser)
-            loggedOnUser.uploads:=loggedOnUser.uploads+1
-          ENDIF
-        ENDIF
-        IF(status=RESULT_LCFILES)            /* 11w */
-          lcfile:=1
-          rzmsg:=NIL
-          aePuts('\b\nCarrier lost, moving to lost carrier directory.\b\n')
-        ENDIF
-
-        IF(status=RESULT_PRIVATE)             /* Private Upload */
+      IF(status2=RESULT_FAILURE)            /* Move to a Hold AREA */
           hold:=1
-          rzmsg:=NIL
-          StringF(tempstr,'\b\nMoving to \s''s private directory.\b\n\b\n',cmds.sysopName)
+          StringF(tempstr,'Requires review, possibly bad format\b\n\t  Moving to \s''s private Directory.\b\n\b\n',cmds.sysopName)
           aePuts(tempstr)
+          JUMP move_It
+      ENDIF
+
+      IF(status=RESULT_FAILURE)             /* Move to a Hold AREA */
+          IF(foundDupe)              /* 11w */
+              StringF(tempstr,'\b\nFile already exists, moving to \s''s private directory\b\n',cmds.sysopName)
+              aePuts(tempstr)
+              hold:=1
+          ENDIF
+      ENDIF
+      
+      IF(status=RESULT_SUCCESS)            /* Move to Upload AREA */
+        hold:=NIL
+        IF creditAccountTrackUploads(loggedOnUser)
+          loggedOnUser.uploads:=loggedOnUser.uploads+1
         ENDIF
-        
-        IF(rzmsg)
-           aePuts('\b\nMoving to message base file directory.\b\n')
-        ENDIF
+      ENDIF
+      IF(status=RESULT_LCFILES)            /* 11w */
+        lcfile:=1
+        rzmsg:=NIL
+        aePuts('\b\nCarrier lost, moving to lost carrier directory.\b\n')
+      ENDIF
+
+      IF(status=RESULT_PRIVATE)             /* Private Upload */
+        hold:=1
+        rzmsg:=NIL
+        StringF(tempstr,'\b\nMoving to \s''s private directory.\b\n\b\n',cmds.sysopName)
+        aePuts(tempstr)
+      ENDIF
+      
+      IF(rzmsg)
+         aePuts('\b\nMoving to message base file directory.\b\n')
+      ENDIF
 move_It:     /* gets here if lostcarrier, and file is complete but not when file is incomplete */
 
-        IF(hold OR lcfile OR rzmsg)       /* 11w added lcfile */
-          IF(lcfile) THEN StringF(tempstr2,'\sLCFILES/\s',currentConfDir,str)
-          IF(hold) THEN StringF(tempstr2,'\sHOLD/\s',currentConfDir,str)
-          IF(rzmsg) THEN StringF(tempstr2,'\sF\d/\s',msgBaseLocation,mailHeader.msgNumb,str)
-          
-          IF(StrLen(sopt.ramPen)>0)
-            StringF(tempstr,'\s/\s',sopt.ramPen,str)
-          ELSE
-            StringF(tempstr,'\sNode\d/PLAYPEN/\s',cmds.bbsLoc,node,str)
-          ENDIF
-            
-          status:=0
-          WHILE((StrLen(FilePart(tempstr2))<35) AND (status=FALSE))
-            status:=Rename(tempstr,tempstr2)
-            IF(status=FALSE)
-              status:=fileCopy(tempstr,tempstr2)
-              IF(status=FALSE) THEN StrAdd(tempstr2,'_')
-              IF(status)
-                SetProtection(tempstr,FIBF_OTR_DELETE)
-                DeleteFile(tempstr) 
-              ENDIF
-            ENDIF
-          ENDWHILE
-            
-          StrCopy(tempstr,'\tUpload ')
-          IF(status=NIL)
-            StringF(tempstr2,'WARNING!\b\nUnable to move file!\b\n')
-            aePuts(tempstr2)
-            StrAdd(tempstr,'unable to be ')
-          ENDIF
-          StringF(tempstr3,'moved to \s',tempstr2)
-          StrAdd(tempstr,tempstr3)
-          callersLog(tempstr)
-        ELSE
-          moveFile(str,fsize)
-        ENDIF
-
-        sysopULStats(hold)
-        /* Add Uploaded Bytes to Users Account */
-        IF((hold=NIL) AND (lcfile=NIL) AND (rzmsg=NIL)) 
-          IF creditAccountTrackUploads(loggedOnUser) 
-            IF sopt.toggles[TOGGLES_CREDITBYKB] THEN fsize:=Shr(fsize,10)
-            ->loggedOnUser.bytesUpload:=loggedOnUser.bytesUpload+fsize
-            addBCD(loggedOnUserMisc.uploadBytesBCD,fsize)
-            loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
-         ENDIF
-        ENDIF
-
-        /* Build the first line to send to upload dir */
-        IF(lcfile AND (StrLen(str) > 12))
-          StringF(fmtstr,'\s \s  \s  \s\n',str,fsstr,odate,fcomment)
-        ELSE
-          StringF(fmtstr,'\l\s[13] \s  \s  \s\n',str,fsstr,odate,fcomment)
-        ENDIF
-
-        IF(StrLen(str) < 13)       /* for big file name on lost carrier */
-           IF(checksym)
-             fmtstr[13]:=checksym
-           ELSE               
-             IF(status2=RESULT_FAILURE) THEN fmtstr[13]:="F"
-             IF(status2=RESULT_SUCCESS) THEN fmtstr[13]:="P"
-             IF(status2=RESULT_NOT_ALLOWED) THEN fmtstr[13]:="N"
-           ENDIF
-        ENDIF
-        IF(foundDupe)
-          fmtstr[13]:="D"
-          foundDupe:=0
-        ENDIF
+      IF(hold OR lcfile OR rzmsg)       /* 11w added lcfile */
+        IF(lcfile) THEN StringF(tempstr2,'\sLCFILES/\s',currentConfDir,str)
+        IF(hold) THEN StringF(tempstr2,'\sHOLD/\s',currentConfDir,str)
+        IF(rzmsg) THEN StringF(tempstr2,'\sF\d/\s',msgBaseLocation,mailHeader.msgNumb,str)
         
-        IF((hold=NIL) AND (lcfile=NIL)) 
-          IF(rzmsg=FALSE) 
-            StrCopy(ray,currentConfDir);
-            StrAdd(ray,'DIR')
-            StringF(ray2,'\d',maxDirs)
-            StrAdd(ray,ray2)
-          ELSE
-            StringF(ray,'\sF\d/\s.dis',msgBaseLocation,mailHeader.msgNumb,str)
-          ENDIF
+        IF(StrLen(sopt.ramPen)>0)
+          StringF(tempstr,'\s/\s',sopt.ramPen,str)
         ELSE
-          StrCopy(ray,currentConfDir)
-          IF(lcfile)
-            StrAdd(ray,'LCFILES/')
-            StrAdd(ray,purgeScanNM)
-            StrAdd(ray,'.lc')
-          ELSE
-             StrAdd(ray,'HOLD/HELD')
-          ENDIF
+          StringF(tempstr,'\sNode\d/PLAYPEN/\s',cmds.bbsLoc,node,str)
         ENDIF
-
-        f:=Open(ray,MODE_READWRITE)
-        Seek(f,0,OFFSET_END)
-        fileWrite(f,fmtstr)
-        x3:=0;
-        WHILE(x2)
-            /* Print the comment lines */
-            IF(StrLen(scomment[x3])>0)
-              StringF(tempstr,'                                 \s\n',scomment[x3])
-              fileWrite(f,tempstr)
-              StrCopy(scomment[x3],'')
-              x3:=x3+1
+          
+        status:=0
+        WHILE((StrLen(FilePart(tempstr2))<35) AND (status=FALSE))
+          status:=Rename(tempstr,tempstr2)
+          IF(status=FALSE)
+            status:=fileCopy(tempstr,tempstr2)
+            IF(status=FALSE) THEN StrAdd(tempstr2,'_')
+            IF(status)
+              SetProtection(tempstr,FIBF_OTR_DELETE)
+              DeleteFile(tempstr) 
             ENDIF
-            x2:=x2-1
+          ENDIF
         ENDWHILE
-        IF(checkToolTypeExists(TOOLTYPE_NODE,node,'SENTBY_FILES'))   /* Print the Sent by: line */
-          StringF(tempstr,'                                 Sent by: \s\n',loggedOnUser.name)
-          fileWrite(f,tempstr)  
+          
+        StrCopy(tempstr,'\tUpload ')
+        IF(status=NIL)
+          StringF(tempstr2,'WARNING!\b\nUnable to move file!\b\n')
+          aePuts(tempstr2)
+          StrAdd(tempstr,'unable to be ')
         ENDIF
-        Close(f)
-      ENDIF   /*if strlen > 1 */ 
-    ENDIF
+        StringF(tempstr3,'moved to \s',tempstr2)
+        StrAdd(tempstr,tempstr3)
+        callersLog(tempstr)
+      ELSE
+        moveFile(str,fsize)
+      ENDIF
+
+      sysopULStats(hold)
+      /* Add Uploaded Bytes to Users Account */
+      IF((hold=NIL) AND (lcfile=NIL) AND (rzmsg=NIL)) 
+        IF creditAccountTrackUploads(loggedOnUser) 
+          IF sopt.toggles[TOGGLES_CREDITBYKB] THEN fsize:=Shr(fsize,10)
+          ->loggedOnUser.bytesUpload:=loggedOnUser.bytesUpload+fsize
+          addBCD(loggedOnUserMisc.uploadBytesBCD,fsize)
+          loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
+       ENDIF
+      ENDIF
+
+      /* Build the first line to send to upload dir */
+      IF(lcfile AND (StrLen(str) > 12))
+        StringF(fmtstr,'\s \s  \s  \s\n',str,fsstr,odate,fcomment)
+      ELSE
+        StringF(fmtstr,'\l\s[13] \s  \s  \s\n',str,fsstr,odate,fcomment)
+      ENDIF
+
+      IF(StrLen(str) < 13)       /* for big file name on lost carrier */
+         IF(checksym)
+           fmtstr[13]:=checksym
+         ELSE               
+           IF(status2=RESULT_FAILURE) THEN fmtstr[13]:="F"
+           IF(status2=RESULT_SUCCESS) THEN fmtstr[13]:="P"
+           IF(status2=RESULT_NOT_ALLOWED) THEN fmtstr[13]:="N"
+         ENDIF
+      ENDIF
+      IF(foundDupe)
+        fmtstr[13]:="D"
+        foundDupe:=0
+      ENDIF
+      
+      IF((hold=NIL) AND (lcfile=NIL)) 
+        IF(rzmsg=FALSE) 
+          StrCopy(ray,currentConfDir);
+          StrAdd(ray,'DIR')
+          StringF(ray2,'\d',maxDirs)
+          StrAdd(ray,ray2)
+        ELSE
+          StringF(ray,'\sF\d/\s.dis',msgBaseLocation,mailHeader.msgNumb,str)
+        ENDIF
+      ELSE
+        StrCopy(ray,currentConfDir)
+        IF(lcfile)
+          StrAdd(ray,'LCFILES/')
+          StrAdd(ray,purgeScanNM)
+          StrAdd(ray,'.lc')
+        ELSE
+           StrAdd(ray,'HOLD/HELD')
+        ENDIF
+      ENDIF
+
+      f:=Open(ray,MODE_READWRITE)
+      Seek(f,0,OFFSET_END)
+      fileWrite(f,fmtstr)
+      x3:=0;
+      WHILE(x2)
+          /* Print the comment lines */
+          IF(StrLen(scomment[x3])>0)
+            StringF(tempstr,'                                 \s\n',scomment[x3])
+            fileWrite(f,tempstr)
+            StrCopy(scomment[x3],'')
+            x3:=x3+1
+          ENDIF
+          x2:=x2-1
+      ENDWHILE
+      IF(checkToolTypeExists(TOOLTYPE_NODE,node,'SENTBY_FILES'))   /* Print the Sent by: line */
+        StringF(tempstr,'                                 Sent by: \s\n',loggedOnUser.name)
+        fileWrite(f,tempstr)  
+      ENDIF
+      Close(f)
+    ENDIF   /*if strlen > 1 */ 
   ENDFOR       /* else */
    
  eit:
@@ -25094,20 +25108,22 @@ logonLoop:
 	  RETURN
   ENDIF
 
- IF logonType>=LOGON_TYPE_REMOTE
-    stat:=checkPassword()
-    IF stat<>RESULT_SUCCESS
-      END loggedOnUser
-      loggedOnUser:=NIL
-      END loggedOnUserKeys
-      loggedOnUserKeys:=NIL
-      END loggedOnUserMisc
-      loggedOnUserMisc:=NIL
-      state:=STATE_LOGGING_OFF
-      RETURN
-    ENDIF
- ELSE
-   IF newUser=FALSE THEN displayUserToCallersLog(0)
+ IF newUser=FALSE
+   IF logonType>=LOGON_TYPE_REMOTE
+     stat:=checkPassword()
+     IF stat<>RESULT_SUCCESS
+       END loggedOnUser
+       loggedOnUser:=NIL
+       END loggedOnUserKeys
+       loggedOnUserKeys:=NIL
+       END loggedOnUserMisc
+       loggedOnUserMisc:=NIL
+       state:=STATE_LOGGING_OFF
+       RETURN
+     ENDIF
+   ELSE
+     displayUserToCallersLog(0)
+   ENDIF
  ENDIF
 
  validUser:=1
@@ -25204,7 +25220,9 @@ PROC processAwait()
         IF dStatBar THEN clearStatusPane()
 
         IF (sopt.trapDoor=FALSE)
-          aePuts('[37m[ s')
+          IF (KickVersion(40)) AND (bitPlanes>2)
+            aePuts('[37m[ s')
+          ENDIF
           aePuts('[0 p')
 
           send017()
@@ -25818,14 +25836,13 @@ ENDPROC
 
 PROC openExpressScreen()
   DEF width,height,top,left,dispId,colourcount
-  DEF blockpen
   DEF pubScreen[255]:STRING
   DEF penstr[12]:STRING
   DEF debugstr[255]:STRING
   DEF pub=FALSE
   DEF pubLock=NIL
   DEF opentags,temp
-  DEF pens: PTR TO INT
+  DEF pens: PTR TO INT, cols:PTR TO INT
   DEF statePtr:PTR TO awaitState
   
   IF scropen THEN RETURN
@@ -25891,7 +25908,13 @@ PROC openExpressScreen()
   IF pub=FALSE
     IF screen=NIL  
          
-      pens:=NEW [0,7,7,7,6,4,7,0,4,7,4,7,-1]:INT
+      IF (bitPlanes<3) OR (KickVersion(40)=FALSE)
+        pens:=NEW [0,1,1,1,6,4,1,0,4,1,4,1,-1]:INT
+        cols:=NEW [0,0,0,0,1,15,15,15,2,0,15,0,3,15,15,0,4,0,0,15,5,15,0,15,6,0,15,15,7,15,0,0,-1,0,0,0]:INT
+      ELSE
+        pens:=NEW [0,7,7,7,6,4,7,0,4,7,4,7,-1]:INT
+        cols:=NEW [0,0,0,0,1,15,0,0,2,0,15,0,3,15,15,0,4,0,0,15,5,15,0,15,6,0,15,15,7,15,15,15,-1,0,0,0]:INT
+      ENDIF               
 
       IF readToolType(TOOLTYPE_NODE,node,'SCREENPENS',penstr)
         FOR temp:=0 TO StrLen(penstr)-1
@@ -25905,40 +25928,24 @@ PROC openExpressScreen()
       temp:=readToolTypeInt(TOOLTYPE_WINDOW,node,'WINDOW.DISPLAYID')
       IF temp<>-1 THEN dispId:=temp
 
-      ->IF(sopt.toggles[TOGGLES_RED1]=FALSE)
-      ->debugLog(LOG_DEBUG,'red1=false')
-      ->blockpen:=1
-      ->screen:=OpenScreenTagList(NIL,
-      ->  
-      ->    [SA_TYPE,CUSTOMSCREEN,SA_LEFT,0,SA_TOP,0,SA_WIDTH,width,SA_HEIGHT,height,SA_DEPTH,bitPlanes,SA_TITLE,titlebar,SA_DISPLAYID,dispId,
-      ->        SA_DETAILPEN,0,SA_BLOCKPEN,blockpen, 
-      ->        SA_PENS,pens,
-      ->        SA_INTERLEAVED,1,
-  ->  ->            SA_FULLPALETTE,1,
-      ->          SA_FONT,defaultfontattr,
-      ->          SA_COLORS,[0,0,0,0,1,15,15,15,2,0,15,0,3,15,15,0,4,0,0,15,5,15,0,15,6,0,15,15,7,15,0,0,-1,0,0,0]:INT,NIL])
-      ->ELSE
-      ->  debugLog(LOG_DEBUG,'red1=true')
-        blockpen:=7
-        opentags:=NEW [SA_TYPE,CUSTOMSCREEN,SA_LEFT,0,SA_TOP,0,SA_WIDTH,width,SA_HEIGHT,height,SA_DEPTH,bitPlanes,SA_TITLE,titlebar,SA_DISPLAYID,dispId,
-                SA_DETAILPEN,1,SA_BLOCKPEN,blockpen, 
-                SA_PUBNAME,IF StrLen(pubScreen)>0 THEN pubScreen ELSE 0,
-                SA_PENS,pens,
-                SA_INTERLEAVED,1,
-  ->              SA_FULLPALETTE,1,
-                SA_FONT,defaultfontattr,
-                SA_COLORS,[0,0,0,0,1,15,0,0,2,0,15,0,3,15,15,0,4,0,0,15,5,15,0,15,6,0,15,15,7,15,15,15,-1,0,0,0]:INT,NIL]
-        screen:=OpenScreenTagList(NIL,opentags)
-        END opentags
+      opentags:=NEW [SA_TYPE,CUSTOMSCREEN,SA_LEFT,0,SA_TOP,0,SA_WIDTH,width,SA_HEIGHT,height,SA_DEPTH,bitPlanes,SA_TITLE,titlebar,SA_DISPLAYID,dispId,
+              SA_PUBNAME,IF StrLen(pubScreen)>0 THEN pubScreen ELSE 0,
+              SA_PENS,pens,
+              SA_INTERLEAVED,1,
+->              SA_FULLPALETTE,1,
+              SA_FONT,defaultfontattr,
+              SA_COLORS,cols,NIL]
+      screen:=OpenScreenTagList(NIL,opentags)
+      END opentags
 
-        IF (screen) AND (StrLen(pubScreen)>0)
-          PubScreenStatus(screen,0)
-          pubLock:=LockPubScreen(pubScreen)
-          IF pubLock<>FALSE THEN pub:=TRUE
-        ENDIF
+      IF (screen) AND (StrLen(pubScreen)>0)
+        PubScreenStatus(screen,0)
+        pubLock:=LockPubScreen(pubScreen)
+        IF pubLock<>FALSE THEN pub:=TRUE
+      ENDIF
 
-      ->ENDIF
       END pens
+      END cols
     ENDIF
        
     IF screen=NIL THEN RETURN ERR_SCREEN
@@ -25949,8 +25956,8 @@ PROC openExpressScreen()
          WA_LEFT,0,
          WA_WIDTH,18,
          WA_HEIGHT,12,
-         WA_DETAILPEN,0,
-         WA_BLOCKPEN,blockpen,
+         ->WA_DETAILPEN,0,
+         ->WA_BLOCKPEN,blockpen,
        WA_IDCMP,IDCMP_CLOSEWINDOW,NIL]
       windowClose:=OpenWindowTagList(NIL,opentags)
       END opentags
@@ -25974,8 +25981,8 @@ PROC openExpressScreen()
         WA_MAXWIDTH,-1,
         WA_MINHEIGHT,-1,
         WA_MAXHEIGHT,-1,
-        WA_DETAILPEN,0,
-        WA_BLOCKPEN,blockpen,
+        ->WA_DETAILPEN,0,
+        ->WA_BLOCKPEN,blockpen,
         WA_IDCMP,IDCMP_CLOSEWINDOW,
         WA_FLAGS,WFLG_ACTIVATE,NIL]
       window:=OpenWindowTagList(NIL,opentags)
@@ -25987,8 +25994,8 @@ PROC openExpressScreen()
         WA_LEFT,left,
         WA_WIDTH,width,
         WA_HEIGHT,height-12,
-        WA_DETAILPEN,0,
-        WA_BLOCKPEN,blockpen,
+        ->WA_DETAILPEN,0,
+        ->WA_BLOCKPEN,blockpen,
         WA_FLAGS,WFLG_ACTIVATE,NIL]
       window:=OpenWindowTagList(NIL,opentags)
       END opentags
@@ -26034,14 +26041,18 @@ PROC openExpressScreen()
     consoleReadIO.length:=SIZEOF window
     IF OpenDevice(consoleInputDeviceName, 0, consoleReadIO, 0) THEN RETURN ERR_DEV
     consoleReadIO.command:=CMD_WRITE
-    consoleReadIO.data:='[37m[ s[0 p'
-    consoleReadIO.length:=14
+    IF (KickVersion(40)) AND (bitPlanes>2)
+      consoleReadIO.data:='[37m[ s[0 p'
+      consoleReadIO.length:=14
+    ENDIF
     DoIO(consoleReadIO)
   ENDIF
 
   queueRead(consoleReadIO, {ibuf})  -> Send the first console read request
   scropen:=TRUE
-  conPuts('[37m[ s')
+  IF (KickVersion(40)) AND (bitPlanes>2)
+    conPuts('[37m[ s')
+  ENDIF
   conPuts('[0 p')
 
   IF (KickVersion(40) AND (bitPlanes>2)) THEN conPuts('[37m[ s')
@@ -26116,8 +26127,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
    
-  StrCopy(expressVer,'v5.0.0-b20',ALL)
-  StrCopy(expressDate,'29-Nov-2018',ALL)
+  StrCopy(expressVer,'v5.0.0-b21',ALL)
+  StrCopy(expressDate,'11-Dec-2018',ALL)
 
   InitSemaphore(bgData)
  
@@ -26150,6 +26161,8 @@ PROC main() HANDLE
   IF (iconbase:=OpenLibrary('icon.library',33))=NIL THEN Raise(ERR_NOICON)
 
    IF (diskfontbase:=OpenLibrary('diskfont.library', 37))=NIL THEN Raise(ERR_NO_DISKFONT)
+
+  recFileNames:=List(1024)
 
   historyBuf:=List(20)
   historyNum:=0
@@ -26608,6 +26621,8 @@ PROC main() HANDLE
     ENDFOR
     END confBases
   ENDIF
+
+  freeList(recFileNames)
 
   freeList(confNames)
   freeList(confDirs)
