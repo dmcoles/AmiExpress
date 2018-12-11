@@ -24566,7 +24566,7 @@ PROC processLoggedOnUser()
           loggedOnUser.chatRemain:=loggedOnUser.chatLimit
           loggedOnUser.dailyBytesDld:=0
           loggedOnUser.timeTotal:=loggedOnUser.timeLimit
-          loggedOnUser.timeLastOn:=currTime
+          ->loggedOnUser.timeLastOn:=currTime
         ELSE
           StringF(string,'timeused debug: \s logon same day,  currday \d, lastday \d, timeused \d',loggedOnUser.name,currDay,lastDay,loggedOnUser.timeUsed)
           debugLog(LOG_WARN,string)
