@@ -12953,11 +12953,11 @@ PROC checkForFileSize(fn: PTR TO CHAR, cfn:PTR TO CHAR, z)
                 StrAdd(final,fBlock.filename)
               ENDIF
               fsize:=fBlock.size
-              tsec:=Div(Div(fsize,onlineBaud),10)
+              tsec:=Div(fsize,Div(onlineBaud,10))
               min:=tsec/60
               secs:=tsec-(min*60)
-              StringF(str,' \r\d[4]k,\r\d[3] mins \z\r\d[2] secs \s\t',Div(fsize,1024),min,secs,fBlock.filename)
-              IF(str[16]=" ") THEN SetStr(str,16)
+              StringF(str,' \r\dk, \d mins \z\r\d[2] secs \s\t',Div(fsize,1024),min,secs,fBlock.filename)
+              ->IF(str[16]=" ") THEN SetStr(str,16)
               aePuts(str)
               IF((fBlock.comment[0]="F") OR (freeDownloads))
                 aePuts('  >>Free Download!\b\n')
@@ -17973,12 +17973,12 @@ PROC downloadAFile(str: PTR TO CHAR, cmdcode: PTR TO CHAR, params)
  arestart:
  
  WHILE TRUE
-   tsec:=Div(Div(dtfsize,onlineBaud),10)
+   tsec:=Div(dtfsize,Div(onlineBaud,10))
    min:=tsec/60
    IF(((Div(timeLimit,60))-min)<0)
      aePuts('Not enough time for requested downloads.\b\n\b\n')
      RETURN RESULT_SUCCESS
-   ENDIF
+    ENDIF
  
   tempsize:=tfsize
   IF sopt.toggles[TOGGLES_CREDITBYKB] THEN tempsize:=Shr(tempsize,10)
@@ -18056,12 +18056,12 @@ PROC downloadAFile(str: PTR TO CHAR, cmdcode: PTR TO CHAR, params)
    
  aePuts(' Batch Download Estimate:\b\n')
   astart2:
-  tsec:=Div(Div(dtfsize,onlineBaud),10)
+  tsec:=Div(dtfsize,Div(onlineBaud,10))
   min:=tsec/60
   secs:=tsec-(min*60)
   StringF(str,'   \d files, \dk bytes, \d mins \d secs\b\n',numFiles,Div(dtfsize,1024),min,secs)
   aePuts(str)
-
+  
  IF(tbad<tfsize)
    aePuts('Exceeded bytes limit.\b\n\b\n')
    RETURN RESULT_SUCCESS
@@ -18927,7 +18927,7 @@ ENDPROC Val(tempStr)
 
 PROC longNumberInput(n)
   DEF tempStr[20]:STRING
-  StringF(tempStr,'\d',n)
+  formatUnsignedLong(n,tempStr)
   lineInput('',tempStr,10,INPUT_TIMEOUT,tempStr)
 ENDPROC Val(tempStr)
 
