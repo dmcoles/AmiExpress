@@ -26042,20 +26042,21 @@ PROC openExpressScreen()
     IF OpenDevice(consoleInputDeviceName, 0, consoleReadIO, 0) THEN RETURN ERR_DEV
     consoleReadIO.command:=CMD_WRITE
     IF (KickVersion(40)) AND (bitPlanes>2)
-      consoleReadIO.data:='[37m[ s[0 p'
-      consoleReadIO.length:=14
+      consoleReadIO.data:='[37m[ s'
+      consoleReadIO.length:=StrLen(consoleReadIO.data)
+      DoIO(consoleReadIO)
     ENDIF
+    consoleReadIO.data:='[0 p'
+    consoleReadIO.length:=StrLen(consoleReadIO.data)
     DoIO(consoleReadIO)
   ENDIF
 
   queueRead(consoleReadIO, {ibuf})  -> Send the first console read request
   scropen:=TRUE
   IF (KickVersion(40)) AND (bitPlanes>2)
-    conPuts('[37m[ s')
+    conPuts('[37m[ s',-1,TRUE)
   ENDIF
-  conPuts('[0 p')
-
-  IF (KickVersion(40) AND (bitPlanes>2)) THEN conPuts('[37m[ s')
+  conPuts('[0 p',-1,TRUE)
 
   statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
   IF((sopt.statBar<>FALSE) AND (pub=FALSE)) THEN toggleStatusDisplay()
@@ -26128,7 +26129,7 @@ PROC main() HANDLE
   DEF transptr:PTR TO mln
    
   StrCopy(expressVer,'v5.0.0-b21',ALL)
-  StrCopy(expressDate,'11-Dec-2018',ALL)
+  StrCopy(expressDate,'12-Dec-2018',ALL)
 
   InitSemaphore(bgData)
  
