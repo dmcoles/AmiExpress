@@ -3846,6 +3846,7 @@ PROC readToolType(toolType,tooltypeSelector,key,outValue)
     tooltypes:=do.tooltypes
     IF (s:=FindToolType(tooltypes,key)) THEN StrCopy(outValue,s,ALL)
   ENDIF
+  IF diskObjectCache=NIL THEN FreeDiskObject(do)
 ENDPROC s<>NIL
 
 PROC readToolTypeInt(toolType,tooltypeSelector,key)
@@ -3873,6 +3874,7 @@ PROC checkToolType(toolType,tooltypeSelector,key,testValue)
       IF (MatchToolValue(s,testValue)) THEN result:=TRUE
     ENDIF
   ENDIF
+  IF diskObjectCache=NIL THEN FreeDiskObject(do)
 ENDPROC result
 
 PROC checkToolTypeExists(toolType,tooltypeSelector,key)
@@ -3891,6 +3893,7 @@ PROC checkToolTypeExists(toolType,tooltypeSelector,key)
     tooltypes:=do.tooltypes
     IF(s:=FindToolType(tooltypes,key)) THEN result:=TRUE
   ENDIF
+  IF diskObjectCache=NIL THEN FreeDiskObject(do)
 ENDPROC result
 
 PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
