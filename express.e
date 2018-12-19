@@ -3935,51 +3935,54 @@ PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
     do:=GetDiskObject(fileName)
     ownToolTypes:=FALSE
     IF do=NIL
-      StringF(fn2,'\s.cfg',fileName)
-      IF fileExists(fn2)
+      StringF(fn2,'\s.txt',fileName)
+      IF fileExists(fn2)=FALSE
+        StringF(fn2,'\s.cfg',fileName)
+        IF fileExists(fn2)
+          do:=GetDefDiskObject(WBPROJECT)
+        ENDIF
+      ELSE
         do:=GetDefDiskObject(WBPROJECT)
-        ->do:=NEW do
+      ENDIF
+      IF do<>NIL
+        fileBuf:=New(getFileSize(fn2)+1)     ->allow an extra char in case file does not end in LF
 
-        IF do<>NIL
-          fileBuf:=New(getFileSize(fn2)+1)     ->allow an extra char in case file does not end in LF
-
-          fh:=Open(fn2,MODE_OLDFILE)
-          IF fh>0
-            off:=0
-            lineCount:=0
-            WHILE(ReadStr(fh,fn2)<>-1) OR (StrLen(fn2)>0)
-              len:=0
-              WHILE (fn2[len]<>0) AND (fn2[len]<>";")
-                len++
-              ENDWHILE
-
-              ->trim trailing space
-              WHILE (fn2[len-1]<=32) AND (len>0)
-                len--
-                EXIT len=0    ->this is just here to prevent the fn2[len-1] causing a buffer underrun in the absence of short circuit evaluation
-              ENDWHILE
-              SetStr(fn2,len)
-
-              AstrCopy(fileBuf+off,fn2,len+1)
-              lineCount++
-              off:=off+len+1
+        fh:=Open(fn2,MODE_OLDFILE)
+        IF fh>0
+          off:=0
+          lineCount:=0
+          WHILE(ReadStr(fh,fn2)<>-1) OR (StrLen(fn2)>0)
+            len:=0
+            WHILE (fn2[len]<>0) AND (fn2[len]<>";")
+              len++
             ENDWHILE
-            
-            toolTypes:=List(lineCount+1)
-            off:=0
-            FOR i:=1 TO lineCount
-              ListAdd(toolTypes,[fileBuf+off])
-              off:=off+StrLen(fileBuf+off)+1
-            ENDFOR
-            ListAdd(toolTypes,[NIL])
-            do.tooltypes:=toolTypes
-            ownToolTypes:=TRUE
-            Close(fh)
-          ELSE
-            Dispose(fileBuf)
-            FreeDiskObject(do)
-            do:=NIL
-          ENDIF
+
+            ->trim trailing space
+            WHILE (fn2[len-1]<=32) AND (len>0)
+              len--
+              EXIT len=0    ->this is just here to prevent the fn2[len-1] causing a buffer underrun in the absence of short circuit evaluation
+            ENDWHILE
+            SetStr(fn2,len)
+
+            AstrCopy(fileBuf+off,fn2,len+1)
+            lineCount++
+            off:=off+len+1
+          ENDWHILE
+          
+          toolTypes:=List(lineCount+1)
+          off:=0
+          FOR i:=1 TO lineCount
+            ListAdd(toolTypes,[fileBuf+off])
+            off:=off+StrLen(fileBuf+off)+1
+          ENDFOR
+          ListAdd(toolTypes,[NIL])
+          do.tooltypes:=toolTypes
+          ownToolTypes:=TRUE
+          Close(fh)
+        ELSE
+          Dispose(fileBuf)
+          FreeDiskObject(do)
+          do:=NIL
         ENDIF
       ENDIF
     ENDIF
@@ -26131,8 +26134,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
    
-  StrCopy(expressVer,'v5.0.0-b21',ALL)
-  StrCopy(expressDate,'12-Dec-2018',ALL)
+  StrCopy(expressVer,'v5.0.0-rc1',ALL)
+  StrCopy(expressDate,'19-Dec-2018',ALL)
 
   InitSemaphore(bgData)
  
