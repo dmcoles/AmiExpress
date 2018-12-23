@@ -2,7 +2,7 @@
 
 ### Introduction
 
-Welcome to the AmiExpress repository. AmiExpress was a BBS System that ran on the Commodore Amiga series of computers and was developed by Lightspeed Technologies in the 1990s.
+Welcome to the AmiExpress repository. AmiExpress was a BBS System that ran on the Commodore Amiga series of computers and was developed by Lightspeed Technologies in the 1990s. Joe Hodge from Lightspeed technologies has given full approval of this project to resurrect the Ami-Express product and has given me permission to continue to use the Ami-Express name.
 
 This is a rewrite of that system  written in Amiga E. It is open source and has new features and bug fixes in addition to most of the functionality of the previous version being implemented.
 
