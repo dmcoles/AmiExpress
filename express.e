@@ -26134,8 +26134,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
    
-  StrCopy(expressVer,'v5.0.0-rc1',ALL)
-  StrCopy(expressDate,'19-Dec-2018',ALL)
+  StrCopy(expressVer,'v5.0.0',ALL)
+  StrCopy(expressDate,'23-Dec-2018',ALL)
 
   InitSemaphore(bgData)
  
