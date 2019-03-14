@@ -86,7 +86,7 @@ CONST CHAT_NTXT=6
 CONST WLEF=0
 CONST WTOP=0
 CONST WWID=640
-CONST WHEI=90
+CONST WHEI=88
 
 CONST GAD_SYSOPLOGIN=0
 CONST GAD_INSTANTLOGIN=1
@@ -1032,69 +1032,69 @@ PROC doControl(node)
       StringF(cmd,'run >nil: bbs:utils/mcp.script')
       Execute(cmd,NIL,NIL)
     CASE SV_SETNRAMS
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_SETNRAMS)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_SYSOPLOG
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_SYSOPLOG)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_LOCALLOG
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_LOCALLOG)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_ACCOUNTS
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_ACCOUNTS)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_EXITNODE
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_EXITNODE)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_NODEOFFHOOK
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_NODEOFFHOOK)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_RESERVE
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_RESERVE)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_CHAT
       cd:=users[node].actionVal
-      IF((cd<>26) AND (cd<>1) AND (cd<>2) AND (cd<>11) AND (cd<>12) AND (cd<>15) AND (cd<>18) AND (cd<>20) AND (cd<>21) AND (cd<>22) AND (cd<>24))
+      IF((cd<>ENV_SUSPEND) AND (cd<>ENV_DOWNLOADING) AND (cd<>ENV_UPLOADING) AND (cd<>ENV_ACCOUNTSEQ) AND (cd<>ENV_LOGOFF) AND (cd<>ENV_EMACS) AND (cd<>ENV_NOTACTIVE) AND (cd<>ENV_CONNECT) AND (cd<>ENV_LOGGINGON) AND (cd<>ENV_AWAITCONNECT) AND (cd<>ENV_SHUTDOWN))
         callNode(node,SV_CHAT)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_INITMODEM
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_INITMODEM)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_INSTANT
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_INSTANT)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_AESHELL
       IF shellMode
-        IF(users[node].actionVal=22)
+        IF(users[node].actionVal=ENV_AWAITCONNECT)
           callNode(node,SV_AESHELL)
         ELSE
           DisplayBeep(scr)
@@ -1102,7 +1102,7 @@ PROC doControl(node)
       ENDIF
     CASE SV_CHATTOGGLE
       cd:=users[node].actionVal
-      IF((cd<>24) AND (cd<>26))
+      IF((cd<>ENV_SHUTDOWN) AND (cd<>ENV_SUSPEND))
        /* if(TChat[node]) TChat[node]=0; else TChat[node]=1;
 
         SetAPen(eWin.rport,getNodeTextColour(node))
@@ -1120,7 +1120,7 @@ PROC doControl(node)
       ENDIF
     CASE SV_QUIETNODE
       cd:=users[node].actionVal
-      IF((cd<>24) AND (cd<>26))
+      IF((cd<>ENV_SHUTDOWN) AND (cd<>ENV_SUSPEND))
         callNode(node,SV_QUIETNODE)
       ELSE
         DisplayBeep(scr)
@@ -1457,8 +1457,8 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
   
   users[node].active:=1
   
-  IF(Val(action)=27) THEN users[node].actionVal:=22 ELSE users[node].actionVal:=Val(action)
-  IF(users[node].actionVal=21)
+  IF(Val(action)=ENV_RESERVE) THEN users[node].actionVal:=ENV_AWAITCONNECT ELSE users[node].actionVal:=Val(action)
+  IF(users[node].actionVal=ENV_LOGGINGON)
     regLastUser(users[node].user,node);
     SELECT topOption
       CASE LAST_CALLERS
@@ -1581,7 +1581,7 @@ PROC regLastDownloads(name:PTR TO CHAR,node)
   
   regNodeDownloads(name,node)
   IF((regLastDownloadsNum>0) AND (regLastDownloadsNum<5))
-    IF(StrCmp(lastDownloads[regLastDownloadsNum-1],name))=FALSE THEN RETURN
+    IF(StrCmp(lastDownloads[regLastDownloadsNum-1],name)) THEN RETURN
   ENDIF
   
   IF(regLastDownloadsNum=5)
@@ -1601,7 +1601,7 @@ PROC regNodeDownloads(name:PTR TO CHAR, node)
   DEF i=0
   
   IF((ndDownloads[node].num>0) AND (ndDownloads[node].num<5))
-    IF(StrCmp(ndDownloads[node].lastUsers[ndDownloads[node].num-1],name))=FALSE THEN RETURN
+    IF(StrCmp(ndDownloads[node].lastUsers[ndDownloads[node].num-1],name)) THEN RETURN
   ENDIF
   
   IF(ndDownloads[node].num=5)
@@ -1624,7 +1624,7 @@ PROC regLastUploads(name:PTR TO CHAR,node)
   
   regNodeUploads(name,node)
   IF((regLastUploadsNum>0) AND (regLastUploadsNum<5))
-    IF(StrCmp(lastUploads[regLastUploadsNum-1],name))=FALSE THEN RETURN
+    IF(StrCmp(lastUploads[regLastUploadsNum-1],name)) THEN RETURN
   ENDIF
   
   IF(regLastUploadsNum=5)
@@ -1644,7 +1644,7 @@ PROC regNodeUploads(name:PTR TO CHAR,node)
   DEF i=0
   
   IF((ndUploads[node].num>0) AND (ndUploads[node].num<5))
-    IF(StrCmp(ndUploads[node].lastUsers[ndUploads[node].num-1],name))=FALSE THEN RETURN
+    IF(StrCmp(ndUploads[node].lastUsers[ndUploads[node].num-1],name)) THEN RETURN
   ENDIF
   
   IF(ndUploads[node].num=5)
@@ -1683,7 +1683,10 @@ ENDPROC
 
 PROC regLastUser(name:PTR TO CHAR,node)
   DEF i=0
+  DEF tempStr[100]:STRING
   ->DEF num=0;  was static
+  
+  StringF(tempStr,'\d: \s',node,name)
   regNodeUser(name,node)
   IF((regLastUserNum>0) AND (regLastUserNum<5))
     IF(StrCmp(lastUsers[regLastUserNum-1],name)) THEN RETURN
@@ -1694,9 +1697,9 @@ PROC regLastUser(name:PTR TO CHAR,node)
       i++
     ENDWHILE
     regLastUserNum:=4
-    strcpy(lastUsers[regLastUserNum],name)
+    strcpy(lastUsers[regLastUserNum],tempStr)
   ELSE
-    strcpy(lastUsers[regLastUserNum],name)
+    strcpy(lastUsers[regLastUserNum],tempStr)
   ENDIF
   regLastUserNum++
 ENDPROC
@@ -3017,13 +3020,13 @@ PROC attemptShutdown()
   ELSE
     FOR i:=0 TO MAX_NODES-1
       IF(StrLen(startNode[i])>0)
-        IF((users[i].actionVal=22) AND (down[i])=FALSE)
+        IF((users[i].actionVal=ENV_AWAITCONNECT) AND (down[i])=FALSE)
           control:=SV_NODEOFFHOOK
           down[i]:=TRUE
           doControl(i)
         ENDIF                     
       ELSE
-        IF(users[i].actionVal<>24) THEN notDone:=1 
+        IF(users[i].actionVal<>ENV_SHUTDOWN) THEN notDone:=1 
       ENDIF
     ENDFOR
   ENDIF
@@ -3056,7 +3059,7 @@ PROC main() HANDLE
  
   KickVersion(37)  -> E-Note: requires V37
 
-  StringF(myVerStr,'v5.0.0')
+  StringF(myVerStr,'v5.1.0')
 
   dim:=[1,1,1,1]:INT  /*** Dimensions of ZIP window default ***/
   zim:=[10,100]:INT
@@ -3227,7 +3230,7 @@ PROC main() HANDLE
 
   IF scr
     topOffset:=scr.wbortop+scr.font.ysize+1-11
-    height:=height+topOffset
+    height:=height+topOffset+scr.wborbottom
     initNgAry()
 
     IF(zipOn)
