@@ -348,7 +348,7 @@ OBJECT tempAccess
 ENDOBJECT
 
 OBJECT zModem 
-  fileName[40]:ARRAY OF CHAR
+  fileName[255]:ARRAY OF CHAR
   titleBar[60]:ARRAY OF CHAR
   zStat[60]:ARRAY OF CHAR
   filesize:LONG
@@ -14552,10 +14552,10 @@ PROC xprupdate()
   IF(xpru.xpru_updatemask AND XPRU_FILENAME)<>0
     update:=TRUE
     IF xpru.xpru_filename<>NIL
-      IF StrCmp(zModemInfo.fileName,FilePart(xpru.xpru_filename),40)=FALSE 
-        strCpy(zModemInfo.fileName,FilePart(xpru.xpru_filename),40)
+      IF StrCmp(zModemInfo.fileName,xpru.xpru_filename,ALL)=FALSE 
+        strCpy(zModemInfo.fileName,xpru.xpru_filename,ALL)
         IF zModemInfo.inProgress=ZMODEM_UPLOAD
-          sendMasterUpload(zModemInfo.fileName)
+          sendMasterUpload(FilePart(zModemInfo.fileName))
         ENDIF
       ENDIF
     ENDIF
@@ -14575,9 +14575,9 @@ PROC xprupdate()
       IF zModemInfo.filesize<>xpru.xpru_filesize
         zModemInfo.filesize:=xpru.xpru_filesize
         IF zModemInfo.downloading
-          StringF(outmsg,'\t\sDownloading \s[12] \d bytes',IF zModemInfo.freeDFlag THEN 'Free ' ELSE '',zModemInfo.fileName,xpru.xpru_filesize)
+          StringF(outmsg,'\t\sDownloading \s \d bytes',IF zModemInfo.freeDFlag THEN 'Free ' ELSE '',zModemInfo.fileName,xpru.xpru_filesize)
         ELSE
-          StringF(outmsg,'\tUploading \s[12] \d bytes',zModemInfo.fileName,xpru.xpru_filesize)
+          StringF(outmsg,'\tUploading \s[12] \d bytes',FilePart(zModemInfo.fileName),xpru.xpru_filesize)
         ENDIF
         callersLog(outmsg)
         udLog(outmsg)
@@ -14865,7 +14865,6 @@ PROC xprfnext2(buffer:PTR TO CHAR, xprObj:PTR TO xprData)
             
             ->loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+tempsize
             addBCD(loggedOnUserMisc.downloadBytesBCD,tempsize)
-            WriteF('debug: \d \d\n',tempsize,tBT)
             loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
             loggedOnUser.downloads:=loggedOnUser.downloads+1
           ENDIF
@@ -15043,7 +15042,7 @@ PROC updateZDisplay()
     IF (KickVersion(40) AND (bitPlanes>2))
       zmodemStatPrint('[37m[ s')
     ENDIF
-    StringF(tempstr,'[H\n FileName: \s\n',zModemInfo.fileName)
+    StringF(tempstr,'[H\n FileName: \s\n',FilePart(zModemInfo.fileName))
     zmodemStatPrint(tempstr)
     StringF(tempstr,' FileSize: \d\n',zModemInfo.filesize)
     zmodemStatPrint(tempstr)
@@ -17319,7 +17318,6 @@ ENDPROC RESULT_SUCCESS
 
 PROC formatFileSizeForDirList(fsize,fsstr:PTR TO CHAR)
   DEF tmpSize
-  WriteF('calculate dir filesize: \d\n',fsize)
   IF sopt.toggles[TOGGLES_CREDITBYKB]
     tmpSize:=Shr(fsize,10)
     IF tmpSize<=999999
@@ -18641,10 +18639,9 @@ sysopDL:
     pcps:=zModemInfo.cps
   ENDIF
 ->// (RTS) added dnload cps rate Fri Mar 27 13:13:29 1992
-  WriteF('debug2: \d',tBT)
-  WriteF('debug3: \d',Div(tBT,1024))
-  StringF(string,' \d files, \dk bytes, \d minutes \d seconds \d cps, \d% efficiency at \d\b\n\b\n',onlineNFiles,Div(tBT,1024),Div(tTTM,60),Mod(tTTM,60),pcps,peff,onlineBaud)
+  StringF(string,' \d files, \dk bytes, \d minutes \d seconds \d cps, \d% efficiency at \d',onlineNFiles,Div(tBT,1024),Div(tTTM,60),Mod(tTTM,60),pcps,peff,onlineBaud)
   aePuts(string)
+  aePuts('\b\n\b\n')
  
   IF pcps>65535 THEN pcps:=65535
   IF(pcps > loggedOnUserKeys.dnCPS)
