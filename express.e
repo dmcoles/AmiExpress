@@ -3,7 +3,7 @@
 ->
 OPT LARGE,REG=5,OSVERSION=37
 
-ENUM ERR_NONE, ERR_NOICON, ERR_NO_DISKFONT,ERR_SCREEN, ERR_WINDOW, ERR_MP, ERR_IO, ERR_DEV, ERR_PORT, ERR_ARG, ERR_BRKR, ERR_CXERR, ERR_LIB, ERR_PORT, ERR_ASL, ERR_KICK, ERR_LIB, ERR_SERVERRP, ERR_NOSERIAL, ERR_SSL, ERR_KICKVER, ERR_ALREADYRUNNING,ERR_COMPUTERTYPES,ERR_NOSERIALLOCK,ERR_NOOWNDEVUNIT
+ENUM ERR_NONE, ERR_NOICON, ERR_NO_DISKFONT,ERR_SCREEN, ERR_WINDOW, ERR_MP, ERR_IO, ERR_DEV, ERR_PORT, ERR_ARG, ERR_BRKR, ERR_CXERR, ERR_LIB, ERR_PORT, ERR_ASL, ERR_KICK, ERR_LIB, ERR_SERVERRP, ERR_NOSERIAL, ERR_SSL, ERR_KICKVER, ERR_ALREADYRUNNING,ERR_COMPUTERTYPES,ERR_NOSERIALLOCK,ERR_NOOWNDEVUNIT, ERR_EXCEPT,ERR_SSL
 
 ENUM STATE_AWAIT, STATE_CONNECTING, STATE_SYSOPLOGON, STATE_LOGON, STATE_LOGGEDON, STATE_HANGUP, STATE_LOGGING_OFF, STATE_SHUTDOWN, STATE_CHECK,STATE_SUSPEND
 
@@ -13,13 +13,13 @@ ENUM SUBSTATE_DISPLAY_AWAIT, SUBSTATE_INPUT, SUBSTATE_DISPLAY_BULL, SUBSTATE_DIS
 
 ENUM CMDTYPE_BBSCMD,CMDTYPE_SYSCMD,CMDTYPE_CUSTOM
 
-ENUM TOOLTYPE_PRESET, TOOLTYPE_NODE,TOOLTYPE_CONFCONFIG,TOOLTYPE_CONF,TOOLTYPE_BBSCMD,TOOLTYPE_CONFCMD,TOOLTYPE_NODECMD,TOOLTYPE_SYSCMD,TOOLTYPE_DRIVES,TOOLTYPE_NAMESNOTALLOWED,TOOLTYPE_COMPUTERLIST,TOOLTYPE_ACCESS,TOOLTYPE_AREA,TOOLTYPE_PRESET,TOOLTYPE_FCHECK,TOOLTYPE_NODE_WINDOW,TOOLTYPE_NODE_TIMES,TOOLTYPE_WINDOW,TOOLTYPE_CONNECT,TOOLTYPE_XPRTYPES,TOOLTYPE_XFERLIB,TOOLTYPE_SCREENTYPES,TOOLTYPE_NRAMS, TOOLTYPE_BBSCONFIG,TOOLTYPE_ASCPACK,TOOLTYPE_QWKPACK,TOOLTYPE_QWKCONFIG,TOOLTYPE_DEFAULT_ACCESS,TOOLTYPE_LANGUAGES,TOOLTYPE_USER_ACCESS, TOOLTYPE_NODE_PRESET,TOOLTYPE_CONFCMD2
+ENUM TOOLTYPE_PRESET, TOOLTYPE_NODE,TOOLTYPE_CONFCONFIG,TOOLTYPE_CONF,TOOLTYPE_BBSCMD,TOOLTYPE_CONFCMD,TOOLTYPE_NODECMD,TOOLTYPE_SYSCMD,TOOLTYPE_DRIVES,TOOLTYPE_NAMESNOTALLOWED,TOOLTYPE_COMPUTERLIST,TOOLTYPE_ACCESS,TOOLTYPE_AREA,TOOLTYPE_PRESET,TOOLTYPE_FCHECK,TOOLTYPE_NODE_WINDOW,TOOLTYPE_NODE_TIMES,TOOLTYPE_WINDOW,TOOLTYPE_CONNECT,TOOLTYPE_XPRTYPES,TOOLTYPE_XFERLIB,TOOLTYPE_SCREENTYPES,TOOLTYPE_NRAMS, TOOLTYPE_BBSCONFIG,TOOLTYPE_ASCPACK,TOOLTYPE_QWKPACK,TOOLTYPE_QWKCONFIG,TOOLTYPE_DEFAULT_ACCESS,TOOLTYPE_LANGUAGES,TOOLTYPE_USER_ACCESS, TOOLTYPE_NODE_PRESET,TOOLTYPE_CONFCMD2,TOOLTYPE_CONFSYSCMD,TOOLTYPE_NODESYSCMD
 
 ENUM DOORTYPE_XIM, DOORTYPE_AIM, DOORTYPE_SIM, DOORTYPE_TIM, DOORTYPE_IIM, DOORTYPE_MCI, DOORTYPE_AEM, DOORTYPE_SUP
 
 ENUM LOG_NONE=0, LOG_ERROR=1, LOG_WARN=2, LOG_DEBUG=3
 
-ENUM SCREEN_AWAIT, SCREEN_BBSTITLE, SCREEN_LOGON, SCREEN_JOIN, SCREEN_JOINCONF, SCREEN_JOINED, SCREEN_BULL, SCREEN_NODE_BULL, SCREEN_CONF_BULL, SCREEN_MENU, SCREEN_LOGOFF, SCREEN_DOWNLOAD, SCREEN_UPLOAD, SCREEN_NEWUSERPW, SCREEN_NONEWUSERS, SCREEN_NONEWATBAUD, SCREEN_GUESTLOGON, SCREEN_NOCALLERSATBAUD, SCREEN_LOCKOUT0, SCREEN_LOCKOUT1, SCREEN_PRIVATE, SCREEN_ONENODE, SCREEN_LOGON24, SCREEN_NOT_TIME, SCREEN_FILEHELP,SCREEN_LANGUAGES
+ENUM SCREEN_AWAIT, SCREEN_BBSTITLE, SCREEN_LOGON, SCREEN_JOIN, SCREEN_JOINCONF, SCREEN_JOINED, SCREEN_BULL, SCREEN_NODE_BULL, SCREEN_CONF_BULL, SCREEN_MENU, SCREEN_LOGOFF, SCREEN_DOWNLOAD, SCREEN_UPLOAD, SCREEN_NEWUSERPW, SCREEN_NONEWUSERS, SCREEN_NONEWATBAUD, SCREEN_GUESTLOGON, SCREEN_NOCALLERSATBAUD, SCREEN_LOCKOUT0, SCREEN_LOCKOUT1, SCREEN_PRIVATE, SCREEN_ONENODE, SCREEN_LOGON24, SCREEN_NOT_TIME, SCREEN_FILEHELP,SCREEN_LANGUAGES,SCREEN_REALNAMES,SCREEN_INTERNETNAMES
 
 ENUM LOGON_TYPE_LOGGED_OFF=0, LOGON_TYPE_SYSOP=1, LOGON_TYPE_LOCAL=2, LOGON_TYPE_REMOTE=3
 
@@ -254,7 +254,8 @@ MODULE 'intuition/screens',
        'owndevunit'
 
   MODULE '*axcommon',
-         '*miscfuncs'
+         '*miscfuncs',
+         '*stringlist'
 
 OBJECT user
   name[30]:ARRAY OF CHAR
@@ -333,9 +334,9 @@ OBJECT userMisc
   realName[26]:ARRAY OF CHAR
   downloadBytesBCD[8]:ARRAY OF CHAR
   uploadBytesBCD[8]:ARRAY OF CHAR
-  unknown[30]:ARRAY OF CHAR
-  unknown2:INT
-  unknown3[164]:ARRAY OF CHAR
+  unknown[28]:ARRAY OF CHAR
+  nodeFlags[32]:ARRAY OF LONG
+  confFlags2[10]:ARRAY OF LONG
 ENDOBJECT
 
 OBJECT tempAccess
@@ -353,7 +354,7 @@ OBJECT zModem
   filesize:LONG
   cps:LONG
   eff:LONG
-  recPos:LONG
+  transPos:LONG
   errorCount: LONG
   errorPos:LONG
   resumePos:LONG
@@ -364,6 +365,7 @@ OBJECT zModem
   lastUpdate: LONG
   inProgress: LONG
   downloading: CHAR
+  freeDFlag: LONG
 ENDOBJECT
 
 OBJECT confBase
@@ -392,12 +394,6 @@ OBJECT doorMsg
     data:INT
   string[80]:ARRAY OF CHAR
     carrier:INT
-ENDOBJECT
-
-OBJECT screenDisplayState
-  filename
-  position
-  parentDisplayState: PTR TO screenDisplayState
 ENDOBJECT
 
 OBJECT awaitState
@@ -540,6 +536,12 @@ OBJECT flagFileItem
   confNum: LONG
 ENDOBJECT
 
+OBJECT xprData
+  currentFile:LONG
+  fileList:PTR TO stdlist
+  updateDownloadStats: LONG
+ENDOBJECT
+
 DEF masterMsg:acpMessage
 DEF resmp: PTR TO mp
 DEF rexxmp: PTR TO mp
@@ -626,11 +628,11 @@ DEF mailStat=NIL: PTR TO mailStat
 DEF mailHeader=NIL: PTR TO mailHeader
 DEF cmds: commands
 DEF mybbsLoc[255]:STRING
-DEF parsedParams: PTR TO LONG
-DEF confBases: PTR TO LONG
+DEF parsedParams: PTR TO stringlist
+DEF confBases: PTR TO stdlist
 DEF newSinceFlag
 DEF computerEntries
-DEF computerTypes: PTR TO LONG
+DEF computerTypes: PTR TO stringlist
 DEF onlineEdit=0
 DEF quietFlag=FALSE
 DEF chatFlag=FALSE
@@ -647,10 +649,9 @@ DEF tMPBT=0
 DEF tBT=0
 DEF dTBT=0
 DEF beenUDd=0
-DEF numSkipd=0
 DEF lcFileXfr=0
-DEF recFileNames:PTR TO LONG
-DEF skipdFiles=0
+DEF recFileNames:PTR TO stringlist
+DEF skipdFiles:PTR TO stringlist
 DEF checksym=0
 DEF purgeScanNM[31]:STRING
 DEF validUser=0
@@ -693,12 +694,12 @@ DEF alreadyRecvd
 DEF delMsgNum
 DEF lastMsgReadConf=0
 DEF lastNewReadConf=0
-DEF msgBuf: PTR TO LONG
+DEF msgBuf: PTR TO stringlist
 DEF maxMsgLines = 800
-DEF confNames: PTR TO LONG
-DEF confDirs: PTR TO LONG
+DEF confNames: PTR TO stringlist
+DEF confDirs: PTR TO stringlist
 DEF historyFolder[255]:STRING
-DEF historyBuf : PTR TO LONG
+DEF historyBuf : PTR TO stringlist
 DEF historyNum
 DEF historyCycle
 DEF comment=0
@@ -714,11 +715,11 @@ DEF editor: editor
 DEF editorFileName[80]:STRING
 DEF editorFileInclude[80]:STRING
 
-DEF xprLib: PTR TO LONG
-DEF xprTitle: PTR TO LONG
-DEF screenTypeTitle: PTR TO LONG
-DEF screenTypeExt: PTR TO LONG
-DEF scomment:PTR TO LONG
+DEF xprLib: PTR TO stringlist
+DEF xprTitle: PTR TO stringlist
+DEF screenTypeTitle: PTR TO stringlist
+DEF screenTypeExt: PTR TO stringlist
+DEF scomment:PTR TO stringlist
 
 DEF fCheckDir[255]:STRING
 
@@ -735,7 +736,7 @@ DEF rzmsg=0
 DEF tempUser: PTR TO user
 DEF tempUserKeys: PTR TO userKeys
 DEF tempUserMisc: PTR TO userMisc
-DEF flagFilesList:PTR TO LONG
+DEF flagFilesList:PTR TO stdlist
 DEF onlineBaud,onlineBaudR
 DEF idRate[15]:STRING
 DEF idDate[15]:STRING
@@ -752,6 +753,9 @@ DEF lastTimeUpdate
 DEF bitPlanes=3
 DEF ximPort=0
 
+DEF namePrompt[255]:STRING
+DEF passwordPrompt[255]:STRING
+
 DEF mciterminator[1]:STRING
 
 DEF customMsgParam1=0
@@ -763,7 +767,7 @@ DEF transfering=FALSE
 DEF cancelTransferOffHook=FALSE
 DEF aeGoodFile=0
 ->download stuff
-DEF sysopdl,numFiles,freeDFlag,fsize,tfsize,dtfsize
+DEF sysopdl,numFiles,fsize,dtfsize
 DEF zModemInfo: zModem
 DEF chatSerFlag=0,chatConFlag=0
 
@@ -788,8 +792,9 @@ DEF securityFlags[255]:STRING
 DEF shutDownMsg[255]:STRING
 DEF shutDownFlag=0
 
-DEF olmBuf: PTR TO LONG
-DEF olmQueue: PTR TO LONG
+DEF olmBuf: PTR TO stringlist
+DEF olmQueue: PTR TO stringlist
+DEF lastOlmNode=-1
 
 DEF translators: PTR TO translator
 DEF managedTranslators=FALSE
@@ -807,7 +812,7 @@ DEF sdReplyRexx=NIL: PTR TO rexxmsg
 DEF bgData:bgCheckData
 DEF bgFileCheck=FALSE
 
-DEF diskObjectCache:PTR TO LONG
+DEF diskObjectCache:PTR TO stdlist
 DEF cacheResetOn=CACHE_RESET_NEVER
 DEF cacheTests=0
 DEF cacheHits=0
@@ -829,6 +834,13 @@ DEF serialCacheEnabled=FALSE
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
       ERR_ASL  IF AllocAslRequest()=NIL
+
+
+PROC listAdd2(list:PTR TO LONG, v)
+  ListAdd(list,[0])
+  list[ListLen(list)-1]:=v
+ENDPROC
+
 
 PROC checkIconifyMsg()
 ENDPROC
@@ -871,6 +883,18 @@ PROC convertAccess()
   userSpecificAccess:=fileExists(tempStr,TRUE);
   
   StrCopy(securityFlags,'')
+ENDPROC
+
+/*must be called with EString*/
+PROC removeCR(str:PTR TO CHAR)
+  DEF i,n=0
+  FOR i:=0 TO EstrLen(str)-1
+    IF str[i]<>13
+      str[n]:=str[i]
+      n++
+    ENDIF
+  ENDFOR
+  SetStr(str,n)
 ENDPROC
 
 PROC stcsma(s: PTR TO CHAR,p: PTR TO CHAR)
@@ -1035,7 +1059,7 @@ PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, toemail:PT
 
                 IF appendMsgBuf
                   FOR i:=0 TO lines-1
-                     StringF(request,'\s\b\n',msgBuf[i])
+                     StringF(request,'\s\b\n',msgBuf.item(i))
                      IF ((errcode:=SsL_write(ssl, request, StrLen(request))) <=0 )
                        WriteF('error sending msg data\n');
                      ENDIF
@@ -1196,7 +1220,7 @@ PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, toemail:PT
 
             IF appendMsgBuf
               FOR i:=0 TO lines-1
-                 StringF(request,'\s\b\n',msgBuf[i])
+                 StringF(request,'\s\b\n',msgBuf.item(i))
                  IF ((errcode:=Send(sock, request, StrLen(request),0)) <=0 )
                    WriteF('error sending msg data\n');
                  ENDIF
@@ -1267,42 +1291,37 @@ PROC base64enc(data:PTR TO CHAR,len,output)
 ENDPROC 
 
 /* Open and initialize AmiSSL */
-PROC initssl(createctx)
+PROC initssl(createctx) HANDLE
   DEF tags
 
   socketbase:=OpenLibrary('bsdsocket.library', 4)
     IF (socketbase=NIL)
         WriteF('Couldn''t open bsdsocket.library v4!\n')
-    cleanupssl()
-    RETURN FALSE
+    Raise(ERR_SSL)        
   ENDIF
 
   amisslmasterbase:=OpenLibrary('amisslmaster.library',AMISSLMASTER_MIN_VERSION)
     IF (amisslmasterbase=NIL)
         WriteF('Couldn''t open amisslmaster.library v\d!\n',AMISSLMASTER_MIN_VERSION);
-    cleanupssl()
-    RETURN FALSE
+    Raise(ERR_SSL)        
   ENDIF
 
     IF (InitAmiSSLMaster(AMISSL_CURRENT_VERSION, TRUE))=NIL
         WriteF('AmiSSL version is too old!\n');
-    cleanupssl()
-    RETURN FALSE
+    Raise(ERR_SSL)        
   ENDIF
 
   amisslbase:=OpenAmiSSL()
     IF (amisslbase=NIL)
     WriteF('Couldn''t open AmiSSL!\n');
-    cleanupssl()
-    RETURN FALSE
+    Raise(ERR_SSL)        
   ENDIF
 
   tags:=NEW [amiSSL_ErrNoPtr,{errno},amiSSL_SocketBase,socketbase,0]
   IF (InitAmiSSLA(tags) <> 0)
     END tags
         WriteF('Couldn''t initialize AmiSSL!\n');
-    cleanupssl()
-    RETURN FALSE
+    Raise(ERR_SSL)        
   ENDIF
   END tags
 
@@ -1321,13 +1340,14 @@ PROC initssl(createctx)
     ctx:=SsL_CTX_new(TlS_client_method())
     IF (ctx=0)
       WriteF('Couldn''t create ssl ctx!\n');
-      cleanupssl()
-      RETURN FALSE
+      Raise(ERR_SSL)        
     ENDIF
     SsL_CTX_set_default_verify_paths(ctx);
     SsL_CTX_set_verify(ctx, SSL_VERIFY_PEER OR SSL_VERIFY_FAIL_IF_NO_PEER_CERT,NIL);
   ENDIF
-
+EXCEPT
+  cleanupssl()
+  RETURN FALSE
 ENDPROC TRUE
 
 PROC cleanupssl()
@@ -1374,20 +1394,20 @@ PROC connectToServer(host:PTR TO CHAR, port)
     hostaddr:=hostaddr[]
 
     NEW addr
-        addr.sin_family:=AF_INET;
+      addr.sin_family:=AF_INET;
     addr.sin_addr:=hostaddr[]; /* This should be checked against INADDR_NONE */
     addr.sin_port:=port->htons(port);
 
-        IF (Connect(sock, addr, SIZEOF sockaddr_in) >= 0)
-            is_ok:=TRUE
-        ELSE
-      WriteF('Couldn''t connect to server\n');
-    ENDIF
+      IF (Connect(sock, addr, SIZEOF sockaddr_in) >= 0)
+          is_ok:=TRUE
+      ELSE
+        WriteF('Couldn''t connect to server\n');
+      ENDIF
     END addr
-        IF (is_ok=FALSE)
-            CloseSocket(sock);
-            sock:=-1;
-    ENDIF
+      IF (is_ok=FALSE)
+        CloseSocket(sock);
+        sock:=-1;
+      ENDIF
     ENDIF
 
 ENDPROC sock
@@ -1484,7 +1504,7 @@ PROC checkMailConfScan(conf)
     RETURN FALSE
   ENDIF
    
-  cb:=ListItem(confBases,conf-1)
+  cb:=confBases.item(conf-1)
   
   IF cb<>NIL
     IF (cb.handle[0] AND MAIL_SCAN_MASK)<>0 THEN res:=TRUE ELSE res:=FALSE
@@ -1503,7 +1523,7 @@ PROC checkFileConfScan(conf)
     RETURN FALSE
   ENDIF
 
-  cb:=ListItem(confBases,conf-1)
+  cb:=confBases.item(conf-1)
   
   IF cb<>NIL
     IF (cb.handle[0] AND FILE_SCAN_MASK)<>0 THEN res:=TRUE ELSE res:=FALSE
@@ -1779,7 +1799,7 @@ PROC checkDoorMsg(mode)
    DEF ch,cmd
    DEF type,temp,exit
    DEF servermsg: PTR TO jhMessage
-   DEF olmmsg,len,i
+   DEF len,i
    DEF subState: loggedOnState
    DEF debugstr[255]:STRING
    DEF tempstring[255]:STRING
@@ -2163,34 +2183,23 @@ PROC checkDoorMsg(mode)
         CASE SV_INCOMING_MSG
           subState:=stateData
           
-          IF ListLen(olmBuf)<ListMax(olmBuf)
-            olmmsg:=String(StrLen(servermsg.string))
-            StrCopy(olmmsg,servermsg.string)
-            ListAdd(olmBuf,[olmmsg])
-          ENDIF
+          lastOlmNode:=servermsg.nodeID
+          olmBuf.add(servermsg.string)
           IF servermsg.lineNum<0
             ->message ready to send
             IF (state=STATE_LOGGEDON) AND (subState.subState=SUBSTATE_READ_COMMAND)
-              FOR i:=0 TO ListLen(olmBuf)-1
-                aePuts(olmBuf[i])
-                DisposeLink(olmBuf[i])
+              FOR i:=0 TO olmBuf.count()-1
+                aePuts(olmBuf.item(i))
               ENDFOR
+              olmBuf.clear()
               ->readChar(INPUT_TIMEOUT)
               ->displayMenuPrompt()
             ELSE
-              len:=0
-              FOR i:=0 TO ListLen(olmBuf)-1
-                len:=len+StrLen(olmBuf[i])
-                len:=len+2
+              FOR i:=0 TO olmBuf.count()-1
+                olmQueue.add(olmBuf.item(i))
               ENDFOR
-              olmmsg:=String(len)
-              FOR i:=0 TO ListLen(olmBuf)-1
-                StrAdd(olmmsg,olmBuf[i])
-                DisposeLink(olmBuf[i])
-              ENDFOR
-              ListAdd(olmQueue,[olmmsg])
+              olmBuf.clear()
             ENDIF
-            SetList(olmBuf,0)
           ENDIF
         CASE LOAD_ACCOUNT
           doorMsgLoadAccount(servermsg)
@@ -2618,34 +2627,6 @@ PROC countSpaces(str:PTR TO CHAR)
   ENDFOR
 ENDPROC count
 
-PROC reAllocList(list:PTR TO LONG, increaseBy)
-  DEF newList:PTR TO LONG
-  DEF i,cnt
-  cnt:=ListMax(list)
-  newList:=List(cnt+increaseBy)
-  FOR i:=0 TO cnt-1
-    ListAdd(newList,[ListItem(list,i)])
-  ENDFOR
-  DisposeLink(list)
-ENDPROC newList
-
-PROC clearList(list:PTR TO LONG)
-  DEF i
-  IF list<>NIL
-    FOR i:=0 TO ListLen(list)-1
-      DisposeLink(ListItem(list,i))
-    ENDFOR
-    SetList(list,0)
-  ENDIF
-ENDPROC
-
-PROC freeList(list:PTR TO LONG)
-  IF list<>NIL
-    clearList(list)
-    DisposeLink(list)
-  ENDIF
-ENDPROC
-
 PROC aePuts(string,force=FALSE)
   aePuts2(string,-1,force)
 ENDPROC
@@ -2909,13 +2890,13 @@ ENDPROC result1 OR result2
 ->ENDPROC (date1.days*60)+date1.minute-(date2.days*60)-date2.minute
 
 PROC getConfLocation(confNum,outConfLocationString=NIL)
-  IF outConfLocationString<>NIL THEN StrCopy(outConfLocationString,ListItem(confDirs,confNum-1))
-ENDPROC ListItem(confDirs,confNum-1)
+  IF outConfLocationString<>NIL THEN StrCopy(outConfLocationString,confDirs.item(confNum-1))
+ENDPROC confDirs.item(confNum-1)
 
 PROC setConfLocation(confNum,newconfLocation)
   DEF p : PTR TO CHAR
 
-  StrCopy(ListItem(confDirs,confNum-1),newconfLocation)
+  confDirs.setItem(confNum-1,newconfLocation)
   IF confNum<11
     p:=cmds.conf1Loc
     strCpy(p+((confNum-1)*60),newconfLocation,ALL)
@@ -2932,13 +2913,13 @@ ENDPROC
 
 
 PROC getConfName(confNum,outConfNameString=NIL)
-  IF outConfNameString<>NIL THEN StrCopy(outConfNameString,ListItem(confNames,confNum-1))
-ENDPROC ListItem(confNames,confNum-1)
+  IF outConfNameString<>NIL THEN StrCopy(outConfNameString,confNames.item(confNum-1))
+ENDPROC confNames.item(confNum-1)
 
 PROC setConfName(confNum,newConfName)
   DEF p : PTR TO CHAR
 
-  StrCopy(ListItem(confNames,confNum-1),newConfName)
+  confNames.setItem(confNum-1,newConfName)
   IF confNum<11
     p:=cmds.conf1Name
 
@@ -2978,17 +2959,14 @@ ENDPROC
 
 PROC addToHistory(text)
   DEF msg
-  IF ListLen(historyBuf)<20
-    msg:=String(255)
-    StrCopy(msg,text)
-    ListAdd(historyBuf,[msg])
-    historyNum:=ListLen(historyBuf)-1
+  IF historyBuf.count()<20
+    historyNum:=historyBuf.add(text)
     historyCycle:=historyNum
   ELSE
-    StrCopy(historyBuf[historyNum],text)
+    historyBuf.setItem(historyNum,text)
     historyCycle:=historyNum
     historyNum++
-    IF historyNum>=ListLen(historyBuf) THEN historyNum:=0
+    IF historyNum>=historyBuf.count() THEN historyNum:=0
   ENDIF
 ENDPROC
 
@@ -3050,10 +3028,7 @@ redoinput:
       warning:=FALSE
       timeout:=originalTimeout
       IF (ch=2) AND (wasControl=0)  -> CTRL B
-        FOR i:=0 TO ListLen(historyBuf)-1
-          DisposeLink(ListItem(historyBuf,i))
-        ENDFOR
-        SetList(historyBuf,0)
+        historyBuf.clear()
         historyNum:=0
         historyCycle:=0
         wasControl:=TRUE
@@ -3075,7 +3050,7 @@ redoinput:
       ENDIF
       
       IF (rawArrow=FALSE)
-        IF (ch=UPARROW) AND (ListLen(historyBuf)>0)
+        IF (ch=UPARROW) AND (historyBuf.count()>0)
           StrCopy(tempstr,'')
           FOR i:=curpos TO StrLen(outputString)-1
             StrAdd(tempstr,'[1C')
@@ -3085,14 +3060,14 @@ redoinput:
             StrAdd(tempstr,' ')
             strAddChar(tempstr,8)
           ENDFOR
-          StrCopy(outputString,historyBuf[historyCycle],maxLen)
+          StrCopy(outputString,historyBuf.item(historyCycle),maxLen)
           historyCycle--
-          IF historyCycle<0 THEN historyCycle:=ListLen(historyBuf)-1
+          IF historyCycle<0 THEN historyCycle:=historyBuf.count()-1
           aePuts(tempstr)
           aePuts(outputString)
           curpos:=StrLen(outputString)
         ENDIF
-        IF (ch=DOWNARROW) AND (ListLen(historyBuf)>0) 
+        IF (ch=DOWNARROW) AND (historyBuf.count()>0) 
           StrCopy(tempstr,'')
           FOR i:=curpos TO StrLen(outputString)-1
             StrAdd(tempstr,'[1C')
@@ -3102,9 +3077,9 @@ redoinput:
             StrAdd(tempstr,' ')
             strAddChar(tempstr,8)
           ENDFOR
-          StrCopy(outputString,historyBuf[historyCycle],maxLen)
+          StrCopy(outputString,historyBuf.item(historyCycle),maxLen)
           historyCycle++
-          IF historyCycle>=ListLen(historyBuf) THEN historyCycle:=0
+          IF historyCycle>=historyBuf.count() THEN historyCycle:=0
           aePuts(tempstr)
           aePuts(outputString)
           curpos:=StrLen(outputString)
@@ -3384,7 +3359,7 @@ PROC loadTranslator(translator:PTR TO translator,fileName)
       ELSE
         wordList:=indexes[26]
       ENDIF
-      ListAdd(wordList,[outtxt])
+      listAdd2(wordList,outtxt)
       outtxt:=outtxt+StrLen(outtxt)+1
       outtxt:=outtxt+StrLen(outtxt)+1
     ENDFOR
@@ -3518,16 +3493,10 @@ PROC loadHistory()
     ReadStr(fh,tempstr)
     historyCycle:=Val(tempstr)
 
-    FOR i:=0 TO ListLen(historyBuf)-1
-      DisposeLink(ListItem(historyBuf,i))
-    ENDFOR
-    SetList(historyBuf,0)
+    historyBuf.clear()
 
     WHILE(ReadStr(fh,tempstr)<>-1) OR (StrLen(tempstr)>0)
-      msg:=String(255)
-      StrCopy(msg,tempstr)
-
-      ListAdd(historyBuf,[msg])
+      historyBuf.add(tempstr)
     ENDWHILE
     Close(fh)
   ENDIF
@@ -3548,27 +3517,26 @@ PROC saveHistory()
     fileWriteLn(fh,tempstr)
     StringF(tempstr,'\d',historyCycle)
     fileWriteLn(fh,tempstr)
-    FOR i:=0 TO ListLen(historyBuf)-1
-      fileWriteLn(fh,historyBuf[i])
+    FOR i:=0 TO historyBuf.count()-1
+      fileWriteLn(fh,historyBuf.item(i))
     ENDFOR
     Close(fh)
   ENDIF
 ENDPROC
 
 /* adds a new flagFileItem populated with the filename & conf passed in to the specified list */
-PROC addFlagItem(list,confNum,fileName)
+PROC addFlagItem(list:PTR TO stdlist,confNum,fileName)
   DEF item:PTR TO flagFileItem
 
   item:=NEW item
   item.fileName:=String(StrLen(fileName))
   StrCopy(item.fileName,fileName)
-  item.confNum:=confNum
-  
-  ListAdd(list,[item])
+  item.confNum:=confNum  
+  list.add(item)
 ENDPROC
 
 /* adds new flagFileItems populated with the filename & conf passed in to the specified list from the space delimited list of filenames */
-PROC addFlagItems(list,confNum,fileNames)
+PROC addFlagItems(list:PTR TO stdlist,confNum,fileNames)
   DEF fname[255]:STRING
   DEF i
   
@@ -3589,16 +3557,16 @@ PROC addFlagItems(list,confNum,fileNames)
 ENDPROC
 
 /*clears out the specified list of flagFileItems */
-PROC clearFlagItems(list)
+PROC clearFlagItems(list:PTR TO stdlist)
   DEF item:PTR TO flagFileItem
   DEF i
   
-  FOR i:=0 TO ListLen(list)-1
-    item:=ListItem(list,i)
+  FOR i:=0 TO list.count()-1
+    item:=list.item(i)
     DisposeLink(item.fileName)
     END item
   ENDFOR
-  SetList(list,0)
+  list.clear()
 ENDPROC
 
 PROC loadFlagged()
@@ -3635,7 +3603,7 @@ PROC loadFlagged()
     Close(fh)
   ENDIF
 
-  IF ListLen(flagFilesList)>0
+  IF flagFilesList.count()>0
     aePuts('\b\n** Flagged File(s) Exist **\b\n')
     sendBELL()
   ENDIF
@@ -3650,28 +3618,26 @@ PROC saveFlagged()
   aePuts('\b\n** AutoSaving File Flags **\b\n')
   sendBELL()
   
-  IF(ListLen(flagFilesList))
-    IF ownPartFiles
-      StringF(fname,'\sPartdownload/dump\d-\d',cmds.bbsLoc,node,loggedOnUser.slotNumber)
-      DeleteFile(fname)
-      StringF(fname,'\sPartdownload/flagged\d-\d',cmds.bbsLoc,node,loggedOnUser.slotNumber)
-      DeleteFile(fname)
-    ELSE
-      StringF(fname,'\sPartdownload/dump\d',cmds.bbsLoc,loggedOnUser.slotNumber)
-      DeleteFile(fname)
-      StringF(fname,'\sPartdownload/flagged\d',cmds.bbsLoc,loggedOnUser.slotNumber)
-      DeleteFile(fname)
-    ENDIF
-  
-    IF ListLen(flagFilesList)
-      IF(fh:=Open(fname,MODE_NEWFILE))>0
-        FOR i:=0 TO ListLen(flagFilesList)-1
-          item:=flagFilesList[i]
-          StringF(fname,'\d \s\n',item.confNum,item.fileName)
-          Write(fh,fname,StrLen(fname))
-        ENDFOR
-        Close(fh)
-      ENDIF
+  IF ownPartFiles
+    StringF(fname,'\sPartdownload/dump\d-\d',cmds.bbsLoc,node,loggedOnUser.slotNumber)
+    DeleteFile(fname)
+    StringF(fname,'\sPartdownload/flagged\d-\d',cmds.bbsLoc,node,loggedOnUser.slotNumber)
+    DeleteFile(fname)
+  ELSE
+    StringF(fname,'\sPartdownload/dump\d',cmds.bbsLoc,loggedOnUser.slotNumber)
+    DeleteFile(fname)
+    StringF(fname,'\sPartdownload/flagged\d',cmds.bbsLoc,loggedOnUser.slotNumber)
+    DeleteFile(fname)
+  ENDIF
+
+  IF(flagFilesList.count())  
+    IF(fh:=Open(fname,MODE_NEWFILE))>0
+      FOR i:=0 TO flagFilesList.count()-1
+        item:=flagFilesList.item(i)
+        StringF(fname,'\d \s\n',item.confNum,item.fileName)
+        Write(fh,fname,StrLen(fname))
+      ENDFOR
+      Close(fh)
     ENDIF
   ENDIF
 ENDPROC
@@ -3680,7 +3646,7 @@ PROC showFlaggedFiles(maxLen)
   DEF i
   DEF item:PTR TO flagFileItem
   
-  FOR i:=0 TO ListLen(flagFilesList)-1
+  FOR i:=0 TO flagFilesList.count()-1
     IF (maxLen=-1) OR (maxLen>0)
       IF i<>0 
         IF (maxLen>0) OR (maxLen=-1)
@@ -3688,7 +3654,7 @@ PROC showFlaggedFiles(maxLen)
           IF maxLen>0 THEN maxLen:=maxLen-1
         ENDIF
       ENDIF
-      item:=flagFilesList[i]
+      item:=flagFilesList.item(i)
       IF (maxLen=-1) OR (maxLen>StrLen(item.fileName))
         aePuts(item.fileName)
         IF maxLen<>-1 THEN maxLen:=maxLen-StrLen(item.fileName)
@@ -3892,6 +3858,12 @@ PROC getNodeFile(toolType,tooltypeSelector,nodeFile)
     CASE TOOLTYPE_NODECMD
       -> tooltypeSector is command name string
       StringF(nodeFile,'\sCommands/Node\dCmd/\s',cmds.bbsLoc,node,tooltypeSelector)
+    CASE TOOLTYPE_CONFSYSCMD
+      -> tooltypeSector is command name string
+      StringF(nodeFile,'\sCommands/Conf\dSysCmd/\s',cmds.bbsLoc,currentConf,tooltypeSelector)
+    CASE TOOLTYPE_NODESYSCMD
+      -> tooltypeSector is command name string
+      StringF(nodeFile,'\sCommands/Node\dSysCmd/\s',cmds.bbsLoc,node,tooltypeSelector)
     CASE TOOLTYPE_SYSCMD
       -> tooltypeSector is command name string
       StringF(nodeFile,'\sCommands/SYSCmd/\s',cmds.bbsLoc,tooltypeSelector)
@@ -3936,7 +3908,7 @@ PROC getNodeFile(toolType,tooltypeSelector,nodeFile)
       StringF(nodeFile,'\sProtocols/XprTypes',cmds.bbsLoc)
     CASE TOOLTYPE_XFERLIB
       -> tooltypeSector is xpr lib number
-      StringF(nodeFile,'\sProtocols/\s',cmds.bbsLoc,xprLib[tooltypeSelector])
+      StringF(nodeFile,'\sProtocols/\s',cmds.bbsLoc,xprLib.item(tooltypeSelector))
     CASE TOOLTYPE_SCREENTYPES
       -> tooltypeSector is not used
       StringF(nodeFile,'\sScreenTypes',cmds.bbsLoc)
@@ -3970,9 +3942,9 @@ PROC getNodeFile(toolType,tooltypeSelector,nodeFile)
   ENDSELECT
 ENDPROC
 
-PROC findFirst(path: PTR TO CHAR,buf: PTR TO CHAR)
-  DEF pdir: PTR TO filelock
-  DEF dir_info: PTR TO fileinfoblock
+PROC findFirst(path: PTR TO CHAR,buf: PTR TO CHAR) HANDLE
+  DEF pdir=NIL: PTR TO filelock
+  DEF dir_info=NIL: PTR TO fileinfoblock
   DEF returnval=0
 
   IF ((dir_info:=(AllocDosObject(DOS_FIB,NIL)))=NIL)
@@ -3981,15 +3953,11 @@ PROC findFirst(path: PTR TO CHAR,buf: PTR TO CHAR)
   ENDIF
   
   IF((pdir:=(Lock(path,ACCESS_READ)))=FALSE)
-    UnLock(pdir)
-    FreeDosObject(DOS_FIB,dir_info)
-    RETURN 0
+    Raise(ERR_EXCEPT)
   ENDIF
 
   IF(Examine(pdir,dir_info))=FALSE
-    UnLock(pdir)
-    FreeDosObject(DOS_FIB,dir_info)
-    RETURN 0
+    Raise(ERR_EXCEPT)
   ENDIF
 
   IF(ExNext(pdir,dir_info))
@@ -4000,6 +3968,10 @@ PROC findFirst(path: PTR TO CHAR,buf: PTR TO CHAR)
   ENDIF
   UnLock(pdir)
   FreeDosObject(DOS_FIB,dir_info)
+EXCEPT
+  IF pdir THEN UnLock(pdir)
+  IF dir_info THEN FreeDosObject(DOS_FIB,dir_info)
+  RETURN 0
 ENDPROC returnval
 
 PROC findAcsLevel()
@@ -4092,12 +4064,11 @@ PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
   DEF fh,fileBuf,off,lineCount,len
 
   IF diskObjectCache<>NIL
-    cnt:=ListLen(diskObjectCache)
+    cnt:=diskObjectCache.count()
 
     i:=0
     WHILE (i<cnt) AND (found=FALSE)
-      IF diskObjectCache[i] 
-        cacheObj:=diskObjectCache[i]
+      IF (cacheObj:=diskObjectCache.item(i))
         IF strCmpi(fileName,cacheObj.fileName,ALL)
           do:=cacheObj.diskObject
           found:=TRUE
@@ -4112,10 +4083,10 @@ PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
     ->LRU algorithm, move most recently used to end of list
     i++
     WHILE i<cnt
-      diskObjectCache[i-1]:=diskObjectCache[i]
+      diskObjectCache.setItem(i-1,diskObjectCache.item(i))
       i++
     ENDWHILE
-    diskObjectCache[cnt-1]:=cacheObj
+    diskObjectCache.setItem(cnt-1,cacheObj)
     cacheHits++
   ELSE
     do:=GetDiskObject(fileName)
@@ -4158,7 +4129,7 @@ PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
           toolTypes:=List(lineCount+1)
           off:=0
           FOR i:=1 TO lineCount
-            ListAdd(toolTypes,[fileBuf+off])
+            listAdd2(toolTypes,fileBuf+off)
             off:=off+StrLen(fileBuf+off)+1
           ENDFOR
           ListAdd(toolTypes,[NIL])
@@ -4179,16 +4150,14 @@ PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
       StrCopy(cacheObj.fileName,fileName)
       cacheObj.diskObject:=do
 
-      IF ListLen(diskObjectCache)<(ListMax(diskObjectCache)-1)
-        ListAdd(diskObjectCache,[cacheObj])
+      IF diskObjectCache.count()<(diskObjectCache.maxSize()-1)
+        diskObjectCache.add(cacheObj)
       ELSE
-        cacheObj:=diskObjectCache[0]
+        cacheObj:=diskObjectCache.item(0)
         DisposeLink(cacheObj.fileName)
         FreeDiskObject(cacheObj.diskObject)
-        FOR i:=1 TO cnt
-          diskObjectCache[i-1]:=diskObjectCache[i]
-        ENDFOR
-        diskObjectCache[cnt]:=cacheObj
+        diskObjectCache.remove(0)
+        diskObjectCache.add(cacheObj)
       ENDIF
     ENDIF
   ENDIF
@@ -4200,9 +4169,8 @@ PROC clearDiskObjectCache()
   DEF mem
 
   IF diskObjectCache=NIL THEN RETURN
-  FOR i:=0 TO ListLen(diskObjectCache)-1
-    IF diskObjectCache[i] 
-      cacheObj:=diskObjectCache[i]
+  FOR i:=0 TO diskObjectCache.count()-1
+    IF (cacheObj:=diskObjectCache.item(i))
       IF cacheObj.ownsToolTypes
         do:=cacheObj.diskObject
         mem:=do.tooltypes[0]      -> release the file buffer (first string pointer points to start of buffer)
@@ -4217,9 +4185,8 @@ PROC clearDiskObjectCache()
       ENDIF
       END cacheObj
     ENDIF
-    diskObjectCache[i]:=NIL
   ENDFOR
-  SetList(diskObjectCache,0)
+  diskObjectCache.clear()
   cacheTests:=0
   cacheHits:=0
 ENDPROC
@@ -4905,8 +4872,8 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
           CASE DT_LANGUAGE
             IF msg.data
               IF loggedOnUser<>NIL 
-                IF (loggedOnUser.screenType<ListLen(screenTypeExt))
-                  strCpy(msg.string,ListItem(screenTypeExt,loggedOnUser.screenType),200)
+                IF (loggedOnUser.screenType<screenTypeExt.count())
+                  strCpy(msg.string,screenTypeExt.item(loggedOnUser.screenType),200)
                 ENDIF
               ENDIF
             ELSE
@@ -5362,11 +5329,21 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
     ENDIF
 
   ELSEIF cmdtype=CMDTYPE_SYSCMD
-    getNodeFile(TOOLTYPE_SYSCMD,cmd,commandfile)
+    getNodeFile(TOOLTYPE_CONFSYSCMD,cmd,commandfile)
     IF fileExists(commandfile,TRUE)
-      tooltype:=TOOLTYPE_SYSCMD
+      tooltype:=TOOLTYPE_CONFSYSCMD
     ELSE
-      RETURN FALSE
+      getNodeFile(TOOLTYPE_NODESYSCMD,cmd,commandfile)
+      IF fileExists(commandfile,TRUE)
+        tooltype:=TOOLTYPE_NODESYSCMD
+      ELSE  
+        getNodeFile(TOOLTYPE_SYSCMD,cmd,commandfile)
+        IF fileExists(commandfile,TRUE)
+          tooltype:=TOOLTYPE_SYSCMD
+        ELSE
+          RETURN FALSE
+        ENDIF
+      ENDIF
     ENDIF
   ELSEIF cmdtype=CMDTYPE_CUSTOM
     getNodeFile(TOOLTYPE_CONFCMD2,cmd,commandfile)
@@ -5429,7 +5406,6 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
   ENDIF
 
   IF readToolType(tooltype,cmd,'PASSWORD',passwordstr)    
-  
     aePuts('\b\n')
     aePuts('Enter Password >: ')
     StrCopy(commandfile,'')
@@ -5502,7 +5478,7 @@ PROC loadConfDB(account,confNum,addr,force=FALSE)
   DEF bi, confLoc[255]:STRING
   DEF tmpMem
   IF (account = loggedOnUser.slotNumber) AND (force=FALSE)
-    CopyMem(ListItem(confBases,confNum-1),addr,SIZEOF confBase)
+    CopyMem(confBases.item(confNum-1),addr,SIZEOF confBase)
     RETURN
   ENDIF
 
@@ -5538,7 +5514,7 @@ PROC saveConfDB(account,confNum,addr,force=FALSE)
   DEF bi, confLoc[255]:STRING
 
   IF (account = loggedOnUser.slotNumber) AND (force=FALSE)
-    CopyMem(addr,ListItem(confBases,confNum-1),SIZEOF confBase)
+    CopyMem(addr,confBases.item(confNum-1),SIZEOF confBase)
     RETURN
   ENDIF
 
@@ -5571,7 +5547,7 @@ PROC loadMsgPointers(conf)
     RETURN
   ENDIF
 
-  cb:=ListItem(confBases,conf-1)
+  cb:=confBases.item(conf-1)
 
   IF (checkSecurity(ACS_CONFERENCE_ACCOUNTING))
     IF (readToolTypeInt(TOOLTYPE_CONF,conf,'CONFDB_SHARED')<=0)
@@ -5610,7 +5586,7 @@ PROC saveMsgPointers(conf)
     RETURN
   ENDIF
 
-  cb:=ListItem(confBases,conf-1)
+  cb:=confBases.item(conf-1)
 
   IF (checkSecurity(ACS_CONFERENCE_ACCOUNTING))
     IF (readToolTypeInt(TOOLTYPE_CONF,conf,'CONFDB_SHARED')<=0)
@@ -6000,7 +5976,7 @@ PROC processMciCmd(mcidata,len,pos)
       aePuts2(tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'HW',ALL))
       pos:=pos+2+t
-      StrCopy(tempstr,computerTypes[loggedOnUser.secBulletin])
+      StrCopy(tempstr,computerTypes.item(loggedOnUser.secBulletin))
       aePuts2(tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'TL',ALL))
       pos:=pos+2+t
@@ -6078,12 +6054,12 @@ PROC processMciCmd(mcidata,len,pos)
       showFlaggedFiles(maxLen)
     ELSEIF (StrCmp(cmd,'FC',ALL))
       pos:=pos+2+t
-      StringF(tempstr,'\d',ListLen(flagFilesList))
+      StringF(tempstr,'\d',flagFilesList.count())
       aePuts(tempstr)
     ELSEIF (StrCmp(cmd,'FL',ALL))
       pos:=pos+2+t
-      FOR i:=0 TO ListLen(flagFilesList)-1
-        item:=flagFilesList[i]
+      FOR i:=0 TO flagFilesList.count()-1
+        item:=flagFilesList.item(i)
         StringF(tempstr,'                     \s\b\n',item.fileName)
         aePuts(tempstr)
       ENDFOR
@@ -6391,7 +6367,7 @@ PROC processMciCmd2(mcidata,len,pos,outdata)
       StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'HW',ALL))
       pos:=pos+2+t
-      StrCopy(tempstr,computerTypes[loggedOnUser.secBulletin])
+      StrCopy(tempstr,computerTypes.item(loggedOnUser.secBulletin))
       StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'TL',ALL))
       pos:=pos+2+t
@@ -6607,8 +6583,8 @@ PROC tranChat()
   runSysCommand('CHATIN','')
 
   StrCopy(chatfile,'')
-  IF (loggedOnUser.screenType<ListLen(screenTypeExt))
-    StringF(chatfile,'\sNode\d/StartChat.\s',cmds.bbsLoc,node,screenTypeExt[loggedOnUser.screenType]) 
+  IF (loggedOnUser.screenType<screenTypeExt.count())
+    StringF(chatfile,'\sNode\d/StartChat.\s',cmds.bbsLoc,node,screenTypeExt.item(loggedOnUser.screenType))
     IF fileExists(chatfile)=FALSE THEN StrCopy(chatfile,'')
   ENDIF
   IF StrLen(chatfile)=0
@@ -6762,8 +6738,8 @@ PROC tranChat()
   IF(ansiColour)    THEN aePuts('[0m')
   
   StrCopy(chatfile,'')
-  IF (loggedOnUser.screenType<ListLen(screenTypeExt))
-    StringF(chatfile,'\sNode\d/EndChat.\s',cmds.bbsLoc,node,screenTypeExt[loggedOnUser.screenType]) 
+  IF (loggedOnUser.screenType<screenTypeExt.count())
+    StringF(chatfile,'\sNode\d/EndChat.\s',cmds.bbsLoc,node,screenTypeExt.item(loggedOnUser.screenType))
     IF fileExists(chatfile)=FALSE THEN StrCopy(chatfile,'')
   ENDIF
   IF StrLen(chatfile)=0
@@ -6812,8 +6788,8 @@ PROC tranChat()
   runSysCommand('CHATIN','')
 
   StrCopy(chatfile,'')
-  IF (loggedOnUser.screenType<ListLen(screenTypeExt))
-    StringF(chatfile,'\sNode\d/StartChat.\s',cmds.bbsLoc,node,screenTypeExt[loggedOnUser.screenType]) 
+  IF (loggedOnUser.screenType<screenTypeExt.count())
+    StringF(chatfile,'\sNode\d/StartChat.\s',cmds.bbsLoc,node,screenTypeExt.item(loggedOnUser.screenType))
     IF fileExists(chatfile)=FALSE THEN StrCopy(chatfile,'')
   ENDIF
   IF StrLen(chatfile)=0
@@ -6973,8 +6949,8 @@ PROC tranChat()
   IF(ansiColour)    THEN aePuts('[0m')
   
   StrCopy(chatfile,'')
-  IF (loggedOnUser.screenType<ListLen(screenTypeExt))
-    StringF(chatfile,'\sNode\d/EndChat.\s',cmds.bbsLoc,node,screenTypeExt[loggedOnUser.screenType]) 
+  IF (loggedOnUser.screenType<screenTypeExt.count())
+    StringF(chatfile,'\sNode\d/EndChat.\s',cmds.bbsLoc,node,screenTypeExt.item(loggedOnUser.screenType))
     IF fileExists(chatfile)=FALSE THEN StrCopy(chatfile,'')
   ENDIF
   IF StrLen(chatfile)=0
@@ -6999,8 +6975,8 @@ wx:
   
   runSysCommand('CHATIN','')
   StrCopy(chatfile,'')
-  IF (loggedOnUser.screenType<ListLen(screenTypeExt))
-    StringF(chatfile,'\sNode\d/StartChat.\s',cmds.bbsLoc,node,screenTypeExt[loggedOnUser.screenType]) 
+  IF (loggedOnUser.screenType<screenTypeExt.count())
+    StringF(chatfile,'\sNode\d/StartChat.\s',cmds.bbsLoc,node,screenTypeExt.item(loggedOnUser.screenType))
     IF fileExists(chatfile)=FALSE THEN StrCopy(chatfile,'')
   ENDIF
   IF StrLen(chatfile)=0
@@ -7157,8 +7133,8 @@ chatbrk:
  wy:
 
   StrCopy(chatfile,'')
-  IF (loggedOnUser.screenType<ListLen(screenTypeExt))
-    StringF(chatfile,'\sNode\d/EndChat.\s',cmds.bbsLoc,node,screenTypeExt[loggedOnUser.screenType]) 
+  IF (loggedOnUser.screenType<screenTypeExt.count())
+    StringF(chatfile,'\sNode\d/EndChat.\s',cmds.bbsLoc,node,screenTypeExt.item(loggedOnUser.screenType))
     IF fileExists(chatfile)=FALSE THEN StrCopy(chatfile,'')
   ENDIF
   IF StrLen(chatfile)=0
@@ -7189,8 +7165,8 @@ PROC findSecurityScreen(screenDirAndName,screenfileName)
     ENDIF
 
     IF loggedOnUser<>NIL
-      IF (loggedOnUser.screenType<ListLen(screenTypeExt))
-        StringF(screenfileName,'\s\s',screenDirAndName,screenTypeExt[loggedOnUser.screenType])
+      IF (loggedOnUser.screenType<screenTypeExt.count())
+        StringF(screenfileName,'\s\s',screenDirAndName,screenTypeExt.item(loggedOnUser.screenType))
         IF fileExists(screenfileName) THEN RETURN TRUE
       ENDIF
     ENDIF
@@ -7207,8 +7183,8 @@ PROC findSecurityScreen(screenDirAndName,screenfileName)
         IF fileExists(screenfileName) THEN RETURN TRUE
       ENDIF
 
-      IF (loggedOnUser.screenType<ListLen(screenTypeExt))
-        StringF(screenfileName,'\s\d\s',screenDirAndName,secLevel,screenTypeExt[loggedOnUser.screenType])
+      IF (loggedOnUser.screenType<screenTypeExt.count())
+        StringF(screenfileName,'\s\d\s',screenDirAndName,secLevel,screenTypeExt.item(loggedOnUser.screenType))
         IF fileExists(screenfileName) THEN RETURN TRUE
       ENDIF
       StringF(screenfileName,'\s\d\s',screenDirAndName,secLevel,'.TXT')
@@ -7224,8 +7200,8 @@ PROC findSecurityScreen(screenDirAndName,screenfileName)
       IF fileExists(screenfileName) THEN RETURN TRUE
     ENDIF
     IF loggedOnUser<>NIL
-      IF (loggedOnUser.screenType<ListLen(screenTypeExt))
-        StringF(screenfileName,'\s\s',screenDirAndName,screenTypeExt[loggedOnUser.screenType])
+      IF (loggedOnUser.screenType<screenTypeExt.count())
+        StringF(screenfileName,'\s\s',screenDirAndName,screenTypeExt.item(loggedOnUser.screenType))
         IF fileExists(screenfileName) THEN RETURN TRUE
       ENDIF
     ENDIF
@@ -7547,6 +7523,12 @@ PROC displayScreen(screenType)
     CASE SCREEN_LANGUAGES
       StringF(screencheck,'\s',cmds.bbsLoc,'Languages')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
+    CASE SCREEN_INTERNETNAMES
+      StringF(screencheck,'\s',cmds.bbsLoc,'InternetNames')
+      IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
+    CASE SCREEN_REALNAMES
+      StringF(screencheck,'\s',cmds.bbsLoc,'RealNames')
+      IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
   ENDSELECT
 ENDPROC res
 
@@ -7723,35 +7705,35 @@ PROC processCommodityMessage(signals)
 
   IF signals AND cxsigflag
   WHILE msg:=GetMsg(broker_mp)
-      -> Extract any necessary information from the CxMessage and return it
-      msgid:=CxMsgID(msg)
-      msgtype:=CxMsgType(msg)
-      ReplyMsg(msg)
+    -> Extract any necessary information from the CxMessage and return it
+    msgid:=CxMsgID(msg)
+    msgtype:=CxMsgType(msg)
+    ReplyMsg(msg)
 
-      SELECT msgtype
+    SELECT msgtype
       CASE CXM_IEVENT
         -> Shouldn't get any of these in this example
       CASE CXM_COMMAND
         -> Commodities has sent a command
         SELECT msgid
-        CASE CXCMD_APPEAR
-          debugLog(LOG_DEBUG,'CXCMD_APPEAR')
-      openExpressScreen()
-        CASE CXCMD_DISAPPEAR
-      debugLog(LOG_DEBUG,'CXCMD_DISAPPEAR')
-      closeExpressScreen()    
-        CASE CXCMD_DISABLE
-          debugLog(LOG_DEBUG,'CXCMD_DISABLE')
-          -> The user clicked CX Exchange disable gadget, better disable
-          ActivateCxObj(broker, FALSE)
-        CASE CXCMD_ENABLE
-          -> User clicked enable gadget
-          debugLog(LOG_DEBUG,'CXCMD_ENABLE')
-          ActivateCxObj(broker, TRUE)
-        CASE CXCMD_KILL
-          -> User clicked kill gadget, better quit
-          debugLog(LOG_DEBUG,'CXCMD_KILL')
-          reqState:=REQ_STATE_SHUTDOWN
+          CASE CXCMD_APPEAR
+            debugLog(LOG_DEBUG,'CXCMD_APPEAR')
+            openExpressScreen()
+          CASE CXCMD_DISAPPEAR
+            debugLog(LOG_DEBUG,'CXCMD_DISAPPEAR')
+            closeExpressScreen()    
+          CASE CXCMD_DISABLE
+            debugLog(LOG_DEBUG,'CXCMD_DISABLE')
+            -> The user clicked CX Exchange disable gadget, better disable
+            ActivateCxObj(broker, FALSE)
+          CASE CXCMD_ENABLE
+            -> User clicked enable gadget
+            debugLog(LOG_DEBUG,'CXCMD_ENABLE')
+            ActivateCxObj(broker, TRUE)
+          CASE CXCMD_KILL
+            -> User clicked kill gadget, better quit
+            debugLog(LOG_DEBUG,'CXCMD_KILL')
+            reqState:=REQ_STATE_SHUTDOWN
         ENDSELECT
       DEFAULT
         debugLog(LOG_WARN,'Unknown msgtype')
@@ -7761,34 +7743,34 @@ PROC processCommodityMessage(signals)
 ENDPROC
 
 PROC processWindowMessage(signals)
-    -> If IDCMP messages received, handle them
-    DEF winmsg:PTR TO intuimessage
-    DEF windowsig
-    DEF msgclass
-    DEF win:PTR TO window
+  -> If IDCMP messages received, handle them
+  DEF winmsg:PTR TO intuimessage
+  DEF windowsig
+  DEF msgclass
+  DEF win:PTR TO window
 
-    IF windowClose<>NIL
-      windowsig:=Shl(1, windowClose.userport.sigbit)
-      win:=windowClose
-    ELSEIF window<>NIL
-      windowsig:=Shl(1, window.userport.sigbit)
-      win:=window
-    ELSE
-      windowsig:=0
-    ENDIF
+  IF windowClose<>NIL
+    windowsig:=Shl(1, windowClose.userport.sigbit)
+    win:=windowClose
+  ELSEIF window<>NIL
+    windowsig:=Shl(1, window.userport.sigbit)
+    win:=window
+  ELSE
+    windowsig:=0
+  ENDIF
 
-    IF signals AND windowsig
-      -> We have to ReplyMsg these when done with them
-      WHILE winmsg:=GetMsg(win.userport)
-        msgclass:=winmsg.class
-        ReplyMsg(winmsg)
-        SELECT msgclass
-        CASE IDCMP_CLOSEWINDOW
-          closeExpressScreen()        
-        ENDSELECT
-        EXIT window=NIL
-      ENDWHILE
-    ENDIF
+  IF signals AND windowsig
+    -> We have to ReplyMsg these when done with them
+    WHILE winmsg:=GetMsg(win.userport)
+      msgclass:=winmsg.class
+      ReplyMsg(winmsg)
+      SELECT msgclass
+      CASE IDCMP_CLOSEWINDOW
+        closeExpressScreen()        
+      ENDSELECT
+      EXIT window=NIL
+    ENDWHILE
+  ENDIF
 ENDPROC
 
 PROC initStatCon()
@@ -7835,7 +7817,7 @@ PROC closeAEStats()
     statWriteMP:=NIL
   ENDIF
   
-    IF(windowStat<>NIL) THEN CloseWindow(windowStat)
+  IF(windowStat<>NIL) THEN CloseWindow(windowStat)
   windowStat:=NIL
 ENDPROC
 
@@ -7921,133 +7903,132 @@ PROC checkIncomingCall()
   DEF stat,n,isConnected=FALSE
   DEF filetags
    
-    IF(sopt.trapDoor OR instantLogon)
-      instantLogon:=FALSE
-      JUMP go
-    ENDIF
+  IF(sopt.trapDoor OR instantLogon)
+    instantLogon:=FALSE
+    JUMP go
+  ENDIF
 
-    rCount:=ringCount
+  rCount:=ringCount
   
-    IF (rCount=-1) THEN rCount:=2
-    StringF(string,'ringcount: \d',rCount)
-    debugLog(LOG_DEBUG,string)
+  IF (rCount=-1) THEN rCount:=2
+  StringF(string,'ringcount: \d',rCount)
+  debugLog(LOG_DEBUG,string)
 
-      ioFlags[IOFLAG_SER_IN]:=-1
-      ioFlags[IOFLAG_SER_OUT]:=0
+  ioFlags[IOFLAG_SER_IN]:=-1
+  ioFlags[IOFLAG_SER_OUT]:=0
 
-    StrCopy(hostName,'')
-    StrCopy(hostIP,'')
+  StrCopy(hostName,'')
+  StrCopy(hostIP,'')
 
-    WHILE(rCount)
-      stat:=lineInput('','',80,5,string)
-      IF stat<>RESULT_SUCCESS THEN RETURN
-      
-      IF StrLen(string)>0
-        IF InStr(string,'HOST NAME')>=0
-          IF (n:=InStr(string,'='))<>-1
-            StrCopy(hostName,TrimStr(string+n+1))
-          ENDIF
-        ENDIF
-        IF InStr(string,'HOST IP ADDR')>=0
-          IF (n:=InStr(string,'='))<>-1
-            StrCopy(hostIP,TrimStr(string+n+1))
-          ENDIF
-        ENDIF
-        IF(stringCompare(string,cmds.mRing))=RESULT_SUCCESS THEN rCount--
-      ENDIF
-    ENDWHILE
-    IF(rCount) THEN RETURN
-          
-    IF(sopt.toggles[TOGGLES_CALLERID] OR sopt.toggles[TOGGLES_CALLERIDNAME])    
-      lineInput('','',14,5,idRate)
-      lineInput('','',14,5,idTime)
-      lineInput('','',14,5,idDate)
-      lineInput('','',40,5,idNmbr)
-      IF(sopt.toggles[TOGGLES_CALLERIDNAME]) THEN lineInput('','',40,5,idName)
-      callerIDLog(1)
-    ENDIF
-        /* OTHERWISE EQUAL, ANSWER AND SET BAUDS */
-go: 
-        statClearTime()
-      ->ioFlags[IOFLAG_SER_OUT]:=1
-/*(JOE)---- added this v*/
-    IF(sopt.trapDoor=FALSE)
-      StringF(string,'\s\b',cmds.mAnswer)
-      serPuts(string)
-      n:=0
-      IF(input=RESULT_TIMEOUT) THEN JUMP timedout
-      REPEAT
-        input:=lineInput('','',80,40,string)
-        IF(input=RESULT_TIMEOUT) THEN JUMP timedout
-        IF strCmpi(string,'+FCO',ALL)
-          doFax()
-          RESULT_SUCCESS
-        ELSEIF (StrCmp(string,'CONNECT',7))
-          isConnected:=TRUE
-        ELSEIF (StrLen(string)>0) AND (StrCmp(string,cmds.mRing,ALL)=FALSE) AND (StrCmp(string,cmds.mAnswer,ALL)=FALSE)
-          n++
-          StringF(tempstr,'\tINVALID CONNECT    = \s',string)
-          callersLog(tempstr)
-        ENDIF
-      UNTIL((isConnected) OR (n=5))
-      IF isConnected=FALSE THEN JUMP timedout
-    ELSE
-      strCpy(string,trapConnect,ALL)
-    ENDIF
-    StrCopy(connectString,string)
-        IF(sopt.trapDoor)
-            ->//CutConnect(string)
-          IF(input=RESULT_TIMEOUT) THEN JUMP timedout
-    ENDIF
-     
-    stripReturn(string)
-    readToolType(TOOLTYPE_CONNECT,node,string,connectString)
+  WHILE(rCount)
+    stat:=lineInput('','',80,5,string)
+    IF stat<>RESULT_SUCCESS THEN RETURN
     
-    IF(StrCmp(connectString,'CONNECT',7))
-      onlineBaud:=Val(connectString+7)
-      onlineBaudR:=cmds.openingBaud
-      IF onlineBaud=0 THEN onlineBaud:=cmds.openingBaud
-      IF StrLen(connectString)=7 THEN StringF(connectString,'CONNECT \d',onlineBaud)
-
-      ioFlags[IOFLAG_SER_OUT]:=-1
-      ioFlags[IOFLAG_SCR_OUT]:=-1
-      IF(cmds.acLvl[LVL_VARYING_LINK_RATE]=1) THEN setBaud(onlineBaud)
-
-      IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_CONNECT',tempstr))
-        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
-        processMci2(tempstr,tempstr2)
-        SystemTagList(tempstr2,filetags)
-        END filetags
-      ENDIF
-
-      IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_CONNECT',tempstr))
-        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
-        processMci2(tempstr,tempstr2)
-        SystemTagList(tempstr2,filetags)
-        END filetags
-      ENDIF
-
-      conCLS()
-      RETURN RESULT_CONNECT
-    ENDIF
-      
-    onlineBaud:=cmds.openingBaud 
-    setEnvStat(ENV_AWAITCONNECT)
- 
-
-timedout:
-      dropDTR()
-      Delay(25)
-      IF(cmds.acLvl[LVL_VARYING_LINK_RATE]=1)
-          setBaud(cmds.openingBaud)
-        Delay(25)
+    IF StrLen(string)>0
+      IF InStr(string,'HOST NAME')>=0
+        IF (n:=InStr(string,'='))<>-1
+          StrCopy(hostName,TrimStr(string+n+1))
         ENDIF
-      intDoReset(cmds.mReset)
-      serPutChar("\b")
-      Delay(25)
-      purgeLine()
-        ioFlags[IOFLAG_SER_IN]:=0
-        ioFlags[IOFLAG_SER_OUT]:=0
+      ENDIF
+      IF InStr(string,'HOST IP ADDR')>=0
+        IF (n:=InStr(string,'='))<>-1
+          StrCopy(hostIP,TrimStr(string+n+1))
+        ENDIF
+      ENDIF
+      IF(stringCompare(string,cmds.mRing))=RESULT_SUCCESS THEN rCount--
+    ENDIF
+  ENDWHILE
+  IF(rCount) THEN RETURN
+        
+  IF(sopt.toggles[TOGGLES_CALLERID] OR sopt.toggles[TOGGLES_CALLERIDNAME])    
+    lineInput('','',14,5,idRate)
+    lineInput('','',14,5,idTime)
+    lineInput('','',14,5,idDate)
+    lineInput('','',40,5,idNmbr)
+    IF(sopt.toggles[TOGGLES_CALLERIDNAME]) THEN lineInput('','',40,5,idName)
+    callerIDLog(1)
+  ENDIF
+  /* OTHERWISE EQUAL, ANSWER AND SET BAUDS */
+go: 
+  statClearTime()
+  ->ioFlags[IOFLAG_SER_OUT]:=1
+/*(JOE)---- added this v*/
+  IF(sopt.trapDoor=FALSE)
+    StringF(string,'\s\b',cmds.mAnswer)
+    serPuts(string)
+    n:=0
+    IF(input=RESULT_TIMEOUT) THEN JUMP timedout
+    REPEAT
+      input:=lineInput('','',80,40,string)
+      IF(input=RESULT_TIMEOUT) THEN JUMP timedout
+      IF strCmpi(string,'+FCO',ALL)
+        doFax()
+        RESULT_SUCCESS
+      ELSEIF (StrCmp(string,'CONNECT',7))
+        isConnected:=TRUE
+      ELSEIF (StrLen(string)>0) AND (StrCmp(string,cmds.mRing,ALL)=FALSE) AND (StrCmp(string,cmds.mAnswer,ALL)=FALSE)
+        n++
+        StringF(tempstr,'\tINVALID CONNECT    = \s',string)
+        callersLog(tempstr)
+      ENDIF
+    UNTIL((isConnected) OR (n=5))
+    IF isConnected=FALSE THEN JUMP timedout
+  ELSE
+    strCpy(string,trapConnect,ALL)
+  ENDIF
+  StrCopy(connectString,string)
+  IF(sopt.trapDoor)
+    ->//CutConnect(string)
+    IF(input=RESULT_TIMEOUT) THEN JUMP timedout
+  ENDIF
+   
+  stripReturn(string)
+  readToolType(TOOLTYPE_CONNECT,node,string,connectString)
+  
+  IF(StrCmp(connectString,'CONNECT',7))
+    onlineBaud:=Val(connectString+7)
+    onlineBaudR:=cmds.openingBaud
+    IF onlineBaud=0 THEN onlineBaud:=cmds.openingBaud
+    IF StrLen(connectString)=7 THEN StringF(connectString,'CONNECT \d',onlineBaud)
+
+    ioFlags[IOFLAG_SER_OUT]:=-1
+    ioFlags[IOFLAG_SCR_OUT]:=-1
+    IF(cmds.acLvl[LVL_VARYING_LINK_RATE]=1) THEN setBaud(onlineBaud)
+
+    IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_CONNECT',tempstr))
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+      processMci2(tempstr,tempstr2)
+      SystemTagList(tempstr2,filetags)
+      END filetags
+    ENDIF
+
+    IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_CONNECT',tempstr))
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+      processMci2(tempstr,tempstr2)
+      SystemTagList(tempstr2,filetags)
+      END filetags
+    ENDIF
+
+    conCLS()
+    RETURN RESULT_CONNECT
+  ENDIF
+    
+  onlineBaud:=cmds.openingBaud 
+  setEnvStat(ENV_AWAITCONNECT)
+ 
+timedout:
+  dropDTR()
+  Delay(25)
+  IF(cmds.acLvl[LVL_VARYING_LINK_RATE]=1)
+    setBaud(cmds.openingBaud)
+    Delay(25)
+  ENDIF
+  intDoReset(cmds.mReset)
+  serPutChar("\b")
+  Delay(25)
+  purgeLine()
+  ioFlags[IOFLAG_SER_IN]:=0
+  ioFlags[IOFLAG_SER_OUT]:=0
 
 ENDPROC RESULT_SUCCESS
 
@@ -8056,68 +8037,68 @@ PROC reserveForUser()
   DEF str[34]:STRING
 
 reserveRedo:
- confNameType:=NAME_TYPE_USERNAME
- aePuts('\b\n[0mEnter username to reserve for: ')
- stat:=lineInput('','',30,INPUT_TIMEOUT,str)
- IF((stat<0) OR (StrLen(str)=0)) THEN RETURN
+  confNameType:=NAME_TYPE_USERNAME
+  aePuts('\b\n[0mEnter username to reserve for: ')
+  stat:=lineInput('','',30,INPUT_TIMEOUT,str)
+  IF((stat<0) OR (StrLen(str)=0)) THEN RETURN
  
- stat:=chooseAName(str,tempUser,tempUserKeys,tempUserMisc,0)
- IF(stat<RESULT_FAILURE) THEN   RETURN  
- IF(stat=RESULT_FAILURE) THEN JUMP reserveRedo
- StrCopy(reservedName,tempUserKeys.userName)
+  stat:=chooseAName(str,tempUser,tempUserKeys,tempUserMisc,0)
+  IF(stat<RESULT_FAILURE) THEN   RETURN  
+  IF(stat=RESULT_FAILURE) THEN JUMP reserveRedo
+  StrCopy(reservedName,tempUserKeys.userName)
 ENDPROC
 
 PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE)
-    DEF consolesig=0,windowsig=0,obuf[255]:STRING
-    DEF ch=0,lch,wasControl=0,signals
-    DEF doorsig=0,rexxsig=0,serialsig=0,timersig=0,timedout=0
-    DEF temp[255]:STRING
-    DEF statePtr: PTR TO awaitState
+  DEF consolesig=0,windowsig=0,obuf[255]:STRING
+  DEF ch=0,lch,wasControl=0,signals
+  DEF doorsig=0,rexxsig=0,serialsig=0,timersig=0,timedout=0
+  DEF temp[255]:STRING
+  DEF statePtr: PTR TO awaitState
 
-    flushSerialCache()
+  flushSerialCache()
 
-    chatSerFlag:=0
-    chatConFlag:=0
+  chatSerFlag:=0
+  chatConFlag:=0
 
-    IF loggedOnUser<>NIL THEN statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
+  IF loggedOnUser<>NIL THEN statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
  
-    IF consoleReadMP<>NIL THEN consolesig:=Shl(1, consoleReadMP.sigbit)
-    IF serialReadMP<>NIL THEN serialsig:=Shl(1, serialReadMP.sigbit)
-    
-    IF windowClose<>NIL
-       windowsig:=Shl(1, windowClose.userport.sigbit)
-    ELSEIF window<>NIL
-       windowsig:=Shl(1, window.userport.sigbit)
-    ENDIF
+  IF consoleReadMP<>NIL THEN consolesig:=Shl(1, consoleReadMP.sigbit)
+  IF serialReadMP<>NIL THEN serialsig:=Shl(1, serialReadMP.sigbit)
+  
+  IF windowClose<>NIL
+     windowsig:=Shl(1, windowClose.userport.sigbit)
+  ELSEIF window<>NIL
+     windowsig:=Shl(1, window.userport.sigbit)
+  ENDIF
 
 
-    IF resmp<>NIL THEN doorsig:=Shl(1, resmp.sigbit)
-    IF rexxmp<>NIL THEN rexxsig:=Shl(1, rexxmp.sigbit)
+  IF resmp<>NIL THEN doorsig:=Shl(1, resmp.sigbit)
+  IF rexxmp<>NIL THEN rexxsig:=Shl(1, rexxmp.sigbit)
 
 -> A character, or an IDCMP msg, or both could wake us up
-    signals:=0
-    IF checkSer() THEN signals:=signals OR serialsig
-    IF checkCon() THEN signals:=signals OR consolesig
-    
-    IF (transfering)
-      RETURN TRUE,RESULT_TIMEOUT
+  signals:=0
+  IF checkSer() THEN signals:=signals OR serialsig
+  IF checkCon() THEN signals:=signals OR consolesig
+  
+  IF (transfering)
+    RETURN TRUE,RESULT_TIMEOUT
+  ENDIF
+
+  IF signals=0
+    IF timeout<>0
+      openTimer()
+      timeout:=Mul(timeout,1000000)
+      setTimer(timeout)
+      IF timerport<>NIL THEN timersig:=Shl(1, timerport.sigbit)
     ENDIF
 
-    IF signals=0
-      IF timeout<>0
-        openTimer()
-        timeout:=Mul(timeout,1000000)
-        setTimer(timeout)
-        IF timerport<>NIL THEN timersig:=Shl(1, timerport.sigbit)
-      ENDIF
+    signals:=Wait(SIGBREAKF_CTRL_C OR consolesig OR windowsig OR cxsigflag OR doorsig OR rexxsig OR serialsig OR timersig OR extsig)
+    timedout:=(timersig<>0) AND ((signals AND timersig)<>0)
+    IF timedout THEN waitTime()
+    closeTimer()
+  ENDIF
 
-      signals:=Wait(SIGBREAKF_CTRL_C OR consolesig OR windowsig OR cxsigflag OR doorsig OR rexxsig OR serialsig OR timersig OR extsig)
-      timedout:=(timersig<>0) AND ((signals AND timersig)<>0)
-      IF timedout THEN waitTime()
-      closeTimer()
-    ENDIF
-
-    IF (extsig<>0) AND ((signals AND extsig)<>0) THEN RETURN TRUE,RESULT_SIGNALLED
+  IF (extsig<>0) AND ((signals AND extsig)<>0) THEN RETURN TRUE,RESULT_SIGNALLED
 
   IF (timedout)
     RETURN TRUE,RESULT_TIMEOUT
@@ -8282,23 +8263,23 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE)
     -> F4
     IF (servercmd=SV_RESERVE) OR ((wasControl=1) AND (ch="3"))
       servercmd:=-1    
-        IF(StrLen(reservedName)>0)
+      IF(StrLen(reservedName)>0)
         StrCopy(reservedName,'')
-            ELSE
-                ioFlags[IOFLAG_SER_IN]:=0
-            ioFlags[IOFLAG_SER_OUT]:=0
-            ioFlags[IOFLAG_SCR_OUT]:=-1
-              ioFlags[IOFLAG_KBD_IN]:=-1
-                timeLimit:=3600
-                intDoReset(sopt.offHook)
-                conPuts('[ p')
+      ELSE
+        ioFlags[IOFLAG_SER_IN]:=0
+        ioFlags[IOFLAG_SER_OUT]:=0
+        ioFlags[IOFLAG_SCR_OUT]:=-1
+        ioFlags[IOFLAG_KBD_IN]:=-1
+        timeLimit:=3600
+        intDoReset(sopt.offHook)
+        conPuts('[ p')
         conCLS()
-                reserveForUser()
-            resetSystem(1)
-            ioFlags[IOFLAG_SER_IN]:=-1
-              ioFlags[IOFLAG_SCR_OUT]:=0
+        reserveForUser()
+        resetSystem(1)
+        ioFlags[IOFLAG_SER_IN]:=-1
+        ioFlags[IOFLAG_SCR_OUT]:=0
         setEnvStat(ENV_RESERVE)
-            ENDIF
+      ENDIF
       IF reqState=REQ_STATE_NONE THEN statePtr.redrawScreen:=TRUE
     ENDIF
     
@@ -8426,10 +8407,10 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE)
     ENDIF
 
     ->F8
-      IF (servercmd=SV_INITMODEM) OR ((wasControl=1) AND (ch="7"))
+    IF (servercmd=SV_INITMODEM) OR ((wasControl=1) AND (ch="7"))
       servercmd:=-1
-            reInitModem()
-            resetSystem(1)
+      reInitModem()
+      resetSystem(1)
     ENDIF
 
     ->F9
@@ -8518,25 +8499,25 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE)
     ->Shift F6 - grant/remove temporary access
     IF ((wasControl=2) AND (ch="5")) 
       servercmd:=-1
-        IF(tempAccessGranted)
-                    loggedOnUser.secStatus:=tempAccess.accessLevel;
-                loggedOnUser.secBoard:=tempAccess.ratioType;
-                loggedOnUser.secLibrary:=tempAccess.ratio;
-                loggedOnUser.timeTotal:=tempAccess.timeTotal;
-                  strCpy(loggedOnUser.conferenceAccess,tempAccess.confAc,10)
-                    statPrintUser(loggedOnUser,loggedOnUserMisc,loggedOnUserKeys)
-            ELSE
-                    tempAccess.accessLevel:=loggedOnUser.secStatus
-                tempAccess.ratioType:=loggedOnUser.secBoard
-                tempAccess.ratio:=loggedOnUser.secLibrary
-                tempAccess.timeTotal:=loggedOnUser.timeTotal
-                  strCpy(tempAccess.confAc,loggedOnUser.conferenceAccess,10)
-          doOnLineEdit(TRUE)
-          convertAccess()
-            ENDIF
-            tempAccessGranted:=Not(tempAccessGranted)
-        conPuts('\b\nTemporary Access ')
-          conPuts((IF tempAccessGranted THEN 'Granted\b\n' ELSE 'Removed\b\n'))     
+      IF(tempAccessGranted)
+        loggedOnUser.secStatus:=tempAccess.accessLevel;
+        loggedOnUser.secBoard:=tempAccess.ratioType;
+        loggedOnUser.secLibrary:=tempAccess.ratio;
+        loggedOnUser.timeTotal:=tempAccess.timeTotal;
+        strCpy(loggedOnUser.conferenceAccess,tempAccess.confAc,10)
+        statPrintUser(loggedOnUser,loggedOnUserMisc,loggedOnUserKeys)
+      ELSE
+        tempAccess.accessLevel:=loggedOnUser.secStatus
+        tempAccess.ratioType:=loggedOnUser.secBoard
+        tempAccess.ratio:=loggedOnUser.secLibrary
+        tempAccess.timeTotal:=loggedOnUser.timeTotal
+        strCpy(tempAccess.confAc,loggedOnUser.conferenceAccess,10)
+        doOnLineEdit(TRUE)
+        convertAccess()
+      ENDIF
+      tempAccessGranted:=Not(tempAccessGranted)
+      conPuts('\b\nTemporary Access ')
+      conPuts((IF tempAccessGranted THEN 'Granted\b\n' ELSE 'Removed\b\n'))     
     ENDIF
 
     ->F7
@@ -8703,9 +8684,9 @@ PROC loadAccount(slot,userPtr, userKeysPtr, userMiscPtr)
 ENDPROC result
 
 /* if flg > 0 then force save account */
-PROC saveAccount(hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO userMisc,uslot,flg)
+PROC saveAccount(hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO userMisc,uslot,flg) HANDLE
   DEF slot,stat
-  DEF fh,l
+  DEF fh=NIL,l
   DEF tempStr[255]:STRING
 
   IF((onlineEdit) AND (logonType>=LOGON_TYPE_REMOTE))
@@ -8714,11 +8695,11 @@ PROC saveAccount(hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO 
   ENDIF
  
   IF(flg)                /* Force Save User Account */
-     uslot--
-     slot:=uslot
+    uslot--
+    slot:=uslot
   ELSE
-     IF(hoozer.slotNumber=0) THEN RETURN RESULT_FAILURE
-     slot:=hoozer.slotNumber-1
+    IF(hoozer.slotNumber=0) THEN RETURN RESULT_FAILURE
+    slot:=hoozer.slotNumber-1
   ENDIF
 
   l:=SIZEOF user
@@ -8730,8 +8711,7 @@ PROC saveAccount(hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO 
 
   stat:=Write(fh,hoozer,l)
   IF(stat<>l)
-    Close(fh)
-    RETURN RESULT_FAILURE
+    Raise(ERR_EXCEPT)
   ENDIF
 
   Close(fh)
@@ -8746,8 +8726,7 @@ PROC saveAccount(hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO 
 
   stat:=Write(fh,hoozer2,l)
   IF(stat<>l)
-    Close(fh)
-    RETURN RESULT_FAILURE
+    Raise(ERR_EXCEPT)
   ENDIF
 
   Close(fh)
@@ -8761,12 +8740,14 @@ PROC saveAccount(hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO 
 
     stat:=Write(fh,hoozer3,l)
     IF(stat<>l)
-      Close(fh)
-      RETURN RESULT_FAILURE
+      Raise(ERR_EXCEPT)
     ENDIF
 
     Close(fh)
   ENDIF
+EXCEPT
+  Close(fh)
+  RETURN RESULT_FAILURE
 ENDPROC RESULT_SUCCESS
 
 PROC processLoggingOff()
@@ -8796,24 +8777,10 @@ PROC processLoggingOff()
   checkOnlineStatus()
   clearFlagItems(flagFilesList)
 
-  IF ListLen(olmBuf)>0
-    FOR i:=0 TO ListLen(olmBuf)-1
-      DisposeLink(olmBuf[i])
-    ENDFOR
-    SetList(olmBuf,0)
-  ENDIF
-
-  IF ListLen(olmQueue)>0
-    FOR i:=0 TO ListLen(olmQueue)-1
-      DisposeLink(olmQueue[i])
-    ENDFOR
-    SetList(olmQueue,0)
-  ENDIF
+  olmBuf.clear()
+  olmQueue.clear()
   
-  FOR i:=0 TO ListLen(historyBuf)-1
-    DisposeLink(ListItem(historyBuf,i))
-  ENDFOR
-  SetList(historyBuf,0)
+  historyBuf.clear()
   historyNum:=0
   historyCycle:=0
 
@@ -8926,8 +8893,8 @@ PROC processLoggingOff()
   mcioff:=FALSE
   mciViewSafe:=TRUE
 
-  freeList(recFileNames)
-  recFileNames:=List(1024)
+  END recFileNames
+  recFileNames:=NEW recFileNames.stringlist()
 
   IF (relogon=FALSE)
     state:=STATE_AWAIT
@@ -9004,8 +8971,8 @@ PROC myDirRecurse(path: PTR TO CHAR,cflag)
   lock:=Lock(path,ACCESS_READ)
   IF(lock)=0
     FreeDosObject(DOS_FIB,f_info)
-      RETURN
-    ENDIF
+    RETURN
+  ENDIF
  
   IF(Examine(lock,f_info))=0
     StringF(tempstr,'\s does not exist\b\n',path)
@@ -9013,24 +8980,24 @@ PROC myDirRecurse(path: PTR TO CHAR,cflag)
     UnLock(lock)
     FreeDosObject(DOS_FIB,f_info)
     RETURN
-    ENDIF
+  ENDIF
  
   lineCount:=0
   IF(f_info.entrytype>0)
     StringF(tempstr,'Directory of \s\b\n',path)
-      aePuts(tempstr)
+    aePuts(tempstr)
  
     WHILE(((ExNext(lock,f_info))<>0) AND(stat=FALSE))
-        myDirDisplay(f_info)
+      myDirDisplay(f_info)
+      stat:=checkForPause()
+      IF(cflag AND (stat=FALSE) AND (StrLen(f_info.comment)>0))
+        aePuts(' : ')
+        aePuts(f_info.comment)
+        aePuts('\b\n')
         stat:=checkForPause()
-          IF(cflag AND (stat=FALSE) AND (StrLen(f_info.comment)>0))
-          aePuts(' : ')
-          aePuts(f_info.comment)
-            aePuts('\b\n')
-              stat:=checkForPause()
       ENDIF
     ENDWHILE
-    ELSE
+  ELSE
     myDirDisplay(f_info)
   ENDIF
  
@@ -9049,18 +9016,18 @@ PROC myDirAnyWhere(params)
   aePuts('\b\n')
   parseParams(params)
 
-  IF(ListLen(parsedParams)>0)
-    StrCopy(tempstr,parsedParams[0])
-      IF ListLen(parsedParams)>1
-      IF strCmpi(parsedParams[1],'c',1) THEN comments:=1
+  IF(parsedParams.count()>0)
+    StrCopy(tempstr,parsedParams.item(0))
+    IF parsedParams.count()>1
+      IF strCmpi(parsedParams.item(1),'c',1) THEN comments:=1
     ENDIF
   ELSE
     comments:=1
-      aePuts('FullPath for directory? ')
-      stat:=lineInput('','',250,INPUT_TIMEOUT,tempstr)
-      IF((stat<0) OR (StrLen(tempstr)=0))   
+    aePuts('FullPath for directory? ')
+    stat:=lineInput('','',250,INPUT_TIMEOUT,tempstr)
+    IF((stat<0) OR (StrLen(tempstr)=0))   
       aePuts('\b\n')
-        RETURN
+      RETURN
     ENDIF
   
     IF(findAssign(tempstr))
@@ -9070,11 +9037,11 @@ PROC myDirAnyWhere(params)
     ENDIF
 
     aePuts('Include comments (Y/n)? ')
-        stat:=lineInput('','',3,INPUT_TIMEOUT,tempstr2)
-      IF(stat<0) THEN RETURN
+    stat:=lineInput('','',3,INPUT_TIMEOUT,tempstr2)
+    IF(stat<0) THEN RETURN
 
-      IF((tempstr2[0]="n") OR (tempstr2[0]="N")) THEN comments:=0
-    ENDIF
+    IF((tempstr2[0]="n") OR (tempstr2[0]="N")) THEN comments:=0
+  ENDIF
   myDirRecurse(tempstr,comments)
   aePuts('\b\n')
 ENDPROC
@@ -9212,17 +9179,17 @@ PROC masterLoadPointers(hoozer: PTR TO user)
   DEF i,cb: PTR TO confBase
 
   FOR i:=1 TO cmds.numConf
-    cb:=ListItem(confBases,i-1)
+    cb:=confBases.item(i-1)
     loadConfDB(hoozer.slotNumber,i,cb,TRUE)
   ENDFOR
 ENDPROC
 
 PROC clearMsgPointers()
   DEF cb: PTR TO confBase
-  DEF i,j
+  DEF i,j, defaultmask
 
   FOR i:=1 TO cmds.numConf
-    cb:=ListItem(confBases,i-1)
+    cb:=confBases.item(i-1)
     cb.bytesDownload:=0
     cb.bytesUpload:=0
     FOR j:=0 TO 7
@@ -9237,7 +9204,12 @@ PROC clearMsgPointers()
     cb.lastEMail:=0
     cb.confYM:=0
     cb.confRead:=0
-    cb.handle[0]:=cb.handle[0] AND Not(MAIL_SCAN_MASK OR FILE_SCAN_MASK OR ZOOM_SCAN_MASK)
+    defaultmask:=0
+    
+    IF checkToolTypeExists(TOOLTYPE_CONF,i,'DEFAULT_NEWSCAN') THEN defaultmask:=defaultmask OR MAIL_SCAN_MASK
+    IF checkToolTypeExists(TOOLTYPE_CONF,i,'DEFAULT_NEW_FILES') THEN defaultmask:=defaultmask OR FILE_SCAN_MASK
+    IF checkToolTypeExists(TOOLTYPE_CONF,i,'DEFAULT_ZOOM') THEN defaultmask:=defaultmask OR ZOOM_SCAN_MASK
+    cb.handle[0]:=defaultmask
   ENDFOR
 ENDPROC
 
@@ -9260,7 +9232,7 @@ PROC addMsgPointers()
   loggedOnUser.messagesPosted:=0
 
   FOR i:=1 TO cmds.numConf
-    cb:=ListItem(confBases,i-1)
+    cb:=confBases.item(i-1)
     IF (readToolTypeInt(TOOLTYPE_CONF,i,'CONFDB_SHARED')>0) AND (checkConfAccess(i))
       ->loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+cb.bytesDownload
       ->loggedOnUser.bytesUpload:=loggedOnUser.bytesUpload+cb.bytesUpload
@@ -9280,7 +9252,7 @@ PROC masterSavePointers(hoozer: PTR TO user)
   DEF i,cb: PTR TO confBase
 
   FOR i:=1 TO cmds.numConf
-    cb:=ListItem(confBases,i-1)
+    cb:=confBases.item(i-1)
     saveConfDB(hoozer.slotNumber,i,cb,TRUE)
   ENDFOR
 ENDPROC
@@ -9293,39 +9265,39 @@ PROC getMailStatFile(confNum)
 
   fd:=Open(string,OLDFILE)
   IF(fd<=0)
-     fd:=Open(string,MODE_READWRITE)
-     IF(fd<=0) 
-         myError(ERR_MSGBASE)
-         mailStat.lowestKey:=0
-         mailStat.lowestNotDel:=0
-         mailStat.highMsgNum:=0
+    fd:=Open(string,MODE_READWRITE)
+    IF(fd<=0) 
+      myError(ERR_MSGBASE)
+      mailStat.lowestKey:=0
+      mailStat.lowestNotDel:=0
+      mailStat.highMsgNum:=0
 
-         RETURN RESULT_FAILURE
-     ENDIF
+      RETURN RESULT_FAILURE
+    ENDIF
 
-     mailStat.lowestNotDel:=0
-     mailStat.lowestKey:=1
-     mailStat.highMsgNum:=1
-     stat:=Write(fd,mailStat,SIZEOF mailStat)
+    mailStat.lowestNotDel:=0
+    mailStat.lowestKey:=1
+    mailStat.highMsgNum:=1
+    stat:=Write(fd,mailStat,SIZEOF mailStat)
   ELSE
-     stat:=Read(fd,mailStat,SIZEOF mailStat)
+    stat:=Read(fd,mailStat,SIZEOF mailStat)
   ENDIF
 
   IF (stat<>SIZEOF mailStat)
-     Close(fd)
-     myError(ERR_MSGBASE)
-     RETURN RESULT_FAILURE
+    Close(fd)
+    myError(ERR_MSGBASE)
+    RETURN RESULT_FAILURE
   ENDIF
 
   Close(fd)
 
 ENDPROC RESULT_SUCCESS
 
-PROC parseList(liststring,list)
+PROC parseList(liststring,list:PTR TO stringlist)
   DEF spacepos,startpos,newitem
   DEF tempstr[255]:STRING
   
-  SetList(list,0)
+  list.clear()
 
   IF StrLen(liststring)=0 THEN RETURN
   
@@ -9335,9 +9307,8 @@ PROC parseList(liststring,list)
     WHILE(spacepos>=0)
       MidStr(tempstr,liststring,startpos,spacepos-startpos)
       UpperStr(tempstr)
-      newitem:=String(StrLen(TrimStr(tempstr)))
-      StrCopy(newitem,TrimStr(tempstr),ALL)
-      IF StrLen(newitem)>0 THEN ListAdd(list,[newitem])
+      newitem:=TrimStr(tempstr)
+      IF StrLen(newitem)>0 THEN list.add(newitem)
       startpos:=spacepos+1
       WHILE ((startpos<StrLen(liststring)) AND (liststring[startpos]=" ")) DO startpos:=startpos+1
       spacepos:=InStr(liststring,' ',startpos)
@@ -9345,32 +9316,27 @@ PROC parseList(liststring,list)
     IF startpos<StrLen(liststring)
       MidStr(tempstr,liststring,startpos,StrLen(liststring)-startpos)
       UpperStr(tempstr)
-      newitem:=String(StrLen(TrimStr(tempstr)))
-      StrCopy(newitem,TrimStr(tempstr),ALL)
-      IF StrLen(newitem)>0 THEN ListAdd(list,[newitem])
+      newitem:=TrimStr(tempstr)
+      IF StrLen(newitem)>0 THEN list.add(newitem)
     ENDIF
   ELSE
     newitem:=String(StrLen(liststring))
-    StrCopy(newitem,liststring,ALL)
-    UpperStr(newitem)
-    IF StrLen(newitem)>0 THEN ListAdd(list,[newitem])
+    StrCopy(tempstr,liststring,ALL)
+    UpperStr(tempstr)
+    IF StrLen(tempstr)>0 THEN list.add(tempstr)
   ENDIF
 ENDPROC
 
 PROC parseParams(paramstring)
-  DEF i
-  FOR i:=0 TO ListLen(parsedParams)-1
-    DisposeLink(ListItem(parsedParams,i))
-  ENDFOR
+  parsedParams.clear()
   parseList(paramstring,parsedParams)
 ENDPROC
 
 PROC paramsContains(paramcheck)
-  DEF i, paramitem
+  DEF i
 
-  FOR i:=0 TO ListLen(parsedParams)-1
-    paramitem:=ListItem(parsedParams,i)
-    IF StrCmp(paramitem,paramcheck) THEN RETURN TRUE
+  FOR i:=0 TO parsedParams.count()-1
+    IF StrCmp(parsedParams.item(i),paramcheck) THEN RETURN TRUE
   ENDFOR
 
 ENDPROC FALSE
@@ -9406,8 +9372,8 @@ PROC commentToSYSOP()
   IF(stat<0) THEN RETURN stat
 
   IF (StrLen(str)=0)
-     aePuts('\b\n')
-     RETURN RESULT_SUCCESS
+    aePuts('\b\n')
+    RETURN RESULT_SUCCESS
   ENDIF
   strCpy(mailHeader.subject,str,30)
   mailHeader.status:="R"
@@ -9462,85 +9428,85 @@ PROC stringCompare(nam: PTR TO CHAR,pat: PTR TO CHAR)
 ENDPROC RESULT_FAILURE
 
 PROC displayMessage(gfh)
- DEF timeVar
- DEF str[255]:STRING
- DEF string[255]:STRING
- DEF date[100]:STRING
- DEF tempStr[255]:STRING
- DEF stat
-
- timeVar:=mailHeader.msgDate
- formatLongDateTime(timeVar,date)
-
- IF translatorMode=TRANS_NONE
-   checkScreenClear()
-
-   StringF(str,'[32mDate   [33m: [0m\l\s[30]   [32mNumber[33m: [0m\d\b\n',date,mailHeader.msgNumb)
-   aePuts(str)
-   StrCopy(date,mailHeader.toName,31)
-   LowerStr(date)
-   timeVar:=(StrCmp(date,'eall',4))
-   IF(timeVar) 
-     StrCopy(date,confMailName,31)
-     StrAdd(date,' (ALL)')
-   ELSE
-     StrCopy(date,mailHeader.toName,31)
-   ENDIF
-
-   StringF(str,'[32mTo     [33m: [0m\l\s[30]  ',date)
-
-   aePuts(str)
-   IF(mailHeader.recv<>0)
-       timeVar:=mailHeader.recv
-       formatLongDateTime(timeVar,date)
-       StringF(str,' [32mRecv''d[33m: [0m\s\b\n',date)
-       aePuts(str)
-   ELSE
-       aePuts(' [32mRecv''d[33m: [0m')
-       IF(stringCompare(mailHeader.toName,'ALL')=RESULT_SUCCESS)
-            aePuts('N/A\b\n')
-       ELSE
-            aePuts('No\b\n')
-       ENDIF
-   ENDIF
-
-   IF(mailHeader.status="P") OR (mailHeader.status="p")
-       StrCopy(string,'Public Message',ALL)
-   ELSE
-       StrCopy(string,'Private Message',ALL)
-   ENDIF
-   
-   StringF(str,'[32mFrom   [33m: [0m\l\s[30]   [32mStatus[33m: [0m\s\b\n',mailHeader.fromName,string)
-   aePuts(str)
-   StringF(str,'[32mSubject[33m: [0m\s\b\n\b\n',mailHeader.subject)
-   aePuts(str)
-
-   alreadyRecvd:=mailHeader.recv
-
-   IF(stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)
-       IF(mailHeader.recv=0)
-        mailHeader.recv:=getSystemTime()
-           delMsgNum:=mailHeader.msgNumb
-           saveOverHeader(gfh)
-       ENDIF
-   ENDIF
-
- ENDIF
-
- StringF(tempStr,'\s\d',msgBaseLocation,mailHeader.msgNumb)
- IF(nonStopMail)
+  DEF timeVar
+  DEF str[255]:STRING
+  DEF string[255]:STRING
+  DEF date[100]:STRING
+  DEF tempStr[255]:STRING
+  DEF stat
+  
+  timeVar:=mailHeader.msgDate
+  formatLongDateTime(timeVar,date)
+  
+  IF translatorMode=TRANS_NONE
+    checkScreenClear()
+  
+    StringF(str,'[32mDate   [33m: [0m\l\s[30]   [32mNumber[33m: [0m\d\b\n',date,mailHeader.msgNumb)
+    aePuts(str)
+    StrCopy(date,mailHeader.toName,31)
+    LowerStr(date)
+    timeVar:=(StrCmp(date,'eall',4))
+    IF(timeVar) 
+      StrCopy(date,confMailName,31)
+      StrAdd(date,' (ALL)')
+    ELSE
+      StrCopy(date,mailHeader.toName,31)
+    ENDIF
+  
+    StringF(str,'[32mTo     [33m: [0m\l\s[30]  ',date)
+  
+    aePuts(str)
+    IF(mailHeader.recv<>0)
+      timeVar:=mailHeader.recv
+      formatLongDateTime(timeVar,date)
+      StringF(str,' [32mRecv''d[33m: [0m\s\b\n',date)
+      aePuts(str)
+    ELSE
+      aePuts(' [32mRecv''d[33m: [0m')
+      IF(stringCompare(mailHeader.toName,'ALL')=RESULT_SUCCESS)
+        aePuts('N/A\b\n')
+      ELSE
+        aePuts('No\b\n')
+      ENDIF
+    ENDIF
+  
+    IF(mailHeader.status="P") OR (mailHeader.status="p")
+      StrCopy(string,'Public Message',ALL)
+    ELSE
+      StrCopy(string,'Private Message',ALL)
+    ENDIF
+    
+    StringF(str,'[32mFrom   [33m: [0m\l\s[30]   [32mStatus[33m: [0m\s\b\n',mailHeader.fromName,string)
+    aePuts(str)
+    StringF(str,'[32mSubject[33m: [0m\s\b\n\b\n',mailHeader.subject)
+    aePuts(str)
+  
+    alreadyRecvd:=mailHeader.recv
+  
+    IF(stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)
+      IF(mailHeader.recv=0)
+       mailHeader.recv:=getSystemTime()
+          delMsgNum:=mailHeader.msgNumb
+          saveOverHeader(gfh)
+      ENDIF
+    ENDIF
+  
+  ENDIF
+  
+  StringF(tempStr,'\s\d',msgBaseLocation,mailHeader.msgNumb)
+  IF(nonStopMail)
     nonStopDisplayFlag:=TRUE
     mcioff:=TRUE
     displayFile(tempStr,TRUE,FALSE)
     ->stat:=MenuSend(tempStr)
-   IF(stat=RESULT_FAILURE) THEN nonStopMail:=FALSE
- ELSE
+    IF(stat=RESULT_FAILURE) THEN nonStopMail:=FALSE
+  ELSE
     mcioff:=TRUE
     displayFile(tempStr,TRUE)
-      ->MenuSend24(tempStr,5)
- ENDIF
- mcioff:=FALSE
- stat:=checkAttachedFile(mailHeader.msgNumb,1)
+    ->MenuSend24(tempStr,5)
+  ENDIF
+  mcioff:=FALSE
+  stat:=checkAttachedFile(mailHeader.msgNumb,1)
 ENDPROC stat
 
 
@@ -9562,19 +9528,19 @@ PROC errorLog(stringout: PTR TO CHAR)
   gfp1:=Open(fname,MODE_READWRITE)
 
   IF(gfp1>0)
-      Seek(gfp1,0,OFFSET_END)
+    Seek(gfp1,0,OFFSET_END)
     StringF(xgstr2,'\s ',xgstr1)
     Write(gfp1,xgstr2,StrLen(xgstr2))
     fileWriteLn(gfp1,stringout)
-      Close(gfp1)
-    ENDIF
+    Close(gfp1)
+  ENDIF
 ENDPROC
 
-PROC fileListReverse(filename: PTR TO CHAR)
+PROC fileListReverse(filename: PTR TO CHAR) HANDLE
   DEF currentPos,readsize,loop,stat
-  DEF buf:PTR TO CHAR
+  DEF buf=NIL:PTR TO CHAR
   DEF bufptr1:PTR TO CHAR, bufptr2:PTR TO CHAR
-  DEF fh
+  DEF fh=NIL
   DEF memsize=4096
   DEF bufend,temp
   readsize:=memsize
@@ -9606,16 +9572,12 @@ PROC fileListReverse(filename: PTR TO CHAR)
             stat:=displayIt3(bufptr2+loop+1)
             bufptr2[loop+1]:=0
             IF stat<0
-              Close(fh)
-              Dispose(buf)
-              RETURN stat
+              Raise(ERR_EXCEPT)
             ENDIF
             IF bufend
               stat:=displayIt3(bufptr1)
               IF stat<0
-                Close(fh)
-                Dispose(buf)
-                RETURN stat
+                Raise(ERR_EXCEPT)
               ENDIF
             ENDIF
             bufend:=FALSE
@@ -9627,21 +9589,24 @@ PROC fileListReverse(filename: PTR TO CHAR)
         bufptr2:=temp
       UNTIL (currentPos<=0) OR (stat<0)
       Close(fh)
+      fh:=NIL
       stat:=displayIt3(bufptr1)
       IF stat<0
-        Dispose(buf)
-        RETURN stat
+        Raise(ERR_EXCEPT)
       ENDIF
       IF bufend
         stat:=displayIt3(bufptr2)
         IF stat<0
-          Dispose(buf)
-          RETURN stat
+          Raise(ERR_EXCEPT)
         ENDIF
       ENDIF
     ENDIF
     Dispose(buf)
   ENDIF
+EXCEPT
+  IF fh THEN Close(fh)
+  IF buf THEN Dispose(buf)
+  RETURN stat
 ENDPROC RESULT_SUCCESS
 
 PROC displayCallersLog(filename: PTR TO CHAR,tf)
@@ -9740,15 +9705,15 @@ PROC debugLog(logType,logline:PTR TO CHAR)
   ENDIF
 ENDPROC
 
-PROC remoteShell()
+PROC remoteShell() HANDLE
   DEF rMsg:mn
   DEF wMsg:mn
   DEF fifoName[255]:STRING
   DEF fifoMast[255]:STRING
   DEF fifoSlav[255]:STRING
-  DEF ioSink:PTR TO mp
-  DEF fifoR
-  DEF fifoW
+  DEF ioSink=NIL:PTR TO mp
+  DEF fifoR=NIL
+  DEF fifoW=NIL
   
   DEF fifrIP=0
   DEF fifwIP=0
@@ -9782,19 +9747,14 @@ PROC remoteShell()
   IF (fifoW = NIL) 
     aePuts('unable to open fifo master\n')
     callersLog('\tunable to open fifo master\n')
-    CloseLibrary(fifobase)
-    deletePort(ioSink)   
-    RETURN RESULT_FAILURE
+    Raise(ERR_EXCEPT)
   ENDIF
   
   fifoR:=OpenFifo(fifoSlav, 2048, FIFOF_READ  OR FIFOF_NORMAL OR FIFOF_NBIO)
   IF (fifoR = NIL) 
     aePuts('unable to open fifo slave\n')
     callersLog('\tunable to open fifo slave\n')
-    CloseFifo(fifoW,FIFOF_EOF)
-    CloseLibrary(fifobase)
-    deletePort(ioSink)
-    RETURN RESULT_FAILURE
+    Raise(ERR_EXCEPT)
   ENDIF
   
 
@@ -9808,10 +9768,7 @@ PROC remoteShell()
   IF(findAssign('fifo:')<>0)
     aePuts('unable to find fifo: device\n')
     callersLog('\tunable to find fifo: device\n')
-    CloseFifo(fifoW,FIFOF_EOF)
-    CloseLibrary(fifobase)
-    deletePort(ioSink)
-    RETURN RESULT_FAILURE
+    Raise(ERR_EXCEPT)
   ENDIF
 
 
@@ -9909,24 +9866,33 @@ PROC remoteShell()
   IF (fifobase) THEN CloseLibrary(fifobase)
 
   IF (ioSink) THEN deletePort(ioSink)
+EXCEPT
+  IF (fifoR) THEN CloseFifo(fifoR, FIFOF_EOF)
 
+  /*  no FIFOF_EOF on IDCMP_CLOSEWINDOW to conform to documentation */
+  IF (fifoW) THEN   CloseFifo(fifoW, FIFOF_EOF) 
+
+  IF (fifobase) THEN CloseLibrary(fifobase)
+
+  IF (ioSink) THEN deletePort(ioSink)
+  RETURN RESULT_FAILURE
 ENDPROC RESULT_SUCCESS
 
 PROC waitMsg(msg:PTR TO mn)
-    WHILE(msg.ln.type = NT_MESSAGE)
-      Wait(Shl(1,msg.replyport.sigbit))
-    ENDWHILE
-    Forbid()
-    Remove(msg)
-    Permit()
+  WHILE(msg.ln.type = NT_MESSAGE)
+    Wait(Shl(1,msg.replyport.sigbit))
+  ENDWHILE
+  Forbid()
+  Remove(msg)
+  Permit()
 ENDPROC
 
 PROC sendBreak(c)
-    DEF buf[256]:STRING
-    DEF fh
+  DEF buf[256]:STRING
+  DEF fh
 
-    StringF(buf, 'FIFO:bbsshell\d/\c', node, c)
-    IF ((fh:=Open(buf, 1005))) THEN Close(fh)
+  StringF(buf, 'FIFO:bbsshell\d/\c', node, c)
+  IF ((fh:=Open(buf, 1005))) THEN Close(fh)
 ENDPROC
 
 PROC doorLog(type, str:PTR TO CHAR)
@@ -9983,15 +9949,15 @@ PROC creditLog(logline: PTR TO CHAR)
   IF(fh<=0)
     fh:=Open(fn,MODE_NEWFILE)
   ELSE
-      Close(fh)
-      fh:=Open(fn,MODE_READWRITE)
+    Close(fh)
+    fh:=Open(fn,MODE_READWRITE)
     Seek(fh,0,OFFSET_END)
-    ENDIF
+  ENDIF
 
   IF(fh)
     fileWriteLn(fh,logline)
       Close(fh)
-    ENDIF
+  ENDIF
 ENDPROC
 
 PROC logoffLog(stat: PTR TO CHAR)
@@ -10024,10 +9990,10 @@ PROC callersLog(stringout: PTR TO CHAR,linefeed=TRUE)
   IF(gfp1<=0)
     gfp1:=Open(buff,MODE_NEWFILE)
   ELSE
-      Close(gfp1)
-      gfp1:=Open(buff,MODE_READWRITE)
+    Close(gfp1)
+    gfp1:=Open(buff,MODE_READWRITE)
     Seek(gfp1,0,OFFSET_END)
-    ENDIF
+  ENDIF
 
   IF(gfp1)
     IF linefeed
@@ -10050,15 +10016,15 @@ PROC udLog(stringout: PTR TO CHAR)
   IF(gfp1<=0)
     gfp1:=Open(lstr,MODE_NEWFILE)
   ELSE
-      Close(gfp1)
-      gfp1:=Open(lstr,MODE_READWRITE)
+    Close(gfp1)
+    gfp1:=Open(lstr,MODE_READWRITE)
     Seek(gfp1,0,OFFSET_END)
-    ENDIF
+  ENDIF
 
   IF(gfp1)
     fileWriteLn(gfp1,stringout)
-      Close(gfp1)
-    ENDIF
+    Close(gfp1)
+  ENDIF
 ENDPROC
 
 PROC udLogDivider()
@@ -10071,26 +10037,26 @@ PROC callerIDLog(opt)
 
   IF(((sopt.toggles[TOGGLES_CALLERID]) OR (sopt.toggles[TOGGLES_CALLERIDNAME])) AND opt)
     StringF(tempstr,'\sNode\d/CallerIDlog',cmds.bbsLoc,node)
-     fi:=Open(tempstr,MODE_READWRITE)
-     Seek(fi,0,OFFSET_END)
-     fileWrite(fi,'**************************************************************\n');
+    fi:=Open(tempstr,MODE_READWRITE)
+    Seek(fi,0,OFFSET_END)
+    fileWrite(fi,'**************************************************************\n');
 
-     IF(sopt.toggles[TOGGLES_CALLERIDNAME])
-        StringF(tempstr,'\t(\s - \s [\s[16] / \s]) \n',idDate,idTime,idNmbr,idName)
-     ELSE
-        StringF(tempstr,'\t(\s - \s [\s[16]])\n',idDate,idTime,idNmbr)
-     ENDIF
-     fileWrite(fi,tempstr)
-     Close(fi)
-     RETURN
+    IF(sopt.toggles[TOGGLES_CALLERIDNAME])
+       StringF(tempstr,'\t(\s - \s [\s[16] / \s]) \n',idDate,idTime,idNmbr,idName)
+    ELSE
+       StringF(tempstr,'\t(\s - \s [\s[16]])\n',idDate,idTime,idNmbr)
+    ENDIF
+    fileWrite(fi,tempstr)
+    Close(fi)
+    RETURN
   ENDIF
   IF(sopt.toggles[TOGGLES_CALLERID] OR sopt.toggles[TOGGLES_CALLERIDNAME])
     StringF(tempstr,'\sNode\d/CallerIDlog',cmds.bbsLoc,node)
-     fi:=Open(tempstr,MODE_READWRITE)
-     Seek(fi,0,OFFSET_END)
-     StringF(tempstr,'\t\s\n',loggedOnUser.name)
-     fileWrite(fi,tempstr)
-     Close(fi)
+    fi:=Open(tempstr,MODE_READWRITE)
+    Seek(fi,0,OFFSET_END)
+    StringF(tempstr,'\t\s\n',loggedOnUser.name)
+    fileWrite(fi,tempstr)
+    Close(fi)
   ENDIF
 ENDPROC
 
@@ -10139,22 +10105,22 @@ PROC deleteMsgFiles(num:LONG)
   StringF(str,'\sF\d',msgBaseLocation,num)
 
   IF(fBlock:=AllocDosObject(DOS_FIB,NIL))
-      IF(fLock:=Lock(str,ACCESS_READ))
+    IF(fLock:=Lock(str,ACCESS_READ))
 
-          IF(Examine(fLock,fBlock))
+      IF(Examine(fLock,fBlock))
         WHILE(ExNext(fLock,fBlock))
           StringF(image,'\sF\d/\s',msgBaseLocation,num,fBlock.filename)
           SetProtection(image,FIBF_OTR_DELETE)
           DeleteFile(image)
         ENDWHILE
         aePuts('\b\n')
-          ENDIF
+      ENDIF
       UnLock(fLock)   
     ENDIF
-      FreeDosObject(DOS_FIB,fBlock)
+    FreeDosObject(DOS_FIB,fBlock)
     SetProtection(str,FIBF_OTR_DELETE)
     DeleteFile(str)
-    ENDIF
+  ENDIF
      
 ENDPROC   
 
@@ -10169,23 +10135,23 @@ PROC attachMsgFiles(num: LONG,s:PTR TO CHAR)
   StringF(str,'\sF\d',msgBaseLocation,num)
 
   IF(fBlock:=AllocDosObject(DOS_FIB,NIL))
-      IF(fLock:=Lock(str,ACCESS_READ))
-          IF(Examine(fLock,fBlock))
+    IF(fLock:=Lock(str,ACCESS_READ))
+      IF(Examine(fLock,fBlock))
         WHILE(ExNext(fLock,fBlock))
           StringF(image,'\sF\d/\s ',msgBaseLocation,num,fBlock.filename)
           IF(StrLen(image)+StrLen(s)<1024)
             aePuts('\b\nFlagging >:')
             aePuts(fBlock.filename)
-           
+         
             StrAdd(s,image)
           ENDIF
-              ENDWHILE
+        ENDWHILE
         aePuts('\b\n')
-          ENDIF
+      ENDIF
       UnLock(fLock)
     ENDIF
-      FreeDosObject(DOS_FIB,fBlock)
-    ENDIF
+    FreeDosObject(DOS_FIB,fBlock)
+  ENDIF
      
 ENDPROC       
 
@@ -10209,25 +10175,25 @@ PROC checkAttachedFile(msgnumb,flag)
   StringF(str,'\s\d',msgBaseLocation,msgnumb)
  
   IF(fBlock:=AllocDosObject(DOS_FIB,NIL))
-      IF(fLock:=Lock(str,ACCESS_READ))
-        IF(Examine(fLock,fBlock)) 
-            IF(StrLen(fBlock.comment)>0)
-                StrCopy(tempStr,fBlock.comment)
+    IF(fLock:=Lock(str,ACCESS_READ))
+      IF(Examine(fLock,fBlock)) 
+        IF(StrLen(fBlock.comment)>0)
+          StrCopy(tempStr,fBlock.comment)
           filetype:=1
-              ENDIF
-           
         ENDIF
+         
+      ENDIF
       UnLock(fLock)
       IF(filetype=0)
         StringF(str,'\sF\d',msgBaseLocation,msgnumb)
         IF(fLock:=Lock(str,ACCESS_READ))
-           UnLock(fLock)
-           filetype:=2
+          UnLock(fLock)
+          filetype:=2
         ENDIF
       ENDIF
     ENDIF
-      FreeDosObject(DOS_FIB,fBlock)
-    ENDIF
+    FreeDosObject(DOS_FIB,fBlock)
+  ENDIF
       
         
   IF(filetype)
@@ -10252,17 +10218,17 @@ PROC checkAttachedFile(msgnumb,flag)
         RETURN stat
       ENDIF
       stat:=0
-        aePuts('\b\n')
-        ELSE
+      aePuts('\b\n')
+    ELSE
       IF(filetype=2) THEN deleteMsgFiles(msgnumb)
-          stat:=isupper(tempStr[0])
-            IF(stat) 
+        stat:=isupper(tempStr[0])
+        IF(stat) 
           SetProtection(tempStr,FIBF_OTR_DELETE)
-              DeleteFile(tempStr)
-                aePuts('\b\nDeleted attached file(s) ')
-                aePuts(tempStr)
+          DeleteFile(tempStr)
+          aePuts('\b\nDeleted attached file(s) ')
+          aePuts(tempStr)
         ENDIF
-        ENDIF
+      ENDIF
     ENDIF
 
 ENDPROC RESULT_SUCCESS
@@ -10315,14 +10281,14 @@ PROC forwardMSG(gfh)
 
   IF checkSecurity(ACS_DELETE_MESSAGE)
     IF(stringCompare(frm,confMailName)=RESULT_SUCCESS)
-        aePuts('Delete original message ')
-        stat:=yesNo(2)
-        IF(stat<0) THEN RETURN stat
-        IF(stat) THEN deleteMSG(gfh)
+      aePuts('Delete original message ')
+      stat:=yesNo(2)
+      IF(stat<0) THEN RETURN stat
+      IF(stat) THEN deleteMSG(gfh)
     ENDIF
   ENDIF
 
- aePuts('\b\nSaving...')
+  aePuts('\b\nSaving...')
  
   StringF(tempStr,'\s\d',msgBaseLocation,mailHeader.msgNumb)
   IF loadMsg(tempStr)
@@ -10362,10 +10328,10 @@ PROC replyToMSG(gfh)
   
   IF checkSecurity(ACS_DELETE_MESSAGE)
     IF(stringCompare(frm,confMailName)=RESULT_SUCCESS)
-        aePuts('Delete original message ')
-        stat:=yesNo(2)
-        IF(stat<0) THEN RETURN stat
-        IF(stat) THEN deleteMSG(gfh)
+      aePuts('Delete original message ')
+      stat:=yesNo(2)
+      IF(stat<0) THEN RETURN stat
+      IF(stat) THEN deleteMSG(gfh)
     ENDIF
   ENDIF
   
@@ -10379,57 +10345,40 @@ PROC checkToForward(str,name,check)
 
   IF readToolType(TOOLTYPE_CONF,currentConf,'FORWARDMAIL',str)
     IF(str[StrLen(str)-1]="\n") THEN SetStr(str,StrLen(str)-1)
-     IF(check)
-       loadAccount(1,tempUser,tempUserKeys,tempUserMisc)
-       IF(stringCompare(name,tempUser.name)=RESULT_SUCCESS)
-         IF(stat:=findUserFromName(1,confNameType,str,tempUser,tempUserKeys,tempUserMisc))
-           SELECT confNameType
-              CASE NAME_TYPE_USERNAME
+    IF(check)
+      loadAccount(1,tempUser,tempUserKeys,tempUserMisc)
+      IF(stringCompare(name,tempUser.name)=RESULT_SUCCESS)
+        IF(stat:=findUserFromName(1,confNameType,str,tempUser,tempUserKeys,tempUserMisc))
+          SELECT confNameType
+             CASE NAME_TYPE_USERNAME
+              StringF(tempStr,'    [36mForwarding mail To[33m:[0m \s\b\n',tempUserKeys.userName)
+            CASE NAME_TYPE_REALNAME
+              StringF(tempStr,'    [36mForwarding mail To[33m:[0m \s\b\n',tempUserMisc.realName)
+            CASE NAME_TYPE_INTERNETNAME
+              StringF(tempStr,'    [36mForwarding mail To[33m:[0m \s\b\n',tempUserMisc.internetName)
+          ENDSELECT
+          aePuts(tempStr)
+          AstrCopy(name,tempUserKeys.userName,31)
+          error:=1
+        ENDIF
+      ENDIF
+    ELSE
+      IF(stat:=findUserFromName(1,confNameType,str,tempUser,tempUserKeys,tempUserMisc))
+          SELECT confNameType
+             CASE NAME_TYPE_USERNAME
                StringF(tempStr,'    [36mForwarding mail To[33m:[0m \s\b\n',tempUserKeys.userName)
-             CASE NAME_TYPE_REALNAME
+            CASE NAME_TYPE_REALNAME
                StringF(tempStr,'    [36mForwarding mail To[33m:[0m \s\b\n',tempUserMisc.realName)
-             CASE NAME_TYPE_INTERNETNAME
+            CASE NAME_TYPE_INTERNETNAME
                StringF(tempStr,'    [36mForwarding mail To[33m:[0m \s\b\n',tempUserMisc.internetName)
-           ENDSELECT
-           aePuts(tempStr)
-           AstrCopy(name,tempUserKeys.userName,31)
-           error:=1
-         ENDIF
-       ENDIF
-     ELSE
-       IF(stat:=findUserFromName(1,confNameType,str,tempUser,tempUserKeys,tempUserMisc))
-           SELECT confNameType
-              CASE NAME_TYPE_USERNAME
-                StringF(tempStr,'    [36mForwarding mail To[33m:[0m \s\b\n',tempUserKeys.userName)
-             CASE NAME_TYPE_REALNAME
-                StringF(tempStr,'    [36mForwarding mail To[33m:[0m \s\b\n',tempUserMisc.realName)
-             CASE NAME_TYPE_INTERNETNAME
-                StringF(tempStr,'    [36mForwarding mail To[33m:[0m \s\b\n',tempUserMisc.internetName)
-           ENDSELECT
-         aePuts(tempStr)
-         AstrCopy(name,tempUserKeys.userName,31)
-         error:=1
-       ENDIF
-     ENDIF
+          ENDSELECT
+        aePuts(tempStr)
+        AstrCopy(name,tempUserKeys.userName,31)
+        error:=1
+      ENDIF
+    ENDIF
   ENDIF
 ENDPROC error
-
-PROC clearMsgBuf()
-  DEF i
-  
-  FOR i:=0 TO ListLen(msgBuf)-1
-    DisposeLink(ListItem(msgBuf,i))
-  ENDFOR
-  SetList(msgBuf,0)
-ENDPROC
-
-PROC setMsgBufItem(n,str)
-  DEF c
-  WHILE (c:=ListLen(msgBuf))<(n+1)
-    ListAdd(msgBuf,[String(255)])
-  ENDWHILE
-  StrCopy(msgBuf[n],str)
-ENDPROC
 
 PROC saveMsg(s)
   DEF f,i=0
@@ -10437,13 +10386,12 @@ PROC saveMsg(s)
   IF(lines)
     IF (f:=Open(s,MODE_NEWFILE))>0
       WHILE lines
-        fileWriteLn(f,msgBuf[i])
-        DisposeLink(ListItem(msgBuf,i))
+        fileWriteLn(f,msgBuf.item(i))
         lines--
         i++
       ENDWHILE
       Close(f)
-      SetList(msgBuf,0)
+      msgBuf.clear()
       RETURN 1
     ENDIF
   ENDIF
@@ -10454,74 +10402,75 @@ PROC loadMsg(s)
   DEF loadStr[255]:STRING
 
   lines:=0
-  clearMsgBuf()
+  msgBuf.clear()
   StrCopy(loadStr,s,ALL)
   IF(f:=Open(loadStr,MODE_OLDFILE))>0
   
-     WHILE((ReadStr(f,loadStr)<>-1) AND (lines<ListMax(msgBuf)))
-       setMsgBufItem(lines,loadStr)
-       lines++
-     ENDWHILE
-    ->IF StrLen(msgBuf[lines])>0 THEN lines++
+    WHILE(ReadStr(f,loadStr)<>-1)
+      removeCR(loadStr)
+      msgBuf.add(loadStr)
+      lines++
+    ENDWHILE
+    ->IF StrLen(msgBuf.item(lines))>0 THEN lines++
       
-     Close(f)
+    Close(f)
     /* temp:=lines-1
      WHILE(temp>0)
-        stripReturn(&MsgBuf[temp][0])
-        if(MsgBuf[temp][0]=='\0') temp--
+        stripReturn(&MsgBuf.item(temp)[0])
+        if(MsgBuf.item(temp)[0]=='\0') temp--
         else break
      ENDWHILE
      lines:=temp+1*/
-     RETURN 1
- ENDIF
+    RETURN 1
+  ENDIF
 
 ENDPROC FALSE
 
 PROC msgToHeader()
- aePuts('\b\n                       [32m([33m------------------------------[32m)[0m\b\n')
- aePuts('     [36mTo[33m: [32m([33mEnter[32m)[0m=[32m''[33mALL[32m''[32m?[0m ')
+  aePuts('\b\n                       [32m([33m------------------------------[32m)[0m\b\n')
+  aePuts('     [36mTo[33m: [32m([33mEnter[32m)[0m=[32m''[33mALL[32m''[32m?[0m ')
 ENDPROC
 
 PROC processLine(pat, vorig, dest)
- DEF i,i2,nff
- DEF rep[80]:STRING
- DEF orig[100] : STRING
-
- StrCopy(orig,vorig,ALL)
- FOR i:=0 TO StrLen(pat)-1
-     EXIT pat[i]=";"
- ENDFOR
-
- IF(i>=StrLen(pat)) THEN RETURN 0
-
- StrCopy(rep,pat+i+1,ALL)
- SetStr(pat,i)
-
- StrCopy(dest,'',ALL)
-
- FOR i:=0 TO StrLen(orig)-StrLen(pat)
-     nff:=1
-     IF(pat[0]=orig[i])
-         nff:=0
-         i2:=i+1
-         WHILE((i2-i)<StrLen(pat)) 
-             IF(pat[i2-i]<>orig[i2]) 
-                 nff:=1
-                 JUMP wbrk
-             ENDIF
-          i2++
-         ENDWHILE
-        wbrk:
-     ENDIF
-     IF(nff<>1)
-         SetStr(orig,i)
-         StrCopy(dest,orig,ALL)
-         StrAdd(dest,rep)
-         IF(i2<StrLen(vorig)) THEN StrAdd(dest,orig[i2])
-         dest[75]:=0
-         RETURN 1
-     ENDIF
- ENDFOR
+  DEF i,i2,nff
+  DEF rep[80]:STRING
+  DEF orig[100] : STRING
+  
+  StrCopy(orig,vorig,ALL)
+  FOR i:=0 TO StrLen(pat)-1
+    EXIT pat[i]=";"
+  ENDFOR
+  
+  IF(i>=StrLen(pat)) THEN RETURN 0
+  
+  StrCopy(rep,pat+i+1,ALL)
+  SetStr(pat,i)
+  
+  StrCopy(dest,'',ALL)
+  
+  FOR i:=0 TO StrLen(orig)-StrLen(pat)
+    nff:=1
+    IF(pat[0]=orig[i])
+      nff:=0
+      i2:=i+1
+      WHILE((i2-i)<StrLen(pat)) 
+          IF(pat[i2-i]<>orig[i2]) 
+              nff:=1
+              JUMP wbrk
+          ENDIF
+       i2++
+      ENDWHILE
+wbrk:
+    ENDIF
+    IF(nff<>1)
+      SetStr(orig,i)
+      StrCopy(dest,orig,ALL)
+      StrAdd(dest,rep)
+      IF(i2<StrLen(vorig)) THEN StrAdd(dest,orig[i2])
+      dest[75]:=0
+      RETURN 1
+    ENDIF
+  ENDFOR
 
 ENDPROC 0
 
@@ -10552,18 +10501,18 @@ PROC editDirFile(params)
  
   parseParams(params)
   REPEAT
-      IF StrLen(tempStr)=0
-          StringF(tempStr,'\b\nDirectory to Edit[1-\d]? ',maxDirs)
-          aePuts(tempStr)
-          stat:=lineInput('','',5,INPUT_TIMEOUT,tempStr)
-          IF((stat<0) OR (StrLen(tempStr)=0))
-              aePuts('\b\n')
-              RETURN
-          ENDIF
+    IF StrLen(tempStr)=0
+      StringF(tempStr,'\b\nDirectory to Edit[1-\d]? ',maxDirs)
+      aePuts(tempStr)
+      stat:=lineInput('','',5,INPUT_TIMEOUT,tempStr)
+      IF((stat<0) OR (StrLen(tempStr)=0))
+        aePuts('\b\n')
+        RETURN
       ENDIF
-      which:=Val(tempStr)
-      StrCopy(tempStr,'')
-      IF((which<1) OR (which>maxDirs)) THEN aePuts('\b\nNo such directory!\b\n')
+    ENDIF
+    which:=Val(tempStr)
+    StrCopy(tempStr,'')
+    IF((which<1) OR (which>maxDirs)) THEN aePuts('\b\nNo such directory!\b\n')
   UNTIL (which>=1) AND (which<=maxDirs)
  
   StringF(tempStr,'\sDir\d',currentConfDir,which)
@@ -10579,8 +10528,8 @@ PROC editAnyFile(params)
   setEnvStat(ENV_SYSOP)
 
   parseParams(params)
-  IF(ListLen(parsedParams)>0)
-    StrCopy(tempStr,parsedParams[0])
+  IF(parsedParams.count()>0)
+    StrCopy(tempStr,parsedParams.item(0))
   ELSE
     aePuts('\b\nFullPath/Filename to Editor? ')
     stat:=lineInput('','',250,INPUT_TIMEOUT,tempStr)
@@ -10610,10 +10559,10 @@ PROC edit(allowFullscreen=TRUE,maxLineLen=75)
   DEF tempstr[255]:STRING
 
 /* Clear msg buffer */
- rzmsg:=NIL
- StrCopy(str,'',ALL)
- x:=0
- bkFlag:=0
+  rzmsg:=NIL
+  StrCopy(str,'',ALL)
+  x:=0
+  bkFlag:=0
 
   StringF(str,'\sCommands/SysCmd/FULLEDIT.info',cmds.bbsLoc)
   IF(fileExists(str) AND checkSecurity(ACS_FULL_EDIT) AND (loggedOnUser.editorType<>1))
@@ -10669,7 +10618,7 @@ PROC edit(allowFullscreen=TRUE,maxLineLen=75)
   ENDIF
 
   aePuts('\b\n')
-  StringF(tempstr,'   Enter your text. (Enter) alone to end. (\d chars/line, \d lines, max)\b\n',maxLineLen,ListMax(msgBuf))
+  StringF(tempstr,'   Enter your text. (Enter) alone to end. (\d chars/line)\b\n',maxLineLen)
   aePuts(tempstr)
   StrCopy(str,'|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|')
   SetStr(str,maxLineLen)
@@ -10678,462 +10627,458 @@ PROC edit(allowFullscreen=TRUE,maxLineLen=75)
   IF(lines<>0)
     FOR j:=0 TO lines-1
       IF j<=98
-        StringF(space,'\d[2]> \s\b\n',j+1,msgBuf[j])
+        StringF(space,'\d[2]> \s\b\n',j+1,msgBuf.item(j))
       ELSE
-        StringF(space,'\d[3]> \s\b\n',j+1,msgBuf[j])
+        StringF(space,'\d[3]> \s\b\n',j+1,msgBuf.item(j))
       ENDIF
       aePuts(space)
     ENDFOR
   ENDIF
 /*removed (JOE)
 
- if(Lines!=0) {
+  if(Lines!=0) {
      for(j=0 j<Lines j++) {
-         sprintf(SPACE,"%2d> \s\b\n",j+1,MsgBuf[j])
+         sprintf(SPACE,"%2d> \s\b\n",j+1,MsgBuf.item(j))
          AEPutStr(SPACE)
      }
  }
 */
   StrCopy(space,'',ALL)
 
- rawArrow:=TRUE
+  rawArrow:=TRUE
+  
+  REPEAT
+    bEG_IN:
+    msgBuf.setItem(lines,space)
+    IF lines<=98
+     StringF(str,'\d[2]> \s',lines+1,msgBuf.item(lines))
+    ELSE
+     StringF(str,'\d[3]> \s',lines+1,msgBuf.item(lines))
+    ENDIF
+    aePuts(str)
+  
+    WHILE TRUE
+next2:
 
- REPEAT
-     bEG_IN:
-     setMsgBufItem(lines,space)
-     IF lines<=98
-      StringF(str,'\d[2]> \s',lines+1,msgBuf[lines])
-     ELSE
-      StringF(str,'\d[3]> \s',lines+1,msgBuf[lines])
-     ENDIF
-     aePuts(str)
-
-     WHILE TRUE
-         next2:
-
-         c:=readChar(INPUT_TIMEOUT)
-         IF(c<0) THEN RETURN c        
-         IF(c=13) 
-             IF(StrLen(space)=0)
-                 setMsgBufItem(lines,'')
-                 bkFlag:=1
-                 JUMP brk
-             ENDIF
-             setMsgBufItem(lines,space)
-             StrCopy(space,'',ALL)
-             aePuts('\b\n')
-             x:=0
-             JUMP brk
-         ENDIF
-         IF(c=30) 
-             StrCopy(tempstr,'')
-             WHILE(x)
-                 strAddChar(tempstr,8)
-                 StrAdd(tempstr,' ')
-                 strAddChar(tempstr,8)
-                 x--
-             ENDWHILE
-             aePuts(tempstr)
-             StrCopy(space,'',ALL)
-             JUMP next2
-         ENDIF
-         IF(c=CHAR_BACKSPACE)
-          StrCopy(tempstr,'')
-          IF x>0
-            strAddChar(tempstr,c)
-            x--
-            FOR i:=x TO StrLen(space)-2
-              space[i]:=space[i+1]
-              strAddChar(tempstr,space[i+1])
-            ENDFOR
-            StrAdd(tempstr,' ')
-            FOR i:=x TO StrLen(space)-1
-              StrAdd(tempstr,'[1D')
-            ENDFOR
-            
-            SetStr(space,EstrLen(space)-1)      
-            aePuts(tempstr)
+      c:=readChar(INPUT_TIMEOUT)
+      IF(c<0) THEN RETURN c        
+      IF(c=13) 
+        IF(StrLen(space)=0)
+          msgBuf.setItem(lines,'')
+          bkFlag:=1
+          JUMP brk
+        ENDIF
+        msgBuf.setItem(lines,space)
+        StrCopy(space,'',ALL)
+        aePuts('\b\n')
+        x:=0
+        JUMP brk
+      ENDIF
+      IF(c=30) 
+        StrCopy(tempstr,'')
+        WHILE(x)
+          strAddChar(tempstr,8)
+          StrAdd(tempstr,' ')
+          strAddChar(tempstr,8)
+          x--
+        ENDWHILE
+        aePuts(tempstr)
+        StrCopy(space,'',ALL)
+        JUMP next2
+      ENDIF
+      IF(c=CHAR_BACKSPACE)
+        StrCopy(tempstr,'')
+        IF x>0
+          strAddChar(tempstr,c)
+          x--
+          FOR i:=x TO StrLen(space)-2
+            space[i]:=space[i+1]
+            strAddChar(tempstr,space[i+1])
+          ENDFOR
+          StrAdd(tempstr,' ')
+          FOR i:=x TO StrLen(space)-1
+            StrAdd(tempstr,'[1D')
+          ENDFOR
+          
+          SetStr(space,EstrLen(space)-1)      
+          aePuts(tempstr)
+        ENDIF
+        JUMP next2
+      ENDIF
+      IF (c=CHAR_DELETE)
+        StrCopy(tempstr,'')
+        IF x<(StrLen(space))
+          FOR i:=x TO StrLen(space)-2
+            space[i]:=space[i+1]
+            strAddChar(tempstr,space[i+1])
+          ENDFOR
+          StrAdd(tempstr,' ')
+          FOR i:=x TO StrLen(space)-1
+            StrAdd(tempstr,'[1D')
+          ENDFOR
+          SetStr(space,EstrLen(space)-1)      
+          aePuts(tempstr)
+        ENDIF
+        JUMP next2
+      ENDIF
+      IF(c=CHAR_TAB)
+        c:=Mod(x,8)
+        IF x=(StrLen(space))
+          IF(x+(8-c)>maxLineLen-3)
+            c:=CHAR_TAB
+          ELSE
+            WHILE c<8
+              StrCopy(str2,' ',ALL)
+              aePuts(' ')
+              StrAdd(space,str2)
+              x++
+              c++
+            ENDWHILE
           ENDIF
-          JUMP next2
-         ENDIF
-         IF (c=CHAR_DELETE)
-          StrCopy(tempstr,'')
-          IF x<(StrLen(space))
-            FOR i:=x TO StrLen(space)-2
-              space[i]:=space[i+1]
-              strAddChar(tempstr,space[i+1])
-            ENDFOR
-            StrAdd(tempstr,' ')
-            FOR i:=x TO StrLen(space)-1
-              StrAdd(tempstr,'[1D')
-            ENDFOR
-            SetStr(space,EstrLen(space)-1)      
-            aePuts(tempstr)
-          ENDIF
-          JUMP next2
-         ENDIF
-         IF(c=CHAR_TAB)
-           c:=Mod(x,8)
-           IF x=(StrLen(space))
-             IF(x+(8-c)>maxLineLen-3)
-              c:=CHAR_TAB
-             ELSE
-                 WHILE c<8
-                    StrCopy(str2,' ',ALL)
-                    aePuts(' ')
-                    StrAdd(space,str2)
-                    x++
-                    c++
-                 ENDWHILE
-             ENDIF
-           ELSE
-             IF(StrLen(space)+(7-c)<maxLineLen)
-               FOR i:=c TO 7
-                StrCopy(tempstr,'')
-                StrAdd(space,'#')
-               ENDFOR
-               FOR i:=StrLen(space)-1 TO x+(7-c) STEP -1
-                 space[i]:=space[i-(8-c)]
-               ENDFOR
-
-               FOR i:=c TO 7
-                space[x]:=" "
-                sendChar(" ")
-                x++
-               ENDFOR
-
-                FOR i:=x TO StrLen(space)-1
-                  strAddChar(tempstr,space[i])
-                ENDFOR
-                FOR i:=x TO StrLen(space)-1
-                  StrAdd(tempstr,'[1D')
-                ENDFOR
-                aePuts(tempstr)
-             ELSE
-              c:=CHAR_TAB
-             ENDIF
-           ENDIF
-         ENDIF
-         IF ((c=LEFTARROW) AND (x>0))
-           x--
-           aePuts('[1D')
-         ENDIF
-         IF ((c=RIGHTARROW) AND (x<(StrLen(space))))
-           x++
-           aePuts('[1C')
-         ENDIF
-
-         IF(c<" ") THEN JUMP next2
-
-         IF (x<StrLen(space))
-            IF StrLen(space)<maxLineLen
+        ELSE
+          IF(StrLen(space)+(7-c)<maxLineLen)
+            FOR i:=c TO 7
               StrCopy(tempstr,'')
               StrAdd(space,'#')
-              FOR i:=StrLen(space)-1 TO x+1 STEP -1
-                space[i]:=space[i-1]
-              ENDFOR
-              space[x]:=c
-              sendChar(c)
+            ENDFOR
+            FOR i:=StrLen(space)-1 TO x+(7-c) STEP -1
+              space[i]:=space[i-(8-c)]
+            ENDFOR
+        
+            FOR i:=c TO 7
+              space[x]:=" "
+              sendChar(" ")
               x++
-              FOR i:=x TO StrLen(space)-1
-                strAddChar(tempstr,space[i])
-              ENDFOR
-              FOR i:=x TO StrLen(space)-1
-                StrAdd(tempstr,'[1D')
-              ENDFOR
-              aePuts(tempstr)
-            ENDIF
-         ELSE
-           x++
-           sendChar(c)
-           StrCopy(str2,' ',ALL)
-           str2[0]:=c
-           StrAdd(space,str2)
-         ENDIF
-
-         IF(x>maxLineLen) 
-             back:=0
-             brkflag:=FALSE
-             FOR cn:=x TO 1 STEP -1
-                 IF(space[cn-1]=" ")
-                     back:=x-cn
-                     SetStr(space,cn-1)
-                     brkflag:=TRUE
-                 ENDIF
-                 EXIT brkflag
-             ENDFOR
-             IF(back=0)
-                 setMsgBufItem(lines,space)
-                 aePuts('\b\n')
-                 StrCopy(space,'',ALL)
-                 x:=0
-                 JUMP brk
-             ENDIF
-             StrCopy(str,'',ALL)
-             FOR cn:=x-back TO x-1
-                 StrCopy(str2,' ',ALL)
-                 str2[0]:=space[cn]
-                 StrAdd(str,str2)
-             ENDFOR
-             x:=StrLen(str)
-             setMsgBufItem(lines,space)
-             StrCopy(space,str,ALL)
-             StrCopy(tempstr,'')
-             FOR cn:=0 TO x
-                 strAddChar(tempstr,8)
-                 StrAdd(tempstr,' ')
-                 strAddChar(tempstr,8)
-             ENDFOR
-             aePuts(tempstr)
-             aePuts('\b\n')
-             JUMP brk
-         ENDIF
-     ENDWHILE
-brk:
-     lines++
-     IF((lines=(ListMax(msgBuf)-2)) AND (bkFlag=0)) THEN aePuts('\b\nWarning two lines remaining.\b\n\b\n')
-
- UNTIL (bkFlag<>0) OR (lines>=ListMax(msgBuf))
-
-  IF(lines<ListMax(msgBuf))
-      lines--
-  ELSE
-      lines:=ListMax(msgBuf)
-  ENDIF
-  SetList(msgBuf,lines)
-
- rawArrow:=FALSE
-
- aePuts('\b\n')
-
- REPEAT
-cont2:
-      IF(helplist=0)
-       aePuts('\b\n[32mMsg. Options: [33mA[36m,[33mC[36m,[33mD[36m,[33mE')
-       IF(checkSecurity(ACS_ATTACH_FILES) AND fileattach) THEN aePuts('[36m,[33mF')
-       aePuts('[36m,[33mL[36m,[33mS')
-       IF(fileattach AND (((mailHeader.status="P") AND checkSecurity(ACS_PUB_MSGFILES)) OR (checkSecurity(ACS_PRI_MSGFILES) AND (mailHeader.status<>"P")))) THEN aePuts('[36m,[33mX')
-       aePuts('[36m,[33m? [0m>:')
-      ELSE
-         aePuts('\b\n[33mA[32m>[36mbort[0m')
-         aePuts('\b\n[33mC[32m>[36montinue[0m')
-         aePuts('\b\n[33mD[32m>[36melete Lines[0m')
-         aePuts('\b\n[33mE[32m>[36mdit[0m')
-         IF (fileattach AND checkSecurity(ACS_ATTACH_FILES)) THEN aePuts('\b\n[33mF[32m>[36mile Attachment[0m')
-         aePuts('\b\n[33mL[32m>[36mist[0m')
-         aePuts('\b\n[33mS[32m>[36mave[0m')
-         IF(fileattach AND (((mailHeader.status="P") AND checkSecurity(ACS_PUB_MSGFILES)) OR (checkSecurity(ACS_PRI_MSGFILES) AND (mailHeader.status<>"P")))) THEN aePuts('\b\n[33mX[32m>[36mfer Files[0m')
-         aePuts('\b\n[0m >: ')
-         helplist:=0
+            ENDFOR
+        
+            FOR i:=x TO StrLen(space)-1
+              strAddChar(tempstr,space[i])
+            ENDFOR
+            FOR i:=x TO StrLen(space)-1
+              StrAdd(tempstr,'[1D')
+            ENDFOR
+            aePuts(tempstr)
+          ELSE
+            c:=CHAR_TAB
+          ENDIF
+        ENDIF
       ENDIF
-     stat:=lineInput('','',10,INPUT_TIMEOUT,str)
-     
-     messageMenuChar:=str[0]
-     IF stat<0 THEN RETURN stat
-
-
-     IF(str[0]="?")
-        helplist:=1
-        JUMP cont2
-     ENDIF
-     IF((str[0]="D") OR (str[0]="d"))
-         REPEAT
-             IF(lines=0)
-                 aePuts('\b\nNo lines to delete.\b\n')
-                 stat:=0
-                 JUMP brk3
-             ENDIF
+      IF ((c=LEFTARROW) AND (x>0))
+        x--
+        aePuts('[1D')
+      ENDIF
+      IF ((c=RIGHTARROW) AND (x<(StrLen(space))))
+        x++
+        aePuts('[1C')
+      ENDIF
+   
+      IF(c<" ") THEN JUMP next2
+   
+      IF (x<StrLen(space))
+        IF StrLen(space)<maxLineLen
+          StrCopy(tempstr,'')
+          StrAdd(space,'#')
+          FOR i:=StrLen(space)-1 TO x+1 STEP -1
+            space[i]:=space[i-1]
+          ENDFOR
+          space[x]:=c
+          sendChar(c)
+          x++
+          FOR i:=x TO StrLen(space)-1
+            strAddChar(tempstr,space[i])
+          ENDFOR
+          FOR i:=x TO StrLen(space)-1
+            StrAdd(tempstr,'[1D')
+          ENDFOR
+          aePuts(tempstr)
+        ENDIF
+      ELSE
+        x++
+        sendChar(c)
+        StrCopy(str2,' ',ALL)
+        str2[0]:=c
+        StrAdd(space,str2)
+      ENDIF
+   
+      IF(x>maxLineLen) 
+        back:=0
+        brkflag:=FALSE
+        FOR cn:=x TO 1 STEP -1
+          IF(space[cn-1]=" ")
+            back:=x-cn
+            SetStr(space,cn-1)
+            brkflag:=TRUE
+          ENDIF
+          EXIT brkflag
+        ENDFOR
+        IF(back=0)
+          msgBuf.setItem(lines,space)
+          aePuts('\b\n')
+          StrCopy(space,'',ALL)
+          x:=0
+          JUMP brk
+        ENDIF
+        StrCopy(str,'',ALL)
+        FOR cn:=x-back TO x-1
+          StrCopy(str2,' ',ALL)
+          str2[0]:=space[cn]
+          StrAdd(str,str2)
+        ENDFOR
+        x:=StrLen(str)
+        msgBuf.setItem(lines,space)
+        StrCopy(space,str,ALL)
+        StrCopy(tempstr,'')
+        FOR cn:=0 TO x
+          strAddChar(tempstr,8)
+          StrAdd(tempstr,' ')
+          strAddChar(tempstr,8)
+        ENDFOR
+        aePuts(tempstr)
+        aePuts('\b\n')
+        JUMP brk
+      ENDIF
+    ENDWHILE
+brk:
+    lines++
+    ->IF((lines=(msgBuf.maxSize()-2)) AND (bkFlag=0)) THEN aePuts('\b\nWarning two lines remaining.\b\n\b\n')   ->no limit on list size now
+  
+  UNTIL (bkFlag<>0) ->OR (lines>=ListMax(msgBuf))  max limit removed
+  
+   /*IF(lines<ListMax(msgBuf))
+       lines--
+   ELSE
+       lines:=ListMax(msgBuf)
+   ENDIF*/
+   lines--
+   msgBuf.setSize(lines)
+  
+  rawArrow:=FALSE
+  
+  aePuts('\b\n')
+  
+  REPEAT
+cont2:
+    IF(helplist=0)
+      aePuts('\b\n[32mMsg. Options: [33mA[36m,[33mC[36m,[33mD[36m,[33mE')
+      IF(checkSecurity(ACS_ATTACH_FILES) AND fileattach) THEN aePuts('[36m,[33mF')
+      aePuts('[36m,[33mL[36m,[33mS')
+      IF(fileattach AND (((mailHeader.status="P") AND checkSecurity(ACS_PUB_MSGFILES)) OR (checkSecurity(ACS_PRI_MSGFILES) AND (mailHeader.status<>"P")))) THEN aePuts('[36m,[33mX')
+      aePuts('[36m,[33m? [0m>:')
+    ELSE
+      aePuts('\b\n[33mA[32m>[36mbort[0m')
+      aePuts('\b\n[33mC[32m>[36montinue[0m')
+      aePuts('\b\n[33mD[32m>[36melete Lines[0m')
+      aePuts('\b\n[33mE[32m>[36mdit[0m')
+      IF (fileattach AND checkSecurity(ACS_ATTACH_FILES)) THEN aePuts('\b\n[33mF[32m>[36mile Attachment[0m')
+      aePuts('\b\n[33mL[32m>[36mist[0m')
+      aePuts('\b\n[33mS[32m>[36mave[0m')
+      IF(fileattach AND (((mailHeader.status="P") AND checkSecurity(ACS_PUB_MSGFILES)) OR (checkSecurity(ACS_PRI_MSGFILES) AND (mailHeader.status<>"P")))) THEN aePuts('\b\n[33mX[32m>[36mfer Files[0m')
+      aePuts('\b\n[0m >: ')
+      helplist:=0
+    ENDIF
+    stat:=lineInput('','',10,INPUT_TIMEOUT,str)
+      
+    messageMenuChar:=str[0]
+    IF stat<0 THEN RETURN stat
+ 
+ 
+    IF(str[0]="?")
+      helplist:=1
+      JUMP cont2
+      ENDIF
+      IF((str[0]="D") OR (str[0]="d"))
+        REPEAT
+          IF(lines=0)
+            aePuts('\b\nNo lines to delete.\b\n')
+            stat:=0
+            JUMP brk3
+          ENDIF
 /*
-             if(Lines==89)   Lines+=1
+         if(Lines==89)   Lines+=1
 */
-             StringF(str,'\b\n[36mLine number to delete [32m[[33m1[32m..[33m\d[32m][0m? ',lines)
-             aePuts(str)
-             stat:=lineInput('','',5,INPUT_TIMEOUT,str)
-             IF (stat<0) THEN JUMP brk3
-             
-             IF(StrLen(str)=0) 
-                stat:=0
-                JUMP brk3
-             ENDIF
-             stat:=Val(str)
-
-             IF((stat<1) OR (stat>lines))
-                 StringF(str,'\b\nLine \d does not exist.\b\n',stat)
-                 aePuts(str)
-             ENDIF
-         UNTIL (stat>0) AND (stat<=lines)
-         brk3:
-
-         IF stat<0 THEN RETURN stat
-
-         IF (stat=0) THEN JUMP cont2
-
-         IF stat<=99
-          StringF(str,'\b\n\d[2]> \s\b\n',stat,msgBuf[stat-1])
-         ELSE
-          StringF(str,'\b\n\d[3]> \s\b\n',stat,msgBuf[stat-1])
-         ENDIF
-         
-         aePuts(str)
-         aePuts('\b\n[36mIs this the correct line [32m([33mY[32m/[33mN[32m)[0m? ')
-         cn:=yesNo(0)
-         IF cn<0 THEN RETURN stat
-
-         IF(cn)
-             FOR j:=(stat-1) TO lines-1
-               setMsgBufItem(j,msgBuf[j+1])
-             ENDFOR
-
-             StringF(str,'\b\nDeleted line \d.\b\n',stat)
-             lines--
-             DisposeLink(msgBuf[lines])
-             SetList(msgBuf,lines)
-             aePuts(str)
-         ENDIF
-         JUMP cont2
-     ENDIF
-
-     IF((str[0]="C") OR (str[0]="c")) 
-         aePuts('\b\n')
-         lines--
-         IF(lines<0) THEN lines:=0
-         StrCopy(space,msgBuf[lines],ALL)
-         DisposeLink(msgBuf[lines])
-         SetList(msgBuf,lines)
-         
-         bkFlag:=0
-         x:=StrLen(space)
-         JUMP bEG_IN
-     ENDIF
-     IF((str[0]="E") OR (str[0]="e")) 
-         IF(lines<1) 
-             aePuts('\b\nNo Lines to edit!\b\n')
-             JUMP cont2
-         ENDIF
+          StringF(str,'\b\n[36mLine number to delete [32m[[33m1[32m..[33m\d[32m][0m? ',lines)
+          aePuts(str)
+          stat:=lineInput('','',5,INPUT_TIMEOUT,str)
+          IF (stat<0) THEN JUMP brk3
+          
+          IF(StrLen(str)=0) 
+            stat:=0
+            JUMP brk3
+          ENDIF
+          stat:=Val(str)
+ 
+          IF((stat<1) OR (stat>lines))
+            StringF(str,'\b\nLine \d does not exist.\b\n',stat)
+            aePuts(str)
+          ENDIF
+        UNTIL (stat>0) AND (stat<=lines)
+brk3:
+ 
+      IF stat<0 THEN RETURN stat
+ 
+      IF (stat=0) THEN JUMP cont2
+ 
+      IF stat<=99
+        StringF(str,'\b\n\d[2]> \s\b\n',stat,msgBuf.item(stat-1))
+      ELSE
+        StringF(str,'\b\n\d[3]> \s\b\n',stat,msgBuf.item(stat-1))
+      ENDIF
+      
+      aePuts(str)
+      aePuts('\b\n[36mIs this the correct line [32m([33mY[32m/[33mN[32m)[0m? ')
+      cn:=yesNo(0)
+      IF cn<0 THEN RETURN stat
+ 
+      IF(cn)
+        msgBuf.remove(stat-1)
+ 
+        StringF(str,'\b\nDeleted line \d.\b\n',stat)
+        lines--
+        aePuts(str)
+      ENDIF
+      JUMP cont2
+    ENDIF
+ 
+    IF((str[0]="C") OR (str[0]="c")) 
+      aePuts('\b\n')
+      lines--
+      IF(lines<0) THEN lines:=0
+      StrCopy(space,msgBuf.item(lines),ALL)
+      msgBuf.setSize(lines)
+      
+      bkFlag:=0
+      x:=StrLen(space)
+      JUMP bEG_IN
+    ENDIF
+    IF((str[0]="E") OR (str[0]="e")) 
+      IF(lines<1) 
+        aePuts('\b\nNo Lines to edit!\b\n')
+        JUMP cont2
+      ENDIF
 loopHere:
-         StringF(str,'\b\n[36mLine number to edit [32m[[33m1[32m..[33m\d[32m][0m? ',lines)
-         aePuts(str)
-
-         stat:=lineInput('','',5,INPUT_TIMEOUT,str)
-         IF (stat<0) THEN RETURN RESULT_TIMEOUT
-         IF(StrLen(str)=0) THEN JUMP cont2
-
-         x:=Val(str)
-         IF((x<1) OR (x>lines))
-             StringF(str,'\b\nLine \d does not exist.\b\n',x)
-             aePuts(str)
-             JUMP loopHere
-         ENDIF
-         StrCopy(temp,msgBuf[x-1])
-         aePuts('\b\n    Edit Line')
-         aePuts('\b\n   (---------------------------------------------------------------------------)')
-         stat:=lineInput('\b\n    ',temp,maxLineLen,INPUT_TIMEOUT,temp)
-         IF (stat<0) THEN RETURN stat
-         setMsgBufItem(x-1,temp)
-         
-         /*StringF(space,'\b\n\d[2]> \s\b\n',x,msgBuf[x-1])
-         aePuts(space)
-         aePuts('\b\n    Old string;New string')
-         aePuts('\b\n   (------------------------------------------------------------)')
-         aePuts('\b\n   :')
-
-         stat:=lineInput('','',60,INPUT_TIMEOUT,str)
-         IF(stat<0) THEN RETURN RESULT_TIMEOUT
-         IF(StrLen(str)=0) THEN JUMP cont2
-
-         stat:=processLine(str,msgBuf[x-1],temp)
-         IF(stat=0) 
-             aePuts('\b\nString not found!\b\n')
+      StringF(str,'\b\n[36mLine number to edit [32m[[33m1[32m..[33m\d[32m][0m? ',lines)
+      aePuts(str)
+ 
+      stat:=lineInput('','',5,INPUT_TIMEOUT,str)
+      IF (stat<0) THEN RETURN RESULT_TIMEOUT
+      IF(StrLen(str)=0) THEN JUMP cont2
+ 
+      x:=Val(str)
+      IF((x<1) OR (x>lines))
+        StringF(str,'\b\nLine \d does not exist.\b\n',x)
+        aePuts(str)
+        JUMP loopHere
+      ENDIF
+      StrCopy(temp,msgBuf.item(x-1))
+      aePuts('\b\n    Edit Line')
+      aePuts('\b\n   (---------------------------------------------------------------------------)')
+      stat:=lineInput('\b\n    ',temp,maxLineLen,INPUT_TIMEOUT,temp)
+      IF (stat<0) THEN RETURN stat
+      msgBuf.setItem(x-1,temp)
+      
+      /*StringF(space,'\b\n\d[2]> \s\b\n',x,msgBuf.item(x-1))
+      aePuts(space)
+      aePuts('\b\n    Old string;New string')
+      aePuts('\b\n   (------------------------------------------------------------)')
+      aePuts('\b\n   :')
+ 
+      stat:=lineInput('','',60,INPUT_TIMEOUT,str)
+      IF(stat<0) THEN RETURN RESULT_TIMEOUT
+      IF(StrLen(str)=0) THEN JUMP cont2
+ 
+      stat:=processLine(str,msgBuf.item(x-1),temp)
+      IF(stat=0) 
+        aePuts('\b\nString not found!\b\n')
+        JUMP cont2
+      ELSE
+        aePuts('\b\n    NewLine:\b\n    --------\b\n   >')
+        aePuts(temp)
+        aePuts('\b\n\b\nCorrect ')
+ 
+        stat:=yesNo(1)
+        IF (stat<0) THEN RETURN stat
+        IF (stat=0) THEN JUMP cont2
+ 
+        msgBuf.setItem(x-1,temp)
+      ENDIF*/
+      JUMP cont2
+    ENDIF
+ 
+    IF((str[0]="L") OR (str[0]="l")) 
+      aePuts('\b\n')
+      FOR j:=0 TO lines-1
+        IF j<=98
+          StringF(space,'\d[2]> \s\b\n',j+1,msgBuf.item(j))
+        ELSE
+          StringF(space,'\d[3]> \s\b\n',j+1,msgBuf.item(j))
+        ENDIF
+        aePuts(space)
+      ENDFOR
+      JUMP cont2
+    ENDIF
+ 
+    IF((str[0]="F") OR (str[0]="f") AND (disallowFileAttach=FALSE))
+      messageMenuChar:="F"
+ 
+      IF(checkSecurity(ACS_ATTACH_FILES) AND fileattach) 
+        WHILE TRUE
+          IF(ximPort=CONSOLE_PORT)
+            asl(attachedFile)
+          ELSE
+           aePuts('\b\nEnter path/filename to attach (''5 <DIR>''=DIR): ')
+           stat:=lineInput('','',250,INPUT_TIMEOUT,attachedFile)
+           IF(stat<0) THEN RETURN stat
+           IF((attachedFile[0]="5") AND (attachedFile[1]=" "))
+             myDirAnyWhere(attachedFile)
+             StrCopy(attachedFile,'')
              JUMP cont2
-         ELSE
-             aePuts('\b\n    NewLine:\b\n    --------\b\n   >')
-             aePuts(temp)
-             aePuts('\b\n\b\nCorrect ')
-
-             stat:=yesNo(1)
-             IF (stat<0) THEN RETURN stat
-             IF (stat=0) THEN JUMP cont2
-
-             setMsgBufItem(x-1,temp)
-         ENDIF*/
-         JUMP cont2
-     ENDIF
-
-     IF((str[0]="L") OR (str[0]="l")) 
-         aePuts('\b\n')
-         FOR j:=0 TO lines-1
-            IF j<=98
-              StringF(space,'\d[2]> \s\b\n',j+1,msgBuf[j])
-            ELSE
-              StringF(space,'\d[3]> \s\b\n',j+1,msgBuf[j])
+           ENDIF
+          ENDIF
+          IF(StrLen(attachedFile)>0)
+            LowerStr(attachedFile)
+            IF(findAssign(attachedFile))
+              aePuts('\b\nDevice not Mounted.\b\n')
+              aePuts('\b\n')
+              StrCopy(attachedFile,'')
+              JUMP cont2 
             ENDIF
-             aePuts(space)
-         ENDFOR
-         JUMP cont2
-     ENDIF
-
-     IF((str[0]="F") OR (str[0]="f") AND (disallowFileAttach=FALSE))
-         messageMenuChar:="F"
-
-         IF(checkSecurity(ACS_ATTACH_FILES) AND fileattach) 
-             WHILE TRUE
-                 IF(ximPort=CONSOLE_PORT)
-                    asl(attachedFile)
-                 ELSE
-                  aePuts('\b\nEnter path/filename to attach (''5 <DIR>''=DIR): ')
-                  stat:=lineInput('','',250,INPUT_TIMEOUT,attachedFile)
-                  IF(stat<0) THEN RETURN stat
-                  IF((attachedFile[0]="5") AND (attachedFile[1]=" "))
-                    myDirAnyWhere(attachedFile)
-                    StrCopy(attachedFile,'')
-                    JUMP cont2
-                  ENDIF
-                 ENDIF
-                 IF(StrLen(attachedFile)>0)
-                    LowerStr(attachedFile)
-                    IF(findAssign(attachedFile))
-                      aePuts('\b\nDevice not Mounted.\b\n')
-                      aePuts('\b\n')
-                      StrCopy(attachedFile,'')
-                      JUMP cont2 
-                    ENDIF
-                    IF(restricted(attachedFile))
-                      StrCopy(attachedFile,'')
-                      JUMP cont2 
-                    ELSE
-                      aePuts('Delete file when message is deleted ')
-                      stat:=yesNo(2)
-                      IF(stat<0) THEN RETURN stat
-                      LowerStr(attachedFile)
-                      IF(stat)
-                        attachedFile[0]:=charToUpper(attachedFile[0])
-                      ENDIF
-                    ENDIF
-                 ENDIF
-                 EXIT TRUE
-             ENDWHILE
-         ELSE
-            higherAccess()
-         ENDIF
-
-     ENDIF
-     IF((str[0]="S") OR (str[0]="s"))
-         loggedOnUser.messagesPosted:=loggedOnUser.messagesPosted+1
-         RETURN RESULT_SUCCESS
-     ENDIF
-
-     IF(fileattach AND ((str[0]="X") OR (str[0]="x")) AND ((checkSecurity(ACS_PRI_MSGFILES) AND (mailHeader.status="R")) OR (checkSecurity(ACS_PUB_MSGFILES) AND (mailHeader.status="P"))))
-       rzmsg:=1
-       loggedOnUser.messagesPosted:=loggedOnUser.messagesPosted+1
-       RETURN RESULT_SUCCESS
-     ENDIF
-     IF((str[0]="A") OR(str[0]="a")) 
-         aePuts('\b\nAbort message entry (y/n)? ')
-         stat:=yesNo(0)
-         IF(stat<0) THEN RETURN stat
-         IF(stat>0) THEN RETURN -1
-     ENDIF
- UNTIL stat<0
+            IF(restricted(attachedFile))
+              StrCopy(attachedFile,'')
+              JUMP cont2 
+            ELSE
+              aePuts('Delete file when message is deleted ')
+              stat:=yesNo(2)
+              IF(stat<0) THEN RETURN stat
+              LowerStr(attachedFile)
+              IF(stat)
+                attachedFile[0]:=charToUpper(attachedFile[0])
+              ENDIF
+            ENDIF
+          ENDIF
+          EXIT TRUE
+        ENDWHILE
+      ELSE
+        higherAccess()
+      ENDIF
+ 
+    ENDIF
+    IF((str[0]="S") OR (str[0]="s"))
+      loggedOnUser.messagesPosted:=loggedOnUser.messagesPosted+1
+      RETURN RESULT_SUCCESS
+    ENDIF
+ 
+    IF(fileattach AND ((str[0]="X") OR (str[0]="x")) AND ((checkSecurity(ACS_PRI_MSGFILES) AND (mailHeader.status="R")) OR (checkSecurity(ACS_PUB_MSGFILES) AND (mailHeader.status="P"))))
+      rzmsg:=1
+      loggedOnUser.messagesPosted:=loggedOnUser.messagesPosted+1
+      RETURN RESULT_SUCCESS
+    ENDIF
+    IF((str[0]="A") OR(str[0]="a")) 
+      aePuts('\b\nAbort message entry (y/n)? ')
+      stat:=yesNo(0)
+      IF(stat<0) THEN RETURN stat
+      IF(stat>0) THEN RETURN -1
+    ENDIF
+  UNTIL stat<0
 ENDPROC stat
 
 PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
@@ -11149,33 +11094,33 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
   mh.msgDate:=getSystemTime()
   strCpy(mh.fromName,confMailName,31)
   IF(msgbaselock:=lockMsgBase())
-     getMailStatFile(currentConf)
-     mh.msgNumb:=mailStat.highMsgNum
-     stat:=saveMessageHeader(gfh,mh)
-     IF(stat<>RESULT_FAILURE) 
-         StringF(string,'Message Number \d...',mh.msgNumb)
-         aePuts(string)
-         StringF(tempStr,'\s\d',msgBaseLocation,mh.msgNumb)
-         IF((f:=Open(tempStr,MODE_NEWFILE)))<=0
-             aePuts('Failed!\b\n\b\n')
-             rzmsg:=NIL
-             RETURN RESULT_FAILURE
-         ENDIF
-         FOR i:=0 TO lines-1
-             StringF(tempStr2,'\s\b\n',msgBuf[i])
-             Write(f,tempStr2,StrLen(tempStr2))
-          ENDFOR
-         Close(f)
-         aePuts('done!\b\n\b\n')
-
-         IF(StrLen(attachedFile)<>0)
-             SetComment(tempStr,attachedFile)
-             StrCopy(attachedFile,'',ALL)
-         ENDIF
-     ELSE
+    getMailStatFile(currentConf)
+    mh.msgNumb:=mailStat.highMsgNum
+    stat:=saveMessageHeader(gfh,mh)
+    IF(stat<>RESULT_FAILURE) 
+      StringF(string,'Message Number \d...',mh.msgNumb)
+      aePuts(string)
+      StringF(tempStr,'\s\d',msgBaseLocation,mh.msgNumb)
+      IF((f:=Open(tempStr,MODE_NEWFILE)))<=0
         aePuts('Failed!\b\n\b\n')
-     ENDIF
-     UnLock(msgbaselock)
+        rzmsg:=NIL
+        RETURN RESULT_FAILURE
+      ENDIF
+      FOR i:=0 TO lines-1
+        StringF(tempStr2,'\s\n',msgBuf.item(i))
+        Write(f,tempStr2,StrLen(tempStr2))
+      ENDFOR
+      Close(f)
+      aePuts('done!\b\n\b\n')
+
+      IF(StrLen(attachedFile)<>0)
+        SetComment(tempStr,attachedFile)
+        StrCopy(attachedFile,'',ALL)
+      ENDIF
+    ELSE
+      aePuts('Failed!\b\n\b\n')
+    ENDIF
+    UnLock(msgbaselock)
 
     IF (tempUser.slotNumber=1)
       IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_SYSOP_COMMENT',tempStr))
@@ -11197,28 +11142,28 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
       ENDIF
     ENDIF
   
-     IF(rzmsg)
-       StringF(tempStr,'\sF\d',msgBaseLocation,mh.msgNumb)
-       IF(rzmsglock=CreateDir(tempStr))
-         UnLock(rzmsglock)
-       ENDIF
-       setEnvStat(ENV_UPLOADING) 
-       aePuts('\b\n')           /* 11w */
-       bgFileCheck:=FALSE
-       stat:=uploadaFile(0,'','')
-       rzmsg:=NIL
-       StringF(tempStr,'\sF\d',msgBaseLocation,mh.msgNumb)
-       SetProtection(tempStr,FIBF_OTR_DELETE)
-       DeleteFile(tempStr)
-       IF(stat=RESULT_GOODBYE)
-         fileattach:=FALSE
-         reqState:=REQ_STATE_LOGOFF
-         RETURN RESULT_STANDARD_LOGOFF
-       ENDIF
-       
-       IF(stat=RESULT_NO_CARRIER) THEN RETURN RESULT_NO_CARRIER
-       RETURN stat
+    IF(rzmsg)
+      StringF(tempStr,'\sF\d',msgBaseLocation,mh.msgNumb)
+      IF(rzmsglock=CreateDir(tempStr))
+        UnLock(rzmsglock)
       ENDIF
+      setEnvStat(ENV_UPLOADING) 
+      aePuts('\b\n')           /* 11w */
+      bgFileCheck:=FALSE
+      stat:=uploadaFile(0,'','')
+      rzmsg:=NIL
+      StringF(tempStr,'\sF\d',msgBaseLocation,mh.msgNumb)
+      SetProtection(tempStr,FIBF_OTR_DELETE)
+      DeleteFile(tempStr)
+      IF(stat=RESULT_GOODBYE)
+        fileattach:=FALSE
+        reqState:=REQ_STATE_LOGOFF
+        RETURN RESULT_STANDARD_LOGOFF
+      ENDIF
+      
+      IF(stat=RESULT_NO_CARRIER) THEN RETURN RESULT_NO_CARRIER
+      RETURN stat
+    ENDIF
   ELSE
      aePuts('ERROR! Another task has the MsgBase locked!\b\nMessage has not been saved!\b\n\b\n')
   ENDIF
@@ -11231,235 +11176,228 @@ PROC enterMSG(gfh)
   DEF firstparam
   DEF tempStr[255]:STRING
   DEF exit,i,i2,i3,stat
+  DEF t
 
   aFlag:=0
 
- StrCopy(attachedFile,'',ALL)
- IF(comment=1)
-     comment:=0
-     JUMP skipAll
- ENDIF
-
- IF(replyFlag=1)
-   JUMP skipBegin
- ELSE
-     IF(ListLen(parsedParams)>0) 
-          firstparam:=ListItem(parsedParams,0)
-          IF(StrLen(firstparam)<=30)        
-             strCpy(mailHeader.toName,firstparam,31)
-             msgToHeader()
-             aePuts(mailHeader.toName)
-             aePuts('\b\n')
-             JUMP skipEntry
-         ENDIF
-     ENDIF
+  StrCopy(attachedFile,'',ALL)
+  IF(comment=1)
+    comment:=0
+    JUMP skipAll
+  ENDIF
+  
+  IF(replyFlag=1)
+    JUMP skipBegin
+  ELSE
+    IF(parsedParams.count()>0) 
+      firstparam:=parsedParams.item(0)
+      IF(StrLen(firstparam)<=30)        
+        strCpy(mailHeader.toName,firstparam,31)
+        msgToHeader()
+        aePuts(mailHeader.toName)
+        aePuts('\b\n')
+        JUMP skipEntry
+      ENDIF
+    ENDIF
   ENDIF
  
 
- msgToHeader()
- stat:=lineInput('','',30,INPUT_TIMEOUT,tempStr)
- strCpy(mailHeader.toName,tempStr,31)
- IF(stat<0)
-   RETURN stat
- ENDIF
+  msgToHeader()
+  stat:=lineInput('','',30,INPUT_TIMEOUT,tempStr)
+  strCpy(mailHeader.toName,tempStr,31)
+  IF(stat<0)
+    RETURN stat
+  ENDIF
 
 skipEntry:
 
- IF checkSecurity(ACS_CENSORED)
-   mailHeader.status:="p"
- ELSE
-   mailHeader.status:="P"
- ENDIF
+  IF checkSecurity(ACS_CENSORED)
+    mailHeader.status:="p"
+  ELSE
+    mailHeader.status:="P"
+  ENDIF
 
- IF(StrLen(mailHeader.toName)=0) 
-     aFlag:=1
-     strCpy(mailHeader.toName,'ALL',ALL)
- ELSE
-     strCpy(str,mailHeader.toName,31)
-     LowerStr(str)                          /* convert string to lower case */
-     stat:=StrCmp(str,'eall',4)            /* looking for eall             */
-
-     IF(stat)
-         IF(checkSecurity(ACS_EALL_MESSAGES)) 
-             aFlag:=2
-             strCpy(mailHeader.toName,'EALL',ALL)
-         ELSE
-             aePuts('\b\nUser does not exist!!\b\n\b\n')
-             RETURN RESULT_FAILURE
-         ENDIF
-     ELSE
-         stat:=StrCmp(str,'sysop',5)
-         IF(stat)
-             loadAccount(1,tempUser,tempUserKeys,tempUserMisc)
-         ELSE
-           stat:=chooseAName(mailHeader.toName,tempUser,tempUserKeys,tempUserMisc,1)
-           IF(stat<0)
-             RETURN stat
-           ENDIF
-         ENDIF
-         SELECT confNameType
-           CASE NAME_TYPE_USERNAME
-             strCpy(mailHeader.toName,tempUserKeys.userName,31)
-           CASE NAME_TYPE_REALNAME
-             strCpy(mailHeader.toName,tempUserMisc.realName,26)
-           CASE NAME_TYPE_INTERNETNAME
-             strCpy(mailHeader.toName,tempUserMisc.internetName,10)
-         ENDSELECT
-         IF(isTempConf(tempUser,currentConf-1)=FALSE)
-           aePuts('\b\nUser does not have access to this conference!\b\n\b\n')
-           RETURN RESULT_FAILURE
-         ENDIF
-     ENDIF
- ENDIF
-
- checkToForward(str,mailHeader.toName,1)
- 
- aePuts('[36mSubject[33m: [32m([33mBlank[32m)[0m=[33mabort[32m?[0m ')
- stat:=lineInput('','',30,INPUT_TIMEOUT,tempStr)
- strCpy(mailHeader.subject,tempStr,31)
- IF(stat<0)
+  IF(StrLen(mailHeader.toName)=0) 
+    aFlag:=1
+    strCpy(mailHeader.toName,'ALL',ALL)
+  ELSE
+    strCpy(str,mailHeader.toName,31)
+    LowerStr(str)                          /* convert string to lower case */
+    stat:=StrCmp(str,'eall',4)            /* looking for eall             */
+  
+    IF(stat)
+      IF(checkSecurity(ACS_EALL_MESSAGES)) 
+        aFlag:=2
+        strCpy(mailHeader.toName,'EALL',ALL)
+      ELSE
+        aePuts('\b\nUser does not exist!!\b\n\b\n')
+        RETURN RESULT_FAILURE
+      ENDIF
+    ELSE
+      stat:=StrCmp(str,'sysop',5)
+      IF(stat)
+        loadAccount(1,tempUser,tempUserKeys,tempUserMisc)
+      ELSE
+        stat:=chooseAName(mailHeader.toName,tempUser,tempUserKeys,tempUserMisc,1)
+        IF(stat<0)
+          RETURN stat
+        ENDIF
+      ENDIF
+      SELECT confNameType
+        CASE NAME_TYPE_USERNAME
+          strCpy(mailHeader.toName,tempUserKeys.userName,31)
+        CASE NAME_TYPE_REALNAME
+          strCpy(mailHeader.toName,tempUserMisc.realName,26)
+        CASE NAME_TYPE_INTERNETNAME
+          strCpy(mailHeader.toName,tempUserMisc.internetName,10)
+      ENDSELECT
+      IF(isTempConf(tempUser,currentConf-1)=FALSE)
+        aePuts('\b\nUser does not have access to this conference!\b\n\b\n')
+        RETURN RESULT_FAILURE
+      ENDIF
+    ENDIF
+  ENDIF
+  
+  checkToForward(str,mailHeader.toName,1)
+  
+  aePuts('[36mSubject[33m: [32m([33mBlank[32m)[0m=[33mabort[32m?[0m ')
+  stat:=lineInput('','',30,INPUT_TIMEOUT,tempStr)
+  strCpy(mailHeader.subject,tempStr,31)
+  IF(stat<0)
     RETURN stat
- ENDIF
-
- IF(StrLen(mailHeader.subject)=0)
+  ENDIF
+  
+  IF(StrLen(mailHeader.subject)=0)
     aePuts('\b\n')
     RETURN RESULT_FAILURE
- ENDIF
+  ENDIF
 
 skipBegin:
- IF(aFlag=FALSE)
-     aePuts('         [36mPrivate ')
-     stat:=yesNo(2)
-     IF(stat<0)
-        RETURN stat
-     ENDIF
+  IF(aFlag=FALSE)
+    aePuts('         [36mPrivate ')
+    stat:=yesNo(2)
+    IF(stat<0)
+      RETURN stat
+    ENDIF
 
-     IF (stat) 
-       mailHeader.status:="R"
-     ELSE
-       IF checkSecurity(ACS_CENSORED) OR ((mailHeader.status="p") AND (replyFlag=1))
-         mailHeader.status:="p"
-       ELSE
-         mailHeader.status:="P"
-       ENDIF
-     ENDIF
- ENDIF
+    IF (stat) 
+      mailHeader.status:="R"
+    ELSE
+      IF checkSecurity(ACS_CENSORED) OR ((mailHeader.status="p") AND (replyFlag=1))
+        mailHeader.status:="p"
+      ELSE
+        mailHeader.status:="P"
+      ENDIF
+    ENDIF
+  ENDIF
 
- IF(replyFlag=1)
-     replyFlag:=0
-     aePuts('  [36mQuote in Reply ')
-     stat:=yesNo(2)
-     IF(stat<0)
-        RETURN stat
-     ENDIF
+  IF(replyFlag=1)
+    replyFlag:=0
+    aePuts('  [36mQuote in Reply ')
+    stat:=yesNo(2)
+    IF(stat<0)
+       RETURN stat
+    ENDIF
 
-     IF(stat)
-         StringF(tempStr,'\s\d',msgBaseLocation,mailHeader.msgNumb)
-         IF(stat:=loadMsg(tempStr)) 
-             aePuts('\b\n')
-             nonStopDisplayFlag:=FALSE
-             lineCount:=0
-             FOR i:=0 TO lines-1
-                 IF i<=98
-                   StringF(str,'\z\l\d[2]> \s\b\n',i+1,msgBuf[i])
-                 ELSE
-                   StringF(str,'\z\l\d[3]> \s\b\n',i+1,msgBuf[i])
-                 ENDIF
-                 aePuts(str)
-                 EXIT stat:=checkForPause()
-             ENDFOR
-             WHILE TRUE
-                 aePuts('\b\n Enter Startline,Endline or (*=ALL, A=Abort): ')
-                 stat:=lineInput('','',6,INPUT_TIMEOUT,str)
-                 IF(stat<0)
-                    RETURN stat
-                 ENDIF
-         exit:=FALSE
-                 stat:=firstCharValue(str)
-                 IF((stat="A") OR (stat="a"))
-                     i:=(-1)
-                     lines:=0
-                     exit:=TRUE
-                 ENDIF
-                 EXIT exit
+    IF(stat)
+      StringF(tempStr,'\s\d',msgBaseLocation,mailHeader.msgNumb)
+      IF(stat:=loadMsg(tempStr)) 
+        aePuts('\b\n')
+        nonStopDisplayFlag:=FALSE
+        lineCount:=0
+        FOR i:=0 TO lines-1
+          IF i<=98
+            StringF(str,'\z\l\d[2]> \s\b\n',i+1,msgBuf.item(i))
+          ELSE
+            StringF(str,'\z\l\d[3]> \s\b\n',i+1,msgBuf.item(i))
+          ENDIF
+          aePuts(str)
+          EXIT stat:=checkForPause()
+        ENDFOR
+        WHILE TRUE
+          aePuts('\b\n Enter Startline,Endline or (*=ALL, A=Abort): ')
+          stat:=lineInput('','',6,INPUT_TIMEOUT,str)
+          IF(stat<0)
+            RETURN stat
+          ENDIF
+          exit:=FALSE
+          stat:=firstCharValue(str)
+          IF((stat="A") OR (stat="a"))
+            i:=(-1)
+            lines:=0
+            exit:=TRUE
+          ENDIF
+          EXIT exit
 
-                 IF(stat="*")
-                     i:=1
-                     i2:=lines
-                 ELSE
-                    IF (i:=InStr(str,','))<>-1
-                      i2:=Val(str+i+1)
-                    i:=Val(str)
-                    ENDIF
-                    ->sscanf(str,"%d,%d",&i,&i2)
-                 ENDIF
+          IF(stat="*")
+            i:=1
+            i2:=lines
+          ELSE
+            IF (i:=InStr(str,','))<>-1
+              i2:=Val(str+i+1)
+              i:=Val(str)
+            ENDIF
+            ->sscanf(str,"%d,%d",&i,&i2)
+          ENDIF
 
-                 EXIT (((i>0) AND (i<=lines)) AND ((i2>0) AND (i2<=lines)) AND (i<=i2))
+          EXIT (((i>0) AND (i<=lines)) AND ((i2>0) AND (i2<=lines)) AND (i<=i2))
 
-             ENDWHILE
-             IF(i<>(-1))
-                 FOR i3:=0 TO i2-i
-                      
-                   /*  if(i3<98) {
-                    sprintf(str,">\s",MsgBuf[i+i3-1])
-                    setMsgBufItem(i3,str)
-                      }
-                   */
-                   IF(i3<(ListMax(msgBuf)-3))
-                     StrCopy(str,msgBuf[i+i3-1],ALL)
-                     setMsgBufItem(i3,str)
-                   ENDIF
-                 ENDFOR
-                 
-                 IF (i3<((ListMax(msgBuf)-3)))
-                    lines:=i3
-                 ELSE
-                    lines:=(ListMax(msgBuf)-3)
-                 ENDIF
-                 StringF(str,' ^^^-[ \s ]',mailHeader.fromName)
-                 WHILE(StrLen(str)<70)
-                    StrAdd(str,'-')
-                 ENDWHILE
-                 setMsgBufItem(lines,str)
+        ENDWHILE
+        IF(i<>(-1))
+          FOR i3:=0 TO i2-i   
+            msgBuf.setItem(i3,msgBuf.item(i+i3-1))
+          ENDFOR
+          
+          lines:=i3
+          /*IF (i3<((ListMax(msgBuf)-3)))
+            lines:=i3
+          ELSE
+            lines:=(ListMax(msgBuf)-3)
+          ENDIF*/
+          StringF(str,' ^^^-[ \s ]',mailHeader.fromName)
+          WHILE(StrLen(str)<70)
+            StrAdd(str,'-')
+          ENDWHILE
+          msgBuf.setItem(lines,str)
 
-                 lines++
-                 setMsgBufItem(lines,' ')
-                 lines++
-                 setMsgBufItem(lines,'')
-                 /****new reply routines ****/
+          lines++
+          msgBuf.setItem(lines,' ')
+          lines++
+          msgBuf.setItem(lines,'')
+          /****new reply routines ****/
 
-             ELSE
-               clearMsgBuf()
-             ENDIF
-         ENDIF
-     ELSE
-       clearMsgBuf()
-       lines:=0
-     ENDIF
- ELSE
+        ELSE
+          msgBuf.clear()
+        ENDIF
+      ENDIF
+    ELSE
+      msgBuf.clear()
+      lines:=0
+    ENDIF
+  ELSE
 
 skipAll:
-    clearMsgBuf()
+    msgBuf.clear()
     lines:=0
- ENDIF
+  ENDIF
 
- stat:=edit()
- IF((stat=RESULT_TIMEOUT) OR (stat=RESULT_NO_CARRIER))
+  stat:=edit()
+  IF((stat=RESULT_TIMEOUT) OR (stat=RESULT_NO_CARRIER))
     RETURN stat
- ENDIF
-
- aePuts('\b\n')
- IF(stat<0)
+  ENDIF
+  
+  aePuts('\b\n')
+  IF(stat<0)
     RETURN RESULT_FAILURE
- ENDIF
-   
- aePuts('Saving...')
- stat:=saveNewMSG(gfh,mailHeader)
- IF(stat<0)
-       RETURN stat
-      ENDIF
-
- rzmsg:=NIL
+  ENDIF
+    
+  aePuts('Saving...')
+  stat:=saveNewMSG(gfh,mailHeader)
+  IF(stat<0)
+     RETURN stat
+  ENDIF
+  
+  rzmsg:=NIL
 
 ENDPROC RESULT_SUCCESS
 
@@ -11474,55 +11412,57 @@ PROC replyPrompt(gfh)
   
   helplist:=0
   WHILE TRUE
-  contloop:
+contloop:
     fwdFlag:=0
     IF(helplist=0)
-       IF(nonStopMail=FALSE)
+      IF(nonStopMail=FALSE)
         aePuts('\b\n[32mMsg. Options: [33mA[36m')
         IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts(',[33mD')
         aePuts('[36m,[33mF[36m,[33mR[36m,[33mQ')
         StringF(string,'[36m,[33m?[36m,[33m??[36m,[32m<[33mCR[32m> [32m([0m \d[32m )[0m >: ',msgNum)
         aePuts(string)
-       ENDIF
+      ENDIF
     ELSEIF helplist=1
-         aePuts('[33mA[32m>[36mgain[0m')
-         IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
-         aePuts('\b\n[33mF[32m>[36morward[0m')
-         aePuts('\b\n[33mR[32m>[36meply[0m')
-         aePuts('\b\n[33mQ[32m>[36muit[0m')
-         StringF(string,'\b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m \d[32m )[0m >: ',msgNum)
-         aePuts(string)
-         helplist:=0
+      aePuts('[33mA[32m>[36mgain[0m')
+      IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
+      aePuts('\b\n[33mF[32m>[36morward[0m')
+      aePuts('\b\n[33mR[32m>[36meply[0m')
+      aePuts('\b\n[33mQ[32m>[36muit[0m')
+      StringF(string,'\b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m \d[32m )[0m >: ',msgNum)
+      aePuts(string)
+      helplist:=0
     ELSE
-         aePuts('[33mA[32m>[36mgain[0m')
-         IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
-         aePuts('\b\n[33mF[32m>[36morward[0m')
-         aePuts('\b\n[33mR[32m>[36meply[0m')
-         aePuts('\b\n[33mNS[32m>[36m Non-stop mode[0m')
-         IF checkSecurity(ACS_TRANSLATION)
-           IF (StrCmp(userLanguage,hostLanguage)=FALSE) THEN aePuts('\b\n[33mT[32m>[36mranslate[0m')
-           aePuts('\b\n[33mTS[32m>[36m Select Language & Translate[0m')
-           aePuts('\b\n[33mT![32m>[36m Translate To Each language[0m')
-           aePuts('\b\n[33mT*[32m>[36m Translate from each language[0m')
-         ENDIF
-         aePuts('\b\n[33mK[32m>[36meep and quit[0m')
-         IF checkSecurity(ACS_MESSAGE_EDIT)
-          aePuts('\b\n[33mEH[32m>[36m Edit Message Header[0m')
-         ENDIF
-         IF checkSecurity(ACS_ACCOUNT_EDITING)
-          aePuts('\b\n[33mU[32m>[36mser Account Edit[0m')
-         ENDIF
-         aePuts('\b\n[33mQ[32m>[36muit[0m')
-         StringF(string,'\b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m \d[32m )[0m >: ',msgNum)
-         aePuts(string)
-         helplist:=0
+      aePuts('[33mA[32m>[36mgain[0m')
+      IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
+      aePuts('\b\n[33mF[32m>[36morward[0m')
+      aePuts('\b\n[33mR[32m>[36meply[0m')
+      aePuts('\b\n[33mNS[32m>[36m Non-stop mode[0m')
+      IF checkSecurity(ACS_TRANSLATION)
+        IF (StrCmp(userLanguage,hostLanguage)=FALSE) THEN aePuts('\b\n[33mT[32m>[36mranslate[0m')
+        aePuts('\b\n[33mTS[32m>[36m Select Language & Translate[0m')
+        aePuts('\b\n[33mT![32m>[36m Translate To Each language[0m')
+        aePuts('\b\n[33mT*[32m>[36m Translate from each language[0m')
+      ENDIF
+      aePuts('\b\n[33mK[32m>[36meep and quit[0m')
+      IF checkSecurity(ACS_MESSAGE_EDIT)
+        aePuts('\b\n[33mE[32m>[36m Edit Emacs Message[0m')
+        aePuts('\b\n[33mEH[32m>[36m Edit Message Header[0m')
+        aePuts('\b\n[33mEM[32m>[36m Edit Message Body[0m')
+      ENDIF
+      IF checkSecurity(ACS_ACCOUNT_EDITING)
+       aePuts('\b\n[33mU[32m>[36mser Account Edit[0m')
+      ENDIF
+      aePuts('\b\n[33mQ[32m>[36muit[0m')
+      StringF(string,'\b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m \d[32m )[0m >: ',msgNum)
+      aePuts(string)
+      helplist:=0
     ENDIF
 
-   IF(nonStopMail=FALSE)
-       stat:=lineInput('','',10,INPUT_TIMEOUT,str)
-       IF(stat<0) THEN RETURN stat
+    IF(nonStopMail=FALSE)
+      stat:=lineInput('','',10,INPUT_TIMEOUT,str)
+      IF(stat<0) THEN RETURN stat
       aePuts('\b\n')
-   ENDIF  
+    ENDIF  
     IF(strCmpi(str,'??',ALL))
       helplist:=2
       JUMP contloop
@@ -11531,11 +11471,11 @@ PROC replyPrompt(gfh)
       helplist:=1
       JUMP contloop
     ENDIF
-
+    
     IF(((str[0]="N") OR (str[0]="n")) AND ((str[1]="S") OR (str[1]="s"))) THEN nonStopMail:=TRUE
-
+    
     IF((StrLen(str)=0) OR (nonStopMail)) THEN RETURN RESULT_SUCCESS
-
+    
     IF(((str[0]="A") OR (str[0]="a")))
       stat:=displayMessage(gfh)
       IF(stat<0) THEN RETURN stat
@@ -11569,31 +11509,31 @@ PROC replyPrompt(gfh)
           StringF(string,'LANGUAGE.\d',i)
         ENDWHILE
       ELSE
-       IF strCmpi(str,'ts',ALL)
-         stat:=chooseTranslator()
-         IF(stat<0) THEN RETURN stat                       
-       ENDIF
-       translatorMode:=TRANS_HOST_TO_DEFINED
-       StrCopy(translatorLanguage,userLanguage)
-       stat:=displayMessage(gfh)
-       translatorMode:=TRANS_NONE
-       IF(stat<0) THEN RETURN stat
+        IF strCmpi(str,'ts',ALL)
+          stat:=chooseTranslator()
+          IF(stat<0) THEN RETURN stat                       
+        ENDIF
+        translatorMode:=TRANS_HOST_TO_DEFINED
+        StrCopy(translatorLanguage,userLanguage)
+        stat:=displayMessage(gfh)
+        translatorMode:=TRANS_NONE
+        IF(stat<0) THEN RETURN stat
       ENDIF
       JUMP contloop
     ENDIF
- 
+    
     IF checkSecurity(ACS_DELETE_MESSAGE)
       IF(((str[0]="D") OR (str[0]="d")))
-         IF((privateFlag=0) OR ((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)))
-             stat:=deleteMSG(gfh)
-             RETURN RESULT_SUCCESS
-         ELSE
-             aePuts('Not your message.\b\n')
-             JUMP contloop
-         ENDIF
+        IF((privateFlag=0) OR ((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)))
+          stat:=deleteMSG(gfh)
+          RETURN RESULT_SUCCESS
+        ELSE
+          aePuts('Not your message.\b\n')
+          JUMP contloop
+        ENDIF
       ENDIF
     ENDIF
-
+    
     IF(((str[0]="K") OR (str[0]="k")))
       IF((privateFlag=0) OR ((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)))
         mailHeader.recv:=0
@@ -11608,63 +11548,68 @@ PROC replyPrompt(gfh)
         JUMP contloop
       ENDIF
     ENDIF
-
-   IF(((str[0]="E") OR (str[0]="e")) AND (checkSecurity(ACS_MESSAGE_EDIT))) 
-         IF((str[1]="H") OR (str[1]="h"))
-           IF((stat:=editHeader(gfh))<0) THEN RETURN stat
-         ELSE
-           editEMessage(mailHeader.msgNumb)
-         ENDIF
-       stat:=displayMessage(gfh)
-       IF(stat<0) THEN RETURN stat
-       JUMP contloop
-   ENDIF
-   IF(((str[0]="U") OR (str[0]="u"))) 
-       IF(checkSecurity(ACS_ACCOUNT_EDITING)) 
-           StrCopy(str,mailHeader.fromName,31)
-           unum:=findUserFromName(1,confNameType,str,tempUser,tempUserKeys,tempUserMisc)
-           stat:=loadAccount(unum,tempUser,tempUserKeys,tempUserMisc)
-           IF(stat=RESULT_FAILURE)
-               aePuts('Warning, error while loading account\b\n')
-               JUMP contloop
-           ENDIF
-
-           sendCLS()
-           callersLog('\tAccount editing from mail.')
-           editInfo(unum,tempUser,tempUserKeys,tempUserMisc,FALSE)
-           sendCLS()
-           stat:=displayMessage(gfh)
-           IF(stat<0) THEN RETURN stat
-           JUMP contloop
-       ENDIF
-   ENDIF
-
-   IF(((str[0]="f") OR (str[0]="F")))
-     IF((privateFlag=0) OR ((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)) OR (StrCmp(mailHeader.toName,'EALL',4)))
-         stat:=forwardMSG(gfh)
-         JUMP contloop
-     ELSE
-         aePuts('Not your message.\b\n')
-         JUMP contloop
-     ENDIF
-   ENDIF
-
-   IF((str[0]="Q") OR (str[0]="q"))
-       aePuts('\b\n')
-       RETURN RESULT_FAILURE
-   ENDIF
-
-   IF(((str[0]="r") OR (str[0]="R")))
-     IF((privateFlag=0) OR ((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)) OR (StrCmp(mailHeader.toName,'EALL',4)))
-         stat:=replyToMSG(gfh)
-         RETURN RESULT_SUCCESS
-     ELSE
-         aePuts('Not your message.\b\n')
-         JUMP contloop
-     ENDIF
-   ENDIF
- aePuts('No such command!!\b\n')
-ENDWHILE
+    
+    IF(((str[0]="E") OR (str[0]="e")) AND (checkSecurity(ACS_MESSAGE_EDIT))) 
+      IF((str[1]="H") OR (str[1]="h"))
+        IF((stat:=editHeader(gfh))<0) THEN RETURN stat
+      ELSEIF((str[1]="M") OR (str[1]="m"))
+        fileattach:=FALSE
+        StringF(str,'\s\d',msgBaseLocation,mailHeader.msgNumb)
+        loadMsg(str)
+        IF(edit()=RESULT_SUCCESS) THEN saveMsg(str)
+      ELSE
+        editEMessage(mailHeader.msgNumb)
+      ENDIF
+      stat:=displayMessage(gfh)
+      IF(stat<0) THEN RETURN stat
+      JUMP contloop
+    ENDIF
+    IF(((str[0]="U") OR (str[0]="u"))) 
+      IF(checkSecurity(ACS_ACCOUNT_EDITING)) 
+        StrCopy(str,mailHeader.fromName,31)
+        unum:=findUserFromName(1,confNameType,str,tempUser,tempUserKeys,tempUserMisc)
+        stat:=loadAccount(unum,tempUser,tempUserKeys,tempUserMisc)
+        IF(stat=RESULT_FAILURE)
+          aePuts('Warning, error while loading account\b\n')
+          JUMP contloop
+        ENDIF
+    
+        sendCLS()
+        callersLog('\tAccount editing from mail.')
+        editInfo(unum,tempUser,tempUserKeys,tempUserMisc,FALSE)
+        sendCLS()
+        stat:=displayMessage(gfh)
+        IF(stat<0) THEN RETURN stat
+        JUMP contloop
+      ENDIF
+    ENDIF
+    
+    IF(((str[0]="f") OR (str[0]="F")))
+      IF((privateFlag=0) OR ((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)) OR (StrCmp(mailHeader.toName,'EALL',4)))
+        stat:=forwardMSG(gfh)
+        JUMP contloop
+      ELSE
+        aePuts('Not your message.\b\n')
+        JUMP contloop
+      ENDIF
+    ENDIF
+    
+    IF((str[0]="Q") OR (str[0]="q"))
+      aePuts('\b\n')
+      RETURN RESULT_FAILURE
+    ENDIF
+    
+    IF(((str[0]="r") OR (str[0]="R")))
+      IF((privateFlag=0) OR ((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)) OR (StrCmp(mailHeader.toName,'EALL',4)))
+        stat:=replyToMSG(gfh)
+        RETURN RESULT_SUCCESS
+      ELSE
+        aePuts('Not your message.\b\n')
+        JUMP contloop
+      ENDIF
+    ENDIF
+    aePuts('No such command!!\b\n')
+  ENDWHILE
 
 ENDPROC RESULT_SUCCESS
 
@@ -11714,72 +11659,72 @@ PROC checkIfNameAllowed(name)
 ENDPROC RESULT_SUCCESS
 
 PROC numberOfLinesTest()
- DEF stat
- DEF str[20]:STRING
-
- FOR stat:=70 TO 2 STEP -1
-  StringF(str,' \d\b\n',stat)
-      aePuts(str)
- ENDFOR
- aePuts('\b\nEnter the number you see at the top of your screen: ')
- stat:=lineInput('','',3,INPUT_TIMEOUT,str)
- IF(stat<0) THEN RETURN stat
- IF(StrLen(str)=0) THEN RETURN RESULT_SUCCESS
- stat:=Val(str)
-
- IF((stat < 1) OR (stat > 255)) THEN RETURN RESULT_FAILURE
- loggedOnUser.lineLength:=stat
+  DEF stat
+  DEF str[20]:STRING
+  
+  FOR stat:=70 TO 2 STEP -1
+    StringF(str,' \d\b\n',stat)
+    aePuts(str)
+  ENDFOR
+  aePuts('\b\nEnter the number you see at the top of your screen: ')
+  stat:=lineInput('','',3,INPUT_TIMEOUT,str)
+  IF(stat<0) THEN RETURN stat
+  IF(StrLen(str)=0) THEN RETURN RESULT_SUCCESS
+  stat:=Val(str)
+  
+  IF((stat < 1) OR (stat > 255)) THEN RETURN RESULT_FAILURE
+  loggedOnUser.lineLength:=stat
 ENDPROC RESULT_SUCCESS
 
 
 PROC chooseComputer()
- DEF stat
- DEF tempStr[40]:STRING
- 
- FOR stat:=0 TO ListLen(computerTypes)-1 STEP 2
-  StringF(tempStr,'\d[2]> \l\s[34] ',stat+1,computerTypes[stat])
-  aePuts(tempStr)
-  IF((stat+1)<ListLen(computerTypes))
-    StringF(tempStr,'\d[2]> \l\s[34]\b\n',stat+2,computerTypes[stat+1])
+  DEF stat
+  DEF tempStr[40]:STRING
+  
+  FOR stat:=0 TO computerTypes.count()-1 STEP 2
+    StringF(tempStr,'\d[2]> \l\s[34] ',stat+1,computerTypes.item(stat))
     aePuts(tempStr)
-  ELSE
-    aePuts('\b\n')
-  ENDIF
-
- ENDFOR
- aePuts('\b\n')
+    IF((stat+1)<computerTypes.count())
+      StringF(tempStr,'\d[2]> \l\s[34]\b\n',stat+2,computerTypes.item(stat+1))
+      aePuts(tempStr)
+    ELSE
+      aePuts('\b\n')
+    ENDIF
+  
+  ENDFOR
+  aePuts('\b\n')
 
 jLoop5:
- aePuts('Choose computer type: ')
- stat:=lineInput('','',3,INPUT_TIMEOUT,tempStr)
- IF(stat<0) THEN RETURN stat
- IF(StrLen(tempStr)=0) THEN RETURN RESULT_SUCCESS
- stat:=Val(tempStr)
- IF((stat <= 0) OR (stat > ListLen(computerTypes))) THEN JUMP jLoop5
-
- loggedOnUser.secBulletin:=stat-1
+  aePuts('Choose computer type: ')
+  stat:=lineInput('','',3,INPUT_TIMEOUT,tempStr)
+  IF(stat<0) THEN RETURN stat
+  IF(StrLen(tempStr)=0) THEN RETURN RESULT_SUCCESS
+  stat:=Val(tempStr)
+  IF((stat <= 0) OR (stat > computerTypes.count())) THEN JUMP jLoop5
  
+  loggedOnUser.secBulletin:=stat-1
+  
 ENDPROC RESULT_SUCCESS
 
 PROC chooseScreenType()
 
- DEF stat
- DEF tempStr[40]:STRING
- 
- FOR stat:=1 TO ListLen(screenTypeTitle)
-  StringF(tempStr,'\d> \l\s\b\n',stat,screenTypeTitle[stat-1])
-  aePuts(tempStr)
- ENDFOR
+  DEF stat
+  DEF tempStr[40]:STRING
+  
+  FOR stat:=1 TO screenTypeTitle.count()
+    StringF(tempStr,'\d> \l\s\b\n',stat,screenTypeTitle.item(stat-1))
+    aePuts(tempStr)
+  ENDFOR
 
 stLoop5:
- aePuts('\b\nChoose screen type: ')
- stat:=lineInput('','',3,INPUT_TIMEOUT,tempStr)
- IF(stat<0) THEN RETURN stat
- IF(StrLen(tempStr)=0) THEN RETURN RESULT_SUCCESS
- stat:=Val(tempStr)
- IF((stat <= 0) OR (stat > ListLen(screenTypeTitle))) THEN JUMP stLoop5
-
- loggedOnUser.screenType:=stat-1
+  aePuts('\b\nChoose screen type: ')
+  stat:=lineInput('','',3,INPUT_TIMEOUT,tempStr)
+  IF(stat<0) THEN RETURN stat
+  IF(StrLen(tempStr)=0) THEN RETURN RESULT_SUCCESS
+  stat:=Val(tempStr)
+  IF((stat <= 0) OR (stat > screenTypeTitle.count())) THEN JUMP stLoop5
+  
+  loggedOnUser.screenType:=stat-1
  
 ENDPROC RESULT_SUCCESS
 
@@ -11787,8 +11732,8 @@ PROC chooseProtocol()
   DEF stat,i
   DEF tempStr[40]:STRING
 
-  FOR i:=1 TO ListLen(xprTitle)
-    StringF(tempStr,'\d> \s\b\n',i,xprTitle[i-1])
+  FOR i:=1 TO xprTitle.count()
+    StringF(tempStr,'\d> \s\b\n',i,xprTitle.item(i-1))
     aePuts(tempStr)
   ENDFOR
 pLoop1:
@@ -11799,7 +11744,7 @@ pLoop1:
 
   IF(StrLen(tempStr)=0) THEN RETURN RESULT_SUCCESS
   stat:=Val(tempStr)
-  IF((stat <= 0) OR (stat > ListLen(xprTitle))) THEN JUMP pLoop1
+  IF((stat <= 0) OR (stat > xprTitle.count())) THEN JUMP pLoop1
 
   loggedOnUser.xferProtocol:=stat-1
 ENDPROC RESULT_SUCCESS
@@ -11888,126 +11833,120 @@ PROC deactivateOldUsers(days)
   ENDIF
 ENDPROC
 
-PROC findUserFromName(start,nameType,name, hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO userMisc)
-  DEF slot, stat, fh,fh2
+PROC findUserFromName(start,nameType,name, hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO userMisc) HANDLE
+  DEF slot, stat, fh=NIL,fh2=NIL
   DEF tempStr[255]:STRING
 
- start--
- StrCopy(tempStr,name,31)
- UpperStr(tempStr)
-
- fh:=Open(userKeysFile,MODE_OLDFILE)
- IF(fh<=0) THEN RETURN 0
- Seek(fh,start*SIZEOF userKeys,OFFSET_BEGINNING)
-
- fh2:=Open(userMiscFile,MODE_OLDFILE)
- IF(fh2<=0) THEN RETURN 0
- Seek(fh2,start*SIZEOF userMisc,OFFSET_BEGINNING)
-
- slot:=0
- REPEAT
-  stat:=Read(fh,hoozer2,SIZEOF userKeys)
-  IF(stat<>SIZEOF userKeys)
-    Close(fh)
-    Close(fh2)
-    RETURN 0
-  ENDIF
-
-  stat:=Read(fh2,hoozer3,SIZEOF userMisc)
-  IF(stat<>SIZEOF userMisc)
-    Close(fh)
-    Close(fh2)
-    RETURN 0
-  ENDIF
-
-  slot++
-  SELECT nameType
-    CASE NAME_TYPE_USERNAME
-      IF ((nameCompare(hoozer2.userName,tempStr)=RESULT_SUCCESS) AND (hoozer2.number<>0))
-        Close(fh)
-        Close(fh2)
-        RETURN start+slot
-      ENDIF
-    CASE NAME_TYPE_REALNAME
-      IF ((nameCompare(hoozer3.realName,tempStr)=RESULT_SUCCESS) AND (hoozer2.number<>0))
-        Close(fh)
-        Close(fh2)
-        RETURN start+slot
-      ENDIF
-    CASE NAME_TYPE_INTERNETNAME
-      IF ((nameCompare(hoozer3.internetName,tempStr)=RESULT_SUCCESS) AND (hoozer2.number<>0))
-        Close(fh)
-        Close(fh2)
-        RETURN start+slot
-      ENDIF
-  ENDSELECT
- UNTIL FALSE
- Close(fh)
- Close(fh2)
+  start--
+  StrCopy(tempStr,name,31)
+  UpperStr(tempStr)
+ 
+  fh:=Open(userKeysFile,MODE_OLDFILE)
+  IF(fh<=0) THEN RETURN 0
+  Seek(fh,start*SIZEOF userKeys,OFFSET_BEGINNING)
+ 
+  fh2:=Open(userMiscFile,MODE_OLDFILE)
+  IF(fh2<=0) THEN RETURN 0
+  Seek(fh2,start*SIZEOF userMisc,OFFSET_BEGINNING)
+ 
+  slot:=0
+  REPEAT
+   stat:=Read(fh,hoozer2,SIZEOF userKeys)
+   IF(stat<>SIZEOF userKeys)
+     Throw(ERR_EXCEPT,0)
+   ENDIF
+ 
+   stat:=Read(fh2,hoozer3,SIZEOF userMisc)
+   IF(stat<>SIZEOF userMisc)
+     Throw(ERR_EXCEPT,0)
+   ENDIF
+ 
+   slot++
+   SELECT nameType
+     CASE NAME_TYPE_USERNAME
+       IF ((nameCompare(hoozer2.userName,tempStr)=RESULT_SUCCESS) AND (hoozer2.number<>0))
+         Throw(ERR_EXCEPT,start+slot)
+       ENDIF
+     CASE NAME_TYPE_REALNAME
+       IF ((nameCompare(hoozer3.realName,tempStr)=RESULT_SUCCESS) AND (hoozer2.number<>0))
+         Throw(ERR_EXCEPT,start+slot)
+       ENDIF
+     CASE NAME_TYPE_INTERNETNAME
+       IF ((nameCompare(hoozer3.internetName,tempStr)=RESULT_SUCCESS) AND (hoozer2.number<>0))
+         Throw(ERR_EXCEPT,start+slot)
+         ENDIF
+   ENDSELECT
+  UNTIL FALSE
+  Close(fh)
+  Close(fh2)
+EXCEPT
+  Close(fh)
+  Close(fh2)
+  RETURN exceptioninfo
 ENDPROC 0
 
 PROC chooseAName(s,hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO userMisc,lflag)
   DEF stat,i
   i:=1
   REPEAT
-     stat:=findUserFromName(i,confNameType,s,hoozer,hoozer2,hoozer3)
-     IF(stat=0) 
-         IF(lflag) THEN aePuts('\b\nUser does not exist!!\b\n\b\n')
-         RETURN RESULT_FAILURE
-     ENDIF
-     IF(stat:=checkForAst(s)) 
-         IF((stat<4) OR ((sopt.toggles[TOGGLES_USEWILDCARDS])=FALSE)) THEN RETURN RESULT_FAILURE
-         aePuts(' Expand: ')
-         aePuts(hoozer2.userName)
-         aePuts(' Correct ')
-         stat:=yesNo(1)
-         IF(stat<0) THEN RETURN stat
-         IF(stat=0)
-             IF(ansiColour) THEN aePuts('[A[K')
-             stat:=1
-             i:=(hoozer2.number)+1
-         ELSE
-          stat:=0
-         ENDIF
+    stat:=findUserFromName(i,confNameType,s,hoozer,hoozer2,hoozer3)
+    IF(stat=0) 
+      IF(lflag) THEN aePuts('\b\nUser does not exist!!\b\n\b\n')
+      RETURN RESULT_FAILURE
+    ENDIF
+    IF(stat:=checkForAst(s)) 
+      IF((stat<4) OR ((sopt.toggles[TOGGLES_USEWILDCARDS])=FALSE)) THEN RETURN RESULT_FAILURE
+      aePuts(' Expand: ')
+      aePuts(hoozer2.userName)
+      aePuts(' Correct ')
+      stat:=yesNo(1)
+      IF(stat<0) THEN RETURN stat
+      IF(stat=0)
+        IF(ansiColour) THEN aePuts('[A[K')
+        stat:=1
+        i:=(hoozer2.number)+1
+      ELSE
+       stat:=0
+      ENDIF
 
-     ELSE
+    ELSE
       stat:=0
-     ENDIF
- UNTIL stat=0
- loadAccount(hoozer2.number,hoozer,hoozer2,hoozer3)
+    ENDIF
+  UNTIL stat=0
+  loadAccount(hoozer2.number,hoozer,hoozer2,hoozer3)
 ENDPROC 1
 
 PROC isTempConf(user: PTR TO user,conf)
-   DEF tooltypeName[10]:STRING
-   StringF(tooltypeName,'CONF.\d',conf+1)
+  DEF tooltypeName[10]:STRING
+  StringF(tooltypeName,'CONF.\d',conf+1)
 
-   IF checkToolTypeExists(TOOLTYPE_AREA,user.conferenceAccess,tooltypeName) THEN RETURN 1 ELSE RETURN 0
+  IF checkToolTypeExists(TOOLTYPE_AREA,user.conferenceAccess,tooltypeName) THEN RETURN 1 ELSE RETURN 0
 ENDPROC
 
 PROC getAValidName(name, default, str)
   DEF stat
   DEF tempstr[255]:STRING
 
- IF(StrLen(name)=0)
-   AstrCopy(str,default,31)
-   RETURN 0
- ENDIF
-
- AstrCopy(str,name,31)
- LowerStr(str)
- IF(StrCmp(str,'all',3))
+  IF(StrLen(name)=0)
+    AstrCopy(str,default,31)
+    RETURN 0
+  ENDIF
+  
+  AstrCopy(str,name,31)
+  LowerStr(str)
+  IF(StrCmp(str,'all',3))
     UpperStr(str)
     RETURN 1
- ENDIF
-
- IF(StrCmp(str,'eall',4))
-     UpperStr(str)
-     RETURN 1
- ENDIF
- 
- IF(StrCmp(str,'sysop',5))
+  ENDIF
+  
+  IF(StrCmp(str,'eall',4))
+    UpperStr(str)
+    RETURN 1
+  ENDIF
+  
+  IF(StrCmp(str,'sysop',5))
     loadAccount(1,tempUser,tempUserKeys,tempUserMisc)
- ELSE
+  ELSE
     stat:=chooseAName(name,tempUser,tempUserKeys,tempUserMisc,1)
     IF(stat<0)
       AstrCopy(str,'',ALL)
@@ -12015,19 +11954,19 @@ PROC getAValidName(name, default, str)
     ENDIF
   ENDIF
 
-   SELECT confNameType
-     CASE NAME_TYPE_USERNAME
-       AstrCopy(str,tempUserKeys.userName,31)
-     CASE NAME_TYPE_REALNAME
-       AstrCopy(str,tempUserMisc.realName,26)
-     CASE NAME_TYPE_INTERNETNAME
-       AstrCopy(str,tempUserMisc.internetName,10)
-   ENDSELECT
+  SELECT confNameType
+    CASE NAME_TYPE_USERNAME
+      AstrCopy(str,tempUserKeys.userName,31)
+    CASE NAME_TYPE_REALNAME
+      AstrCopy(str,tempUserMisc.realName,26)
+    CASE NAME_TYPE_INTERNETNAME
+      AstrCopy(str,tempUserMisc.internetName,10)
+  ENDSELECT
   IF(isTempConf(tempUser,currentConf-1)=FALSE)
-     aePuts('\b\nUser does not have access to this conference, try another!\b\n\b\n')
+    aePuts('\b\nUser does not have access to this conference, try another!\b\n\b\n')
     AstrCopy(str,'',ALL)
     RETURN 0
- ENDIF
+  ENDIF
 ENDPROC 0
 
 PROC editHeader(gfh)
@@ -12036,46 +11975,46 @@ PROC editHeader(gfh)
   DEF string[200]:STRING
   DEF stat
  
- CopyMem(mailHeader,mh,SIZEOF mailHeader)
- mh.status:="P"
- aePuts('\b\n')
- StringF(string,'     [36mFrom[33m: [32m([33mEnter[32m)[0m=[32m''[33m\s[32m''[32m?[0m ',mailHeader.fromName)
- aePuts(string)
- stat:=lineInput('','',30,INPUT_TIMEOUT,string)
- IF (stat<0) THEN RETURN stat
- aFlag:=getAValidName(string,mailHeader.fromName,mh.fromName)
-
- IF(StrLen(mh.fromName)=0) THEN RETURN 2
-
- IF(aFlag)
-   aePuts('Invalid From Name. Aborting.\b\n')
-   RETURN 2
- ENDIF
- StringF(string,'     [36m  To[33m: [32m([33mEnter[32m)[0m=[32m''[33m\s[32m''[32m?[0m ',mailHeader.toName)
- aePuts(string)
- stat:=lineInput('','',30,INPUT_TIMEOUT,string)
- IF(stat<0) THEN RETURN stat
- aFlag:=getAValidName(string,mailHeader.toName,mh.toName)
-
- IF(StrLen(mh.toName)=0) THEN RETURN 2
- StringF(string,'  [36mSubject[33m: [32m([33mEnter[32m)[0m=[32m''[33m\s[32m''[32m?[0m ',mailHeader.subject)
- aePuts(string)
- stat:=lineInput('','',30,INPUT_TIMEOUT,string)
- IF(stat<0) THEN RETURN stat
- IF(string[0]>=" ") THEN strCpy(mh.subject,string,30)
-
- IF(aFlag=FALSE)
+  CopyMem(mailHeader,mh,SIZEOF mailHeader)
+  mh.status:="P"
+  aePuts('\b\n')
+  StringF(string,'     [36mFrom[33m: [32m([33mEnter[32m)[0m=[32m''[33m\s[32m''[32m?[0m ',mailHeader.fromName)
+  aePuts(string)
+  stat:=lineInput('','',30,INPUT_TIMEOUT,string)
+  IF (stat<0) THEN RETURN stat
+  aFlag:=getAValidName(string,mailHeader.fromName,mh.fromName)
+  
+  IF(StrLen(mh.fromName)=0) THEN RETURN 2
+  
+  IF(aFlag)
+    aePuts('Invalid From Name. Aborting.\b\n')
+    RETURN 2
+  ENDIF
+  StringF(string,'     [36m  To[33m: [32m([33mEnter[32m)[0m=[32m''[33m\s[32m''[32m?[0m ',mailHeader.toName)
+  aePuts(string)
+  stat:=lineInput('','',30,INPUT_TIMEOUT,string)
+  IF(stat<0) THEN RETURN stat
+  aFlag:=getAValidName(string,mailHeader.toName,mh.toName)
+  
+  IF(StrLen(mh.toName)=0) THEN RETURN 2
+  StringF(string,'  [36mSubject[33m: [32m([33mEnter[32m)[0m=[32m''[33m\s[32m''[32m?[0m ',mailHeader.subject)
+  aePuts(string)
+  stat:=lineInput('','',30,INPUT_TIMEOUT,string)
+  IF(stat<0) THEN RETURN stat
+  IF(string[0]>=" ") THEN strCpy(mh.subject,string,30)
+  
+  IF(aFlag=FALSE)
     aePuts('         [36mPrivate ')
     stat:=yesNo(2)
     IF(stat<0) THEN RETURN stat
     IF(stat) THEN mh.status:="R" ELSE mh.status:="P"
   ENDIF
-
- mh.recv:=0
- 
- CopyMem(mh,mailHeader,SIZEOF mailHeader)
- delMsgNum:=msgNum-fwdFlag
- saveOverHeader(gfh)
+  
+  mh.recv:=0
+  
+  CopyMem(mh,mailHeader,SIZEOF mailHeader)
+  delMsgNum:=msgNum-fwdFlag
+  saveOverHeader(gfh)
 
 ENDPROC 1
 
@@ -12106,8 +12045,8 @@ PROC searchNewMail(gfh, cn)
 
   IF(msgNum<mailStat.lowestKey) THEN msgNum:=mailStat.lowestKey
   IF(msgNum>=mailStat.highMsgNum)
-     IF(currentConf=0) THEN aePuts('No mail today!\b\n') ELSE aePuts('\b\n')
-     RETURN RESULT_SUCCESS
+    IF(currentConf=0) THEN aePuts('No mail today!\b\n') ELSE aePuts('\b\n')
+    RETURN RESULT_SUCCESS
   ENDIF
 
   /*IF(currentConf<>0) 
@@ -12115,91 +12054,91 @@ PROC searchNewMail(gfh, cn)
   ENDIF*/
 
   REPEAT
-     IF(msgNum>=mailStat.highMsgNum)
-         JUMP getOUT
-     ENDIF
-   stat:=loadMessageHeader(gfh)
-   IF(mailHeader.status="D") THEN JUMP getNextMSG
-   
-   IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS))) AND (mailHeader.recv=0)
-     IF(currentConf=0)
-
-       IF(mailFlag=0)
-           displayMsg:=msgNum
-           aePuts('\b\n\b\n')
-           aePuts('[32mType     From                           Subject                Msg    \b\n')
-           aePuts('[33m-------  -----------------------------  ---------------------  -------\b\n')
-           aePuts('[0m')
-           mailFlag:=1
-       ENDIF
-       IF (mailHeader="P") OR (mailHeader="p") THEN StrCopy(mailStatus,'Public ') ELSE StrCopy(mailStatus,'Private')
-       StringF(tempStr,'\s  \l\s[29]  \l\s[21]  [0m\z\r\d[6]\b\n',mailStatus,mailHeader.fromName,mailHeader.subject,mailHeader.msgNumb)
-       aePuts(tempStr)
-        
-     ELSE
-       IF mailFlag=0
-         displayMsg:=msgNum
-         mailFlag:=1
-       ENDIF
-     ENDIF
-  ENDIF
- getNextMSG:
- msgNum++
- UNTIL msgNum>mailStat.highMsgNum
+    IF(msgNum>=mailStat.highMsgNum)
+        JUMP getOUT
+    ENDIF
+    stat:=loadMessageHeader(gfh)
+    IF(mailHeader.status="D") THEN JUMP getNextMSG
+    
+    IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS))) AND (mailHeader.recv=0)
+      IF(currentConf=0)
+    
+        IF(mailFlag=0)
+          displayMsg:=msgNum
+          aePuts('\b\n\b\n')
+          aePuts('[32mType     From                           Subject                Msg    \b\n')
+          aePuts('[33m-------  -----------------------------  ---------------------  -------\b\n')
+          aePuts('[0m')
+          mailFlag:=1
+        ENDIF
+        IF (mailHeader="P") OR (mailHeader="p") THEN StrCopy(mailStatus,'Public ') ELSE StrCopy(mailStatus,'Private')
+        StringF(tempStr,'\s  \l\s[29]  \l\s[21]  [0m\z\r\d[6]\b\n',mailStatus,mailHeader.fromName,mailHeader.subject,mailHeader.msgNumb)
+        aePuts(tempStr)
+         
+      ELSE
+        IF mailFlag=0
+          displayMsg:=msgNum
+          mailFlag:=1
+        ENDIF
+      ENDIF
+    ENDIF
+getNextMSG:
+    msgNum++
+  UNTIL msgNum>mailStat.highMsgNum
 
 getOUT:
- IF(currentConf<>0) AND (mailFlag) THEN aePuts('\b\nFound Mail!')
- IF (mailFlag)
-   aePuts('\b\nWould you like to read it now ')
-   stat:=yesNo(1)
-   aePuts('\b\n')
-   IF(stat<0) THEN RETURN stat
-   IF(stat)
-     oldcn:=currentConf
-     msgNum:=displayMsg
-     WHILE (msgNum<mailStat.highMsgNum)
-       stat:=loadMessageHeader(gfh)
-       IF(mailHeader.status<>"D")   
-         IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS))) AND (mailHeader.recv=0)
-           oldcn:=currentConf
-           currentConf:=cn
-           stat:=displayMessage(gfh)
-           IF(stat<0) 
+  IF(currentConf<>0) AND (mailFlag) THEN aePuts('\b\nFound Mail!')
+  IF (mailFlag)
+    aePuts('\b\nWould you like to read it now ')
+    stat:=yesNo(1)
+    aePuts('\b\n')
+    IF(stat<0) THEN RETURN stat
+    IF(stat)
+      oldcn:=currentConf
+      msgNum:=displayMsg
+      WHILE (msgNum<mailStat.highMsgNum)
+        stat:=loadMessageHeader(gfh)
+        IF(mailHeader.status<>"D")   
+          IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS))) AND (mailHeader.recv=0)
+            oldcn:=currentConf
+            currentConf:=cn
+            stat:=displayMessage(gfh)
+            IF(stat<0) 
               currentConf:=oldcn
               RETURN stat
-           ENDIF
-           stat:=replyPrompt(gfh)
-           currentConf:=oldcn
-           IF kMsgFlag=FALSE THEN lastNewReadConf:=msgNum+1
-           IF(stat=RESULT_FAILURE) THEN RETURN RESULT_SUCCESS
-           IF(stat<0) THEN RETURN stat
-         ENDIF
-       ENDIF
-       msgNum++
-     ENDWHILE
-   ELSE
-     RETURN RESULT_SUCCESS
-   ENDIF
- ELSE
-   lastNewReadConf:=msgNum
-   aePuts('No mail today!\b\n')
- ENDIF
+            ENDIF
+            stat:=replyPrompt(gfh)
+            currentConf:=oldcn
+            IF kMsgFlag=FALSE THEN lastNewReadConf:=msgNum+1
+            IF(stat=RESULT_FAILURE) THEN RETURN RESULT_SUCCESS
+            IF(stat<0) THEN RETURN stat
+          ENDIF
+        ENDIF
+        msgNum++
+      ENDWHILE
+    ELSE
+      RETURN RESULT_SUCCESS
+    ENDIF
+  ELSE
+    lastNewReadConf:=msgNum
+    aePuts('No mail today!\b\n')
+  ENDIF
 
 ENDPROC RESULT_SUCCESS
 
 PROC saveOverHeader(gfh)
   DEF headPoint,size,filePos,error,temp
 
- headPoint:=delMsgNum-mailStat.lowestKey
- size:=110
- filePos:=Mul(size,headPoint)
- temp:=filePos-currentSeekPos
-
- error:=Seek(gfh,temp,OFFSET_CURRENT)
- IF(error<0)
-     myError(ERR_MSGBASE)
-     RETURN RESULT_FAILURE
- ENDIF
+  headPoint:=delMsgNum-mailStat.lowestKey
+  size:=110
+  filePos:=Mul(size,headPoint)
+  temp:=filePos-currentSeekPos
+  
+  error:=Seek(gfh,temp,OFFSET_CURRENT)
+  IF(error<0)
+    myError(ERR_MSGBASE)
+    RETURN RESULT_FAILURE
+  ENDIF
 
   mailHeader.pad:=0
   error:=Write(gfh,mailHeader,1)    -> STATUS
@@ -12212,12 +12151,12 @@ PROC saveOverHeader(gfh)
   error:=error+Write(gfh,mailHeader+102,9)  ->msgdate, recv & pad
   error:=error+Write(gfh,mailHeader+110,1)   ->PAD
 
- Seek(gfh,currentSeekPos,OFFSET_BEGINNING)
-
- IF(error<>size)
-     myError(ERR_MSGBASE)
-     RETURN RESULT_FAILURE
- ENDIF
+  Seek(gfh,currentSeekPos,OFFSET_BEGINNING)
+  
+  IF(error<>size)
+    myError(ERR_MSGBASE)
+    RETURN RESULT_FAILURE
+  ENDIF
  
 ENDPROC RESULT_SUCCESS
 
@@ -12226,22 +12165,22 @@ PROC saveStatOnly()
   DEF string[255]:STRING
   DEF fd
 
- StringF(string,'\s\s',msgBaseLocation,'MailStats')
- fd:=Open(string,MODE_READWRITE)
- IF(fd<=0)
-     myError(ERR_MSGBASE)
-     RETURN RESULT_FAILURE
- ENDIF
-
- error:=Write(fd,mailStat,SIZEOF mailStat)
- IF(error<>SIZEOF mailStat)
-     aePuts('Wasn''t the same!\b\n')
-     Close(fd)
-     myError(ERR_MSGBASE)
-     RETURN RESULT_FAILURE
- ENDIF
- Close(fd)
- RETURN RESULT_SUCCESS
+  StringF(string,'\s\s',msgBaseLocation,'MailStats')
+  fd:=Open(string,MODE_READWRITE)
+  IF(fd<=0)
+    myError(ERR_MSGBASE)
+    RETURN RESULT_FAILURE
+  ENDIF
+  
+  error:=Write(fd,mailStat,SIZEOF mailStat)
+  IF(error<>SIZEOF mailStat)
+    aePuts('Wasn''t the same!\b\n')
+    Close(fd)
+    myError(ERR_MSGBASE)
+    RETURN RESULT_FAILURE
+  ENDIF
+  Close(fd)
+  RETURN RESULT_SUCCESS
 ENDPROC
 
 PROC deleteMSG(gfh)
@@ -12250,14 +12189,14 @@ PROC deleteMSG(gfh)
   DEF stat
 
   IF(loggedOnUser.secStatus<210)
-      IF(stringCompare(mailHeader.fromName,confMailName)=RESULT_SUCCESS) THEN JUMP goAheadDel
-      IF(stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) THEN JUMP goAheadDel
-      aePuts('\b\nMessage not deleted, not your mail.\b\n\b\n')
-      RETURN RESULT_FAILURE
+    IF(stringCompare(mailHeader.fromName,confMailName)=RESULT_SUCCESS) THEN JUMP goAheadDel
+    IF(stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) THEN JUMP goAheadDel
+    aePuts('\b\nMessage not deleted, not your mail.\b\n\b\n')
+    RETURN RESULT_FAILURE
   ENDIF
 
 goAheadDel:
- IF(msgbaselock:=lockMsgBase())
+  IF(msgbaselock:=lockMsgBase())
     getMailStatFile(currentConf)
     delMsgNum:=msgNum-fwdFlag
     IF(mailStat.lowestNotDel=delMsgNum) THEN mailStat.lowestNotDel:=mailStat.lowestNotDel+1
@@ -12271,31 +12210,31 @@ goAheadDel:
     StringF(string,'\b\nMessage \d deleted...\b\n',delMsgNum)
     aePuts(string)
     UnLock(msgbaselock)
- ELSE
-   aePuts('Can''t Lock MsgBase, Message not Deleted!\b\n')
- ENDIF
+  ELSE
+    aePuts('Can''t Lock MsgBase, Message not Deleted!\b\n')
+  ENDIF
 ENDPROC RESULT_SUCCESS
 
 PROC lockMsgBase()
   DEF lock, loop, error
- DEF tempstr[255]:STRING
-
- loop:=0
- StringF(tempstr,'\sMailLock',msgBaseLocation)
- REPEAT
-   lock:=Lock(tempstr,ACCESS_WRITE)
-     IF(lock=0)
-         error:=IoErr()
-         IF(error=205) THEN createFile(tempstr)
-         Delay(120)
-         aePuts('.')
-     ENDIF
- UNTIL((lock<>0) OR (loop++>=30))
-
- IF(lock=0)
-     StringF(tempstr,'\tError \d trying to Lock MSGBASE',IoErr())
-     callersLog(tempstr)
- ENDIF
+  DEF tempstr[255]:STRING
+  
+  loop:=0
+  StringF(tempstr,'\sMailLock',msgBaseLocation)
+  REPEAT
+    lock:=Lock(tempstr,ACCESS_WRITE)
+    IF(lock=0)
+      error:=IoErr()
+      IF(error=205) THEN createFile(tempstr)
+      Delay(120)
+      aePuts('.')
+    ENDIF
+  UNTIL((lock<>0) OR (loop++>=30))
+  
+  IF(lock=0)
+    StringF(tempstr,'\tError \d trying to Lock MSGBASE',IoErr())
+    callersLog(tempstr)
+  ENDIF
 ENDPROC lock
 
 PROC createFile(filename)
@@ -12324,376 +12263,383 @@ PROC readMSG(gfh)
   nonStopMail:=paramsContains('NS')
 
   IF paramsContains('S')
-     IF(msgNum>(mailStat.highMsgNum-1))
-         aePuts('No new messages.\b\n')
-         aePuts('\b\n')
-         RETURN RESULT_FAILURE
-     ENDIF
-     JUMP goNextMsg
+    IF(msgNum>(mailStat.highMsgNum-1))
+      aePuts('No new messages.\b\n')
+      aePuts('\b\n')
+      RETURN RESULT_FAILURE
+    ENDIF
+    JUMP goNextMsg
   ENDIF
 
-  IF ListLen(parsedParams)>0
-  firstparam:=ListItem(parsedParams,0)
-  IF (StrCmp(firstparam,'-')) OR (StrCmp(firstparam,'+')) OR (isDigit(firstparam))
-    StrCopy(str,firstparam,ALL) 
-    JUMP passItIN
-  ENDIF
+  IF parsedParams.count()>0
+    firstparam:=parsedParams.item(0)
+    IF (StrCmp(firstparam,'-')) OR (StrCmp(firstparam,'+')) OR (isDigit(firstparam))
+      StrCopy(str,firstparam,ALL) 
+      JUMP passItIN
+    ENDIF
   ENDIF
 
- WHILE TRUE
+  WHILE TRUE
   cont:
-     IF(fwdFlag=1) THEN StringF(str,'\d\c\d',msgNum,fwdDir,mailStat.highMsgNum-1) ELSE StringF(str,'\d\c\d',msgNum,fwdDir,mailStat.lowestKey)
+    IF(fwdFlag=1) THEN StringF(str,'\d\c\d',msgNum,fwdDir,mailStat.highMsgNum-1) ELSE StringF(str,'\d\c\d',msgNum,fwdDir,mailStat.lowestKey)
 
-     IF((msgNum>(mailStat.highMsgNum-1)) OR (msgNum<mailStat.lowestKey)) THEN StrCopy(str,'QUIT',ALL)
+    IF((msgNum>(mailStat.highMsgNum-1)) OR (msgNum<mailStat.lowestKey)) THEN StrCopy(str,'QUIT',ALL)
 
-      IF(helplist=0)
-       IF(nonStopMail=FALSE)
-         aePuts('\b\n[32mMsg. Options: [33mA[36m')
-         IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts(',[33mD')
-         aePuts('[36m,[33mF[36m,[33mR[36m,[33mQ')
-         StringF(string,'[36m,[33m?[36m,[33m??[36m,[32m<[33mCR[32m> [32m([0m \s[32m )[0m>: ',str)
-         aePuts(string)
-       ENDIF
-      ELSEIF(helplist=1)
-         aePuts('[33mA[32m>[36mgain[0m')
-         IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
-         aePuts('\b\n[33mF[32m>[36morward[0m')
-         aePuts('\b\n[33mR[32m>[36meply[0m')
-         aePuts('\b\n[33mQ[32m>[36muit[0m')
-         StringF(string,'\b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m \s[32m )[0m? ',str)
-         aePuts(string)
-         helplist:=0
-      ELSE
-         aePuts('[33mA[32m>[36mgain[0m')
-         IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
-         aePuts('\b\n[33mF[32m>[36morward[0m')
-         aePuts('\b\n[33mR[32m>[36meply[0m')
-         aePuts('\b\n[33mNS[32m>[36m Non-stop mode[0m')
-         IF checkSecurity(ACS_TRANSLATION)
-           IF (StrCmp(userLanguage,hostLanguage)=FALSE) THEN aePuts('\b\n[33mT[32m>[36mranslate[0m')
-           aePuts('\b\n[33mTS[32m>[36m Select Language & Translate[0m')
-           aePuts('\b\n[33mT![32m>[36m Translate to each language[0m')
-           aePuts('\b\n[33mT*[32m>[36m Translate from each language[0m')
-         ENDIF         
-         aePuts('\b\n[33mK[32m>[36meep and quit[0m')
-         IF checkSecurity(ACS_MESSAGE_EDIT)
-          aePuts('\b\n[33mEH[32m>[36m Edit Message Header[0m')
-         ENDIF
-         IF checkSecurity(ACS_ACCOUNT_EDITING)
-          aePuts('\b\n[33mU[32m>[36mser Account Edit[0m')
-         ENDIF
-         
-         aePuts('\b\n[33mQ[32m>[36muit[0m')
-         StringF(string,'\b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m \s[32m )[0m? ',str)
-         aePuts(string)
-         helplist:=0
+    IF(helplist=0)
+      IF(nonStopMail=FALSE)
+        aePuts('\b\n[32mMsg. Options: [33mA[36m')
+        IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts(',[33mD')
+        aePuts('[36m,[33mF[36m,[33mR[36m,[33mQ')
+        StringF(string,'[36m,[33m?[36m,[33m??[36m,[32m<[33mCR[32m> [32m([0m \s[32m )[0m>: ',str)
+        aePuts(string)
       ENDIF
+    ELSEIF(helplist=1)
+      aePuts('[33mA[32m>[36mgain[0m')
+      IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
+      aePuts('\b\n[33mF[32m>[36morward[0m')
+      aePuts('\b\n[33mR[32m>[36meply[0m')
+      aePuts('\b\n[33mQ[32m>[36muit[0m')
+      StringF(string,'\b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m \s[32m )[0m? ',str)
+      aePuts(string)
+      helplist:=0
+    ELSE
+      aePuts('[33mA[32m>[36mgain[0m')
+      IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
+      aePuts('\b\n[33mF[32m>[36morward[0m')
+      aePuts('\b\n[33mR[32m>[36meply[0m')
+      aePuts('\b\n[33mNS[32m>[36m Non-stop mode[0m')
+      IF checkSecurity(ACS_TRANSLATION)
+        IF (StrCmp(userLanguage,hostLanguage)=FALSE) THEN aePuts('\b\n[33mT[32m>[36mranslate[0m')
+        aePuts('\b\n[33mTS[32m>[36m Select Language & Translate[0m')
+        aePuts('\b\n[33mT![32m>[36m Translate to each language[0m')
+        aePuts('\b\n[33mT*[32m>[36m Translate from each language[0m')
+      ENDIF         
+      aePuts('\b\n[33mK[32m>[36meep and quit[0m')
+      IF checkSecurity(ACS_MESSAGE_EDIT)
+       aePuts('\b\n[33mE[32m>[36m Edit Emacs Message[0m')
+       aePuts('\b\n[33mEH[32m>[36m Edit Message Header[0m')
+       aePuts('\b\n[33mEM[32m>[36m Edit Message Body[0m')
+      ENDIF
+      IF checkSecurity(ACS_ACCOUNT_EDITING)
+       aePuts('\b\n[33mU[32m>[36mser Account Edit[0m')
+      ENDIF
+      
+      aePuts('\b\n[33mQ[32m>[36muit[0m')
+      StringF(string,'\b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m \s[32m )[0m? ',str)
+      aePuts(string)
+      helplist:=0
+    ENDIF
    
-     IF(nonStopMail=FALSE)
-         noDirF:=1
-         stat:=lineInput('','',10,INPUT_TIMEOUT,str)
-         IF(stat<>RESULT_SUCCESS) THEN RETURN RESULT_FAILURE
-         aePuts('\b\n')
-     ENDIF
+    IF(nonStopMail=FALSE)
+      noDirF:=1
+      stat:=lineInput('','',10,INPUT_TIMEOUT,str)
+      IF(stat<>RESULT_SUCCESS) THEN RETURN RESULT_FAILURE
+      aePuts('\b\n')
+    ENDIF
     
-     IF(strCmpi(str,'??',ALL))
-       helplist:=2
-       JUMP cont
-     ENDIF
-     IF(str[0]="?")
-       helplist:=1
-       JUMP cont
-     ENDIF
+    IF(strCmpi(str,'??',ALL))
+      helplist:=2
+      JUMP cont
+    ENDIF
+    IF(str[0]="?")
+      helplist:=1
+      JUMP cont
+    ENDIF
 
-     IF(((str[0]="N") OR (str[0]="n")) AND ((str[1]="S") OR (str[1]="s"))) THEN nonStopMail:=TRUE
+    IF(((str[0]="N") OR (str[0]="n")) AND ((str[1]="S") OR (str[1]="s"))) THEN nonStopMail:=TRUE
 
-     IF((EstrLen(str)=0) OR (nonStopMail))
-         noDirF:=1
-         JUMP goNextMsg
-     ENDIF
+    IF((EstrLen(str)=0) OR (nonStopMail))
+      noDirF:=1
+      JUMP goNextMsg
+    ENDIF
 
-     IF(tempFlag)
-         IF((privateFlag=0) OR (stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR
-            (stringCompare(mailHeader.fromName,confMailName)=RESULT_SUCCESS)) OR
-            (checkSecurity(ACS_SYSOP_READ))
+    IF(tempFlag)
+      IF((privateFlag=0) OR (stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR
+         (stringCompare(mailHeader.fromName,confMailName)=RESULT_SUCCESS)) OR
+         (checkSecurity(ACS_SYSOP_READ))
 
-             lowerChar:=charToLower(str[0])
-             SELECT lowerChar
-                 CASE "k"
-                    mailHeader.recv:=0
-                    delMsgNum:=mailHeader.msgNumb;
-                    IF lastNewReadConf>=mailHeader.msgNumb THEN lastNewReadConf--
-                    IF mailStat.lowestNotDel>=mailHeader.msgNumb THEN lastNewReadConf:=mailStat.lowestNotDel
-                    saveOverHeader(gfh)
-                    kMsgFlag:=TRUE
-                    noDirF:=1
-                 CASE "a"
-                     stat:=displayMessage(gfh)
-                     IF(stat<0) THEN RETURN stat
-                     JUMP nextMenu
-                 CASE "t"
-                     IF checkSecurity(ACS_TRANSLATION)=FALSE THEN JUMP nextMenu
+        lowerChar:=charToLower(str[0])
+        SELECT lowerChar
+          CASE "k"
+            mailHeader.recv:=0
+            delMsgNum:=mailHeader.msgNumb;
+            IF lastNewReadConf>=mailHeader.msgNumb THEN lastNewReadConf--
+            IF mailStat.lowestNotDel>=mailHeader.msgNumb THEN lastNewReadConf:=mailStat.lowestNotDel
+            saveOverHeader(gfh)
+            kMsgFlag:=TRUE
+            noDirF:=1
+          CASE "a"
+            stat:=displayMessage(gfh)
+            IF(stat<0) THEN RETURN stat
+            JUMP nextMenu
+          CASE "t"
+            IF checkSecurity(ACS_TRANSLATION)=FALSE THEN JUMP nextMenu
 
-                     IF strCmpi(str,'t!',ALL) OR strCmpi(str,'t*',ALL)
-                        i:=1
-                        StringF(string,'LANGUAGE.\d',i)
-                        WHILE readToolType(TOOLTYPE_LANGUAGES,'',string,translatorLanguage)
-                          
-                          IF StrCmp(translatorLanguage,hostLanguage)=FALSE
-                            IF strCmpi(str,'t!',ALL)
-                              StringF(string,'\b\nTranslating to \s\b\n\b\n',translatorLanguage)
-                              aePuts(string)
-                              translatorMode:=TRANS_HOST_TO_DEFINED
-                            ELSE
-                              StringF(string,'\b\nTranslating from \s\b\n\b\n',translatorLanguage)
-                              aePuts(string)
-                              translatorMode:=TRANS_DEFINED_TO_HOST
-                            ENDIF
-                            
-                            stat:=displayMessage(gfh)
-                            translatorMode:=TRANS_NONE
-                            IF(stat<0) THEN RETURN stat
-                            doPause()
-                          ENDIF
-                          
-                          i++
-                          StringF(string,'LANGUAGE.\d',i)
-                        ENDWHILE
-                     ELSE
-                       IF strCmpi(str,'ts',ALL)
-                         stat:=chooseTranslator()
-                         IF(stat<0) THEN RETURN stat                       
-                       ENDIF
-                       translatorMode:=TRANS_HOST_TO_DEFINED
-                       StrCopy(translatorLanguage,userLanguage)
-                       stat:=displayMessage(gfh)
-                       translatorMode:=TRANS_NONE
-                       IF(stat<0) THEN RETURN stat
-                     ENDIF
-                     JUMP nextMenu
-                 
-                 CASE "d"
-                     IF checkSecurity(ACS_DELETE_MESSAGE) 
-                      stat:=deleteMSG(gfh)
-                      noDirF:=1
-                      JUMP goNextMsg
-                     ENDIF
-                 CASE "f"
-                     stat:=forwardMSG(gfh)
-                     IF(stat<0) THEN RETURN stat
-                     noDirF:=1 
-                     JUMP nextMenu
-                 CASE "r"
-                     stat:=replyToMSG(gfh)
-                     IF(stat<0) THEN RETURN stat
-                     noDirF:=1 
-                     JUMP goNextMsg
-             ENDSELECT      
-          -> ENDIF
-         ENDIF
-         IF(((str[0]="E") OR (str[0]="e")) AND (checkSecurity(ACS_MESSAGE_EDIT))) 
-               /* 11w add */
-               IF((str[1]="H") OR (str[1]="h"))
-               
-                 IF((stat=editHeader(gfh))<0) THEN RETURN stat
-               ELSE
-               /* 11w end */
-                 editEMessage(mailHeader.msgNumb)
-               ENDIF
-             stat:=displayMessage(gfh)
-             IF(stat<0) THEN RETURN stat
-             JUMP nextMenu
-         ENDIF
-
-         IF(((str[0]="U") OR (str[0]="u")) AND ((checkSecurity(ACS_ACCOUNT_EDITING))))
-             StrCopy(str,mailHeader.fromName,31)
-             uNum:=findUserFromName(1,confNameType,str,tempUser,tempUserKeys,tempUserMisc)
-             stat:=loadAccount(uNum,tempUser,tempUserKeys,tempUserMisc)
-             IF(stat=RESULT_FAILURE)
-                 aePuts('Warning, error while loading account\b\n')
-                 JUMP nextMenu
-             ENDIF
-             sendCLS()
-             callersLog('\tAccount editing from mail.')
-             StrCopy(str,'\d',tempUser.slotNumber)
-             IF runSysCommand('ACCOUNTS',str)=FALSE THEN editInfo(uNum,tempUser,tempUserKeys,tempUserMisc,FALSE)
-             sendCLS()
-             stat:=displayMessage(gfh)
-             IF(stat<0) THEN RETURN stat
-             JUMP nextMenu
-         ENDIF
-     ENDIF
-
-     IF((str[0]="Q") OR (str[0]="q"))
-         RETURN RESULT_SUCCESS
-     ENDIF
-
-     passItIN:
-     IF(nonStopMail=FALSE)
-       noDirF:=0
-     ELSE
-       noDirF:=1
-       fwdFlag:=1
-       fwdDir:="+"
-     ENDIF
-     IF(str[StrLen(str)-1]="+")
-         IF(fwdFlag=(-1)) THEN msgNum:=msgNum+2
-         noDirF:=1
-
-         fwdToMsg:=mailStat.highMsgNum
-         fwdFlag:=1
-         fwdDir:="+"
-         stat:=firstChar(str)
-         IF((stat>=0) AND (str[stat]="+")) THEN JUMP goNextMsg
-         str[StrLen(str)-1]:=" "
-     ENDIF
-     IF(str[StrLen(str)-1]="-")
-         IF(fwdFlag=1)
-             msgNum:=msgNum-1
-             msgNum:=msgNum-tempFlag
-         ENDIF
-         noDirF:=1
-         fwdToMsg:=mailStat.lowestKey
-         fwdFlag:=-1
-         fwdDir:="-"
-         stat:=firstChar(str)
-         IF((stat>=0) AND (str[stat]="-")) THEN JUMP goNextMsg
-         str[StrLen(str)-1]:=" "
-     ENDIF
-     StrAdd(str,' ')
-
-     stat:=firstChar(str)
-     IF(stat>=0)
-         IF(isDigit(str+stat)) 
-             msgNum:=Val(str)
-
-            goNextMsg:
-            IF(doormsgcode=2)
-              doormsgcode:=0
-              RETURN RESULT_SUCCESS
+            IF strCmpi(str,'t!',ALL) OR strCmpi(str,'t*',ALL)
+              i:=1
+              StringF(string,'LANGUAGE.\d',i)
+              WHILE readToolType(TOOLTYPE_LANGUAGES,'',string,translatorLanguage)
+                
+                IF StrCmp(translatorLanguage,hostLanguage)=FALSE
+                  IF strCmpi(str,'t!',ALL)
+                    StringF(string,'\b\nTranslating to \s\b\n\b\n',translatorLanguage)
+                    aePuts(string)
+                    translatorMode:=TRANS_HOST_TO_DEFINED
+                  ELSE
+                    StringF(string,'\b\nTranslating from \s\b\n\b\n',translatorLanguage)
+                    aePuts(string)
+                    translatorMode:=TRANS_DEFINED_TO_HOST
+                  ENDIF
+                  
+                  stat:=displayMessage(gfh)
+                  translatorMode:=TRANS_NONE
+                  IF(stat<0) THEN RETURN stat
+                  doPause()
+                ENDIF
+                
+                i++
+                StringF(string,'LANGUAGE.\d',i)
+              ENDWHILE
+            ELSE
+              IF strCmpi(str,'ts',ALL)
+                stat:=chooseTranslator()
+                IF(stat<0) THEN RETURN stat                       
+              ENDIF
+              translatorMode:=TRANS_HOST_TO_DEFINED
+              StrCopy(translatorLanguage,userLanguage)
+              stat:=displayMessage(gfh)
+              translatorMode:=TRANS_NONE
+              IF(stat<0) THEN RETURN stat
             ENDIF
-
-            IF(doormsgcode=1) THEN doormsgcode:=2 
-            
-            IF((stat >=0) OR (str[stat]="+") OR (str[stat] = "-"))
-              checkScreenClear()
+            JUMP nextMenu
+          
+          CASE "d"
+            IF checkSecurity(ACS_DELETE_MESSAGE) 
+              stat:=deleteMSG(gfh)
+              noDirF:=1
+              JUMP goNextMsg
             ENDIF
+          CASE "f"
+            stat:=forwardMSG(gfh)
+            IF(stat<0) THEN RETURN stat
+            noDirF:=1 
+            JUMP nextMenu
+          CASE "r"
+            stat:=replyToMSG(gfh)
+            IF(stat<0) THEN RETURN stat
+            noDirF:=1 
+            JUMP goNextMsg
+        ENDSELECT      
+       -> ENDIF
+      ENDIF
+      IF(((str[0]="E") OR (str[0]="e")) AND (checkSecurity(ACS_MESSAGE_EDIT))) 
+        /* 11w add */
+        IF((str[1]="H") OR (str[1]="h"))
+        
+          IF((stat=editHeader(gfh))<0) THEN RETURN stat
+        ELSEIF((str[1]="M") OR (str[1]="m"))
+          fileattach:=FALSE
+          StringF(str,'\s\d',msgBaseLocation,mailHeader.msgNumb)
+          loadMsg(str)
+          IF(edit()=RESULT_SUCCESS) THEN saveMsg(str)
+        ELSE
+        /* 11w end */
+          editEMessage(mailHeader.msgNumb)
+        ENDIF
+        stat:=displayMessage(gfh)
+        IF(stat<0) THEN RETURN stat
+        JUMP nextMenu
+      ENDIF
 
-             stat:=readit(gfh)
-             IF(stat<RESULT_FAILURE)
-                RETURN RESULT_NO_CARRIER
-             ENDIF
-             IF(stat=10)
-                 RETURN 10
-             ENDIF
-             IF(stat=RESULT_FAILURE) 
-                 aePuts('\b\n')
-                 IF(numOfZMsgs<>0) THEN RETURN RESULT_SUCCESS ELSE RETURN RESULT_FAILURE
-             ENDIF
-         ENDIF
-     ENDIF
-     nextMenu:
-     aePuts('\b\n')
- ENDWHILE
+      IF(((str[0]="U") OR (str[0]="u")) AND ((checkSecurity(ACS_ACCOUNT_EDITING))))
+        StrCopy(str,mailHeader.fromName,31)
+        uNum:=findUserFromName(1,confNameType,str,tempUser,tempUserKeys,tempUserMisc)
+        stat:=loadAccount(uNum,tempUser,tempUserKeys,tempUserMisc)
+        IF(stat=RESULT_FAILURE)
+          aePuts('Warning, error while loading account\b\n')
+          JUMP nextMenu
+        ENDIF
+        sendCLS()
+        callersLog('\tAccount editing from mail.')
+        StrCopy(str,'\d',tempUser.slotNumber)
+        IF runSysCommand('ACCOUNTS',str)=FALSE THEN editInfo(uNum,tempUser,tempUserKeys,tempUserMisc,FALSE)
+        sendCLS()
+        stat:=displayMessage(gfh)
+        IF(stat<0) THEN RETURN stat
+        JUMP nextMenu
+      ENDIF
+    ENDIF
+
+    IF((str[0]="Q") OR (str[0]="q"))
+      RETURN RESULT_SUCCESS
+    ENDIF
+
+    passItIN:
+    IF(nonStopMail=FALSE)
+      noDirF:=0
+    ELSE
+      noDirF:=1
+      fwdFlag:=1
+      fwdDir:="+"
+    ENDIF
+    IF(str[StrLen(str)-1]="+")
+      IF(fwdFlag=(-1)) THEN msgNum:=msgNum+2
+      noDirF:=1
+
+      fwdToMsg:=mailStat.highMsgNum
+      fwdFlag:=1
+      fwdDir:="+"
+      stat:=firstChar(str)
+      IF((stat>=0) AND (str[stat]="+")) THEN JUMP goNextMsg
+      str[StrLen(str)-1]:=" "
+    ENDIF
+    IF(str[StrLen(str)-1]="-")
+      IF(fwdFlag=1)
+        msgNum:=msgNum-1
+        msgNum:=msgNum-tempFlag
+      ENDIF
+      noDirF:=1
+      fwdToMsg:=mailStat.lowestKey
+      fwdFlag:=-1
+      fwdDir:="-"
+      stat:=firstChar(str)
+      IF((stat>=0) AND (str[stat]="-")) THEN JUMP goNextMsg
+      str[StrLen(str)-1]:=" "
+    ENDIF
+    StrAdd(str,' ')
+
+    stat:=firstChar(str)
+    IF(stat>=0)
+      IF(isDigit(str+stat)) 
+        msgNum:=Val(str)
+
+ goNextMsg:
+        IF(doormsgcode=2)
+          doormsgcode:=0
+          RETURN RESULT_SUCCESS
+        ENDIF
+
+        IF(doormsgcode=1) THEN doormsgcode:=2 
+        
+        IF((stat >=0) OR (str[stat]="+") OR (str[stat] = "-"))
+          checkScreenClear()
+        ENDIF
+
+        stat:=readit(gfh)
+        IF(stat<RESULT_FAILURE)
+          RETURN RESULT_NO_CARRIER
+        ENDIF
+        IF(stat=10)
+          RETURN 10
+        ENDIF
+        IF(stat=RESULT_FAILURE) 
+          aePuts('\b\n')
+          IF(numOfZMsgs<>0) THEN RETURN RESULT_SUCCESS ELSE RETURN RESULT_FAILURE
+        ENDIF
+      ENDIF
+    ENDIF
+nextMenu:
+    aePuts('\b\n')
+  ENDWHILE
 ENDPROC RESULT_SUCCESS
 
 PROC noMorePlus()
   DEF str[100]: STRING
 
   IF(nonStopMail=FALSE) 
-     IF(noDirF=0) 
-         StringF(str,'\b\nThe last message in this conference is \d\b\n',mailStat.highMsgNum-1)
-         aePuts(str)
-     ENDIF
+    IF(noDirF=0) 
+      StringF(str,'\b\nThe last message in this conference is \d\b\n',mailStat.highMsgNum-1)
+      aePuts(str)
+    ENDIF
   ENDIF
- nonStopMail:=FALSE
+  nonStopMail:=FALSE
 ENDPROC
 
 PROC noMoreMinus()
   DEF str[100]: STRING
 
- IF(nonStopMail=FALSE) 
-     IF(noDirF=0)
-         StringF(str,'\b\nThe first message in this conference is \d\b\n',mailStat.lowestNotDel)
-         aePuts(str)
-     ENDIF
- ENDIF
- nonStopMail:=FALSE
+  IF(nonStopMail=FALSE) 
+    IF(noDirF=0)
+      StringF(str,'\b\nThe first message in this conference is \d\b\n',mailStat.lowestNotDel)
+      aePuts(str)
+    ENDIF
+  ENDIF
+  nonStopMail:=FALSE
 ENDPROC
 
 PROC readit(gfh)
   DEF stat
   tempFlag:=1
   
- REPEAT
-     IF(msgNum>(mailStat.highMsgNum-1))
-         noMorePlus()
-         RETURN RESULT_FAILURE
-     ENDIF
-     IF(msgNum<mailStat.lowestKey)
-         noMoreMinus()
-         RETURN RESULT_FAILURE
-     ENDIF
+  REPEAT
+    IF(msgNum>(mailStat.highMsgNum-1))
+      noMorePlus()
+      RETURN RESULT_FAILURE
+    ENDIF
+    IF(msgNum<mailStat.lowestKey)
+      noMoreMinus()
+      RETURN RESULT_FAILURE
+    ENDIF
 
-     stat:=loadMessageHeader(gfh)
-     IF(stat=RESULT_FAILURE)
-         aePuts('\b\nMSG Base Error!!!\b\n')
-         RETURN RESULT_FAILURE
-     ENDIF
+    stat:=loadMessageHeader(gfh)
+    IF(stat=RESULT_FAILURE)
+      aePuts('\b\nMSG Base Error!!!\b\n')
+      RETURN RESULT_FAILURE
+    ENDIF
 
-     privateFlag:=0
-     IF(((mailHeader.status="R") OR (mailHeader.status="p")) AND (Not(checkSecurity(ACS_SYSOP_READ)))) 
-         IF((stringCompare(mailHeader.toName,confMailName)<>RESULT_SUCCESS) AND
-            (stringCompare(mailHeader.fromName,confMailName)<>RESULT_SUCCESS))
-             privateFlag:=1
-             IF(noDirF<>0) THEN JUMP nextMSG
-             aePuts('\b\nThat message is Private.\b\n\b\n')
-             nonStopMail:=FALSE
-             RETURN RESULT_SUCCESS
-         ENDIF
-     ENDIF
+    privateFlag:=0
+    IF(((mailHeader.status="R") OR (mailHeader.status="p")) AND (Not(checkSecurity(ACS_SYSOP_READ)))) 
+      IF((stringCompare(mailHeader.toName,confMailName)<>RESULT_SUCCESS) AND
+        (stringCompare(mailHeader.fromName,confMailName)<>RESULT_SUCCESS))
+        privateFlag:=1
+        IF(noDirF<>0) THEN JUMP nextMSG
+        aePuts('\b\nThat message is Private.\b\n\b\n')
+        nonStopMail:=FALSE
+        RETURN RESULT_SUCCESS
+      ENDIF
+    ENDIF
 
-     IF(mailHeader.status="D")
-         privateFlag:=1
-         IF(noDirF<>0) THEN JUMP nextMSG
-         aePuts('\b\nThat message has been deleted.\b\n\b\n')
-         nonStopMail:=FALSE
-         msgNum:=msgNum+fwdFlag
-         RETURN RESULT_SUCCESS
-     ENDIF
+    IF(mailHeader.status="D")
+      privateFlag:=1
+      IF(noDirF<>0) THEN JUMP nextMSG
+      aePuts('\b\nThat message has been deleted.\b\n\b\n')
+      nonStopMail:=FALSE
+      msgNum:=msgNum+fwdFlag
+      RETURN RESULT_SUCCESS
+    ENDIF
 
-     numOfZMsgs++
-     stat:=displayMessage(gfh)
-     IF(stat<0) THEN RETURN stat
+    numOfZMsgs++
+    stat:=displayMessage(gfh)
+    IF(stat<0) THEN RETURN stat
 
-     IF(msgNum>lastMsgReadConf) THEN lastMsgReadConf:=msgNum
+    IF(msgNum>lastMsgReadConf) THEN lastMsgReadConf:=msgNum
 
-     msgNum:=msgNum+fwdFlag
-     RETURN RESULT_SUCCESS
+    msgNum:=msgNum+fwdFlag
+    RETURN RESULT_SUCCESS
 
-     nextMSG:
-     IF(msgNum>lastMsgReadConf) THEN lastMsgReadConf:=msgNum
-     msgNum:=msgNum+fwdFlag
- UNTIL((msgNum>mailStat.highMsgNum) OR (msgNum<mailStat.lowestKey))
+    nextMSG:
+    IF(msgNum>lastMsgReadConf) THEN lastMsgReadConf:=msgNum
+    msgNum:=msgNum+fwdFlag
+  UNTIL((msgNum>mailStat.highMsgNum) OR (msgNum<mailStat.lowestKey))
 
- IF(msgNum>=mailStat.highMsgNum)  THEN noMorePlus() ELSE noMoreMinus()
+  IF(msgNum>=mailStat.highMsgNum)  THEN noMorePlus() ELSE noMoreMinus()
 ENDPROC RESULT_FAILURE
 
 PROC loadMessageHeader(gfh)
   DEF headPoint,size,filePos,error,temp
   DEF f: PTR TO CHAR
  
- headPoint:=msgNum-mailStat.lowestKey
- size:=110 ->SIZEOF mailHeader
- filePos:=Mul(size,headPoint)
- temp:=filePos-currentSeekPos
- IF(temp)
-     error:=Seek(gfh,temp,OFFSET_CURRENT)
-     IF(error<0)
-         myError(ERR_MSGBASE)
-         RETURN RESULT_FAILURE
-     ENDIF
- ENDIF
+  headPoint:=msgNum-mailStat.lowestKey
+  size:=110 ->SIZEOF mailHeader
+  filePos:=Mul(size,headPoint)
+  temp:=filePos-currentSeekPos
+  IF(temp)
+    error:=Seek(gfh,temp,OFFSET_CURRENT)
+    IF(error<0)
+      myError(ERR_MSGBASE)
+      RETURN RESULT_FAILURE
+    ENDIF
+  ENDIF
  
   error:=Read(gfh,mailHeader,1)
   Seek(gfh,1,OFFSET_CURRENT)
@@ -12708,16 +12654,15 @@ PROC loadMessageHeader(gfh)
   currentSeekPos:=Seek(gfh,0,OFFSET_CURRENT)
 
   IF(error<>107)
-     myError(ERR_MSGBASE)
-     RETURN RESULT_FAILURE
- ENDIF
-
+    myError(ERR_MSGBASE)
+    RETURN RESULT_FAILURE
+  ENDIF
  
 ENDPROC RESULT_SUCCESS
 
 PROC saveMessageHeader(gfh,mh:PTR TO mailHeader)
 DEF stat, error
- Seek(gfh,0,OFFSET_END)
+  Seek(gfh,0,OFFSET_END)
 
   mh.pad:=0
   error:=Write(gfh,mh,1)    -> STATUS
@@ -12730,15 +12675,15 @@ DEF stat, error
   error:=error+Write(gfh,mh+102,9)  ->msgdate, recv & pad
   error:=error+Write(gfh,mh+110,1)   ->PAD
 
- Seek(gfh,currentSeekPos,OFFSET_BEGINNING)
+  Seek(gfh,currentSeekPos,OFFSET_BEGINNING)
 
- IF(error<>110) THEN RETURN RESULT_FAILURE
-
- mailStat.highMsgNum:=mailStat.highMsgNum+1
- IF(mailStat.highMsgNum=2) THEN mailStat.lowestNotDel:=1
-
- stat:=saveStatOnly()
- IF(stat=RESULT_FAILURE) THEN RETURN stat
+  IF(error<>110) THEN RETURN RESULT_FAILURE
+  
+  mailStat.highMsgNum:=mailStat.highMsgNum+1
+  IF(mailStat.highMsgNum=2) THEN mailStat.lowestNotDel:=1
+  
+  stat:=saveStatOnly()
+  IF(stat=RESULT_FAILURE) THEN RETURN stat
  
 ENDPROC RESULT_SUCCESS
 
@@ -12764,25 +12709,25 @@ PROC callMsgFuncs(msgfunc, conf)
 
   gfh:=Open(filename,MODE_READWRITE)
   IF(gfh<=0)
-     gfh:=Open(filename,MODE_NEWFILE)
-     IF(gfh<=0)
-         myError(ERR_MSGBASE)
-         fileattach:=FALSE
-         RETURN RESULT_FAILURE
-     ENDIF
+    gfh:=Open(filename,MODE_NEWFILE)
+    IF(gfh<=0)
+      myError(ERR_MSGBASE)
+      fileattach:=FALSE
+      RETURN RESULT_FAILURE
+    ENDIF
   ENDIF
   currentSeekPos:=0
   stat:=RESULT_FAILURE
   mciViewSafe:=FALSE
 
-   SELECT confNameType
-     CASE NAME_TYPE_USERNAME
-       strCpy(confMailName,loggedOnUserKeys.userName,31)
-     CASE NAME_TYPE_REALNAME
-       strCpy(confMailName,loggedOnUserMisc.realName,26)
-     CASE NAME_TYPE_INTERNETNAME
-       strCpy(confMailName,loggedOnUserMisc.internetName,10)
-   ENDSELECT
+  SELECT confNameType
+    CASE NAME_TYPE_USERNAME
+      strCpy(confMailName,loggedOnUserKeys.userName,31)
+    CASE NAME_TYPE_REALNAME
+      strCpy(confMailName,loggedOnUserMisc.realName,26)
+    CASE NAME_TYPE_INTERNETNAME
+      strCpy(confMailName,loggedOnUserMisc.internetName,10)
+  ENDSELECT
   SELECT msgfunc
     CASE MAIL_READ
          stat:=readMSG(gfh)
@@ -12800,7 +12745,7 @@ PROC callMsgFuncs(msgfunc, conf)
 ENDPROC stat
 
 PROC showFlags()
-  IF(ListLen(flagFilesList)=0)
+  IF(flagFilesList.count()=0)
     aePuts('No file flags\b\n')
   ELSE
     showFlaggedFiles(-1)
@@ -12812,41 +12757,28 @@ PROC isInFlaggedList(s,confNum)
   DEF i
   DEF item:PTR TO flagFileItem
   
-  FOR i:=0 TO ListLen(flagFilesList)-1
-    item:=flagFilesList[i]
-    IF (item.confNum=confNum) AND (stcsma(s,item.fileName)) THEN RETURN TRUE
+  FOR i:=0 TO flagFilesList.count()-1
+    item:=flagFilesList.item(i)
+    IF ((item.confNum=confNum) OR (item.confNum=-1)) AND (stcsma(s,item.fileName)) THEN RETURN TRUE
   ENDFOR
 ENDPROC FALSE
 
-PROC isInList(testlistString,s)
-  DEF tempStr[20]:STRING
-  DEF v,i
-  DEF tempList: PTR TO LONG
-  DEF result
-
-  IF StrLen(testlistString)=0 THEN RETURN FALSE
-
-  tempList:=List(countSpaces(testlistString)+1)
-
-  parseList(testlistString,tempList)
-
-  result:=FALSE
-
-  FOR i:=0 TO ListLen(tempList)-1
-    IF stcsma(s,ListItem(tempList,i)) THEN result:=TRUE
+PROC isInList(list:PTR TO stdlist,s,confNum)
+  DEF i
+  DEF item:PTR TO flagFileItem
+  
+  FOR i:=0 TO list.count()-1
+    item:=list.item(i)
+    IF ((item.confNum=confNum) OR (item.confNum=-1)) AND (stcsma(s,item.fileName)) THEN RETURN TRUE
   ENDFOR
-
-  FOR i:=0 TO ListLen(tempList)-1
-    DisposeLink(ListItem(tempList,i))
-  ENDFOR
-  DisposeLink(tempList)
-
-ENDPROC result
+ENDPROC FALSE
 
 PROC addFlagToList(s:PTR TO CHAR, confNum = -1)
   DEF p: PTR TO CHAR
   DEF stat
   DEF item:PTR TO flagFileItem
+  
+  s:=TrimStr(s)
   
   IF confNum=-1 THEN confNum:=currentConf
   
@@ -12854,10 +12786,10 @@ PROC addFlagToList(s:PTR TO CHAR, confNum = -1)
     UpperStr(s)
     stat:=isInFlaggedList(s,confNum)
     IF(stat=FALSE)
-      IF ListLen(flagFilesList)=ListMax(flagFilesList)
+      /*IF flagFilesList.count()=flagFilesList.maxSize()
         aePuts('Too many flags\b\n')
         RETURN 1
-      ENDIF
+      ENDIF*/
 
       addFlagItem(flagFilesList,confNum,s)
 
@@ -12866,23 +12798,22 @@ PROC addFlagToList(s:PTR TO CHAR, confNum = -1)
   ENDIF
 ENDPROC 0
 
-PROC removeFlagFromList(s: PTR TO CHAR)
-  DEF templist:PTR TO LONG
+PROC removeFlagFromList(s: PTR TO CHAR, c=-1)
+  DEF templist:PTR TO stdlist
   DEF item:PTR TO flagFileItem
   DEF i
   
-  templist:=List(ListMax(flagFilesList))
-  FOR i:=0 TO ListLen(flagFilesList)-1
-    item:=flagFilesList[i]
-    IF strCmpi(item.fileName,s,ALL)=FALSE
-      ListAdd(templist,[flagFilesList[i]])
-    ELSE
-      item:=flagFilesList[i]
+  templist:=NEW templist.stdlist(flagFilesList.maxSize())
+  FOR i:=0 TO flagFilesList.count()-1
+    item:=flagFilesList.item(i)
+    IF (strCmpi(item.fileName,s,ALL)) AND ((c=item.confNum) OR (c=-1))
       DisposeLink(item.fileName)
       END item
+    ELSE
+      templist.add(item)
     ENDIF
   ENDFOR
-  DisposeLink(flagFilesList)
+  END flagFilesList
   flagFilesList:=templist
 ENDPROC
 
@@ -12893,25 +12824,25 @@ PROC flagFrom(s: PTR TO CHAR)
   flag:=1
   StringF(tempStr,'\sdir\d',currentConfDir,maxDirs)
   IF(fp:=Open(tempStr,MODE_OLDFILE))>0
-      WHILE(((ReadStr(fp,tempStr)<>-1) OR (StrLen(tempStr)>0)) AND (stat<>1))
-        IF(StrLen(tempStr)>0) AND (tempStr[0]<>" ")
-            i:=0
-            WHILE((i<StrLen(tempStr)) AND (tempStr[i]<>" "))
-              tempStr2[i]:=tempStr[i]
-              i++
-            ENDWHILE
-            IF(i=0) THEN JUMP flagcont
-            SetStr(tempStr2,i)
-            IF(flag=FALSE) THEN stat:=addFlagToList(tempStr2)
-            IF(flag AND strCmpi(tempStr2,s,ALL))
-              flag:=0
-              stat:=addFlagToList(tempStr2)
-            ENDIF
+    WHILE(((ReadStr(fp,tempStr)<>-1) OR (StrLen(tempStr)>0)) AND (stat<>1))
+      IF(StrLen(tempStr)>0) AND (tempStr[0]<>" ")
+        i:=0
+        WHILE((i<StrLen(tempStr)) AND (tempStr[i]<>" "))
+          tempStr2[i]:=tempStr[i]
+          i++
+        ENDWHILE
+        IF(i=0) THEN JUMP flagcont
+        SetStr(tempStr2,i)
+        IF(flag=FALSE) THEN stat:=addFlagToList(tempStr2)
+        IF(flag AND strCmpi(tempStr2,s,ALL))
+          flag:=0
+          stat:=addFlagToList(tempStr2)
         ENDIF
-        flagcont:
-      ENDWHILE
-      IF(flag) THEN aePuts('Sorry filename not found!\b\n')
-      Close(fp)
+      ENDIF
+flagcont:
+    ENDWHILE
+    IF(flag) THEN aePuts('Sorry filename not found!\b\n')
+    Close(fp)
   ELSE
     RETURN RESULT_FAILURE
   ENDIF
@@ -12976,26 +12907,26 @@ PROC alterFlags(params)
 
   aePuts('\b\n')
   IF(StrLen(params)>0)
-     stat:=flagFiles(params)
-     IF(stat<0) THEN RETURN
-     WHILE(stat)
-       stat:=flagFiles(NIL)
-     ENDWHILE
+    stat:=flagFiles(params)
+    IF(stat<0) THEN RETURN
+    WHILE(stat)
+      stat:=flagFiles(NIL)
+    ENDWHILE
   ELSE
-     REPEAT
-         stat:=flagFiles(NIL)
-         IF(stat<0) THEN RETURN
-     UNTIL stat=0
+    REPEAT
+      stat:=flagFiles(NIL)
+      IF(stat<0) THEN RETURN
+    UNTIL stat=0
   ENDIF
   aePuts('\b\n')
 ENDPROC
 
 PROC checkFlagged()
   DEF stat
-  IF(ListLen(flagFilesList))
-     aePuts('\b\nYou have flagged files still not downloaded.\b\nDo you leave without them? ')
-     stat:=yesNo(2)
-     RETURN stat
+  IF(flagFilesList.count())
+    aePuts('\b\nYou have flagged files still not downloaded.\b\nDo you leave without them? ')
+    stat:=yesNo(2)
+    RETURN stat
   ENDIF
 ENDPROC 1
 
@@ -13006,45 +12937,41 @@ ENDPROC
 PROC displayULStats(u: PTR TO user, um:PTR TO userMisc)
   DEF string[200]:STRING
   DEF ktot[20]:STRING
+  DEF totBCD[8]:ARRAY OF CHAR
 
-  formatBCD(um.downloadBytesBCD,ktot)
+  CopyMem(um.downloadBytesBCD,totBCD,8) 
   IF sopt.toggles[TOGGLES_CREDITBYKB]=FALSE
-    IF StrLen(ktot)>3
-      SetStr(ktot,StrLen(ktot)-3)
-    ELSE
-      StrCopy(ktot,'0')
-    ENDIF
+    divBCD(totBCD,1024)
   ENDIF
-  StringF(string,'Number of Downloads   : \d (\sk total)\b\n',u.downloads AND $FFFF,ktot)
+  formatBCD(totBCD,ktot)
+  
+  StringF(string,'Number of Downloads      : \d (\sk total)\b\n',u.downloads AND $FFFF,ktot)
   aePuts(string)
 
-  formatBCD(um.uploadBytesBCD,ktot)
+  CopyMem(um.uploadBytesBCD,totBCD,8) 
   IF sopt.toggles[TOGGLES_CREDITBYKB]=FALSE
-    IF StrLen(ktot)>3
-      SetStr(ktot,StrLen(ktot)-3)
-    ELSE
-      StrCopy(ktot,'0')
-    ENDIF
+    divBCD(totBCD,1024)
   ENDIF
-  StringF(string,'Number of Uploads     : \d (\sk total)\b\n',u.uploads AND $FFFF,ktot)
+  formatBCD(totBCD,ktot)
+  StringF(string,'Number of Uploads        : \d (\sk total)\b\n',u.uploads AND $FFFF,ktot)
   aePuts(string)
   IF sopt.toggles[TOGGLES_CREDITBYKB]
     IF bytesADL=$7fffffff
-      StrCopy(string,'Todays KBytes Available: Infinite\b\n')
+      StrCopy(string,'Todays KBytes Available  : Infinite\b\n')
     ELSE
-      StringF(string,'Todays KBytes Available: \d\b\n',bytesADL)
+      StringF(string,'Todays KBytes Available  : \d\b\n',bytesADL)
     ENDIF
   ELSE
     IF bytesADL=$7fffffff
-      StrCopy(string,'Todays Bytes Available: Infinite\b\n')
+      StrCopy(string,'Todays Bytes Available   : Infinite\b\n')
     ELSE
-      StringF(string,'Todays Bytes Available: \d\b\n',bytesADL)
+      StringF(string,'Todays Bytes Available   : \d\b\n',bytesADL)
     ENDIF
   ENDIF
   aePuts(string)
 ENDPROC
 
-PROC checkForFileSize(fileItem: PTR TO flagFileItem, cfn:PTR TO CHAR, z)
+PROC checkForFileSize(checkFilename:PTR TO CHAR, checkConfNum, tfsizeList:PTR TO stdlist, freeDFlagList:PTR TO stdlist, cfn:PTR TO stdlist, z)
 
   DEF stat,pstat=1
   DEF fflag=0,wflag=0,doflag=0
@@ -13055,13 +12982,16 @@ PROC checkForFileSize(fileItem: PTR TO flagFileItem, cfn:PTR TO CHAR, z)
   DEF ft
   
   DEF fBlock: PTR TO fileinfoblock
+  DEF flagFile:PTR TO flagFileItem
   DEF fLock
   DEF drivenum
   
-  FOR min:=0 TO StrLen(fileItem.fileName)-1
-    IF((fileItem.fileName[min]="?") OR (fileItem.fileName[min]="*")) THEN wflag:=1
+  IF checkConfNum=-1 THEN checkConfNum:=currentConf
+  
+  FOR min:=0 TO StrLen(checkFilename)-1
+    IF((checkFilename[min]="?") OR (checkFilename[min]="*")) THEN wflag:=1
   ENDFOR
-  StrCopy(tempstr2,fileItem.fileName)
+  StrCopy(tempstr2,checkFilename)
   UpperStr(tempstr2)
 
   fname1:=FilePart(tempstr2)
@@ -13098,10 +13028,10 @@ PROC checkForFileSize(fileItem: PTR TO flagFileItem, cfn:PTR TO CHAR, z)
   drivenum:=1
   StringF(tempstr,'DLPATH.\d',drivenum++)
   REPEAT
-  c1:
+c1:
     IF(z=0)
       
-      IF readToolType(TOOLTYPE_CONF,IF fileItem.confNum=-1 THEN currentConf ELSE fileItem.confNum,tempstr,path)
+      IF readToolType(TOOLTYPE_CONF,IF checkConfNum=-1 THEN currentConf ELSE checkConfNum,tempstr,path)
         pstat:=1 /* shouldnt this be 251 ?*/
       ELSE
         pstat:=0
@@ -13111,152 +13041,155 @@ PROC checkForFileSize(fileItem: PTR TO flagFileItem, cfn:PTR TO CHAR, z)
     IF(StrLen(path)=0) THEN JUMP c1
     IF (pstat=0) THEN JUMP outst
 
- jumpIn:
+jumpIn:
     IF(wflag=0) 
       IF(sysopdl=0)
-         StrCopy(final,path)
-         StrAdd(final,fileItem.fileName)
-       ELSE
-         StrCopy(final,fileItem.fileName)
-         IF(findAssign(final)) THEN JUMP outst
-       ENDIF
-       ft:=Open(final,MODE_OLDFILE)
-       IF(ft>0)
-         Close(ft)
-         doflag:=1
-       ELSE
-         IF(sysopdl) THEN JUMP outst
-       ENDIF
+        StrCopy(final,path)
+        StrAdd(final,checkFilename)
+      ELSE
+        StrCopy(final,checkFilename)
+        IF(findAssign(final)) THEN JUMP outst
+      ENDIF
+      ft:=Open(final,MODE_OLDFILE)
+      IF(ft>0)
+        Close(ft)
+        doflag:=1
+      ELSE
+        IF(sysopdl) THEN JUMP outst
+      ENDIF
     ELSE
       doflag:=1
     ENDIF
 
     IF(doflag)
-       IF((fLock:=Lock(final,ACCESS_READ))=0)
-         FreeDosObject(DOS_FIB,fBlock)
-         StringF(str,'Error, Path \s missing, adjust paths file..',path)
-         aePuts(str)
-         aePuts('\b\n\b\n')
-         callersLog(str)
-         RETURN RESULT_FAILURE
-       ENDIF
+      IF((fLock:=Lock(final,ACCESS_READ))=0)
+        FreeDosObject(DOS_FIB,fBlock)
+        StringF(str,'Error, Path \s missing, adjust paths file..',path)
+        aePuts(str)
+        aePuts('\b\n\b\n')
+        callersLog(str)
+        RETURN RESULT_FAILURE
+      ENDIF
 
-       IF((Examine(fLock,fBlock))=NIL)
-           FreeDosObject(DOS_FIB,fBlock)
-           myError(1)
-           UnLock(fLock)
-           RETURN RESULT_FAILURE
-       ENDIF
-       
-       IF(wflag=0) THEN JUMP gotit
+      IF((Examine(fLock,fBlock))=NIL)
+        FreeDosObject(DOS_FIB,fBlock)
+        myError(1)
+        UnLock(fLock)
+        RETURN RESULT_FAILURE
+      ENDIF
+      
+      IF(wflag=0) THEN JUMP gotit
 
-       WHILE (ExNext(fLock,fBlock))     /* my change.. prior to this we had a blank file name */
-          IF(fBlock.direntrytype<0)
- gotit:
-            StrCopy(tempstr,fBlock.filename)
-            UpperStr(tempstr)
-            stat:=stcsma(tempstr,tempstr2)
-            IF((stat<>0) OR sysopdl) 
-              fflag:=1
-              IF(sysopdl) 
-                StrCopy(final,fileItem.fileName)
-              ELSE
-                StrCopy(final,path)
-                StrAdd(final,fBlock.filename)
-              ENDIF
-              fsize:=fBlock.size
-              tsec:=Div(fsize,Div(onlineBaud,10))
-              min:=tsec/60
-              secs:=tsec-(min*60)
-              StringF(str,' \r\dk, \d mins \z\r\d[2] secs \s\t',Div(fsize,1024),min,secs,fBlock.filename)
-              ->IF(str[16]=" ") THEN SetStr(str,16)
-              aePuts(str)
-              IF((fBlock.comment[0]="F") OR (freeDownloads))
-                aePuts('  >>Free Download!\b\n')
-                tfsize:=tfsize-fsize
-              ELSE
-                freeDFlag++
-                aePuts('\b\n')
-              ENDIF
-              IF((z<>1) OR sysopdl)
-                 /***** SYSTEM SECURITY ADDED BY JOSEPH HODGE *****/
-                  IF(strCmpi(fBlock.comment,'Restricted',10))
-                   aePuts('    >>Restricted File<< Updating CallersLog\b\n')
-                   StringF(clog,'\t\tAttempt to download RESTRICTED file [\s]',fileItem.fileName)
-                   callersLog(clog)
-                   FreeDosObject(DOS_FIB,fBlock)
-                   UnLock(fLock)
-                   RETURN 11
-                 ENDIF
-
-                 IF(StrLen(final)+StrLen(cfn)>2000)
-                   aePuts(' Too many entries!!  The remainder was left off.\b\n')
-                   numFiles--
-                   FreeDosObject(DOS_FIB,fBlock)
-                   UnLock(fLock)
-                   RETURN 11
-                 ENDIF
-                 IF((dp:=isInList(cfn,final)))=FALSE
-                   numFiles++
-                   IF StrLen(cfn)>0 THEN StrAdd(cfn,' ')
-                   StrAdd(cfn,final)
-                   IF((p:=isInFlaggedList(fBlock.filename,fileItem.confNum)))=FALSE
-                     addFlagToList(fBlock.filename,fileItem.confNum)
-                   ENDIF
-                 ELSE
-                   aePuts('   File is already selected!\b\n')
-                 ENDIF
+      WHILE (ExNext(fLock,fBlock))     /* my change.. prior to this we had a blank file name */
+        IF(fBlock.direntrytype<0)
+gotit:
+          StrCopy(tempstr,fBlock.filename)
+          UpperStr(tempstr)
+          stat:=stcsma(tempstr,tempstr2)
+          IF((stat<>0) OR sysopdl) 
+            fflag:=1
+            IF(sysopdl) 
+              StrCopy(final,checkFilename)
+            ELSE
+              StrCopy(final,path)
+              StrAdd(final,fBlock.filename)
+            ENDIF
+            fsize:=fBlock.size
+            tsec:=Div(fsize,Div(onlineBaud,10))
+            min:=tsec/60
+            secs:=tsec-(min*60)
+            StringF(str,' \r\dk, \d mins \z\r\d[2] secs \s\t',Div(fsize,1024),min,secs,fBlock.filename)
+            ->IF(str[16]=" ") THEN SetStr(str,16)
+            aePuts(str)
+            IF((fBlock.comment[0]="F") OR (freeDownloads))
+              aePuts('  >>Free Download!\b\n')
+              tfsizeList.setItem(checkConfNum-1,tfsizeList.item(checkConfNum-1)-fsize)
+            ELSE
+              freeDFlagList.setItem(checkConfNum-1,freeDFlagList.item(checkConfNum-1)+1)
+              aePuts('\b\n')
+            ENDIF
+            IF((z<>1) OR sysopdl)
+               /***** SYSTEM SECURITY ADDED BY JOSEPH HODGE *****/
+              IF(strCmpi(fBlock.comment,'Restricted',10))
+               aePuts('    >>Restricted File<< Updating CallersLog\b\n')
+               StringF(clog,'\t\tAttempt to download RESTRICTED file [\s]',checkFilename)
+               callersLog(clog)
+               FreeDosObject(DOS_FIB,fBlock)
+               UnLock(fLock)
+               RETURN 11
               ENDIF
 
-              IF(dp=NIL) 
-                  tfsize:=tfsize+fsize
-                  dtfsize:=dtfsize+fsize
-              ENDIF
-              IF(wflag=0)
+              /*IF (cfn.count()>=cfn.maxSize())
+                aePuts(' Too many entries!!  The remainder was left off.\b\n')
+                numFiles--
                 FreeDosObject(DOS_FIB,fBlock)
                 UnLock(fLock)
-                IF(dp<>NIL) THEN RETURN RESULT_FAILURE ELSE RETURN RESULT_SUCCESS
+                RETURN 11
+              ENDIF*/
+              IF((dp:=isInList(cfn,final,checkConfNum)))=FALSE
+                numFiles++
+                flagFile:=NEW flagFile
+                flagFile.confNum:=checkConfNum
+                flagFile.fileName:=String(StrLen(final))
+                StrCopy(flagFile.fileName,final)
+                cfn.add(flagFile)
+                IF((p:=isInFlaggedList(fBlock.filename,checkConfNum)))=FALSE
+                  addFlagToList(fBlock.filename,checkConfNum)
+                ENDIF
+              ELSE
+                aePuts('   File is already selected!\b\n')
               ENDIF
             ENDIF
-          ENDIF
 
-          IF(sCheckInput())
-            stat:=readChar(1) 
-            IF(stat<0)
+            IF(dp=NIL) 
+              tfsizeList.setItem(checkConfNum-1,tfsizeList.item(checkConfNum-1)+fsize)
+              dtfsize:=dtfsize+fsize
+            ENDIF
+            IF(wflag=0)
               FreeDosObject(DOS_FIB,fBlock)
               UnLock(fLock)
-              RETURN RESULT_NO_CARRIER
+              IF(dp<>NIL) THEN RETURN RESULT_FAILURE ELSE RETURN RESULT_SUCCESS
             ENDIF
-            SELECT stat
-              CASE 23 /* Pause */
-                stat:=readChar(INPUT_TIMEOUT)
-                IF(stat<0)
-                  FreeDosObject(DOS_FIB,fBlock)
-                  UnLock(fLock)
-                  RETURN RESULT_NO_CARRIER
-                ENDIF
-              CASE 3 /* ^C */
-                aePuts('**Break\b\n')
+          ENDIF
+        ENDIF
+
+        IF(sCheckInput())
+          stat:=readChar(1) 
+          IF(stat<0)
+            FreeDosObject(DOS_FIB,fBlock)
+            UnLock(fLock)
+            RETURN RESULT_NO_CARRIER
+          ENDIF
+          SELECT stat
+            CASE 23 /* Pause */
+              stat:=readChar(INPUT_TIMEOUT)
+              IF(stat<0)
                 FreeDosObject(DOS_FIB,fBlock)
                 UnLock(fLock)
-                RETURN 10
-            ENDSELECT
-          ENDIF
-       ENDWHILE
+                RETURN RESULT_NO_CARRIER
+              ENDIF
+            CASE 3 /* ^C */
+              aePuts('**Break\b\n')
+              FreeDosObject(DOS_FIB,fBlock)
+              UnLock(fLock)
+              RETURN 10
+          ENDSELECT
+        ENDIF
+      ENDWHILE
        
-       UnLock(fLock)
-       IF(z=1) THEN JUMP outst
+      UnLock(fLock)
+      IF(z=1) THEN JUMP outst
     ENDIF
     StringF(tempstr,'DLPATH.\d',drivenum++)
 
   UNTIL pstat=0
 
- outst:
+outst:
 
   FreeDosObject(DOS_FIB,fBlock)
 
   IF(fflag=0)
-    StringF(str,'       File (\s) not found.\b\n',fileItem.fileName)
+    StringF(str,'       File (\s) not found.\b\n',checkFilename)
     aePuts(str)
     RETURN RESULT_FAILURE
   ENDIF
@@ -13281,13 +13214,13 @@ PROC statPrint(s: PTR TO CHAR)
   DEF str[25]:STRING
 
   IF(dStatBar AND (statWriteIO<>NIL))
-     IF(bitPlanes<3)
-        stripAnsi(s,str,0,0)
-        statWriteIO.data:=str
-        statWriteIO.length:=-1
-        statWriteIO.command:=CMD_WRITE
-        DoIO(statWriteIO)
-        RETURN
+    IF(bitPlanes<3)
+      stripAnsi(s,str,0,0)
+      statWriteIO.data:=str
+      statWriteIO.length:=-1
+      statWriteIO.command:=CMD_WRITE
+      DoIO(statWriteIO)
+      RETURN
     ENDIF
     statWriteIO.data:=s
     statWriteIO.length:=-1
@@ -13537,8 +13470,8 @@ PROC createResControl()
 ENDPROC
 
 PROC deleteResControl()
- IF(resmp) THEN deletePort(resmp)
- resmp:=0
+  IF(resmp) THEN deletePort(resmp)
+  resmp:=0
 ENDPROC
 
 PROC createRexxPort()
@@ -13648,7 +13581,7 @@ PROC setEnvMsg(s: PTR TO CHAR)
   IF((port:=FindPort('AE.Master')))
     PutMsg(port,masterMsg)
     WaitPort(serverRP)
-      GetMsg(serverRP)
+    GetMsg(serverRP)
   ENDIF
 ENDPROC
 
@@ -13728,7 +13661,7 @@ PROC sendMaster()
   IF((port:=FindPort('AE.Master')))
     PutMsg(port,masterMsg)
     WaitPort(serverRP)
-      GetMsg(serverRP)
+    GetMsg(serverRP)
   ENDIF
 ENDPROC
 
@@ -13739,7 +13672,7 @@ PROC sendMasterUpload(filename:PTR TO CHAR)
   DEF temp1[43]:STRING
   DEF port:PTR TO mp
 
-  StringF(temp1,'\s[16]',FilePart(filename))
+  StringF(temp1,'\l\s[16]',FilePart(filename))
   strCpy(masterMsg.user,temp1,ALL)
   strCpy(masterMsg.location,loggedOnUser.location,ALL)
 
@@ -13750,7 +13683,7 @@ PROC sendMasterUpload(filename:PTR TO CHAR)
   IF((port:=FindPort('AE.Master')))
     PutMsg(port,masterMsg)
     WaitPort(serverRP)
-      GetMsg(serverRP)
+    GetMsg(serverRP)
   ENDIF
 
   IF(sopt.toggles[TOGGLES_MULTICOM])
@@ -13767,7 +13700,7 @@ PROC sendMasterDownload(filename: PTR TO CHAR)
   DEF temp1[43]:STRING
   DEF port:PTR TO mp
 
-  StringF(temp1,'\s[16]',FilePart(filename))
+  StringF(temp1,'\l\s[16]',FilePart(filename))
   strCpy(masterMsg.user,temp1,ALL)
   strCpy(masterMsg.location,loggedOnUser.location,ALL)
 
@@ -13778,7 +13711,7 @@ PROC sendMasterDownload(filename: PTR TO CHAR)
   IF((port:=FindPort('AE.Master')))
     PutMsg(port,masterMsg)
     WaitPort(serverRP)
-      GetMsg(serverRP)
+    GetMsg(serverRP)
   ENDIF
 
   IF(sopt.toggles[TOGGLES_MULTICOM])
@@ -13799,9 +13732,9 @@ PROC sendChatFlag(chatFlag)
   masterMsg.command:=IF chatFlag THEN JH_CHATON ELSE JH_CHATOFF
 
   IF((port:=FindPort('AE.Master')))
-     PutMsg(port,masterMsg)
-     WaitPort(serverRP)
-     GetMsg(serverRP)
+    PutMsg(port,masterMsg)
+    WaitPort(serverRP)
+    GetMsg(serverRP)
   ENDIF
   masterMsg.command:=JH_UPDATE
 ENDPROC
@@ -13817,9 +13750,9 @@ PROC sendQuietFlag(opt)
   masterMsg.command:=IF quietFlag THEN JH_QUIETON ELSE JH_QUIETOFF
 
   IF((port:=FindPort('AE.Master')))
-     PutMsg(port,masterMsg)
-     WaitPort(serverRP)
-     GetMsg(serverRP)
+    PutMsg(port,masterMsg)
+    WaitPort(serverRP)
+    GetMsg(serverRP)
   ENDIF
   masterMsg.command:=JH_UPDATE
   IF(sopt.toggles[TOGGLES_MULTICOM])
@@ -14004,7 +13937,7 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
   ELSE
     StrCopy(bcdStr,'0')
   ENDIF
-  StringF(string,'Tooltype cache: Used \d/\d Hit rate: \d/\d (\s%)                     ',ListLen(diskObjectCache),ListMax(diskObjectCache),cacheHits,cacheTests,bcdStr)
+  StringF(string,'Tooltype cache: Used \d/\d Hit rate: \d/\d (\s%)                     ',diskObjectCache.count(),diskObjectCache.maxSize(),cacheHits,cacheTests,bcdStr)
   statMessage(1,4,string)
 ENDPROC
 
@@ -14085,8 +14018,7 @@ PROC xprfopen()
     ENDIF
     
     IF dup
-      strCpy(skipdFiles+(numSkipd*32),FilePart(fn),31)
-      numSkipd++
+      skipdFiles.add(FilePart(fn))
       res:=-1     ->return -1 which is not actually a file handle but xpr lib should see it as being a file that exists
       StringF(tempstr,'xprfopen: oldfile dupe \s - mode - \s, res - \d',fn, am, res)
       debugLog(LOG_DEBUG,tempstr)
@@ -14095,9 +14027,9 @@ PROC xprfopen()
   ENDIF
   
   IF (zModemInfo.inProgress=ZMODEM_UPLOAD)
-    FOR i:=numSkipd-1 TO 0 STEP -1
+    FOR i:=skipdFiles.count()-1 TO 0 STEP -1
       ->if its a dupe file then we dont want to try and resume so return an error
-      IF strCmpi(skipdFiles+(i*32),FilePart(fn),ALL)
+      IF strCmpi(skipdFiles.item(i),FilePart(fn),ALL)
         res:=0
         StringF(tempstr,'xprfopen: readwrite dupe \s - mode - \s, res - \d',fn, am, res)
         debugLog(LOG_DEBUG,tempstr)
@@ -14106,11 +14038,12 @@ PROC xprfopen()
     ENDFOR
   ENDIF
  
+  zModemInfo.resumePos:=0
+  res:=Open(fn,filemode)
 
- res:=Open(fn,filemode)
-
-  IF strCmpi(am,'a',ALL) OR strCmpi(am,'a+',ALL)
+  IF  strCmpi(am,'a',ALL) OR strCmpi(am,'a+',ALL)
     Seek(res,0,OFFSET_END)
+    zModemInfo.resumePos:=Seek(res,0,OFFSET_END)    
   ENDIF
   StringF(tempstr,'xprfopen: \s - mode - \s, res - \d',fn, am, res)
   debugLog(LOG_DEBUG,tempstr)
@@ -14146,7 +14079,7 @@ PROC xprfclose()
   debugLog(LOG_DEBUG,tempstr)
   IF fp<>-1
     Close(fp)
-    IF (zModemInfo.downloading=FALSE) AND (zModemInfo.filesize>0) AND (zModemInfo.recPos=zModemInfo.filesize) AND bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
+    IF (zModemInfo.downloading=FALSE) AND (zModemInfo.filesize>0) AND (zModemInfo.transPos=zModemInfo.filesize) AND bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
       StringF(tempstr,'bgCheckPort\d',node)
       IF (bgport:=FindPort(tempstr))
         msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
@@ -14189,8 +14122,8 @@ PROC xprchkabort()
   res:=0
   IF windowZmodem<NIL
     IF (winmsg:=GetMsg(windowZmodem.userport))<>NIL
-        ReplyMsg(winmsg)
-        IF winmsg.class=IDCMP_CLOSEWINDOW THEN res:=-1
+      ReplyMsg(winmsg)
+      IF winmsg.class=IDCMP_CLOSEWINDOW THEN res:=-1
     ENDIF
   ENDIF
   
@@ -14307,7 +14240,7 @@ PROC xprsread()
   ->StringF(tempstr,'xprsread: \d bytes \d timeout',bsize,timeout)
   ->debugLog(LOG_DEBUG,tempstr)
 
-    /* Valid size parameter? */
+  /* Valid size parameter? */
 
   IF(bsize > 0)
   
@@ -14560,6 +14493,7 @@ PROC xprfseek()
   debugLog(LOG_DEBUG,tempstr)
   
   Seek(fp,offset,origin)
+  IF zModemInfo.resumePos=0 THEN zModemInfo.resumePos:=Seek(fp,0,OFFSET_CURRENT)
 ENDPROC FALSE
 
 PROC xprsflushAsm()
@@ -14589,7 +14523,7 @@ PROC xprupdateAsm()
   MOVEM.L D0-D7/A0-A6,-(A7)
   xprupdate()
   MOVEM.L (A7)+,D0-D7/A0-A6
- ENDPROC D0
+ENDPROC D0
 
 PROC xprupdate()
   DEF xpru: PTR TO xpr_update
@@ -14641,7 +14575,7 @@ PROC xprupdate()
       IF zModemInfo.filesize<>xpru.xpru_filesize
         zModemInfo.filesize:=xpru.xpru_filesize
         IF zModemInfo.downloading
-          StringF(outmsg,'\t\sDownloading \s[12] \d bytes',IF freeDFlag THEN 'Free ' ELSE '',zModemInfo.fileName,xpru.xpru_filesize)
+          StringF(outmsg,'\t\sDownloading \s[12] \d bytes',IF zModemInfo.freeDFlag THEN 'Free ' ELSE '',zModemInfo.fileName,xpru.xpru_filesize)
         ELSE
           StringF(outmsg,'\tUploading \s[12] \d bytes',zModemInfo.fileName,xpru.xpru_filesize)
         ENDIF
@@ -14658,8 +14592,8 @@ PROC xprupdate()
 
   IF(xpru.xpru_updatemask AND XPRU_BYTES)<>0
     IF xpru.xpru_bytes<>-1
-      zModemInfo.recPos:=xpru.xpru_bytes    
-      IF zModemInfo.recPos=zModemInfo.filesize THEN strCpy(zModemInfo.lastTime,xpru.xpru_elapsedtime,40)
+      zModemInfo.transPos:=xpru.xpru_bytes    
+      IF zModemInfo.transPos=zModemInfo.filesize THEN strCpy(zModemInfo.lastTime,xpru.xpru_elapsedtime,40)
     ENDIF
   ENDIF
   IF(xpru.xpru_updatemask AND XPRU_MSG)<>0
@@ -14673,7 +14607,6 @@ PROC xprupdate()
       zModemInfo.cps:=xpru.xpru_datarate
       zModemInfo.eff:=Div(Mul(zModemInfo.cps,100),Div(onlineBaud,10))
     ENDIF
-    
   ENDIF
 
   IF(xpru.xpru_updatemask AND XPRU_BLOCKS)<>0
@@ -14766,13 +14699,13 @@ PROC xprfinfo()
   IF fitype=1
     ->file size
 
-    FOR i:=numSkipd-1 TO 0 STEP -1
+    FOR i:=skipdFiles.count()-1 TO 0 STEP -1
       ->if its a dupe file then we dont want to try and resume so return 2gb filesize
 
-      StringF(tempstr,'xprsfinfo - dupecheck \s \s - res \d',skipdFiles+(i*32),FilePart(fn),strCmpi(skipdFiles+(i*32),FilePart(fn),ALL))
+      StringF(tempstr,'xprsfinfo - dupecheck \s \s - res \d',skipdFiles.item(i),FilePart(fn),strCmpi(skipdFiles.item(i),FilePart(fn),ALL))
       debugLog(LOG_DEBUG,tempstr)
 
-      IF strCmpi(skipdFiles+(i*32),FilePart(fn),ALL)
+      IF strCmpi(skipdFiles.item(i),FilePart(fn),ALL)
         StringF(tempstr,'xprsfinfo - dupe - \s',fn)
         debugLog(LOG_DEBUG,tempstr)
         res:=$7fffffff
@@ -14830,6 +14763,136 @@ PROC xprunlink()
   ENDIF
 ENDPROC res
 
+PROC xprffirstAsm()
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  xprffirst()
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
+
+PROC xprffirst()
+  DEF task:PTR TO tc,res,xprObj:PTR TO xprData
+  DEF fileItem:PTR TO flagFileItem
+  DEF buffer:PTR TO CHAR
+
+  MOVE.L A0,buffer
+  MOVE.L A1,xprObj
+  
+  /*
+  MOVE.L 4,A6
+  SUB.L A1,A1
+  JSR -294(A6)  ->LVO FindTask
+  MOVE.L D0,task
+
+  res:=task.userdata
+  MOVE.L res,A4*/
+  loadA4()
+
+  fileItem:=xprObj.fileList.item(xprObj.currentFile)
+  strCpy(buffer,fileItem.fileName,255)
+  sendMasterDownload(fileItem.fileName)
+  zModemInfo.freeDFlag:=checkFree(fileItem.fileName)  
+  zModemInfo.resumePos:=0
+ENDPROC TRUE
+
+PROC xprfnextAsm()
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  xprfnext()
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
+
+PROC xprfnext()
+  DEF task:PTR TO tc,res,xprObj:PTR TO xprData,tempsize
+  DEF buffer:PTR TO CHAR
+
+  MOVE.L A0,buffer
+  MOVE.L A1,xprObj
+  
+  /*
+  MOVE.L 4,A6
+  SUB.L A1,A1
+  JSR -294(A6)  ->LVO FindTask
+  MOVE.L D0,task
+
+  res:=task.userdata
+  MOVE.L res,A4*/
+  loadA4()
+
+ENDPROC xprfnext2(buffer,xprObj)
+
+PROC xprfnext2(buffer:PTR TO CHAR, xprObj:PTR TO xprData)
+  DEF fileItem:PTR TO flagFileItem
+  DEF cb:PTR TO confBase
+  DEF tempsize
+
+  fileItem:=xprObj.fileList.item(xprObj.currentFile)
+
+  IF (zModemInfo.transPos<>0) AND (zModemInfo.transPos=zModemInfo.filesize)
+    removeFlagFromList(FilePart(fileItem.fileName),fileItem.confNum)
+  ENDIF
+  
+  IF (zModemInfo.transPos<>0) AND (zModemInfo.resumePos<>zModemInfo.filesize) AND (zModemInfo.transPos=zModemInfo.filesize)
+    onlineNFiles++  
+    IF(zModemInfo.freeDFlag=FALSE) THEN donf++
+
+    tempsize:=zModemInfo.filesize
+    tBT:=tBT+tempsize
+    dTBT:=dTBT+tempsize
+
+    IF xprObj.updateDownloadStats
+      IF sopt.toggles[TOGGLES_CREDITBYKB]
+        tempsize:=Shr(tempsize,10)
+      ENDIF
+
+      IF(checkSecurity(ACS_CONFERENCE_ACCOUNTING))
+        saveMsgPointers(currentConf)
+
+        IF(freeDownloads=FALSE)
+          IF creditAccountTrackDownloads(loggedOnUser)
+            cb:=confBases.item(fileItem.confNum)
+            
+            ->cb.bytesDownload:=cb.bytesDownload+tempsize
+            addBCD(cb.downloadBytesBCD,tempsize)
+            cb.bytesDownload:=convertFromBCD(cb.downloadBytesBCD)
+            cb.downloads:=cb.downloads+1
+          ENDIF
+        ENDIF
+        cb.dailyBytesDld:=cb.dailyBytesDld+tempsize
+        IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
+        loadMsgPointers(currentConf)
+      ELSE
+        IF(freeDownloads=FALSE)
+          IF creditAccountTrackDownloads(loggedOnUser)
+            
+            ->loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+tempsize
+            addBCD(loggedOnUserMisc.downloadBytesBCD,tempsize)
+            WriteF('debug: \d \d\n',tempsize,tBT)
+            loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
+            loggedOnUser.downloads:=loggedOnUser.downloads+1
+          ENDIF
+        ENDIF
+        loggedOnUser.dailyBytesDld:=loggedOnUser.dailyBytesDld+tempsize
+        IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
+      ENDIF
+    ENDIF
+  ENDIF
+
+  xprObj.currentFile:=xprObj.currentFile+1
+
+  IF buffer=NIL THEN RETURN FALSE
+
+  IF xprObj.currentFile=xprObj.fileList.count()
+    strCpy(buffer,'',ALL)
+    RETURN FALSE
+  ENDIF
+
+  fileItem:=xprObj.fileList.item(xprObj.currentFile)
+  strCpy(buffer,fileItem.fileName,255)
+  sendMasterDownload(fileItem.fileName)
+  zModemInfo.freeDFlag:=checkFree(fileItem.fileName)  
+  zModemInfo.resumePos:=0
+ENDPROC TRUE
+
+
 PROC waitSerialRead()
   DEF res
   IF readQueued
@@ -14853,9 +14916,9 @@ ENDPROC res
 PROC doSerialRead(data,length)
   IF(readQueued) THEN stopSerialRead()
 
-    serialReadIO.iostd.command:=CMD_READ
-    serialReadIO.iostd.length:=length
-    serialReadIO.iostd.data:=data
+  serialReadIO.iostd.command:=CMD_READ
+  serialReadIO.iostd.length:=length
+  serialReadIO.iostd.data:=data
 ENDPROC DoIO(serialReadIO)
 
 PROC stopSerialRead()
@@ -14871,31 +14934,31 @@ PROC serialErrorReport(request: PTR TO ioextser)
 
   error:=request.iostd.error
   SELECT error
-        CASE SERERR_LINEERR
+    CASE SERERR_LINEERR
       debugLog(LOG_ERROR,'serial error: hardware data overrun')
             ->ErrorMessage = LocaleString(MSG_TERMXPR_ERROR_HARDWARE_DATA_OVERRUN_TXT)
             isFatal:=FALSE
-        CASE SERERR_PARITYERR
+    CASE SERERR_PARITYERR
       debugLog(LOG_ERROR,'serial error: parity error')
             ->ErrorMessage = LocaleString(MSG_TERMXPR_ERROR_PARITY_ERROR_TXT)
             isFatal:=TRUE
-        CASE SERERR_TIMERERR
+    CASE SERERR_TIMERERR
       debugLog(LOG_ERROR,'serial error: timer error')
             ->ErrorMessage = LocaleString(MSG_TERMXPR_ERROR_TIMER_ERROR_TXT)
             isFatal:=FALSE
-        CASE SERERR_BUFOVERFLOW
+    CASE SERERR_BUFOVERFLOW
       debugLog(LOG_ERROR,'serial error: read buffer overflow')
             ->ErrorMessage = LocaleString(MSG_TERMXPR_ERROR_READ_BUFFER_OVERFLOWED_TXT)
             isFatal:=FALSE
-        CASE SERERR_NODSR
+    CASE SERERR_NODSR
       debugLog(LOG_ERROR,'serial error: no dsr')
             ->ErrorMessage = LocaleString(MSG_TERMXPR_ERROR_NO_DSR_TXT)
             isFatal:=TRUE
-        CASE SERERR_DETECTEDBREAK
+    CASE SERERR_DETECTEDBREAK
       debugLog(LOG_ERROR,'serial error: break detected')
             ->ErrorMessage = LocaleString(MSG_TERMXPR_ERROR_BREAK_DETECTED_TXT)
             isFatal:=TRUE
-        DEFAULT
+    DEFAULT
       ->debugLog(LOG_ERROR,'serial error: unknown error')
             ->ErrorMessage = LocaleString(MSG_TERMXPR_ERROR_UNKNOWN_CAUSE_TXT)
             isFatal:=FALSE
@@ -14904,16 +14967,16 @@ ENDPROC isFatal
 
 PROC getSerialInfo()
   DEF waiting,status
-    IF(serialWriteIO)
+  IF(serialWriteIO)
     serialWriteIO.iostd.command:=SDCMD_QUERY
-        DoIO(serialWriteIO)
+    DoIO(serialWriteIO)
 
-        waiting:=serialWriteIO.iostd.actual
-        status:=serialWriteIO.status
-    ELSE
-        waiting:=0
-        status:=(CIAF_COMCD OR CIAF_COMDSR)
-    ENDIF
+    waiting:=serialWriteIO.iostd.actual
+    status:=serialWriteIO.status
+  ELSE
+    waiting:=0
+    status:=(CIAF_COMCD OR CIAF_COMDSR)
+  ENDIF
 ENDPROC waiting,status
 
 PROC setTimer(timeval)
@@ -14961,10 +15024,10 @@ ENDPROC
 
 PROC zmodemStatPrint(s:PTR TO CHAR)
   IF(windowZmodem<>NIL)
-      zModemStatWriteIO.data:=s
-      zModemStatWriteIO.length:=-1
-      zModemStatWriteIO.command:=CMD_WRITE
-      DoIO(zModemStatWriteIO)
+    zModemStatWriteIO.data:=s
+    zModemStatWriteIO.length:=-1
+    zModemStatWriteIO.command:=CMD_WRITE
+    DoIO(zModemStatWriteIO)
   ENDIF
 ENDPROC
 
@@ -14976,69 +15039,71 @@ PROC updateZDisplay()
     /* transfer window not open */
 
   IF(windowZmodem<>NIL)
-     zmodemStatPrint('[H[J[0 p')
-     IF (KickVersion(40) AND (bitPlanes>2))
-       zmodemStatPrint('[37m[ s')
-     ENDIF
-     StringF(tempstr,'[H\n FileName: \s\n',zModemInfo.fileName)
-     zmodemStatPrint(tempstr)
-     StringF(tempstr,' FileSize: \d\n',zModemInfo.filesize)
-     zmodemStatPrint(tempstr)
-     StringF(tempstr,' ETA Time: \s\n',zModemInfo.apxTime)
-     zmodemStatPrint(tempstr)
-     StringF(tempstr,' Curr Time: \s\n',zModemInfo.elapsedTime)
-     zmodemStatPrint(tempstr)
-     StringF(tempstr,' Position: \d\n',zModemInfo.recPos)
-     zmodemStatPrint(tempstr)
+    zmodemStatPrint('[H[J[0 p')
+    IF (KickVersion(40) AND (bitPlanes>2))
+      zmodemStatPrint('[37m[ s')
+    ENDIF
+    StringF(tempstr,'[H\n FileName: \s\n',zModemInfo.fileName)
+    zmodemStatPrint(tempstr)
+    StringF(tempstr,' FileSize: \d\n',zModemInfo.filesize)
+    zmodemStatPrint(tempstr)
+    StringF(tempstr,' ETA Time: \s\n',zModemInfo.apxTime)
+    zmodemStatPrint(tempstr)
+    StringF(tempstr,' Curr Time: \s\n',zModemInfo.elapsedTime)
+    zmodemStatPrint(tempstr)
+    StringF(tempstr,' Position: \d\n',zModemInfo.transPos)
+    zmodemStatPrint(tempstr)
+    StringF(tempstr,' Resume P: \d\n',zModemInfo.resumePos);
+    zmodemStatPrint(tempstr);
 
     IF (gadtoolsbase:=OpenLibrary('gadtools.library',0))<>NIL
       vi:=GetVisualInfoA(screen, [NIL])
       tags2:=NEW [GT_VISUALINFO,vi,0]
   
-      DrawBevelBoxA(windowZmodem.rport,10,125,315,10,tags2)
+      DrawBevelBoxA(windowZmodem.rport,10,135,315,10,tags2)
       FreeVisualInfo(vi)
       END tags2
       CloseLibrary(gadtoolsbase)
     ENDIF
 
-     IF(zModemInfo.filesize=0) 
-       zmodemStatPrint(' Complete: N/A\n')
-       SetAPen(windowZmodem.rport,0)
-       RectFill(windowZmodem.rport,11,126,322,133)
-     ELSE
-       StringF(tempstr,' Complete: \d%\n',Div(Mul(zModemInfo.recPos,100),zModemInfo.filesize))
-       zmodemStatPrint(tempstr)
+    IF(zModemInfo.filesize=0) 
+      zmodemStatPrint(' Complete: N/A\n')
+      SetAPen(windowZmodem.rport,0)
+      RectFill(windowZmodem.rport,11,136,322,143)
+    ELSE
+      StringF(tempstr,' Complete: \d%\n',Div(Mul(zModemInfo.transPos,100),zModemInfo.filesize))
+      zmodemStatPrint(tempstr)
 
-       v1:=zModemInfo.recPos
-       v2:=zModemInfo.filesize
-       IF v2>=1048576
-         v1:=Shr(v1,10)
-         v2:=Shr(v2,10)
-       ENDIF
-       xpos:=11+Div(Mul(v1,311),v2)
+      v1:=zModemInfo.transPos
+      v2:=zModemInfo.filesize
+      IF v2>=1048576
+        v1:=Shr(v1,10)
+        v2:=Shr(v2,10)
+      ENDIF
+      xpos:=11+Div(Mul(v1,311),v2)
 
-       IF xpos>11
-         SetAPen(windowZmodem.rport,1)
-         RectFill(windowZmodem.rport,11,126,xpos,133)
-       ENDIF
+      IF xpos>11
+        SetAPen(windowZmodem.rport,1)
+        RectFill(windowZmodem.rport,11,136,xpos,143)
+      ENDIF
 
-       IF xpos<322
-         SetAPen(windowZmodem.rport,0)
-         RectFill(windowZmodem.rport,xpos+1,126,322,133)
-       ENDIF
-     ENDIF
-     ->StringF(tempstr,' Resume P: \d\n\n',zModemInfo.resumePos)
-     ->zmodemStatPrint(tempstr)
-     StringF(tempstr,' LastTime: \s\n',zModemInfo.lastTime)
-     zmodemStatPrint(tempstr)
-     StringF(tempstr,'      CPS: \d Efficency \d%\n\n',zModemInfo.cps,zModemInfo.eff)
-     zmodemStatPrint(tempstr)
-     StringF(tempstr,' Z Status: \s\n',zModemInfo.zStat)
-     zmodemStatPrint(tempstr)
-     StringF(tempstr,' Errors: \d\n',zModemInfo.errorCount)
-     zmodemStatPrint(tempstr)
-     StringF(tempstr,' ErrorPos: \d ',zModemInfo.errorPos)
-     zmodemStatPrint(tempstr)
+      IF xpos<322
+        SetAPen(windowZmodem.rport,0)
+        RectFill(windowZmodem.rport,xpos+1,136,322,143)
+      ENDIF
+    ENDIF
+    ->StringF(tempstr,' Resume P: \d\n\n',zModemInfo.resumePos)
+    ->zmodemStatPrint(tempstr)
+    StringF(tempstr,' LastTime: \s\n',zModemInfo.lastTime)
+    zmodemStatPrint(tempstr)
+    StringF(tempstr,'      CPS: \d Efficency \d%\n\n',zModemInfo.cps,zModemInfo.eff)
+    zmodemStatPrint(tempstr)
+    StringF(tempstr,' Z Status: \s\n',zModemInfo.zStat)
+    zmodemStatPrint(tempstr)
+    StringF(tempstr,' Errors: \d\n',zModemInfo.errorCount)
+    zmodemStatPrint(tempstr)
+    StringF(tempstr,' ErrorPos: \d ',zModemInfo.errorPos)
+    zmodemStatPrint(tempstr)
 
   ENDIF
   StringF(tempstr,'\r\d[7]',zModemInfo.cps)
@@ -15054,41 +15119,75 @@ ENDPROC freeDownloads
 
 ->this returns 0 = fail, 1 = success unlike most of the routines
 PROC downloadFile(str: PTR TO CHAR)
+  DEF templist:PTR TO stdlist
+  DEF res,i
+  DEF flagItem: PTR TO flagFileItem
+  DEF tempstringlist:PTR TO stringlist
+    
+  templist:=NEW templist.stdlist(100)
+  tempstringlist:=NEW tempstringlist.stringlist(100)
+  IF netMailTransfer=FALSE
+    parseList(str,tempstringlist)
+    FOR i:=0 TO tempstringlist.count()-1
+      flagItem:=NEW flagItem
+      flagItem.fileName:=tempstringlist.item(i)
+      flagItem.confNum:=currentConf
+      templist.setItem(i,flagItem)
+    ENDFOR
+  ELSE
+    flagItem:=NEW flagItem
+    flagItem.fileName:=String(255)
+    StringF(flagItem.fileName,'\s\s',amixnetOutboundDir,str)
+    flagItem.confNum:=currentConf
+    templist.add(flagItem)    
+  ENDIF 
+  
+  res:=downloadFiles(templist,FALSE)
+
+  clearFlagItems(templist)
+  END templist
+  END tempstringlist
+ENDPROC res
+
+->this returns 0 = fail, 1 = success unlike most of the routines
+PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   DEF tempstr[255]:STRING
   DEF debugstr[255]:STRING
   DEF xprio: PTR TO xprIO
-  DEF templist: PTR TO LONG
-  DEF i,result
+  DEF i,result,tempsize
+  DEF cb:PTR TO confBase
   DEF task:PTR TO tc
   DEF time1,time2
   DEF oldshared
+  DEF fileItem:PTR TO flagFileItem
+  DEF x: PTR TO xprData
 
   IF (logonType<>LOGON_TYPE_REMOTE) AND (checkSecurity(ACS_LOCAL_DOWNLOADS)=FALSE)
     aePuts('\b\nNot supported locally...')
     RETURN 0
   ENDIF
 
-  IF (strCmpi(xprLib[loggedOnUser.xferProtocol],'HYDRA',ALL))
+  IF (strCmpi(xprLib.item(loggedOnUser.xferProtocol),'HYDRA',ALL))
     aePuts('\b\nHYDRA protocol is not currently supported')
     RETURN 0
   ENDIF
     
-  IF(strCmpi(xprLib[loggedOnUser.xferProtocol],'INTERNAL',ALL))
+  IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
     StringF(tempstr,'XPR Zmodem: Ready to Send\b\n')
   ELSE
-    StringF(tempstr,'\s: Ready to Send\b\n',xprTitle[loggedOnUser.xferProtocol])
+    StringF(tempstr,'\s: Ready to Send\b\n',xprTitle.item(loggedOnUser.xferProtocol))
   ENDIF
   
   aePuts(tempstr)
   aePuts('Control-X to Cancel\b\n')
   
-  IF(strCmpi(xprLib[loggedOnUser.xferProtocol],'INTERNAL',ALL))
+  IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
     StrCopy(tempstr,'xprzmodem.library')
-  ELSEIF(strCmpi(xprLib[loggedOnUser.xferProtocol],'HYDRA',ALL))
+  ELSEIF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'HYDRA',ALL))
     aePuts('\b\nHYDRA transfers are not currently supported\b\n')
     RETURN 0
   ELSE
-    StringF(tempstr,'\s.library',xprLib[loggedOnUser.xferProtocol])
+    StringF(tempstr,'\s.library',xprLib.item(loggedOnUser.xferProtocol))
   ENDIF
 
   IF (xprotocolbase:=OpenLibrary(tempstr,0))=NIL
@@ -15098,7 +15197,7 @@ PROC downloadFile(str: PTR TO CHAR)
 
   StringF(tempstr,'[Node \d] Send Window',node)
   strCpy(zModemInfo.titleBar,tempstr,ALL)
-  zModemInfo.recPos:=0;zModemInfo.filesize:=0;zModemInfo.errorCount:=0;zModemInfo.errorPos:=0;zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
+  zModemInfo.transPos:=0;zModemInfo.filesize:=0;zModemInfo.errorCount:=0;zModemInfo.errorPos:=0;zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
   strCpy(zModemInfo.zStat,'',ALL)
   strCpy(zModemInfo.fileName,'',ALL)
   strCpy(zModemInfo.lastTime,'',ALL)
@@ -15126,12 +15225,12 @@ PROC downloadFile(str: PTR TO CHAR)
   xprio.xpr_swrite:={xprswriteAsm}
   xprio.xpr_sflush:={xprsflushAsm}
   xprio.xpr_update:={xprupdateAsm}
+  xprio.xpr_ffirst:={xprffirstAsm}
+  xprio.xpr_fnext:={xprfnextAsm}
   xprio.xpr_chkabort:={xprchkabortAsm}
   xprio.xpr_chkmisc:=0 
   xprio.xpr_gets:=0
   xprio.xpr_setserial:={xprsetserialAsm}
-  xprio.xpr_ffirst:=0
-  xprio.xpr_fnext:=0
   xprio.xpr_finfo:={xprfinfoAsm}
   xprio.xpr_fseek:={xprfseekAsm}
   xprio.xpr_data:=0
@@ -15141,7 +15240,7 @@ PROC downloadFile(str: PTR TO CHAR)
   xprio.xpr_getptr:=0
 
   StrCopy(tempstr,'')
-  IF(strCmpi(xprLib[loggedOnUser.xferProtocol],'INTERNAL',ALL))
+  IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
     StrCopy(tempstr,'TN,AY,OR,E9,KN,SN,RN,DN,B64')
   ELSE
     readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'OPTIONS',tempstr)
@@ -15156,16 +15255,8 @@ PROC downloadFile(str: PTR TO CHAR)
     zModemInfo.inProgress:=ZMODEM_NONE
     closezModemStats()
     RETURN 0
-  ENDIF
-  
-  templist:=List(2048)
-  IF netMailTransfer=FALSE
-    parseList(str,templist)
-  ELSE
-    StringF(tempstr,'\s\s',amixnetOutboundDir,str)
-    ListAdd(templist,[tempstr])    
-  ENDIF
-  
+  ENDIF  
+ 
   IF openTimer()
     debugLog(LOG_ERROR,'Can''t re-open Timer Device!')
     CloseLibrary(xprotocolbase)
@@ -15184,27 +15275,98 @@ PROC downloadFile(str: PTR TO CHAR)
   time1:=getSystemTime()
   transfering:=TRUE
   cancelTransferOffHook:=FALSE
-  REPEAT
-    xprio.xpr_filename:=templist[i]
-    sendMasterDownload(templist[i])
+  
+  x:=NEW x
+  x.currentFile:=0
+  x.fileList:=fileList
+  x.updateDownloadStats:=updateDownloadStats
+  xprio.xpr_filename:=x
+  zModemInfo.downloading:=TRUE
+  result:=XprotocolSend(xprio)
+  time2:=getSystemTime()
+  END x
+  
+  IF zModemInfo.transPos<>zModemInfo.filesize THEN result:=FALSE
 
-    freeDFlag:=checkFree(templist[i])
+  IF(result=FALSE)
+    IF((zModemInfo.transPos>0) AND (zModemInfo.resumePos<>zModemInfo.filesize) AND (zModemInfo.transPos=zModemInfo.filesize))
+      callersLog('\tIncomplete 100% Transfer, accumulating Maximum Bytes Downloaded')
+      udLog('\tIncomplete 100% Transfer, accumulating Maximum Bytes Downloaded')
+      result:=TRUE
+      ->call fnext to update stats
+      xprfnext2(NIL,x)
+    ENDIF
+  ENDIF
+    
+  /*REPEAT
+    fileItem:=fileList.item(i)
+    xprio.xpr_filename:=fileItem.fileName
+    sendMasterDownload(fileItem.fileName)
+
+    zModemInfo.freeDFlag:=checkFree(fileItem.fileName)
     zModemInfo.downloading:=TRUE
 
     result:=XprotocolSend(xprio)
 
-    IF zModemInfo.recPos<>zModemInfo.filesize THEN result:=FALSE
+    IF(result=FALSE)
+      IF((zModemInfo.transPos>0) AND (zModemInfo.transPos=zModemInfo.filesize))
+        callersLog('\tIncomplete 100% Transfer, accumulating Maximum Bytes Downloaded')
+        udLog('\tIncomplete 100% Transfer, accumulating Maximum Bytes Downloaded')
+        result:=TRUE
+      ENDIF
+    ENDIF
+    
+    IF zModemInfo.transPos<>zModemInfo.filesize THEN result:=FALSE
     
     IF result
       onlineNFiles++
-      removeFlagFromList(FilePart(templist[i]))
-      IF(freeDFlag=FALSE) THEN donf++
-      tBT:=tBT+zModemInfo.filesize
-      dTBT:=dTBT+zModemInfo.filesize
+      removeFlagFromList(FilePart(fileItem.fileName),fileItem.confNum)
+      IF(zModemInfo.freeDFlag=FALSE) THEN donf++
+
+      tempsize:=zModemInfo.filesize
+      tBT:=tBT+tempsize
+      dTBT:=dTBT+tempsize
+  
+      IF updateDownloadStats
+        IF sopt.toggles[TOGGLES_CREDITBYKB]
+          tempsize:=Shr(tempsize,10)
+        ENDIF
+
+        IF(checkSecurity(ACS_CONFERENCE_ACCOUNTING))
+          saveMsgPointers(currentConf)
+
+          IF(freeDownloads=FALSE)
+            IF creditAccountTrackDownloads(loggedOnUser)
+              cb:=confBases.item(fileItem.confNum)
+              
+              ->cb.bytesDownload:=cb.bytesDownload+tempsize
+              addBCD(cb.downloadBytesBCD,tempsize)
+              cb.bytesDownload:=convertFromBCD(cb.downloadBytesBCD)
+              cb.downloads:=cb.downloads+1
+            ENDIF
+          ENDIF
+          cb.dailyBytesDld:=cb.dailyBytesDld+tempsize
+          IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
+          loadMsgPointers(currentConf)
+        ELSE
+          IF(freeDownloads=FALSE)
+            IF creditAccountTrackDownloads(loggedOnUser)
+              
+              ->loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+tempsize
+              addBCD(loggedOnUserMisc.downloadBytesBCD,tempsize)
+              loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
+              loggedOnUser.downloads:=loggedOnUser.downloads+1
+            ENDIF
+          ENDIF
+          loggedOnUser.dailyBytesDld:=loggedOnUser.dailyBytesDld+tempsize
+          IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
+        ENDIF
+      ENDIF
     ENDIF
+     
     time2:=getSystemTime()
     i++
-  UNTIL (result=0) OR (i=ListLen(templist))
+  UNTIL (result=0) OR (i=fileList.count())*/
   tTTM:=time2-time1;
   XprotocolCleanup(xprio)
   transfering:=FALSE
@@ -15213,10 +15375,6 @@ PROC downloadFile(str: PTR TO CHAR)
   END xprio
 
   closeTimer()
-  FOR i:=0 TO ListLen(templist)-1
-    DisposeLink(templist[i])
-  ENDFOR
-  DisposeLink(templist)
   
   CloseLibrary(xprotocolbase)
   zModemInfo.inProgress:=ZMODEM_NONE
@@ -15226,19 +15384,19 @@ PROC downloadFile(str: PTR TO CHAR)
   ->restart normal serial 
   queueRead(serialReadIO,{serbuff})
 
-  aePuts(xprTitle[loggedOnUser.xferProtocol])
+  aePuts(xprTitle.item(loggedOnUser.xferProtocol))
   IF result THEN aePuts(' download successful\b\n') ELSE aePuts(' download unsuccessful\b\n')
 ENDPROC result
 
-PROC checklist(lfnames: PTR TO LONG, clrfinal: PTR TO CHAR)
+PROC checklist(lfnames: PTR TO stdlist, sizeList:PTR TO stdlist, freeDFlagList:PTR TO stdlist, clrfinal: PTR TO stdlist)
 
   DEF i,status
   DEF item:PTR TO flagFileItem
 
-  FOR i:=0 TO ListLen(lfnames)-1
-    item:=ListItem(lfnames,i)
+  FOR i:=0 TO lfnames.count()-1
+    item:=lfnames.item(i)
     IF(StrLen(item.fileName)>0)
-      status:=checkForFileSize(item,clrfinal,0)
+      status:=checkForFileSize(item.fileName,item.confNum,sizeList,freeDFlagList,clrfinal,0)
       IF((status=11) OR (status=10)) THEN RETURN RESULT_SUCCESS
     ENDIF
   ENDFOR
@@ -15328,13 +15486,13 @@ PROC dynAllocate(maxbufsize)
   avail:=AvailMem(MEMF_LARGEST)
   IF maxbufsize>avail THEN maxbufsize:=avail-65536
 
- /* first try Fast mem allocate */
- WHILE((pbuf:=AllocMem(maxbufsize,MEMF_PUBLIC OR MEMF_CLEAR)))=FALSE
+  /* first try Fast mem allocate */
+  WHILE((pbuf:=AllocMem(maxbufsize,MEMF_PUBLIC OR MEMF_CLEAR)))=FALSE
     maxbufsize:=maxbufsize-65536;
     EXIT (maxbufsize<65536)
     Delay(5)
- ENDWHILE
- IF(maxbufsize<8192)  THEN RETURN 0,0
+  ENDWHILE
+  IF(maxbufsize<8192)  THEN RETURN 0,0
 ENDPROC pbuf,maxbufsize
 
 
@@ -15347,41 +15505,41 @@ PROC fileCopy(from,to)
  
   buf,bufsize:=dynAllocate(getFileSize(from)+8192)
   IF(buf<>NIL) 
-      /* got a buffer full of mem */
-      IF(fhs:=Open(to,MODE_OLDFILE)) 
-            Close(fhs);                 /* file exists so return */
-        FreeMem(buf,bufsize);       
-          RETURN RESULT_SUCCESS
-        ENDIF
+    /* got a buffer full of mem */
+    IF(fhs:=Open(to,MODE_OLDFILE)) 
+          Close(fhs);                 /* file exists so return */
+      FreeMem(buf,bufsize);       
+        RETURN RESULT_SUCCESS
+      ENDIF
 
-      IF(fhs:=Open(from,MODE_OLDFILE)) 
-          IF(fhd:=Open(to,MODE_NEWFILE))
-              REPEAT
-                  stat1:=Read(fhs,buf,bufsize)   /* Read from file */
-                  IF(stat1>0)   THEN stat2:=Write(fhd,buf,stat1) /* write to file*/
+    IF(fhs:=Open(from,MODE_OLDFILE)) 
+      IF(fhd:=Open(to,MODE_NEWFILE))
+        REPEAT
+          stat1:=Read(fhs,buf,bufsize)   /* Read from file */
+          IF(stat1>0)   THEN stat2:=Write(fhd,buf,stat1) /* write to file*/
         UNTIL (stat1<=0) OR (stat2<=0)
 
-              IF(stat1<0)
-                StringF(tempstr,'\b\nERROR while reading from \s!\b\n',from)
+        IF(stat1<0)
+          StringF(tempstr,'\b\nERROR while reading from \s!\b\n',from)
           aePuts(tempstr)
-                ENDIF
-          IF(stat2<0)
-                  StringF(tempstr,'\b\nERROR while writing to \s!\b\n',to)
-                aePuts(tempstr);
-                ENDIF
-              Close(fhd)
-            ENDIF
-        Close(fhs)
         ENDIF
-      FreeMem(buf,bufsize)
+        IF(stat2<0)
+          StringF(tempstr,'\b\nERROR while writing to \s!\b\n',to)
+          aePuts(tempstr);
+        ENDIF
+        Close(fhd)
+      ENDIF
+      Close(fhs)
     ENDIF
+    FreeMem(buf,bufsize)
+  ENDIF
 
- IF(((stat1>=0) AND (stat2>=0)))
+  IF(((stat1>=0) AND (stat2>=0)))
     RETURN 1
- ENDIF
+  ENDIF
  
- ->if we get an error then remove the destination file
- DeleteFile(to)
+  ->if we get an error then remove the destination file
+  DeleteFile(to)
 ENDPROC 0
 
 PROC moveFile(filename,filesize)
@@ -15451,25 +15609,25 @@ PROC moveFile(filename,filesize)
   DeleteFile(tempstr)
 ENDPROC 0
 
-PROC xprReceive(file)
+PROC xprReceive(file) HANDLE
   DEF tempstr[255]:STRING,debugstr[255]:STRING
   DEF result
-  DEF xprio: PTR TO xprIO
+  DEF xprio=NIL: PTR TO xprIO
   DEF task:PTR TO tc
   DEF i,time1,time2
   DEF oldshared,bgport
   DEF msg:PTR TO jhMessage,tags=NIL,count,ch
   DEF proc:PTR TO process
 
-  IF(strCmpi(xprLib[loggedOnUser.xferProtocol],'INTERNAL',ALL))
+  IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
     StrCopy(tempstr,'xprzmodem.library')
-  ELSEIF(strCmpi(xprLib[loggedOnUser.xferProtocol],'HYDRA',ALL))
+  ELSEIF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'HYDRA',ALL))
     aePuts('\b\nHYDRA transfers are not currently supported\b\n')
     RETURN RESULT_FAILURE
   ELSE
-    StringF(tempstr,'\s.library',xprLib[loggedOnUser.xferProtocol])
+    StringF(tempstr,'\s.library',xprLib.item(loggedOnUser.xferProtocol))
   ENDIF
-  ->StrCopy(tempstr,xprLib[loggedOnUser.xferProtocol])
+  ->StrCopy(tempstr,xprLib.item(loggedOnUser.xferProtocol))
   
   IF (xprotocolbase:=OpenLibrary(tempstr,0))=NIL
     aePuts('\b\nUnable to open the xpr library\b\n')
@@ -15480,7 +15638,7 @@ PROC xprReceive(file)
 
   StringF(tempstr,'[Node \d] Receive Window',node)
   strCpy(zModemInfo.titleBar,tempstr,ALL)
-  zModemInfo.recPos:=0; zModemInfo.filesize:=0; zModemInfo.errorCount:=0; zModemInfo.errorPos:=0; zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
+  zModemInfo.transPos:=0; zModemInfo.filesize:=0; zModemInfo.errorCount:=0; zModemInfo.errorPos:=0; zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
   strCpy(zModemInfo.zStat,'',ALL)
   strCpy(zModemInfo.fileName,'',ALL)
   strCpy(zModemInfo.apxTime,'',ALL)
@@ -15522,7 +15680,7 @@ PROC xprReceive(file)
   xprio.xpr_getptr:=0
 
   StrCopy(tempstr,'')
-  IF(strCmpi(xprLib[loggedOnUser.xferProtocol],'INTERNAL',ALL))
+  IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
     StrCopy(tempstr,'TN,AY,OR,E9,KN,SN,RN,DN,B64')
   ELSE
     readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'OPTIONS',tempstr)
@@ -15532,31 +15690,19 @@ PROC xprReceive(file)
   debugLog(LOG_DEBUG,debugstr)
   xprio.xpr_filename:=tempstr
   IF XprotocolSetup(xprio)=0
-    CloseLibrary(xprotocolbase)
-    zModemInfo.inProgress:=ZMODEM_NONE
-    closezModemStats()
-    END xprio
-    RETURN RESULT_FAILURE
+    Raise(ERR_EXCEPT)
   ENDIF
   
   ->override options with thsee (P = upload folder, KN dont keep partial uploads - actually our xprlink routine moves them into partial uploads
   IF(StrLen(sopt.ramPen)>0) THEN StringF(tempstr,'KN,P\s',sopt.ramPen) ELSE StringF(tempstr,'KN,P\sNode\d/PlayPen',cmds.bbsLoc,node)
   xprio.xpr_filename:=tempstr
   IF XprotocolSetup(xprio)=0
-    CloseLibrary(xprotocolbase)
-    zModemInfo.inProgress:=ZMODEM_NONE
-    closezModemStats()
-    END xprio
-    RETURN RESULT_FAILURE
+    Raise(ERR_EXCEPT)
   ENDIF
 
   IF openTimer()
     debugLog(LOG_ERROR,'Can''t re-open Timer Device!')
-    CloseLibrary(xprotocolbase)
-    zModemInfo.inProgress:=ZMODEM_NONE
-    closezModemStats()
-    END xprio
-    RETURN RESULT_FAILURE
+    Raise(ERR_EXCEPT)
   ENDIF
 
   ->cancel current queued serial read request
@@ -15620,7 +15766,7 @@ PROC xprReceive(file)
 
   Delay(50)
 
-  aePuts(xprTitle[loggedOnUser.xferProtocol])
+  aePuts(xprTitle.item(loggedOnUser.xferProtocol))
   IF(result) THEN aePuts(' upload successful\b\n') ELSE aePuts(' upload unsuccessful\b\n')
 
   IF tags<>NIL THEN END tags
@@ -15636,6 +15782,12 @@ PROC xprReceive(file)
   
   ->restart normal serial IO
   queueRead(serialReadIO,{serbuff})
+EXCEPT
+  CloseLibrary(xprotocolbase)
+  zModemInfo.inProgress:=ZMODEM_NONE
+  closezModemStats()
+  IF xprio THEN END xprio
+  RETURN RESULT_FAILURE
 ENDPROC
 
 PROC freeDiskSpace()
@@ -15848,17 +16000,17 @@ PROC partUploadOK(option)
       cnt:=0
       s:=fib.filename
       WHILE((s[0]) AND (cnt < 30))      /* check for valid file name */
-          IF(s[0] = " ")     /* check for spaces at beginning of filename */
-            JUMP inoh
-          ENDIF
-          IF(s[0] = "/")
-            JUMP inoh
-          ENDIF
-          IF((isascii(s[0])))=FALSE
-            JUMP inoh
-          ENDIF
-          cnt++
-          s++
+        IF(s[0] = " ")     /* check for spaces at beginning of filename */
+          JUMP inoh
+        ENDIF
+        IF(s[0] = "/")
+          JUMP inoh
+        ENDIF
+        IF((isascii(s[0])))=FALSE
+          JUMP inoh
+        ENDIF
+        cnt++
+        s++
       ENDWHILE
  
  /** END ERROR CKING */
@@ -15896,22 +16048,22 @@ PROC partUploadOK(option)
             IF(option=FALSE) THEN aePuts('No!   View them (Y/N)? ') ELSE aePuts('View them (Y/N)? ')
             purgeLine()
             WHILE TRUE
-                ch:=checkOnlineStatus()
-                IF(ch<0)
-                  rts_stat:=ch
-                  JUMP outoh
-                ENDIF
-                ch:=readChar(INPUT_TIMEOUT);
-                IF(ch=RESULT_TIMEOUT)
-                  rts_stat:=RESULT_NO_CARRIER
-                  JUMP outoh
-                ENDIF
-                IF((ch="N") OR (ch="n")) 
-                  aePuts('No!\b\n')
-                  rts_stat:=RESULT_ABORT
-                  JUMP outoh
-                ENDIF
-                EXIT ((ch="Y") OR (ch="y"))
+              ch:=checkOnlineStatus()
+              IF(ch<0)
+                rts_stat:=ch
+                JUMP outoh
+              ENDIF
+              ch:=readChar(INPUT_TIMEOUT);
+              IF(ch=RESULT_TIMEOUT)
+                rts_stat:=RESULT_NO_CARRIER
+                JUMP outoh
+              ENDIF
+              IF((ch="N") OR (ch="n")) 
+                aePuts('No!\b\n')
+                rts_stat:=RESULT_ABORT
+                JUMP outoh
+              ENDIF
+              EXIT ((ch="Y") OR (ch="y"))
             ENDWHILE
             ->// AEPutStr("Yes..\b\n");
             rts_stat:=RESULT_FAILURE
@@ -16253,16 +16405,16 @@ PROC zmodemReceive(flname:PTR TO CHAR,uLFType)
   DEF temp[100]:STRING
   IF((logonType>=LOGON_TYPE_REMOTE) AND (localUpload=FALSE) AND (lcFileXfr=FALSE))
   
-    IF ((strCmpi(xprLib[loggedOnUser.xferProtocol],'HYDRA',ALL)))
+    IF ((strCmpi(xprLib.item(loggedOnUser.xferProtocol),'HYDRA',ALL)))
       aePuts('\b\nHYDRA protocol is not currently supported')
       RETURN RESULT_FAILURE
     ENDIF
     
     IF(uLFType=FALSE) 
-      IF(strCmpi(xprLib[loggedOnUser.xferProtocol],'INTERNAL',ALL))
+      IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
         StringF(temp,'\b\nXPR Zmodem: Ready to Receive\b\n')
       ELSE
-        StringF(temp,'\b\n\s: Ready to Receive\b\n',xprTitle[loggedOnUser.xferProtocol])
+        StringF(temp,'\b\n\s: Ready to Receive\b\n',xprTitle.item(loggedOnUser.xferProtocol))
       ENDIF
       aePuts(temp);
       aePuts('Control-X to Cancel\b\n')
@@ -16276,7 +16428,7 @@ PROC zmodemReceive(flname:PTR TO CHAR,uLFType)
 /* still to do
     StringF(temp,'[Node \d] Receive Window',node)
     strCpy(zModemInfo.titleBar,temp,ALL)
-    zModemInfo.recPos:=0; zModemInfo.filesize:=0; zModemInfo.errorCount:=0; zModemInfo.errorPos:=0; zModemInfo.lastTime:=0
+    zModemInfo.transPos:=0; zModemInfo.filesize:=0; zModemInfo.errorCount:=0; zModemInfo.errorPos:=0; zModemInfo.lastTime:=0
     zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
     strCpy(zModemInfo.zStat,'',ALL)
     strCpy(zModemInfo.fileName,'',ALL)
@@ -16303,7 +16455,7 @@ PROC zmodemReceive(flname:PTR TO CHAR,uLFType)
     Delay(70)
     IF(uLFType) THEN aePuts('\b\n\b\n')
 
-    aePuts(xprTitle[loggedOnUser.xferProtocol])
+    aePuts(xprTitle.item(loggedOnUser.xferProtocol))
     IF(c) THEN aePuts(' upload successful\b\n') ELSE aePuts(' upload unsuccessful\b\n')
     RETURN c*/
   ELSE
@@ -16322,7 +16474,7 @@ PROC checkOffhookFlag()
   IF cancelTransferOffHook
     processOlmMessageQueue(TRUE)
     Delay(30)
-        modemOffHook()
+    modemOffHook()
     cancelTransferOffHook:=FALSE
   ENDIF
 ENDPROC
@@ -16336,7 +16488,7 @@ PROC receivePlayPen()
   
   onlineNFiles:=0
   tBT:=0
-  clearList(recFileNames)
+  recFileNames.clear()
   
   IF(StrLen(sopt.ramPen)>0) THEN StringF(tempstr,'\s/',sopt.ramPen) ELSE StringF(tempstr,'\sNode\d/Playpen',cmds.bbsLoc,node)
  
@@ -16386,18 +16538,14 @@ PROC receivePlayPen()
         udLog(tempstr)
         callersLog(tempstr)
 
-        cnt:=ListLen(recFileNames)
-        IF cnt=ListMax(recFileNames) THEN recFileNames:=reAllocList(recFileNames,1024)
-
-        ListAdd(recFileNames,[String(StrLen(fib.filename))])
-        StrCopy(ListItem(recFileNames,cnt),fib.filename)
+        recFileNames.add(fib.filename)
       ENDIF                    /* end if(Fib->fib_DirEntryType < 0)  */
     ENDWHILE                      /* end while(ExNext(FLock,Fib))       */
   ENDIF                               /* end if(Fib->fib_DirEntryType > 0)  */
  
- fx:
-   IF(fLock) THEN UnLock(fLock)
-   IF(fib) THEN FreeDosObject(DOS_FIB,fib)
+fx:
+  IF(fLock) THEN UnLock(fLock)
+  IF(fib) THEN FreeDosObject(DOS_FIB,fib)
 
 ENDPROC
 
@@ -16485,33 +16633,33 @@ PROC resumeStuff(tfs)
           IF removeAll=FALSE THEN aePuts('No!   Delete (Y/N/All)? ')
           purgeLine()
           WHILE (TRUE)
-              IF removeAll
-                ch:="Y"
-              ELSE  
-                ch:=readChar(INPUT_TIMEOUT);
-              ENDIF
-              IF(ch=RESULT_TIMEOUT)
+            IF removeAll
+              ch:="Y"
+            ELSE  
+              ch:=readChar(INPUT_TIMEOUT);
+            ENDIF
+            IF(ch=RESULT_TIMEOUT)
+              FreeDosObject(DOS_FIB,fBlock)
+              IF(fLock) THEN UnLock(fLock)  ->//(RTS) Lock held
+              RETURN RESULT_NO_CARRIER
+            ENDIF
+            IF(logonType>=LOGON_TYPE_REMOTE)
+              status:=checkCarrier()
+              IF(status=FALSE) 
                 FreeDosObject(DOS_FIB,fBlock)
-                IF(fLock) THEN UnLock(fLock)  ->//(RTS) Lock held
+                IF(fLock) THEN UnLock(fLock)  ->(RTS) Lock held
                 RETURN RESULT_NO_CARRIER
               ENDIF
-              IF(logonType>=LOGON_TYPE_REMOTE)
-                status:=checkCarrier()
-                IF(status=FALSE) 
-                  FreeDosObject(DOS_FIB,fBlock)
-                  IF(fLock) THEN UnLock(fLock)  ->(RTS) Lock held
-                  RETURN RESULT_NO_CARRIER
-                ENDIF
-              ENDIF
-              IF((ch="N") OR (ch="n"))
-                aePuts('No!\b\n')
-                JUMP dirCont
-              ENDIF
-              IF ((ch="A") OR (ch="a"))
-                removeAll:=TRUE
-                ch:="Y"
-              ENDIF
-              EXIT ((ch="Y") OR (ch="y"))
+            ENDIF
+            IF((ch="N") OR (ch="n"))
+              aePuts('No!\b\n')
+              JUMP dirCont
+            ENDIF
+            IF ((ch="A") OR (ch="a"))
+              removeAll:=TRUE
+              ch:="Y"
+            ENDIF
+            EXIT ((ch="Y") OR (ch="y"))
           ENDWHILE        /* end first forever */
           IF removeAll
             aePuts('All.. Deleted!\b\n')          
@@ -16573,7 +16721,7 @@ PROC cleanPlayPen()
   DEF tempstr2[255]:STRING
   DEF cnt = 0
  
-  clearList(recFileNames)
+  recFileNames.clear()
 
   IF(StrLen(sopt.ramPen)>0) THEN StringF(tempstr,'\s/',sopt.ramPen) ELSE StringF(tempstr,'\sNode\d/Playpen/',cmds.bbsLoc,node)
 
@@ -16593,8 +16741,8 @@ PROC cleanPlayPen()
   ENDIF
  
   IF((Examine(fLock,fib)))=0
-      myError(6)
-      JUMP fx2;
+    myError(6)
+    JUMP fx2;
   ENDIF
  
   IF(fib.direntrytype > 0)   /* make sure we locked a directory */
@@ -16605,9 +16753,9 @@ PROC cleanPlayPen()
           JUMP fx2
         ENDIF
  
-         cnt:=0
-         s:=fib.filename;
-         WHILE((s[0]) AND (cnt < 30))     /* check for valid file name */
+        cnt:=0
+        s:=fib.filename;
+        WHILE((s[0]) AND (cnt < 30))     /* check for valid file name */
           IF(s[0] = " ")      /* check for spaces at beginning of filename */
             JUMP fx2
           ENDIF
@@ -16619,58 +16767,58 @@ PROC cleanPlayPen()
           ENDIF
           cnt++
           s++
-         ENDWHILE
+        ENDWHILE
 
-          /* get our copy to Filename */
-          IF ownPartFiles
-            StringF(tempstr2,'\sPartUpload/\s@\d-\d',currentConfDir,fib.filename,node,loggedOnUser.slotNumber)
-          ELSE
-            StringF(tempstr2,'\sPartUpload/\s@\d',currentConfDir,fib.filename,loggedOnUser.slotNumber)
-          ENDIF
+        /* get our copy to Filename */
+        IF ownPartFiles
+          StringF(tempstr2,'\sPartUpload/\s@\d-\d',currentConfDir,fib.filename,node,loggedOnUser.slotNumber)
+        ELSE
+          StringF(tempstr2,'\sPartUpload/\s@\d',currentConfDir,fib.filename,loggedOnUser.slotNumber)
+        ENDIF
 
-          IF(StrLen(sopt.ramPen)>0)
-            StringF(tempstr,'\s/\s',sopt.ramPen,fib.filename)
-            REPEAT
+        IF(StrLen(sopt.ramPen)>0)
+          StringF(tempstr,'\s/\s',sopt.ramPen,fib.filename)
+          REPEAT
+            IF(tempstr[StrLen(tempstr)-1] = "/")
+               JUMP fx2
+            ENDIF
+
+            /* again not error, only for testing */
+            /* check for valid copy */
+            stat:=fileCopy(tempstr,tempstr2)
+            IF(stat=FALSE) THEN StrAdd(tempstr2,'_')
+          UNTIL (stat<>0) OR (StrLen(tempstr2)>=40)
+            /* end if RamPen */
+        ELSE    /* uploading to hdrive */
+          StringF(tempstr,'\sNode\d/Playpen/\s',cmds.bbsLoc,node,fib.filename)
+          stat:=Rename(tempstr,tempstr2)
+          err:=IoErr()
+          IF((stat=0) AND (err=213))
+ /* sx:  */ REPEAT
               IF(tempstr[StrLen(tempstr)-1] = "/")
-                 JUMP fx2
+                JUMP fx2
               ENDIF
-
               /* again not error, only for testing */
-              /* check for valid copy */
+              /* check for valid filename */
               stat:=fileCopy(tempstr,tempstr2)
-              IF(stat=FALSE) THEN StrAdd(tempstr2,'_')
-            UNTIL (stat<>0) OR (StrLen(tempstr2)>=40)
-              /* end if RamPen */
-          ELSE    /* uploading to hdrive */
-            StringF(tempstr,'\sNode\d/Playpen/\s',cmds.bbsLoc,node,fib.filename)
-            stat:=Rename(tempstr,tempstr2)
-            err:=IoErr()
-            IF((stat=0) AND (err=213))
- /* sx:  */   REPEAT
-                IF(tempstr[StrLen(tempstr)-1] = "/")
-                  JUMP fx2
-                ENDIF
-                /* again not error, only for testing */
-                /* check for valid filename */
-                stat:=fileCopy(tempstr,tempstr2)
-                IF(stat=FALSE)
-                  StrAdd(tempstr2,'_')
-                ELSE
+              IF(stat=FALSE)
+                StrAdd(tempstr2,'_')
+              ELSE
 -> #ifdef RTS
 ->//(RTS) Sat Jun  6 21:23:40 1992  .. set cause we never knew we lost carrier with a parcial
 ->// upload, there for when we went back from upload_a_file we didnt return goodbye or lost_carrier
  
 ->//               partupload:=TRUE
 ->#endif
-                ENDIF
-              UNTIL (stat<>0) OR (StrLen(tempstr2)>=40)
-            ENDIF          /* end if(!stat&&err==213 */
-          ENDIF            /* end else */
-          IF(stat)
-            SetProtection(tempstr,FIBF_OTR_DELETE)
-            DeleteFile(tempstr)
-          ENDIF
-       ENDIF                       /* end if(Fib->fib_DirEntryType < 0)  */
+              ENDIF
+            UNTIL (stat<>0) OR (StrLen(tempstr2)>=40)
+          ENDIF          /* end if(!stat&&err==213 */
+        ENDIF            /* end else */
+        IF(stat)
+          SetProtection(tempstr,FIBF_OTR_DELETE)
+          DeleteFile(tempstr)
+        ENDIF
+      ENDIF                       /* end if(Fib->fib_DirEntryType < 0)  */
     ENDWHILE                      /* end while(ExNext(FLock,Fib))       */
   ENDIF                           /* end if(Fib->fib_DirEntryType > 0)  */
  
@@ -16685,22 +16833,22 @@ PROC checkOurList(fname: PTR TO CHAR, str: PTR TO CHAR)
   DEF dest[255]:STRING
  
   IF((fp:=Open(fname,MODE_OLDFILE)))<=0     /* can't find our file */
-     RETURN RESULT_SUCCESS
+    RETURN RESULT_SUCCESS
   ENDIF
  
   WHILE((ReadStr(fp,buff)<>-1)) OR (StrLen(buff)>0)
      /* /X 4 changed this to just use simply text match
-        IF(ParsePatternNoCase(buff,dest,200)<>-1)
-       IF(MatchPatternNoCase(dest,str))
-          Close(fp)
+    IF(ParsePatternNoCase(buff,dest,200)<>-1)
+      IF(MatchPatternNoCase(dest,str))
+        Close(fp)
         RETURN RESULT_FAILURE
-       ENDIF
-     ENDIF*/
+      ENDIF
+    ENDIF*/
 
-     IF strCmpi(buff,str,ALL) 
-       Close(fp)
-       RETURN RESULT_FAILURE
-     ENDIF
+    IF strCmpi(buff,str,ALL) 
+      Close(fp)
+      RETURN RESULT_FAILURE
+    ENDIF
   ENDWHILE
   Close(fp)
 ENDPROC RESULT_SUCCESS
@@ -16722,42 +16870,29 @@ PROC checkForFile(fn: PTR TO CHAR)
     StrCopy(path,currentConfDir)
     StrAdd(path,'LcFiles/')
     StringF(final,'\s\s',path,fn)
-    IF(ft:=Open(final,MODE_OLDFILE))>0
-      Close(ft)
-      RETURN RESULT_FAILURE
-    ENDIF
+    IF fileExists(final) THEN RETURN RESULT_FAILURE
   ENDIF
  ->//---------------- lcfiles checking finished
-   x:=1;
-   StringF(path,'DLPATH.\d',x)
-   x++
-     WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path))
-     StrCopy(final,path)
-     StrAdd(final,fn)
-     ft:=Open(final,MODE_OLDFILE)
-     IF(ft>0)  /* Found the file so return fail */
-       Close(ft)
-       RETURN RESULT_FAILURE
-     ENDIF
-     StringF(path,'DLPATH.\d',x)
-     x++
+  x:=1;
+  StringF(path,'DLPATH.\d',x)
+  x++
+  WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,final))
+    StrAdd(final,fn)
+    IF fileExists(final) THEN RETURN RESULT_FAILURE
+    StringF(path,'DLPATH.\d',x)
+    x++
   ENDWHILE
   /*=== 11w add */
-   x:=1
-   StringF(path,'ULPATH.\d',x)
-   x++
-   WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path))
-    StrCopy(final,path)
+  x:=1
+  StringF(path,'ULPATH.\d',x)
+  x++
+  WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,final))
     StrAdd(final,fn)
-    ft:=Open(final,MODE_OLDFILE)
-    IF(ft>0)
-      Close(ft)
-      RETURN RESULT_FAILURE
-    ENDIF
+    IF fileExists(final) THEN RETURN RESULT_FAILURE
     StringF(path,'ULPATH.\d',x)
     x++
-    ENDWHILE
-            
+  ENDWHILE
+           
  /*-- 11w end addition */
 
 ENDPROC RESULT_SUCCESS
@@ -17095,7 +17230,7 @@ PROC sysopUpload()
   aePuts(string)
 
   onlineNFiles:=0
-  numSkipd:=0
+  skipdFiles.clear()
   dTBT:=0
   tBT:=0
   tTTM:=0
@@ -17133,8 +17268,8 @@ PROC sysopUpload()
     ENDIF
   ENDIF
   
-  FOR x:=0 TO ListLen(recFileNames)-1
-    StrCopy(str,ListItem(recFileNames,x))
+  FOR x:=0 TO recFileNames.count()-1
+    StrCopy(str,recFileNames.item(x))
 
     IF(StrLen(sopt.ramPen)>0)
       StringF(tempstr,'\s/\s',sopt.ramPen,str)
@@ -17234,16 +17369,16 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   DEF s:PTR TO CHAR
  
   onlineNFiles:=0
-  numSkipd:=0
+  skipdFiles.clear()
   
   IF(maxDirs=0)
-      aePuts('\b\n');
-      myError(5)             ->Sorry no files in conf
-      RETURN RESULT_FAILURE
+    aePuts('\b\n');
+    myError(5)             ->Sorry no files in conf
+    RETURN RESULT_FAILURE
   ENDIF
  
   IF(uLFType=0)
-      displayScreen(SCREEN_UPLOAD)
+    displayScreen(SCREEN_UPLOAD)
   ENDIF
  
   tFS:=freeDiskSpace()                /* check free space - now in kb instead of bytes */
@@ -17261,47 +17396,47 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   ENDIF
   
   IF(uLFType=0) 
-      parseParams(params)
-      IF(ListLen(parsedParams)>0)
-          StrCopy(string,params[0])
-          setProtocol(string)
-      ELSE
-          setProtocol('')
-      ENDIF
-      protocol:=loggedOnUser.protocol
-      SELECT protocol
-          CASE "Z"
-              IF(StrLen(sopt.ramPen)>0)                     /* are we uploading to a diff device */
-                  StringF(buff,'\s UPLOADING to \s..\b\n',xprTitle[loggedOnUser.xferProtocol],sopt.ramPen)
-              ELSE                        /* otherwise normal upload to playpen dir */
-                  StringF(buff,'\s UPLOADING....\b\n',xprTitle[loggedOnUser.xferProtocol])
-              ENDIF
+    parseParams(params)
+    IF(parsedParams.count()>0)
+      StrCopy(string,params[0])
+      setProtocol(string)
+    ELSE
+        setProtocol('')
+    ENDIF
+    protocol:=loggedOnUser.protocol
+    SELECT protocol
+      CASE "Z"
+        IF(StrLen(sopt.ramPen)>0)                     /* are we uploading to a diff device */
+          StringF(buff,'\s UPLOADING to \s..\b\n',xprTitle.item(loggedOnUser.xferProtocol),sopt.ramPen)
+        ELSE                        /* otherwise normal upload to playpen dir */
+          StringF(buff,'\s UPLOADING....\b\n',xprTitle.item(loggedOnUser.xferProtocol))
+        ENDIF
  
-              aePuts(buff)                              /* show it to the user */
-      ENDSELECT
-      
-      formatSpaceValue(tFS,tempstr)
-      formatSpaceValue(fSUploading,tempstr2)
-      StringF(string,'\s available for uploading.  \s at one time.\b\n',tempstr,tempstr2)   ->changed to indicate space in kb instead of bytes
-      aePuts(string)
-      aePuts('Filename lengths above 12 are not allowed.\b\n\b\n')
+        aePuts(buff)                              /* show it to the user */
+    ENDSELECT
+    
+    formatSpaceValue(tFS,tempstr)
+    formatSpaceValue(fSUploading,tempstr2)
+    StringF(string,'\s available for uploading.  \s at one time.\b\n',tempstr,tempstr2)   ->changed to indicate space in kb instead of bytes
+    aePuts(string)
+    aePuts('Filename lengths above 12 are not allowed.\b\n\b\n')
  
-      SELECT protocol
-          CASE "Z"
-              zresume:=resumeStuff(tFS)
-              IF(zresume<0) THEN RETURN zresume
-              IF((zresume=0) AND strCmpi(cmd,'RG',ALL))
-                  aePuts('\b\nThere are no more files to resume on.\b\n\b\n')
-                  RETURN RESULT_SUCCESS
-              ENDIF
-              IF(zresume=0)
-                  gstat:=uploadDesc()
-                  IF(gstat<0)
-                      cleanItUp()
-                      RETURN gstat
-                  ENDIF
-              ENDIF
-      ENDSELECT
+    SELECT protocol
+      CASE "Z"
+        zresume:=resumeStuff(tFS)
+        IF(zresume<0) THEN RETURN zresume
+        IF((zresume=0) AND strCmpi(cmd,'RG',ALL))
+          aePuts('\b\nThere are no more files to resume on.\b\n\b\n')
+          RETURN RESULT_SUCCESS
+        ENDIF
+        IF(zresume=0)
+          gstat:=uploadDesc()
+          IF(gstat<0)
+            cleanItUp()
+            RETURN gstat
+          ENDIF
+        ENDIF
+    ENDSELECT
   ENDIF
  
  
@@ -17317,14 +17452,14 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   tTCPS:=0
  
   IF(beenUDd=0)
-      displayUserToCallersLog(1)
-      beenUDd:=1
+    displayUserToCallersLog(1)
+    beenUDd:=1
   ENDIF
  
   protocol:=loggedOnUser.protocol
   SELECT protocol
-      CASE "Z"
-          zmodemReceive(path,uLFType)     /* path of upload */
+    CASE "Z"
+      zmodemReceive(path,uLFType)     /* path of upload */
   ENDSELECT
  
   aePuts('\b\n\b\nFile Uploading Complete...\b\n')
@@ -17341,13 +17476,12 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
     pcps:=zModemInfo.cps
   ENDIF
  
-  
   StringF(string,' \d file(s), \dk bytes, \d minute(s). \d second(s), \d cps, \d% efficiency.',onlineNFiles+bgCnt,Div(tBT+bgBytes,1024),Div(tTTM,60),Mod(tTTM,60),pcps,peff)
   aePuts(string)
  
   IF pcps>65535 THEN pcps:=65535
   IF (pcps > loggedOnUserKeys.upCPS)
-     loggedOnUserKeys.upCPS:=pcps
+    loggedOnUserKeys.upCPS:=pcps
   ENDIF
 
   IF bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
@@ -17397,18 +17531,19 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   peff:=(Div(Mul(tTTM,3),2)+60)
   IF(onlineNFiles<1) THEN peff:=0
  
-  IF(numSkipd>0)
-      aePuts('The file(s) :\b\n')
-      x:=0
-      WHILE(x<numSkipd)
-        StringF(str,'\t\t\s\b\n',skipdFiles+(x*32))
-        aePuts(str)
-        StringF(str,'\tSkipped \s',skipdFiles+(x*32))
-          callersLog(str)
-          udLog(str)
-          x:=x+1
-      ENDWHILE
-      aePuts('\b\n\t\tSKIPPED.  They already exist or have symbols.\b\n')
+  IF(skipdFiles.count()>0)
+    aePuts('The file(s) :\b\n')
+    x:=0
+    WHILE(x<skipdFiles.count())
+      StringF(str,'\t\t\s\b\n',skipdFiles.item(x))
+      aePuts(str)
+      StringF(str,'\tSkipped \s',skipdFiles.item(x))
+      callersLog(str)
+      udLog(str)
+      x:=x+1
+    ENDWHILE
+    aePuts('\b\n\t\tSKIPPED.  They already exist or have symbols.\b\n')
+    skipdFiles.clear()
   ENDIF
  
   StringF(str,'Time increased by \d mins.\b\n\b\n',Div(peff,60))
@@ -17431,9 +17566,9 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   /* loop thru uploaded (ing) list of files & move to where they belong*/
  /* this gets the list of files uploaded */
  
-  FOR x:=0 TO ListLen(recFileNames)-1
+  FOR x:=0 TO recFileNames.count()-1
  nx:  
-    StrCopy(str,ListItem(recFileNames,x))
+    StrCopy(str,recFileNames.item(x))
     IF(cmds.acLvl[LVL_CAPITOLS_in_FILE]=1) THEN UpperStr(str)
 
     noF:=noF+1
@@ -17454,12 +17589,12 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
         aePuts('             [------------]')
 inpAgain:
         IF(logonType>=LOGON_TYPE_REMOTE)
-            cstat:=checkCarrier()
-            IF(cstat=FALSE)
-              modemOffHook()
-              moveToLCFILES:=handleLCFiles(istr,fcomment)
-              JUMP cNext
-            ENDIF
+          cstat:=checkCarrier()
+          IF(cstat=FALSE)
+            modemOffHook()
+            moveToLCFILES:=handleLCFiles(istr,fcomment)
+            JUMP cNext
+          ENDIF
         ENDIF
         aePuts('\b\nNew Filename: ')
         status:=lineInput('','',12,INPUT_TIMEOUT,istr)
@@ -17491,11 +17626,11 @@ inpAgain:
         ENDIF
 
         IF(StrLen(sopt.ramPen)>0)                       /* check Ram dir */
-            StringF(tempstr,'\s/\s',sopt.ramPen,istr)
-            StringF(tempstr2,'\s/\s',sopt.ramPen,str)
+          StringF(tempstr,'\s/\s',sopt.ramPen,istr)
+          StringF(tempstr2,'\s/\s',sopt.ramPen,str)
         ELSE
-            StringF(tempstr,'\sNode\d/PlayPen/\s',cmds.bbsLoc,node,istr)
-            StringF(tempstr2,'\sNode\d/PlayPen/\s',cmds.bbsLoc,node,str)
+          StringF(tempstr,'\sNode\d/PlayPen/\s',cmds.bbsLoc,node,istr)
+          StringF(tempstr2,'\sNode\d/PlayPen/\s',cmds.bbsLoc,node,str)
         ENDIF
 
         status:=Rename(tempstr2,tempstr)        /* oldstr, newstr */
@@ -17525,9 +17660,9 @@ ax:
       ENDIF
 
       IF(fBlock:=(AllocDosObject(DOS_FIB,NIL))) = NIL
-          myError(11)
-          UnLock(fLock)
-          RETURN RESULT_FAILURE
+        myError(11)
+        UnLock(fLock)
+        RETURN RESULT_FAILURE
       ENDIF
       IF( Examine(fLock,fBlock) ) THEN fsize:=fBlock.size
       
@@ -17605,21 +17740,23 @@ cinpAgain:
         x2:=0
         REPEAT
           aePuts('                                :')
-          status:=lineInput('','',44,INPUT_TIMEOUT,scomment[x2])
+          status:=lineInput('','',44,INPUT_TIMEOUT,tempstr)
+          scomment.setItem(x2,tempstr)
           IF(status<0)
             modemOffHook()
             moveToLCFILES:=handleLCFiles(istr,fcomment)
             FOR i:=0 TO x2
-              StrCopy(scomment[i],'')
+              scomment.setItem(i,'')
             ENDFOR 
             JUMP cNext
           ENDIF
           x2:=x2+1
-        UNTIL ((StrLen(scomment[x2-1])=0) OR (x2>= (max_desclines-1)))
+        UNTIL ((StrLen(scomment.item(x2-1))=0) OR (x2>= (max_desclines-1)))
       ELSE
         ReadStr(uaf,fcomment)
         x2:=0
-        WHILE(ReadStr(uaf,scomment[x2])<>-1) OR (StrLen(scomment[x2])>0)
+        WHILE(ReadStr(uaf,tempstr)<>-1) OR (StrLen(tempstr)>0)
+          scomment.setItem(x2,tempstr)
           x2:=x2+1
           EXIT (x2>=(max_desclines-1))
         ENDWHILE
@@ -17774,10 +17911,10 @@ move_It:     /* gets here if lostcarrier, and file is complete but not when file
       x3:=0;
       WHILE(x2)
           /* Print the comment lines */
-          IF(StrLen(scomment[x3])>0)
-            StringF(tempstr,'                                 \s\n',scomment[x3])
+          IF(StrLen(scomment.item(x3))>0)
+            StringF(tempstr,'                                 \s\n',scomment.item(x3))
             fileWrite(f,tempstr)
-            StrCopy(scomment[x3],'')
+            scomment.setItem(x3,'')
             x3:=x3+1
           ENDIF
           x2:=x2-1
@@ -17868,7 +18005,8 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
           x2:=0
           IF fh>0
             ReadStr(fh,fcomment)
-            WHILE(ReadStr(fh,scomment[x2])<>-1) OR (StrLen(scomment[x2])>0)
+            WHILE(ReadStr(fh,tempstr)<>-1) OR (StrLen(tempstr)>0)
+              scomment.setItem(x2,tempstr)
               x2:=x2+1
               EXIT (x2>=(max_desclines-1))
             ENDWHILE
@@ -17983,10 +18121,10 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
           x3:=0;
           WHILE(x2)
               /* Print the comment lines */
-              IF(StrLen(scomment[x3])>0)
-                StringF(tempstr,'                                 \s\n',scomment[x3])
+              IF(StrLen(scomment.item(x3))>0)
+                StringF(tempstr,'                                 \s\n',scomment.item(x3))
                 fileWrite(fh,tempstr)
-                StrCopy(scomment[x3],'')
+                scomment.setItem(x3,'')
                 x3:=x3+1
               ENDIF
               x2:=x2-1
@@ -18060,18 +18198,51 @@ PROC beginDLF(cmdcode,params)      /* begin downloading */
   stat:=downloadAFile(cmdcode,params)
 ENDPROC stat
 
+PROC calcConfBad(confNum)
+  DEF cb:PTR TO confBase
+  DEF badBCD[8]:ARRAY OF CHAR
+  DEF bad
+  DEF i
 
-PROC downloadAFile(cmdcode: PTR TO CHAR, params)
-  DEF string[300]:ARRAY OF CHAR
+  cb:=confBases.item(confNum)
+  
+  IF(cb.ratioType<2)    
+    ->bad:=(cb.ratio*cb.bytesUpload)-cb.bytesDownload
+    convertToBCD(0,badBCD)
+    FOR i:=1 TO cb.ratio
+      addBCD2(badBCD,cb.uploadBytesBCD)
+    ENDFOR
+    subBCD2(badBCD,cb.downloadBytesBCD)
+    IF badBCD[0]>=$50
+      ->result was negative
+      bad:=0
+    ELSE
+      bad:=convertFromBCD(badBCD)
+
+      ->bad needs to be used in a signed comparison, so don't allow values >7fffffff
+      IF bad<0 THEN bad:=$7fffffff
+    ENDIF
+  ENDIF
+ENDPROC bad
+
+
+PROC downloadAFile(cmdcode: PTR TO CHAR, params) HANDLE
+  DEF string[300]:STRING
   DEF tsec,min,secs,i,x,status,mystat,bad,nad,proto
   DEF peff,pcps,tbad
   DEF tempsize
   DEF badBCD[8]:ARRAY OF CHAR
   DEF bcdStr[20]:STRING
   DEF tempStr[255]:STRING
-  DEF tempList:PTR TO LONG
+  DEF tempList=NIL:PTR TO stdlist
   DEF item:PTR TO flagFileItem
-  DEF rFinal[3072]:STRING 
+  DEF finalList:PTR TO stdlist
+  DEF tmpItem: flagFileItem
+  DEF tfsizes=NIL:PTR TO stdlist
+  ->DEF tfsize
+  DEF freeDFlags=NIL:PTR TO stdlist
+  DEF freeDFlag
+  DEF cb:PTR TO confBase
   
  -> DEF tempStr[255]:STRING
  ->extern BYTE FreeDownloads,BeenUDd
@@ -18080,7 +18251,6 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params)
   nad:=0
   numFiles:=0
   freeDFlag:=0
-
  
   aePuts('\b\n')
   IF(maxDirs=0)
@@ -18093,20 +18263,19 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params)
     aePuts('\b\n')
   ENDIF
 
-  tfsize:=0
+  ->tfsize:=0
   dtfsize:=0
 
   displayULStats(loggedOnUser,loggedOnUserMisc)              /* Show User stats.. Num Dnloads, uploads */
 
-  tbad:=bytesADL    /* User Daily Limit of bytes to dnload */
   IF(loggedOnUser.secLibrary<>0)     /* Dont have a zero ratio */
     IF((loggedOnUser.secBoard>0) AND (creditAccountEnabled(loggedOnUser)=FALSE))
       nad:=(loggedOnUser.secLibrary*(loggedOnUser.uploads+1))-loggedOnUser.downloads
       StringF(string,'Files Avail before UL : \d\b\n',nad)
       aePuts(string)
       IF(nad<1)
-          exceedRatio()
-          RETURN RESULT_SUCCESS
+        exceedRatio()
+        RETURN RESULT_SUCCESS
       ENDIF
     ENDIF
     IF(loggedOnUser.secBoard<2)
@@ -18142,24 +18311,23 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params)
         exceedRatio()
         RETURN RESULT_SUCCESS
       ENDIF
-      IF (bad<bytesADL) THEN tbad:=bad
     ENDIF
   ELSE
-    aePuts('Download to Upload Ratio Disabled.\b\n')
+    aePuts('Download to Upload Ratio : Disabled.\b\n')
   ENDIF
 /*
 // We can replace this with User.Protocol = 'Z'
 
- mystat=CommandSplit()
-
- if(mystat>1&&(strlen(Command[1])==1)) {
-  PROTO=2
-      strcpy(str,Command[1])
-  SetProtocol(str)
-  } else  {
-  str[0]=0
-      SetProtocol(str)
-  }*/
+  mystat=CommandSplit()
+ 
+  if(mystat>1&&(strlen(Command[1])==1)) {
+   PROTO=2
+       strcpy(str,Command[1])
+   SetProtocol(str)
+   } else  {
+   str[0]=0
+       SetProtocol(str)
+   }*/
 
 
   aePuts('Space between filenames.  ')
@@ -18167,7 +18335,7 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params)
   aePuts('Wildcards permitted.\b\n')
   ->AEPutStr("      Zmodem Uploading & Downloading only\b\n")
 
-  tempList:=List(ListLen(flagFilesList)+1)
+  tempList:=NEW tempList.stdlist(flagFilesList.count()+1)
   sysopdl:=FALSE
 
   IF (strCmpi(cmdcode,'DS',ALL)) AND (checkSecurity(ACS_SYSOP_DOWNLOAD))
@@ -18182,153 +18350,252 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params)
       addFlagItems(tempList,currentConf,params)
     ENDIF
 
-    FOR i:=0 TO ListLen(flagFilesList)-1
-      item:=ListItem(flagFilesList,i)
+    FOR i:=0 TO flagFilesList.count()-1
+      item:=flagFilesList.item(i)
       addFlagItem(tempList,item.confNum,item.fileName)
     ENDFOR    
     
   ENDIF
 
-
- IF(ListLen(tempList)<>0) THEN JUMP skip1
- arestart:
+  tfsizes:=NEW tfsizes.stdlist(cmds.numConf)
+  freeDFlags:=NEW freeDFlags.stdlist(cmds.numConf)
+  finalList:=NEW finalList.stdlist(MAX_FLAGGED_FILES)
+  FOR i:=0 TO cmds.numConf-1
+    tfsizes.add(0)
+    freeDFlags.add(0)
+  ENDFOR
  
- WHILE TRUE
-   tsec:=Div(dtfsize,Div(onlineBaud,10))
-   min:=tsec/60
-   IF(((Div(timeLimit,60))-min)<0)
-    aePuts('Not enough time for requested downloads.\b\n\b\n')
-     
-    clearFlagItems(tempList)
-    DisposeLink(tempList)
-    RETURN RESULT_SUCCESS
-   ENDIF
- 
-  tempsize:=tfsize
-  IF sopt.toggles[TOGGLES_CREDITBYKB] THEN tempsize:=Shr(tempsize,10)
+  IF(tempList.count()<>0)
+    aePuts('\b\nChecking...\b\n')
+    IF(sysopdl=FALSE) 
+      FOR i:=0 TO tempList.count()-1
+        item:=tempList.item(i)
+        FOR x:=0 TO StrLen(item.fileName)-1
+          IF((item.fileName[x]=":") OR (item.fileName[x]="/") OR
+            (((item.fileName[x]="?") OR (item.fileName[x]="#") OR (item.fileName[x]="*")) AND (checkSecurity(ACS_FILE_EXPANSION)=FALSE)))
+            aePuts('\b\nYou may not include any special symbols\b\n')
+            JUMP arestart1
+          ENDIF
+        ENDFOR
+        IF((item.fileName[0]="?") OR (item.fileName[0]="*"))
+          aePuts('\b\nToo ambigious, start with at least one character.\b\n')
+          JUMP arestart1
+        ENDIF
+      ENDFOR
+    ELSE
+      FOR i:=0 TO tempList.count()-1
+        item:=tempList.item(i)
+        FOR x:=0 TO StrLen(item.fileName)-1
+          IF((item.fileName[x]="?") OR (item.fileName[x]="*") OR (item.fileName[x]="#"))
+            aePuts('\b\nSysop download doesn''t support wildcards\b\n')
+            JUMP arestart1
+          ENDIF
+        ENDFOR 
+      ENDFOR
+    ENDIF
+    status:=checklist(tempList,tfsizes,freeDFlags,finalList)
+    IF(status=RESULT_FAILURE) 
+      Throw(ERR_EXCEPT,RESULT_SUCCESS)
+    ENDIF
+  ENDIF
 
-  IF(((tbad-tempsize)<0) AND (loggedOnUser.secBoard<2) AND (loggedOnUser.secLibrary<>0) AND (creditAccountEnabled(loggedOnUser)=FALSE))
-    aePuts('Not enough free bytes for requested downloads.\b\n\b\n')
-    clearFlagItems(tempList)
-    DisposeLink(tempList)
-    RETURN RESULT_SUCCESS
-  ENDIF
-  
-  IF(nad<freeDFlag) AND (loggedOnUser.secBoard>0) AND (loggedOnUser.secLibrary<>0) AND (creditAccountEnabled(loggedOnUser)=FALSE)
-    aePuts('Not enough free files for requested number of downloads.\b\n\b\n')
-    clearFlagItems(tempList)
-    DisposeLink(tempList)
-    RETURN RESULT_SUCCESS
-  ENDIF
-  
-  IF((nad=freeDFlag) AND ((loggedOnUser.secLibrary<>0) AND (loggedOnUser.secBoard>0))) THEN JUMP astart
-
-  IF((loggedOnUser.secLibrary=0) OR (creditAccountEnabled(loggedOnUser)))
-    StringF(tempStr,'\b\n\d mins, (Ratio Disabled), Filespec(\d): ',(Div(timeLimit,60))-min,(numFiles+1))
-  ELSE
-    downloadPrompt(loggedOnUser.secBoard,(Div(timeLimit,60))-min,tbad-tempsize,(numFiles+1),nad-freeDFlag,tempStr)
-  ENDIF
-  aePuts(tempStr)
-
-  status:=lineInput('','',200,INPUT_TIMEOUT,tempStr)
-  IF(status<0) 
-    clearFlagItems(tempList)
-    DisposeLink(tempList)
-    RETURN RESULT_NO_CARRIER
-  ENDIF
-  
-  IF((StrLen(tempStr)=0) AND (numFiles=0))
-    aePuts('\b\n')
-    clearFlagItems(tempList)
-    DisposeLink(tempList)
-    RETURN RESULT_SUCCESS
-  ENDIF
-  
-  IF(StrLen(tempStr)=0) THEN JUMP astart
-  IF((((tempStr[0]="q") OR (tempStr[0]="Q")) OR ((tempStr[0]="a") OR (tempStr[0]="A"))) AND (StrLen(tempStr)=1))
-    aePuts('Aborting...\b\n\b\n')
-    clearFlagItems(tempList)
-    DisposeLink(tempList)
-    RETURN RESULT_SUCCESS
-  ENDIF
+arestart1:
 
   clearFlagItems(tempList)
-  addFlagItem(tempList,currentConf,tempStr)
+  END tempList
+  tempList:=NIL
+ 
+arestart:
   
-  skip1:
-  aePuts('\b\nChecking...\b\n')
-  IF(sysopdl=FALSE) 
-    FOR i:=0 TO ListLen(tempList)-1
-      item:=ListItem(tempList,i)
-      FOR x:=0 TO StrLen(item.fileName)-1
-        IF((item.fileName[x]=":") OR (item.fileName[x]="/") OR
-          (((item.fileName[x]="?") OR (item.fileName[x]="#") OR (item.fileName[x]="*")) AND (checkSecurity(ACS_FILE_EXPANSION)=FALSE)))
+  WHILE TRUE
+    tsec:=Div(dtfsize,Div(onlineBaud,10))
+    min:=tsec/60
+    IF(((Div(timeLimit,60))-min)<0)
+      aePuts('Not enough time for requested downloads.\b\n\b\n')    
+      Throw(ERR_EXCEPT,RESULT_SUCCESS)
+    ENDIF
+
+
+    IF(checkSecurity(ACS_CONFERENCE_ACCOUNTING))
+      saveMsgPointers(currentConf)
+      tempsize:=0
+      FOR i:=0 TO cmds.numConf-1
+        tempsize:=tempsize+tfsizes.item(i)
+      ENDFOR
+      IF sopt.toggles[TOGGLES_CREDITBYKB] THEN tempsize:=Shr(tempsize,10)
+    
+      IF(tempsize>bytesADL)
+        aePuts('Not enough daily byte allowance for requested downloads\b\n\b\n')
+        Throw(ERR_EXCEPT,RESULT_SUCCESS)
+      ENDIF
+    
+      FOR i:=0 TO cmds.numConf-1
+        tempsize:=tfsizes.item(i)
+        freeDFlag:=freeDFlags.item(i)
+        
+        IF sopt.toggles[TOGGLES_CREDITBYKB] THEN tempsize:=Shr(tempsize,10)
+    
+        bad:=calcConfBad(i)
+        cb:=confBases.item(i)
+    
+        IF(((bad-tempsize)<0) AND (cb.ratioType<2) AND (cb.ratio<>0) AND (creditAccountEnabled(loggedOnUser)=FALSE))
+          StringF(string,'Conf \d: Not enough free bytes for requested downloads.\b\n\b\n',relConf(i+1))
+          aePuts(string)
+          Throw(ERR_EXCEPT,RESULT_SUCCESS)
+        ENDIF
+        
+        IF (cb.ratioType>0) AND (cb.ratio<>0) AND (creditAccountEnabled(loggedOnUser)=FALSE)
+          nad:=(cb.ratio*(cb.upload+1))-cb.downloads
+    
+          IF (nad<freeDFlag) 
+            StringF(string,'Conf \d: Not enough free files for requested number of downloads.\b\n\b\n',relConf(i+1))
+            aePuts(string)
+            Throw(ERR_EXCEPT,RESULT_SUCCESS)
+          ENDIF
+        ENDIF
+        
+        EXIT ((nad=freeDFlag) AND ((cb.ratio<>0) AND (cb.ratioType>0))) 
+      ENDFOR
+    
+      tempsize:=tfsizes.item(currentConf-1)
+      freeDFlag:=freeDFlags.item(currentConf-1)
+      bad:=calcConfBad(currentConf-1)
+      IF bad<bytesADL THEN tbad:=bad ELSE tbad:=bytesADL
+      nad:=0
+      IF (cb.ratioType>0) AND (cb.ratio<>0) AND (creditAccountEnabled(loggedOnUser)=FALSE)
+        nad:=(cb.ratio*(cb.upload+1))-cb.downloads
+      ENDIF
+    
+      IF((nad=freeDFlag) AND ((cb.ratio<>0) AND (cb.ratioType>0))) THEN JUMP astart
+      
+    ELSE
+      tempsize:=0
+      freeDFlag:=0
+      nad:=0
+    
+      FOR i:=0 TO cmds.numConf-1
+        tempsize:=tempsize+tfsizes.item(i)
+        freeDFlag:=freeDFlag+freeDFlags.item(i)
+      ENDFOR
+      /*tfsize:=tempsize*/
+      IF sopt.toggles[TOGGLES_CREDITBYKB] THEN tempsize:=Shr(tempsize,10)
+    
+      IF bad<bytesADL THEN tbad:=bad ELSE tbad:=bytesADL
+      
+      IF(tempsize>bytesADL)
+        aePuts('Not enough daily byte allowance for requested downloads\b\n\b\n')
+        Throw(ERR_EXCEPT,RESULT_SUCCESS)
+      ENDIF
+    
+      IF(((tbad-tempsize)<0) AND (loggedOnUser.secBoard<2) AND (loggedOnUser.secLibrary<>0) AND (creditAccountEnabled(loggedOnUser)=FALSE))
+        aePuts('Not enough free bytes for requested downloads.\b\n\b\n')
+        Throw(ERR_EXCEPT,RESULT_SUCCESS)
+      ENDIF
+      
+      IF (loggedOnUser.secBoard>0) AND (loggedOnUser.secLibrary<>0) AND (creditAccountEnabled(loggedOnUser)=FALSE)
+        nad:=(loggedOnUser.secLibrary*(loggedOnUser.uploads+1))-loggedOnUser.downloads
+    
+        IF (nad<freeDFlag) 
+          aePuts('Not enough free files for requested number of downloads.\b\n\b\n')
+          Throw(ERR_EXCEPT,RESULT_SUCCESS)
+        ENDIF
+      ENDIF
+      
+      IF((nad=freeDFlag) AND ((loggedOnUser.secLibrary<>0) AND (loggedOnUser.secBoard>0))) THEN JUMP astart
+    ENDIF
+    
+    IF((loggedOnUser.secLibrary=0) OR (creditAccountEnabled(loggedOnUser)))
+      StringF(tempStr,'\b\n\d mins, (Ratio Disabled), Filespec(\d): ',(Div(timeLimit,60))-min,(numFiles+1))
+    ELSE
+      downloadPrompt(loggedOnUser.secBoard,(Div(timeLimit,60))-min,tbad-tempsize,(numFiles+1),nad-freeDFlag,tempStr)
+    ENDIF
+    aePuts(tempStr)
+    
+    status:=lineInput('','',200,INPUT_TIMEOUT,tempStr)
+    IF(status<0) 
+      Throw(ERR_EXCEPT,RESULT_NO_CARRIER)
+    ENDIF
+    
+    IF((StrLen(tempStr)=0) AND (numFiles=0))
+      aePuts('\b\n')
+      Throw(ERR_EXCEPT,RESULT_SUCCESS)
+    ENDIF
+    
+    IF(StrLen(tempStr)=0) THEN JUMP astart
+    IF((((tempStr[0]="q") OR (tempStr[0]="Q")) OR ((tempStr[0]="a") OR (tempStr[0]="A"))) AND (StrLen(tempStr)=1))
+      aePuts('Aborting...\b\n\b\n')
+      Throw(ERR_EXCEPT,RESULT_SUCCESS)
+    ENDIF
+    
+skip1:
+    aePuts('\b\nChecking...\b\n')
+    IF(sysopdl=FALSE) 
+      FOR x:=0 TO StrLen(tempStr)-1
+        IF((tempStr[x]=":") OR (tempStr[x]="/") OR
+          (((tempStr[x]="?") OR (tempStr[x]="#") OR (tempStr[x]="*")) AND (checkSecurity(ACS_FILE_EXPANSION)=FALSE)))
           aePuts('\b\nYou may not include any special symbols\b\n')
           JUMP arestart
         ENDIF
       ENDFOR
-      IF((item.fileName[0]="?") OR (item.fileName[0]="*"))
+      IF((tempStr[0]="?") OR (tempStr[0]="*"))
         aePuts('\b\nToo ambigious, start with at least one character.\b\n')
         JUMP arestart
       ENDIF
-    ENDFOR
-  ELSE
-    FOR i:=0 TO ListLen(tempList)-1
-      item:=ListItem(tempList,i)
-      FOR x:=0 TO StrLen(item.fileName)-1
-        IF((item.fileName[x]="?") OR (item.fileName[x]="*") OR (item.fileName[x]="#"))
+    ELSE
+      FOR x:=0 TO StrLen(tempStr)-1
+        IF((tempStr[x]="?") OR (tempStr[x]="*") OR (tempStr[x]="#"))
           aePuts('\b\nSysop download doesn''t support wildcards\b\n')
           JUMP arestart
         ENDIF
       ENDFOR 
-    ENDFOR
-  ENDIF
-  status:=checklist(tempList,rFinal)
-  IF(status=RESULT_FAILURE) 
-    clearFlagItems(tempList)
-    DisposeLink(tempList)
-    RETURN RESULT_SUCCESS
-  ENDIF
- ENDWHILE
+    ENDIF
+    
+    status:=checkForFileSize(tempStr,currentConf,tfsizes,freeDFlags,finalList,0)
+    IF((status=RESULT_FAILURE) OR (status=11) OR (status=10)) 
+      Throw(ERR_EXCEPT,RESULT_SUCCESS)
+    ENDIF
+  ENDWHILE
 
- astart:
+astart:
 
- clearFlagItems(tempList)
- DisposeLink(tempList)
-
- IF(numFiles=0) THEN RETURN RESULT_NO_CARRIER
+  END tfsizes
+  tfsizes:=NIL
+  END freeDFlags
+  freeDFlags:=NIL
  
- IF loggedOnUser.protocol="Z"
-    aePuts('\b\nZmodem ')
- ELSEIF loggedOnUser.protocol="C"
-    aePuts('\b\nXmodem/CRC ')
- ENDIF
-   
- aePuts(' Batch Download Estimate:\b\n')
-  astart2:
-  tsec:=Div(dtfsize,Div(onlineBaud,10))
-  min:=tsec/60
-  secs:=tsec-(min*60)
-  StringF(tempStr,'   \d files, \dk bytes, \d mins \d secs\b\n',numFiles,Div(dtfsize,1024),min,secs)
-  aePuts(tempStr)
+  IF(numFiles=0) THEN RETURN RESULT_NO_CARRIER
   
- IF(tbad<tfsize)
-   aePuts('Exceeded bytes limit.\b\n\b\n')
-   RETURN RESULT_SUCCESS
- ENDIF
-
+  IF loggedOnUser.protocol="Z"
+     aePuts('\b\nZmodem ')
+  ELSEIF loggedOnUser.protocol="C"
+     aePuts('\b\nXmodem/CRC ')
+  ENDIF
+    
+  aePuts(' Batch Download Estimate:\b\n')
+   astart2:
+   tsec:=Div(dtfsize,Div(onlineBaud,10))
+   min:=tsec/60
+   secs:=tsec-(min*60)
+   StringF(tempStr,'   \d files, \dk bytes, \d mins \d secs\b\n',numFiles,Div(dtfsize,1024),min,secs)
+   aePuts(tempStr)
+   
+  /*IF(tbad<tfsize)
+    aePuts('Exceeded bytes limit.\b\n\b\n')
+    RETURN RESULT_SUCCESS
+  ENDIF*/
+ 
   IF(min>(Div(timeLimit,60)))
     aePuts('  Insufficent time for transfer.\b\n\b\n')
     RETURN RESULT_SUCCESS
   ENDIF
   
   aePuts('\b\nLAST CHANCE!   (Enter) to Start, (G)oodbye after transfer, (A)bort? ')
-
+ 
   REPEAT
     mystat:=checkOnlineStatus()
     IF(mystat<0) THEN RETURN mystat
     mystat:=readChar(INPUT_TIMEOUT)
-
+ 
     IF(mystat<(-1)) THEN RETURN RESULT_NO_CARRIER
     
     IF((mystat=65) OR (mystat=97))
@@ -18336,9 +18603,9 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params)
       RETURN RESULT_SUCCESS
     ENDIF
     IF (((status="l") OR (status="L")) AND (logonType<LOGON_TYPE_REMOTE))
-       localUpload:=TRUE
-       status:=13
-       JUMP breakd
+      localUpload:=TRUE
+      status:=13
+      JUMP breakd
     ENDIF
   UNTIL (mystat=13) OR (mystat=71) OR (mystat=103)
   breakd:
@@ -18348,78 +18615,52 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params)
 
 sysopDL:
 
- dTBT:=0
- tBT:=0
- tTTM:=0
- tTEFF:=0
- tTCPS:=0
-
+  dTBT:=0
+  tBT:=0
+  tTTM:=0
+  tTEFF:=0
+  tTCPS:=0
+  onlineNFiles:=0
+  
   IF(beenUDd=FALSE)
     displayUserToCallersLog(1)
     beenUDd:=TRUE
   ENDIF
-
- status:=downloadFile(rFinal)
-
- IF(status<>0) THEN clearFlagItems(flagFilesList)
-
- aePuts('\b\n\b\nFile transfer Completed.\b\n')
- peff:=NIL
- pcps:=NIL
- IF(onlineNFiles<>0)
-      ->peff:=Div(tTEFF,onlineNFiles)
-      ->pcps:=Div(tTCPS,onlineNFiles)
-      peff:=zModemInfo.eff
-      pcps:=zModemInfo.cps
- ENDIF
+  
+  status:=downloadFiles(finalList,TRUE)
+  
+  IF(status<>0) THEN clearFlagItems(flagFilesList)
+  
+  aePuts('\b\n\b\nFile transfer Completed.\b\n')
+  peff:=NIL
+  pcps:=NIL
+  IF(onlineNFiles<>0)
+    ->peff:=Div(tTEFF,onlineNFiles)
+    ->pcps:=Div(tTCPS,onlineNFiles)
+    peff:=zModemInfo.eff
+    pcps:=zModemInfo.cps
+  ENDIF
 ->// (RTS) added dnload cps rate Fri Mar 27 13:13:29 1992
-
- IF pcps>65535 THEN pcps:=65535
-
- IF(pcps > loggedOnUserKeys.dnCPS)
-    loggedOnUserKeys.dnCPS:=pcps
-        /* is this baud higher then max cps up ? */
- ENDIF
- 
- IF(status=0)
-   IF(zModemInfo.filesize=zModemInfo.recPos)
-      tBT:=tBT+zModemInfo.filesize
-      dTBT:=dTBT+zModemInfo.filesize
-      donf++
-      callersLog('\tIncomplete 100% Transfer, accumulating Maximum Bytes Downloaded')
-      udLog('\tIncomplete 100% Transfer, accumulating Maximum Bytes Downloaded')
-   ENDIF
-      
- ENDIF
- 
-  StringF(string,' \d files, \dk bytes, \d minutes \d seconds \d cps, \d% efficiency at \d',onlineNFiles,Div(tBT,1024),Div(tTTM,60),Mod(tTTM,60),pcps,peff,onlineBaud)
-
-  tempsize:=dTBT
-  IF sopt.toggles[TOGGLES_CREDITBYKB]
-    tempsize:=Shr(tempsize,10)
-  ENDIF
-
-  IF(freeDownloads=FALSE)
-    IF creditAccountTrackDownloads(loggedOnUser)
-      
-      ->loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+tempsize
-      addBCD(loggedOnUserMisc.downloadBytesBCD,tempsize)
-      loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
-      loggedOnUser.downloads:=loggedOnUser.downloads+donf
-    ENDIF
-  ENDIF
-  loggedOnUser.dailyBytesDld:=loggedOnUser.dailyBytesDld+tempsize
-  IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
-
+  WriteF('debug2: \d',tBT)
+  WriteF('debug3: \d',Div(tBT,1024))
+  StringF(string,' \d files, \dk bytes, \d minutes \d seconds \d cps, \d% efficiency at \d\b\n\b\n',onlineNFiles,Div(tBT,1024),Div(tTTM,60),Mod(tTTM,60),pcps,peff,onlineBaud)
   aePuts(string)
-  aePuts('\b\n\b\n')
+ 
+  IF pcps>65535 THEN pcps:=65535
+  IF(pcps > loggedOnUserKeys.dnCPS)
+    loggedOnUserKeys.dnCPS:=pcps
+    /* is this baud higher then max cps up ? */
+  ENDIF
+  
+  clearFlagItems(finalList)
+  END finalList
 
   StrCopy(tempStr,'\t')
   StrAdd(tempStr,string)
   
   IF(onlineNFiles>0)
-     callersLog(tempStr)
-     udLog(tempStr)
+    callersLog(tempStr)
+    udLog(tempStr)
   ELSE
     callersLog('\tDownload Failed..')
     udLog('\tDownload Failed..')
@@ -18430,6 +18671,22 @@ sysopDL:
 
   statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
   IF((mystat=71) OR (mystat=103)) THEN RETURN(pGoodbye())
+EXCEPT
+  IF tempList
+    clearFlagItems(tempList)
+    END tempList
+  ENDIF
+  IF tfsizes
+    END tfsizes
+  ENDIF
+  IF freeDFlags
+    END freeDFlags
+  ENDIF
+  IF finalList
+    clearFlagItems(finalList)
+    END finalList
+  ENDIF
+  RETURN exceptioninfo
 ENDPROC RESULT_SUCCESS
   
 PROC ccom()
@@ -18504,8 +18761,8 @@ PROC viewAFile(cmdcode,params)
   
   nonStopDisplayFlag:=paramsContains('NS')
 
-  IF ListLen(parsedParams)>0
-    StrCopy(fn,parsedParams[0])
+  IF parsedParams.count()>0
+    StrCopy(fn,parsedParams.item(0))
     JUMP some
   ENDIF
   
@@ -18525,9 +18782,9 @@ some:
   JUMP skipMe
 
 skipToIt:
-    StringF(tempStr,'File \s not found.\b\n\b\n',path)
-    aePuts(tempStr)
-    RETURN RESULT_FAILURE
+  StringF(tempStr,'File \s not found.\b\n\b\n',path)
+  aePuts(tempStr)
+  RETURN RESULT_FAILURE
   
 skipMe:
   
@@ -18551,8 +18808,8 @@ skipMe:
   
   FOR x:=0 TO StrLen(fn)-1
     IF((fn[x]=":") OR (fn[x]="/") OR (fn[x]="*") OR (fn[x]="@"))
-        aePuts('You may not include any special symbols\b\n\b\n')
-        RETURN RESULT_FAILURE
+      aePuts('You may not include any special symbols\b\n\b\n')
+      RETURN RESULT_FAILURE
     ENDIF
   ENDFOR
   
@@ -18576,42 +18833,42 @@ skipit:
          Close(ft)
         RETURN RESULT_FAILURE
       ENDIF
-        WHILE ((ReadStr(ft,tempStr))<>-1) OR (StrLen(tempStr)>0)
-                IF((tempStr[0]>128) OR (tempStr[1]>128) OR (tempStr[2]>128))
-                    Close(ft)
-                    aePuts('\b\nThis file is not a text file.\b\n\b\n')
-                    RETURN RESULT_FAILURE
-                ENDIF
-                aePuts(tempStr)
-                aePuts('\b\n')
-          IF(stat:=checkForPause())
-            Close(ft)
-            aePuts('\b\n')
-            RETURN stat
-          ENDIF
-          IF(checkInput())
-            stat:=readChar(1)
-            SELECT stat
-              CASE 23 /* Pause */
-                stat:=readChar(INPUT_TIMEOUT)
-                IF(stat<0)
+      WHILE ((ReadStr(ft,tempStr))<>-1) OR (StrLen(tempStr)>0)
+              IF((tempStr[0]>128) OR (tempStr[1]>128) OR (tempStr[2]>128))
                   Close(ft)
-                  RETURN RESULT_NO_CARRIER
-                ENDIF
-              CASE 3 /* ^C */
-                aePuts('**Break\b\n\b\n')
+                  aePuts('\b\nThis file is not a text file.\b\n\b\n')
+                  RETURN RESULT_FAILURE
+              ENDIF
+              aePuts(tempStr)
+              aePuts('\b\n')
+        IF(stat:=checkForPause())
+          Close(ft)
+          aePuts('\b\n')
+          RETURN stat
+        ENDIF
+        IF(checkInput())
+          stat:=readChar(1)
+          SELECT stat
+            CASE 23 /* Pause */
+              stat:=readChar(INPUT_TIMEOUT)
+              IF(stat<0)
                 Close(ft)
-                RETURN RESULT_FAILURE
-            ENDSELECT
-          ENDIF
-          ENDWHILE
-            Close(ft)
-            aePuts('\b\n\b\n')
-            RETURN RESULT_SUCCESS
-      ENDIF
-      EXIT ft<>NIL
-      StringF(path,'DLPATH.\d',drivenum++)
-    ENDWHILE
+                RETURN RESULT_NO_CARRIER
+              ENDIF
+            CASE 3 /* ^C */
+              aePuts('**Break\b\n\b\n')
+              Close(ft)
+              RETURN RESULT_FAILURE
+          ENDSELECT
+        ENDIF
+      ENDWHILE
+      Close(ft)
+      aePuts('\b\n\b\n')
+      RETURN RESULT_SUCCESS
+    ENDIF
+    EXIT ft<>NIL
+    StringF(path,'DLPATH.\d',drivenum++)
+  ENDWHILE
   aePuts('File not found.\b\n\b\n')
 ENDPROC RESULT_SUCCESS
 
@@ -18628,15 +18885,15 @@ PROC showVoteTopics()
     IF fileExists(votefile)
       confbyte:=Shr(topicNum+3,3)
       confbit:=Shl(1,Mod(topicNum+3,8))
-      cb:=ListItem(confBases,currentConf-1)
+      cb:=confBases.item(currentConf-1)
       voted:=(cb.handle[confbyte] AND confbit)<>0
 
       loadMsg(votefile)
       FOR i:=0 TO lines-1
         IF i=0
-          StringF(tempstr,'[34m[[0m\r\d[2][34m] [32m\s [35m\s\b\n',topicNum,msgBuf[i],IF voted THEN 'VOTED' ELSE '     ')
+          StringF(tempstr,'[34m[[0m\r\d[2][34m] [32m\s [35m\s\b\n',topicNum,msgBuf.item(i),IF voted THEN 'VOTED' ELSE '     ')
         ELSE
-          StringF(tempstr,'           [35m\s\b\n',msgBuf[i])
+          StringF(tempstr,'           [35m\s\b\n',msgBuf.item(i))
         ENDIF
         aePuts(tempstr)
       ENDFOR
@@ -18676,7 +18933,7 @@ PROC createVoteTopic()
   ENDIF
 
   aePuts('\b\n[33mENTER TOPIC DESCRIPTION [0m\b\n')
-  clearMsgBuf()
+  msgBuf.clear()
   lines:=0
   IF edit(FALSE,50)<>RESULT_SUCCESS THEN RETURN RESULT_SUCCESS
   IF lines=0 THEN RETURN RESULT_SUCCESS
@@ -18686,7 +18943,7 @@ PROC createVoteTopic()
   REPEAT
     StringF(tempStr,'\b\n[33mENTER QUESTION \d[0m\b\n',questNum)
     aePuts(tempStr)
-    clearMsgBuf()
+    msgBuf.clear()
     lines:=0
 
     IF edit(FALSE,50)<>RESULT_SUCCESS THEN lines:=0
@@ -18698,12 +18955,12 @@ PROC createVoteTopic()
       REPEAT  
         StringF(tempStr,'\b\nANSWER [33m\c[0m ]\b\n',ans)
         aePuts(tempStr)
-        clearMsgBuf()
+        msgBuf.clear()
         lines:=0
         IF edit(FALSE,50)<>RESULT_SUCCESS THEN lines:=0
         
         IF (lines<>0)
-          StringF(votefile,'\sVote/Vote\r\z\d[2].\z\d[2].\c',currentConfDir,topicNum,ans)
+          StringF(votefile,'\sVote/Vote\r\z\d[2].\z\d[2].\c',currentConfDir,topicNum,questNum,ans)
           saveMsg(votefile)
           ans++
         ELSE
@@ -18878,14 +19135,14 @@ PROC vote()
       IF fileExists(votefile)
         confbyte:=Shr(topicNum+3,3)
         confbit:=Shl(1,Mod(topicNum+3,8))
-        cb:=ListItem(confBases,currentConf-1)
+        cb:=confBases.item(currentConf-1)
         voted:=(cb.handle[confbyte] AND confbit)<>0
         loadMsg(votefile)
         FOR i:=0 TO lines-1
           IF i=0
-            StringF(tempstr,'[34m[[0m\r\d[2][34m] [32m\s [35m\s\b\n',topicNum,msgBuf[i],IF voted THEN 'VOTED' ELSE '     ')
+            StringF(tempstr,'[34m[[0m\r\d[2][34m] [32m\s [35m\s\b\n',topicNum,msgBuf.item(i),IF voted THEN 'VOTED' ELSE '     ')
           ELSE
-            StringF(tempstr,'           [35m\s\b\n',msgBuf[i])
+            StringF(tempstr,'           [35m\s\b\n',msgBuf.item(i))
           ENDIF
           aePuts(tempstr)
         ENDFOR
@@ -18908,7 +19165,7 @@ PROC vote()
     IF (topicNum>0) AND (topicNum<26)
       confbyte:=Shr(topicNum+3,3)
       confbit:=Shl(1,Mod(topicNum+3,8))
-      cb:=ListItem(confBases,currentConf-1)
+      cb:=confBases.item(currentConf-1)
       voted:=(cb.handle[confbyte] AND confbit)<>0
       IF voted
         showTopicVotes(topicNum)
@@ -18937,7 +19194,7 @@ PROC showTopicVotes(topicNum)
     aePuts('\b\n')   
     loadMsg(votefile)
     FOR i:=0 TO lines-1
-      StringF(tempstr,'\s\b\n',msgBuf[i])
+      StringF(tempstr,'\s\b\n',msgBuf.item(i))
       aePuts(tempstr)
     ENDFOR
     aePuts('\b\n')   
@@ -18960,12 +19217,12 @@ PROC showTopicVotes(topicNum)
           IF !cnt1>0.0
             RealF(tempstr2,cnt2,0)
             RealF(tempstr3,!cnt2/cnt1*100.0,1)
-            StringF(tempstr,'[34m[[0m\c[34m][0m \l\s[40] [35mVOTES[33m: [0m\s, \s%\b\n',ans,msgBuf[i],tempstr2,tempstr3)
+            StringF(tempstr,'[34m[[0m\c[34m][0m \l\s[40] [35mVOTES[33m: [0m\s, \s%\b\n',ans,msgBuf.item(i),tempstr2,tempstr3)
           ELSE
-            StringF(tempstr,'[34m[[0m\c[34m][0m \l\s[40]\b\n',ans,msgBuf[i])
+            StringF(tempstr,'[34m[[0m\c[34m][0m \l\s[40]\b\n',ans,msgBuf.item(i))
           ENDIF
         ELSE
-          StringF(tempstr,'    \s\b\n',msgBuf[i])
+          StringF(tempstr,'    \s\b\n',msgBuf.item(i))
         ENDIF
         aePuts(tempstr)
       ENDFOR
@@ -19010,7 +19267,7 @@ PROC topicVote(topicNum)
     aePuts('\b\n')   
     loadMsg(votefile)
     FOR i:=0 TO lines-1
-      StringF(tempstr,'\s\b\n',msgBuf[i])
+      StringF(tempstr,'\s\b\n',msgBuf.item(i))
       aePuts(tempstr)
     ENDFOR
     aePuts('\b\n')   
@@ -19027,9 +19284,9 @@ PROC topicVote(topicNum)
 
       FOR i:=0 TO lines-1
         IF i=0
-          StringF(tempstr,'[34m[[0m\c[34m][0m \l\s[40]\b\n',ans,msgBuf[i])
+          StringF(tempstr,'[34m[[0m\c[34m][0m \l\s[40]\b\n',ans,msgBuf.item(i))
         ELSE
-          StringF(tempstr,'    \s\b\n',msgBuf[i])
+          StringF(tempstr,'    \s\b\n',msgBuf.item(i))
         ENDIF
         aePuts(tempstr)
       ENDFOR
@@ -19092,7 +19349,7 @@ PROC topicVote(topicNum)
     UnLock(lock)
 
     ->flag voting as complete
-    cb:=ListItem(confBases,currentConf-1)
+    cb:=confBases.item(currentConf-1)
     confbyte:=Shr(topicNum+3,3)
     confbit:=Shl(1,Mod(topicNum+3,8))
     cb.handle[confbyte]:=cb.handle[confbyte] OR confbit
@@ -19268,6 +19525,29 @@ PROC addBCD(bcdTotal:PTR TO CHAR, valToAdd)
   addBCD2(bcdTotal,bcdVal)
 ENDPROC
 
+/*doesnt handle negative numbers*/
+PROC divBCD(bcdVal:PTR TO CHAR,n)
+  DEF bcdVal2[8]:ARRAY OF CHAR
+  DEF bcdVal3[8]:ARRAY OF CHAR
+
+  convertToBCD(n,bcdVal2)
+  convertToBCD(0,bcdVal3)
+  
+  REPEAT
+    subBCD2(bcdVal,bcdVal2)
+    IF bcdVal[0]<$50 THEN addBCD(bcdVal3,1)
+  UNTIL isZeroBCD(bcdVal) OR (bcdVal[0]>=$50)
+  
+  CopyMem(bcdVal3,bcdVal,8)
+ENDPROC
+
+PROC isZeroBCD(bcdVal:PTR TO CHAR)
+  DEF i
+  FOR i:=0 TO 7
+    IF bcdVal[i]<>0 THEN RETURN FALSE
+  ENDFOR
+ENDPROC TRUE
+
 PROC checkLockAccounts(f6)
   DEF tempstr[255]:STRING
   DEF fh,res=FALSE
@@ -19304,19 +19584,19 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
  
   checkLock:=checkLockAccounts(f6)
     REPEAT
-        flag:=0
-        command:=readChar(INPUT_TIMEOUT)
-        IF(command<0) THEN RETURN command
+      flag:=0
+      command:=readChar(INPUT_TIMEOUT)
+      IF(command<0) THEN RETURN command
     command:=charToUpper(command)
         
     flag:=0
 
     SELECT command
-            CASE "\t"
-                flag:=2
-            CASE "X"         /* NO-SAVE */
-                aePuts('[JNo-Save\b\n')
-                flag:=1
+      CASE "\t"
+        flag:=2
+      CASE "X"         /* NO-SAVE */
+        aePuts('[JNo-Save\b\n')
+        flag:=1
       CASE " "
         displayAccountInfo(which,hoozer,hoozer2,hoozer3,f6)
       CASE "+"
@@ -19608,7 +19888,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
       ENDSELECT
     ENDIF
     
-        aePuts('[18;1H')
+    aePuts('[18;1H')
   UNTIL flag
   nofkeys:=0
 
@@ -19623,7 +19903,7 @@ PROC applyConfPresets(hoozer:PTR TO user, preset:LONG)
   masterLoadPointers(hoozer)
 
   FOR i:=1 TO cmds.numConf
-    cb:=confBases[i-1]
+    cb:=confBases.item(i-1)
     
     IF checkToolTypeExists(TOOLTYPE_PRESET,preset,'PRESET.RATIO')
       cb.ratio:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.RATIO')
@@ -19724,9 +20004,9 @@ PROC onlineEditor(f6)
     editInfo(loggedOnUser.slotNumber,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc,f6)
   ENDIF
   IF(loggedOnUser.timeLimit<>temp) 
-      IF(loggedOnUser.timeLimit>temp) THEN loggedOnUser.timeTotal:=loggedOnUser.timeLimit
+    IF(loggedOnUser.timeLimit>temp) THEN loggedOnUser.timeTotal:=loggedOnUser.timeLimit
     timeLimit:=loggedOnUser.timeLimit-loggedOnUser.timeUsed
-    ENDIF
+  ENDIF
 
   IF (loggedOnUser.dailyBytesLimit<>0)
     bytesADL:=loggedOnUser.dailyBytesLimit-loggedOnUser.dailyBytesDld
@@ -19849,7 +20129,7 @@ PROC creditMaintenance(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, 
 
     aePuts('[17;2H                                     ')
 
-        IF(ch<0) THEN RETURN ch
+    IF(ch<0) THEN RETURN ch
     ch:=charToUpper(ch)
  
     SELECT ch
@@ -19946,7 +20226,7 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
     ENDFOR
     hoozer.messagesPosted:=0
     FOR i:=1 TO cmds.numConf
-      cb:=confBases[i-1]
+      cb:=confBases.item(i-1)
       IF (isTempConf(hoozer,i-1))
         hoozer.uploads:=hoozer.uploads+cb.upload
         hoozer.downloads:=hoozer.downloads+cb.downloads
@@ -19983,7 +20263,7 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
   REPEAT
     conPuts('[0 p')
     
-    cb:=confBases[conf-1]
+    cb:=confBases.item(conf-1)
 
     StringF(tempstr,'[2;1H [32mName[36m:[0m \s[32] ',hoozer.name)
     aePuts(tempstr)
@@ -20011,12 +20291,20 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
 
     ->formatUnsignedLong(cb.bytesUpload,tempstr2)
     formatBCD(cb.uploadBytesBCD,tempstr2)
-    StringF(tempstr,'[10;2H[33mO>[32mBytes Uled ....[36m:[0m \s[10]\b\n',tempstr2)
+    IF sopt.toggles[TOGGLES_CREDITBYKB]
+      StringF(tempstr,'[10;2H[33mO>[32mKBytes Uled ...[36m:[0m \s[10]\b\n',tempstr2)
+    ELSE
+      StringF(tempstr,'[10;2H[33mO>[32mBytes Uled ....[36m:[0m \s[10]\b\n',tempstr2)
+    ENDIF
     aePuts(tempstr)
 
     ->formatUnsignedLong(cb.bytesDownload,tempstr2)
     formatBCD(cb.downloadBytesBCD,tempstr2)
-    StringF(tempstr,'[11;2H[33mP>[32mBytes Dled ....[36m:[0m \s[10]\b\n',tempstr2)
+    IF sopt.toggles[TOGGLES_CREDITBYKB]
+      StringF(tempstr,'[11;2H[33mP>[32mKBytes Dled ...[36m:[0m \s[10]\b\n',tempstr2)
+    ELSE
+      StringF(tempstr,'[11;2H[33mP>[32mBytes Dled ....[36m:[0m \s[10]\b\n',tempstr2)
+    ENDIF
     aePuts(tempstr)
 
     StringF(tempstr,'[12;2H[33mL>[32mMessages Posted[36m:[0m \d[10]',cb.messagesPosted)
@@ -20032,12 +20320,20 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
 
     ->formatUnsignedLong(hoozer.bytesUpload,tempstr2)
     formatBCD(hoozer3.uploadBytesBCD,tempstr2)
-    StringF(tempstr,'[10;40H[32mBytes Uled ....[36m:[0m \s[10]\b\n',tempstr2)
+    IF sopt.toggles[TOGGLES_CREDITBYKB]
+      StringF(tempstr,'[10;40H[32mKBytes Uled ...[36m:[0m \s[10]\b\n',tempstr2)
+    ELSE
+      StringF(tempstr,'[10;40H[32mBytes Uled ....[36m:[0m \s[10]\b\n',tempstr2)
+    ENDIF
     aePuts(tempstr)
 
     ->formatUnsignedLong(hoozer.bytesDownload,tempstr2)
     formatBCD(hoozer3.downloadBytesBCD,tempstr2)
-    StringF(tempstr,'[11;40H[32mBytes Dled ....[36m:[0m \s[10]\b\n',tempstr2)
+    IF sopt.toggles[TOGGLES_CREDITBYKB]
+      StringF(tempstr,'[11;40H[32mKBytes Dled ...[36m:[0m \s[10]\b\n',tempstr2)
+    ELSE
+      StringF(tempstr,'[11;40H[32mBytes Dled ....[36m:[0m \s[10]\b\n',tempstr2)
+    ENDIF
     aePuts(tempstr)
 
     StringF(tempstr,'[12;40H[32mMessages_Posted[36m:[0m \d[10]',hoozer.messagesPosted)
@@ -20151,16 +20447,16 @@ PROC doOnLineEdit(f6)
   charStr[0]:=12
   onlineEdit:=1
   IF(logonType>=LOGON_TYPE_REMOTE)
-      ioFlags[IOFLAG_SER_IN]:=0
-      ioFlags[IOFLAG_SER_OUT]:=0
-    ENDIF
+    ioFlags[IOFLAG_SER_IN]:=0
+    ioFlags[IOFLAG_SER_OUT]:=0
+  ENDIF
   conPuts(charStr)
   onlineEditor(f6)
   statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
   IF(logonType>=LOGON_TYPE_REMOTE)
     ioFlags[IOFLAG_SER_IN]:=-1
     ioFlags[IOFLAG_SER_OUT]:=-1
-    ENDIF
+  ENDIF
   onlineEdit:=0
 ENDPROC
 
@@ -20180,25 +20476,25 @@ PROC deleteConfAccess(slot)
     IF(bi>0)
       Seek(bi,(slot-1)*SIZEOF confBase,OFFSET_BEGINNING)
       Read(bi,t,SIZEOF confBase)
-         t.confRead:=0
-         t.newSinceDate:=0
-         t.confRead:=0
-         t.confYM:=0
-         t.bytesDownload:=0
-         t.bytesUpload:=0
-         t.lastEMail:=0
-         t.dailyBytesDld:=0
-         t.upload:=0
-         t.downloads:=0
-         t.ratioType:=0
-         t.ratio:=0
-         t.messagesPosted:=0
-         t.active:=0
-         t.access:=0
-         FOR j:=0 TO 7
-            t.downloadBytesBCD[i]:=0
-            t.uploadBytesBCD[i]:=0
-         ENDFOR
+      t.confRead:=0
+      t.newSinceDate:=0
+      t.confRead:=0
+      t.confYM:=0
+      t.bytesDownload:=0
+      t.bytesUpload:=0
+      t.lastEMail:=0
+      t.dailyBytesDld:=0
+      t.upload:=0
+      t.downloads:=0
+      t.ratioType:=0
+      t.ratio:=0
+      t.messagesPosted:=0
+      t.active:=0
+      t.access:=0
+      FOR j:=0 TO 7
+         t.downloadBytesBCD[i]:=0
+         t.uploadBytesBCD[i]:=0
+      ENDFOR
       Seek(bi,(slot-1)*SIZEOF confBase,OFFSET_BEGINNING)
       Write(bi,t,SIZEOF confBase)
 
@@ -20213,16 +20509,16 @@ PROC checkNEdit(which,f6)
 
   stat:=findLastAccount()
   IF(which>stat)
-      aePuts('Higher Than Maximum Account\b\n')
-      RETURN RESULT_FAILURE
+    aePuts('Higher Than Maximum Account\b\n')
+    RETURN RESULT_FAILURE
   ENDIF
   
   sendCLS()
   stat:=loadAccount(which,tempUser,tempUserKeys,tempUserMisc)
   IF(stat=RESULT_FAILURE)
-      aePuts('Warning, error while loading account\b\n')
-      RETURN RESULT_FAILURE
-    ENDIF
+    aePuts('Warning, error while loading account\b\n')
+    RETURN RESULT_FAILURE
+  ENDIF
   send017()
   sendCLS()
   stat:=editInfo(which,tempUser,tempUserKeys,tempUserMisc,f6)
@@ -20237,36 +20533,38 @@ PROC editAccounts(f6)
   IF runSysCommand('ACCOUNTS','')=FALSE
   
     WHILE TRUE
-      aePuts('\b\nS>earch by name  N>ew account editing  C>redit Accounts\b\nEdit which account? ')
+      aePuts('\b\nS>earch by name  N>ew account editing  C>redit Accounts  B>ulk editing\b\nEdit which account? ')
           stat:=lineInput('','',5,INPUT_TIMEOUT,tempStr)
-        IF(stat) THEN JUMP returnf 
-        IF(charToUpper(tempStr[0])="N")
+      IF(stat) THEN JUMP returnf 
+      IF(charToUpper(tempStr[0])="N")
         listNewAccounts(f6)
+      ELSEIF(charToUpper(tempStr[0])="B")
+        bulkAccountEditor(f6)
       ELSEIF(charToUpper(tempStr[0])="C")
         listCreditAccounts(f6)
-        ELSEIF(charToUpper(tempStr[0])="S")
-            aePuts('\b\nUserName: ')
-            stat:=lineInput('','',30,INPUT_TIMEOUT,tempStr)
-            IF(stat) THEN JUMP returnf
-            lw:=0
-            REPEAT
-                lw++
-                which:=findUserFromName(lw,NAME_TYPE_USERNAME,tempStr,tempUser,tempUserKeys,tempUserMisc)
-                IF(which<=0)
-                    aePuts('\b\nSorry no user under that name.\b\n')
+      ELSEIF(charToUpper(tempStr[0])="S")
+        aePuts('\b\nUserName: ')
+        stat:=lineInput('','',30,INPUT_TIMEOUT,tempStr)
+        IF(stat) THEN JUMP returnf
+        lw:=0
+        REPEAT
+          lw++
+          which:=findUserFromName(lw,NAME_TYPE_USERNAME,tempStr,tempUser,tempUserKeys,tempUserMisc)
+          IF(which<=0)
+            aePuts('\b\nSorry no user under that name.\b\n')
           ELSE
             lw:=which
-                stat:=checkNEdit(which,f6)
+            stat:=checkNEdit(which,f6)
             IF stat<0 THEN JUMP returnf
-              ENDIF
+          ENDIF
         UNTIL (which<=0) OR (stat<>2)
-        ELSE
+      ELSE
         which:=Val(tempStr)
-          IF(which<=0) THEN JUMP returnf
-          stat:=checkNEdit(which,f6)
-            IF stat<0 THEN JUMP returnf
+        IF(which<=0) THEN JUMP returnf
+        stat:=checkNEdit(which,f6)
+        IF stat<0 THEN JUMP returnf
       ENDIF
-      ENDWHILE
+    ENDWHILE
 returnf:
     aePuts('\b\n')
   ENDIF
@@ -20408,40 +20706,40 @@ PROC resizeConfDB(confnum,newSize)
   cb:= NEW cb
   cb2:= NEW cb2
 
-    getConfDbFileName(confnum,confDbFile)
+  getConfDbFileName(confnum,confDbFile)
 
-    StrCopy(oldConfDbFile,confDbFile)
-    StrAdd(oldConfDbFile,'.old')
+  StrCopy(oldConfDbFile,confDbFile)
+  StrAdd(oldConfDbFile,'.old')
 
-    DeleteFile(oldConfDbFile)
+  DeleteFile(oldConfDbFile)
 
-    Rename(confDbFile,oldConfDbFile)
-    
-    IF (fh1:=Open(confDbFile,MODE_NEWFILE))>0
-      IF (fh2:=Open(oldConfDbFile,MODE_OLDFILE))>0
-        WHILE newSize>0
-          IF (Read(fh2,cb,SIZEOF confBase)=SIZEOF confBase)
-            Write(fh1,cb,SIZEOF confBase)
-          ELSE
-            Write(fh1,cb2,SIZEOF confBase)
-          ENDIF
-          newSize--
-        ENDWHILE
+  Rename(confDbFile,oldConfDbFile)
+  
+  IF (fh1:=Open(confDbFile,MODE_NEWFILE))>0
+    IF (fh2:=Open(oldConfDbFile,MODE_OLDFILE))>0
+      WHILE newSize>0
+        IF (Read(fh2,cb,SIZEOF confBase)=SIZEOF confBase)
+          Write(fh1,cb,SIZEOF confBase)
+        ELSE
+          Write(fh1,cb2,SIZEOF confBase)
+        ENDIF
+        newSize--
+      ENDWHILE
 
-        Close(fh1)
-        Close(fh2)
-        DeleteFile(oldConfDbFile)
-      ELSE
-        Close(fh1)
-        DeleteFile(confDbFile)
-
-        ->put the old file back
-        Rename(oldConfDbFile,confDbFile)
-      ENDIF
+      Close(fh1)
+      Close(fh2)
+      DeleteFile(oldConfDbFile)
     ELSE
+      Close(fh1)
+      DeleteFile(confDbFile)
+
       ->put the old file back
       Rename(oldConfDbFile,confDbFile)
     ENDIF
+  ELSE
+    ->put the old file back
+    Rename(oldConfDbFile,confDbFile)
+  ENDIF
   END cb
   END cb2
 ENDPROC
@@ -20637,12 +20935,12 @@ PROC displayAccount(who:LONG, hoozer:PTR TO user, hoozer2: PTR TO userKeys, hooz
   ENDSELECT  
   
   IF(hoozer.slotNumber=who)
-      StringF(tempStr,'[0;0H[33m  ACTIVE[0m [\d]   [32mBAUD[36m:[0m \d\b\n',hoozer.slotNumber,baud)
-      aePuts(tempStr)
-    ELSE
+    StringF(tempStr,'[0;0H[33m  ACTIVE[0m [\d]   [32mBAUD[36m:[0m \d\b\n',hoozer.slotNumber,baud)
+    aePuts(tempStr)
+  ELSE
     StringF(tempStr,'[0;0H[37mINACTIVE[0m [\d]     \b\n',who)
-      aePuts(tempStr)
-    ENDIF
+    aePuts(tempStr)
+  ENDIF
  
   StringF(tempStr,'[2;1H[33mA> [32mName[36m:[0m \l\s[32] ',hoozer.name)
   aePuts(tempStr)
@@ -20699,7 +20997,12 @@ PROC displayAccount(who:LONG, hoozer:PTR TO user, hoozer2: PTR TO userKeys, hooz
  
   ->formatUnsignedLong(hoozer.bytesUpload,tempStr2)
   formatBCD(hoozer3.uploadBytesBCD,tempStr2)
-  StringF(tempStr,'[9;1H[33mO> [32mBytes Uled ....[36m:[0m \l\s[14]',tempStr2)
+
+  IF sopt.toggles[TOGGLES_CREDITBYKB]
+    StringF(tempStr,'[9;1H[33mO> [32mKBytes Uled ...[36m:[0m \l\s[14]',tempStr2)
+  ELSE
+    StringF(tempStr,'[9;1H[33mO> [32mBytes Uled ....[36m:[0m \l\s[14]',tempStr2)
+  ENDIF
   aePuts(tempStr)
  
   formatLongDateTime(hoozer.timeLastOn,tempStr2)
@@ -20708,16 +21011,20 @@ PROC displayAccount(who:LONG, hoozer:PTR TO user, hoozer2: PTR TO userKeys, hooz
  
   ->formatUnsignedLong(hoozer.bytesDownload,tempStr2)
   formatBCD(hoozer3.downloadBytesBCD,tempStr2)
-  StringF(tempStr,'[10;1H[33mP> [32mBytes Dled ....[36m:[0m \l\s[14]',tempStr2)
+  IF sopt.toggles[TOGGLES_CREDITBYKB]
+    StringF(tempStr,'[10;1H[33mP> [32mKBytes Dled ...[36m:[0m \l\s[14]',tempStr2)
+  ELSE
+    StringF(tempStr,'[10;1H[33mP> [32mBytes Dled ....[36m:[0m \l\s[14]',tempStr2)
+  ENDIF
   aePuts(tempStr)
 
-  temp:=ListLen(computerTypes)
+  temp:=computerTypes.count()
   IF temp=0
     StringF(tempStr,'[10;39H[32mComputer Type .[36m:[0m ')
   ELSEIF hoozer.secBulletin>=temp
-    StringF(tempStr,'[10;39H[32mComputer Type .[36m:[0m NOT VALID!',computerTypes[hoozer.secBulletin])
+    StringF(tempStr,'[10;39H[32mComputer Type .[36m:[0m NOT VALID!',computerTypes.item(hoozer.secBulletin))
   ELSE
-    StringF(tempStr,'[10;39H[32mComputer Type .[36m:[0m \l\s[16]',computerTypes[hoozer.secBulletin])
+    StringF(tempStr,'[10;39H[32mComputer Type .[36m:[0m \l\s[16]',computerTypes.item(hoozer.secBulletin))
   ENDIF
   aePuts(tempStr)
 
@@ -20726,16 +21033,20 @@ PROC displayAccount(who:LONG, hoozer:PTR TO user, hoozer2: PTR TO userKeys, hooz
   ELSE
     StrCopy(tempStr2,'Infinite')
   ENDIF
-  StringF(tempStr,'[11;1H[33mQ> [32mByte Limit ....[36m:[0m \l\s[10]',tempStr2)
+  IF sopt.toggles[TOGGLES_CREDITBYKB]
+    StringF(tempStr,'[11;1H[33mQ> [32mKByte Limit ...[36m:[0m \l\s[10]',tempStr2)
+  ELSE
+    StringF(tempStr,'[11;1H[33mQ> [32mByte Limit ....[36m:[0m \l\s[10]',tempStr2)
+  ENDIF
   aePuts(tempStr)
  
-  temp:=ListLen(screenTypeTitle)
+  temp:=screenTypeTitle.count()
   IF temp=0
     StringF(tempStr,'[11;39H[32mScreen Type  ..[36m:[0m ')
   ELSEIF hoozer.screenType>=temp
     StringF(tempStr,'[11;39H[32mScreen Type  ..[36m:[0m NOT VALID!')
   ELSE
-    StringF(tempStr,'[11;39H[32mScreen Type  ..[36m:[0m \l\s',screenTypeTitle[hoozer.screenType])
+    StringF(tempStr,'[11;39H[32mScreen Type  ..[36m:[0m \l\s',screenTypeTitle.item(hoozer.screenType))
   ENDIF
   aePuts(tempStr)
 
@@ -20794,12 +21105,12 @@ PROC displayAccountInfo(who:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, h
   ENDSELECT  
   
   IF(hoozer.slotNumber=who)
-      StringF(tempStr,'[0;0H[33m  ACTIVE[0m [\d]   [32mBAUD[36m:[0m \d    \b\n',hoozer.slotNumber,baud)
-      aePuts(tempStr)
-    ELSE
-    StringF(tempStr,'[0;0H[37mINACTIVE[0m [\d]     \b\n',who)
-      aePuts(tempStr)
-    ENDIF
+    StringF(tempStr,'[0;0H[33m  ACTIVE[0m [\d]   [32mBAUD[36m:[0m \d    \b\n',hoozer.slotNumber,baud)
+    aePuts(tempStr)
+  ELSE
+    StringF(tempStr,'[0;0H[37mINACTIVE[0m [\d]   [32mBAUD[36m:[0m \d    \b\n',who,baud)
+    aePuts(tempStr)
+  ENDIF
  
   StringF(tempStr,'[2;10H\l\s[32]',hoozer.name)
   aePuts(tempStr)
@@ -20848,7 +21159,7 @@ PROC displayAccountInfo(who:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, h
   StringF(tempStr,'[7;56H\l\d[7]',hoozer.messagesPosted AND $FFFF)
   aePuts(tempStr)
 
-   StringF(tempStr,'[8;21H\l\d[10]',hoozer.downloads AND $FFFF)
+  StringF(tempStr,'[8;21H\l\d[10]',hoozer.downloads AND $FFFF)
   aePuts(tempStr)
 
   IF hoozer.newUser THEN StrCopy(tempStr2,'Yes') ELSE StrCopy(tempStr2,'No ')
@@ -20869,13 +21180,13 @@ PROC displayAccountInfo(who:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, h
   StringF(tempStr,'[10;21H\l\s[14]',tempStr2)
   aePuts(tempStr)
 
-  temp:=ListLen(computerTypes)
+  temp:=computerTypes.count()
   IF temp=0
     StringF(tempStr,'[10;56H')
   ELSEIF hoozer.secBulletin>=temp
     StringF(tempStr,'[10;56HNOT VALID!')
   ELSE
-    StringF(tempStr,'[10;56H\l\s[16]',computerTypes[hoozer.secBulletin])
+    StringF(tempStr,'[10;56H\l\s[16]',computerTypes.item(hoozer.secBulletin))
   ENDIF
   aePuts(tempStr)
 
@@ -20887,13 +21198,13 @@ PROC displayAccountInfo(who:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, h
   StringF(tempStr,'[11;21H\l\s[10]',tempStr2)
   aePuts(tempStr)
 
-  temp:=ListLen(screenTypeTitle)
+  temp:=screenTypeTitle.count()
   IF temp=0
     StringF(tempStr,'[11;56H')
   ELSEIF (hoozer.screenType>=temp)
     StringF(tempStr,'[11;56HNOT VALID!')
   ELSE
-    StringF(tempStr,'[11;56H\l\s[16]',screenTypeTitle[hoozer.screenType])
+    StringF(tempStr,'[11;56H\l\s[16]',screenTypeTitle.item(hoozer.screenType))
   ENDIF
   aePuts(tempStr)
 
@@ -20920,19 +21231,347 @@ PROC displayAccountInfo(who:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, h
   aePuts(tempStr)
 ENDPROC
 
+PROC bulkAccountEditor(f6)
+  DEF flag,command
+  DEF settings[13]:ARRAY OF LONG
+  DEF areaName[255]:STRING
+  DEF secLevel[3]:STRING
+  DEF i,v,r
+  DEF tempstr[255]:STRING
+  
+  sendCLS()
+  conPuts('[0 p'); /* turn console cursor off */
+
+  displayBulkScreen()
+  
+  FOR i:=0 TO 12
+    settings[i]:=String(15)
+  ENDFOR
+  StrCopy(areaName,'')
+  StrCopy(secLevel,'')
+  
+  REPEAT
+    flag:=0
+    displayBulkSettings(settings,areaName,secLevel)
+    conPuts('[ p') /* turn console cursor on */
+    command:=readChar(INPUT_TIMEOUT)
+    IF(command<0) THEN RETURN command
+    command:=charToUpper(command)
+
+    SELECT command    
+      CASE "G"
+        aePuts('[6;21H               [6;21H')
+        lineInput('',settings[0],15,INPUT_TIMEOUT,settings[0])
+        v,r:=Val(settings[0])
+        IF r=0 THEN StrCopy(settings[0],'') ELSE StringF(settings[0],'\d',v)
+      CASE "I"
+        aePuts('[6;59H               [6;59H')
+        lineInput('',settings[1],15,INPUT_TIMEOUT,settings[1])
+        v,r:=Val(settings[1])
+        IF (r=0) OR (v<0) OR (v>2) THEN StrCopy(settings[1],'') ELSE StringF(settings[1],'\d',v)
+      CASE "J"
+        aePuts('[7;21H               [7;21H')
+        lineInput('',settings[2],15,INPUT_TIMEOUT,settings[2])
+        v,r:=Val(settings[2])
+        IF (r=0) OR (v<1) OR (v>cmds.numConf) THEN StrCopy(settings[2],'') ELSE StringF(settings[2],'\d',v)
+      CASE "K"
+        aePuts('[8;21H               [8;21H')
+        lineInput('',settings[3],15,INPUT_TIMEOUT,settings[3])
+        v,r:=Val(settings[3])
+        IF r=0 THEN StrCopy(settings[3],'') ELSE StringF(settings[3],'\d',v)
+      CASE "L"
+        aePuts('[8;59H               [8;59H')
+        lineInput('',settings[4],15,INPUT_TIMEOUT,settings[4])
+        v,r:=Val(settings[4])
+        IF r=0 THEN StrCopy(settings[4],'') ELSE StringF(settings[4],'\d',v)
+      CASE "M"
+        aePuts('[9;21H               [9;21H')
+        lineInput('',settings[5],15,INPUT_TIMEOUT,settings[5])
+        v,r:=Val(settings[5])
+        IF r=0 THEN StrCopy(settings[5],'') ELSE StringF(settings[5],'\d',v)
+      CASE "O"
+        aePuts('[10;21H               [10;21H')
+        lineInput('',settings[6],15,INPUT_TIMEOUT,settings[6])
+        v,r:=Val(settings[6])
+        IF r=0 THEN StrCopy(settings[6],'') ELSE StringF(settings[6],'\d',v)
+      CASE "P"
+        aePuts('[10;59H               [10;59H')
+        lineInput('',settings[7],15,INPUT_TIMEOUT,settings[7])
+        v,r:=Val(settings[7])
+        IF r=0 THEN StrCopy(settings[7],'') ELSE StringF(settings[7],'\d',v)
+      CASE "Q"
+        aePuts('[11;21H               [11;21H')
+        lineInput('',settings[8],15,INPUT_TIMEOUT,settings[8])
+        v,r:=Val(settings[8])
+        IF r=0 THEN StrCopy(settings[8],'') ELSE StringF(settings[8],'\d',v)
+      CASE "R"
+        aePuts('[12;21H               [12;21H')
+        lineInput('',settings[9],15,INPUT_TIMEOUT,settings[9])
+        v,r:=Val(settings[9])
+        IF r=0 THEN StrCopy(settings[9],'') ELSE StringF(settings[9],'\d',v)
+      CASE "U"
+        aePuts('[12;59H               [12;59H')
+        lineInput('',settings[10],15,INPUT_TIMEOUT,settings[10])
+        v,r:=Val(settings[10])
+        IF r=0 THEN StrCopy(settings[10],'') ELSE StringF(settings[10],'\d',v)
+      CASE "Y"
+        aePuts('[13;21H               [13;21H')
+        lineInput('',settings[11],15,INPUT_TIMEOUT,settings[11])
+        v,r:=Val(settings[11])
+        IF r=0 THEN StrCopy(settings[11],'') ELSE StringF(settings[11],'\d',v)
+      CASE "#"
+        aePuts('[14;21H               [14;21H')
+        lineInput('',settings[12],15,INPUT_TIMEOUT,settings[12])
+        v,r:=Val(settings[12])
+        IF r=0 THEN StrCopy(settings[12],'') ELSE StringF(settings[12],'\d',v)
+      CASE "1" /* select area Name */
+        aePuts('[18;23H          [18;23H')
+        lineInput('',areaName,10,INPUT_TIMEOUT,areaName)
+      CASE "2" /* select access Level */
+        aePuts('[19;23H   [23;19H')
+        lineInput('',secLevel,3,INPUT_TIMEOUT,secLevel)
+        v,r:=Val(secLevel)
+        IF r=0 THEN StrCopy(secLevel,'')
+      CASE "~"
+        aePuts('[0mUpdating users...')
+        v:=applyBulkChanges(settings,areaName,secLevel)
+        IF (logonType>=LOGON_TYPE_REMOTE)
+          StringF(tempstr,'\tREMOTE Bulk User Update, Area=\s, SecLevel=\s, RecordsAffected=\d',areaName,secLevel,v)
+          callersLog(tempstr)
+        ELSE
+          StringF(tempstr,'\tLOCAL  Bulk User Update, Area=\s, SecLevel=\s RecordsAffected=\d',areaName,secLevel,v)
+          callersLog(tempstr)
+        ENDIF
+        callersLog(tempstr)
+        aePuts('[22;1H                                     ')
+      CASE "\t"
+        flag:=1
+    ENDSELECT
+    conPuts('[0 p'); /* turn console cursor off */
+  UNTIL flag
+ENDPROC
+
+PROC displayBulkScreen() 
+  aePuts('[2;1H                     [33mBULK ACCOUNT MAINTENANCE[0m')
+  
+  aePuts('[4;1H Updates to apply:')
+  
+  aePuts('[6;1H[33mG> [32mRatio .........[36m:')
+  aePuts('[6;39H[33mI> [32mRatio Type ....[36m:')
+  aePuts('[7;1H[33mJ> [32mAutoRejoin ....[36m:')
+  aePuts('[8;1H[33mK> [32mUploads .......[36m:')
+  aePuts('[8;39H[33mL> [32mMessages Posted[36m:')
+  aePuts('[9;1H[33mM> [32mDownloads .....[36m:')
+
+  IF sopt.toggles[TOGGLES_CREDITBYKB]
+    aePuts('[10;1H[33mO> [32mKBytes Uled ...[36m:')
+  ELSE
+    aePuts('[10;1H[33mO> [32mBytes Uled ....[36m:')
+  ENDIF
+                                                 
+  IF sopt.toggles[TOGGLES_CREDITBYKB]
+    aePuts('[10;39H[33mP> [32mKBytes Dled ...[36m:')
+  ELSE
+    aePuts('[10;39H[33mP> [32mBytes Dled ....[36m:')
+  ENDIF
+
+  IF sopt.toggles[TOGGLES_CREDITBYKB]
+    aePuts('[11;1H[33mQ> [32mKByte Limit ...[36m:')
+  ELSE
+    aePuts('[11;1H[33mQ> [32mByte Limit ....[36m:')
+  ENDIF
+  
+  aePuts('[12;1H[33mR> [32mTime Total ....[36m:')
+  aePuts('[12;39H[33mU> [32mTime Limit ....[36m:')
+  aePuts('[13;1H[33mY> [32mChat Limit ....[36m:')
+  aePuts('[14;1H[33m#> [32mTimes Called ..[36m:')
+  
+  aePuts('[16;2H[0mFilter Settings:')
+  
+  aePuts('[18;1H[33m1> [32mSelect Area Name [36m:')
+  aePuts('[19;1H[33m2> [32mSelect Sec Level [36m:')
+  aePuts('[21;1H[33m~[36m=[0mApply Changes [33mTAB[36m=[0mExit\b\n')
+ENDPROC
+
+PROC displayBulkSettings(settings:PTR TO LONG, areaName:PTR TO CHAR, secLevel:PTR TO CHAR)
+  DEF tempStr[255]:STRING
+  DEF i,v
+
+  StringF(tempStr,'[6;20H[0m \s',IF StrLen(settings[0])=0 THEN 'Leave Unchanged' ELSE settings[0])
+  aePuts(tempStr)
+  
+  IF StrLen(settings[1])=0
+    StringF(tempStr,'[6;58H[0m Leave Unchanged')
+  ELSE
+    v:=Val(settings[1])
+    IF(v=0) THEN StringF(tempStr,'[6;58H[0m \d [32m<-[33mByte[32m)[0m',v)
+    IF(v=1) THEN StringF(tempStr,'[6;58H[0m \d [32m<-[33mB/F[32m)[0m',v)
+    IF(v=2) THEN StringF(tempStr,'[6;58H[0m \d [32m<-[33mFile[32m)[0m',v)
+  ENDIF
+  aePuts(tempStr)
+  
+  StringF(tempStr,'[7;20H[0m \s',IF StrLen(settings[2])=0 THEN 'Leave Unchanged' ELSE settings[2])
+  aePuts(tempStr)
+  StringF(tempStr,'[8;20H[0m \s',IF StrLen(settings[3])=0 THEN 'Leave Unchanged' ELSE settings[3])
+  aePuts(tempStr)
+  StringF(tempStr,'[8;58H[0m \s',IF StrLen(settings[4])=0 THEN 'Leave Unchanged' ELSE settings[4])
+  aePuts(tempStr)
+  StringF(tempStr,'[9;20H[0m \s',IF StrLen(settings[5])=0 THEN 'Leave Unchanged' ELSE settings[5])
+  aePuts(tempStr)
+  StringF(tempStr,'[10;20H[0m \s',IF StrLen(settings[6])=0 THEN 'Leave Unchanged' ELSE settings[6])
+  aePuts(tempStr)
+  StringF(tempStr,'[10;58H[0m \s',IF StrLen(settings[7])=0 THEN 'Leave Unchanged' ELSE settings[7])
+  aePuts(tempStr)
+  StringF(tempStr,'[11;20H[0m \s',IF StrLen(settings[8])=0 THEN 'Leave Unchanged' ELSE settings[8])
+  aePuts(tempStr)
+  StringF(tempStr,'[12;20H[0m \s',IF StrLen(settings[9])=0 THEN 'Leave Unchanged' ELSE settings[9])
+  aePuts(tempStr)
+  StringF(tempStr,'[12;58H[0m \s',IF StrLen(settings[10])=0 THEN 'Leave Unchanged' ELSE settings[10])
+  aePuts(tempStr)
+  StringF(tempStr,'[13;20H[0m \s',IF StrLen(settings[11])=0 THEN 'Leave Unchanged' ELSE settings[11])
+  aePuts(tempStr)
+  StringF(tempStr,'[14;20H[0m \s',IF StrLen(settings[12])=0 THEN 'Leave Unchanged' ELSE settings[12])
+  aePuts(tempStr)
+
+  i:=calcAffected(areaName,secLevel)
+  
+  StringF(tempStr,'[16;19H[34m[[0m\d[34m][0m Users will be updated.     ',i)
+  aePuts(tempStr)
+
+  StringF(tempStr,'[18;23H\s',IF StrLen(areaName)=0 THEN 'N/A' ELSE areaName)
+  aePuts(tempStr)
+
+  StringF(tempStr,'[19;23H\s',IF StrLen(secLevel)=0 THEN 'N/A' ELSE secLevel)
+  aePuts(tempStr)
+
+  aePuts('[22;1H')
+ENDPROC
+
+PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO CHAR)
+  DEF fh,fh2,v
+  DEF stat,stat2,match
+
+  IF((fh:=Open(userDataFile,MODE_OLDFILE)))<=0 THEN RETURN RESULT_FAILURE
+
+  IF((fh2:=Open(userMiscFile,MODE_OLDFILE)))<=0 
+    Close(fh)
+    RETURN RESULT_FAILURE
+  ENDIF
+
+  REPEAT
+    stat:=Read(fh,tempUser,SIZEOF user)
+    IF stat<>0
+      IF(stat<>SIZEOF user)
+        Close(fh)
+        Close(fh2)
+        RETURN RESULT_FAILURE
+      ENDIF
+    ENDIF
+
+    stat2:=Read(fh2,tempUserMisc,SIZEOF userMisc)
+    IF stat2<>0
+      IF(stat2<>SIZEOF userMisc)
+        Close(fh)
+        Close(fh2)
+        RETURN RESULT_FAILURE
+      ENDIF
+    ENDIF
+
+    IF ((stat<>0) AND (stat2<>0))
+
+      match:=FALSE
+      IF StrLen(areaName)>0
+        IF strCmpi(tempUser.conferenceAccess,areaName,ALL) THEN match:=TRUE
+      ENDIF
+
+      IF StrLen(secLevel)>0
+        v:=Val(secLevel)
+        IF v=tempUser.secStatus THEN match:=TRUE
+      ENDIF
+
+      IF (StrLen(areaName)=0) AND (StrLen(secLevel)=0) THEN match:=TRUE
+      
+      IF match
+        IF StrLen(settings[0])>0 THEN tempUser.secLibrary:=Val(settings[0])
+        IF StrLen(settings[1])>0 THEN tempUser.secBoard:=Val(settings[1])
+        IF StrLen(settings[2])>0 THEN tempUser.confRJoin:=Val(settings[2])
+        IF StrLen(settings[3])>0 THEN tempUser.uploads:=Val(settings[3])
+        IF StrLen(settings[4])>0 THEN tempUser.messagesPosted:=Val(settings[4])
+        IF StrLen(settings[5])>0 THEN tempUser.downloads:=Val(settings[5])
+        IF StrLen(settings[6])>0
+          bcdVal(settings[6],tempUserMisc.uploadBytesBCD)
+          tempUser.bytesUpload:=convertFromBCD(tempUserMisc.uploadBytesBCD)
+        ENDIF
+        IF StrLen(settings[7])>0 
+          bcdVal(settings[7],tempUserMisc.downloadBytesBCD)
+          tempUser.bytesDownload:=convertFromBCD(tempUserMisc.downloadBytesBCD)
+        ENDIF   
+
+        IF StrLen(settings[8])>0 THEN tempUser.dailyBytesLimit:=Val(settings[8])
+        IF StrLen(settings[9])>0 THEN tempUser.timeTotal:=Mul(Val(settings[9]),60)
+        IF StrLen(settings[10])>0 THEN tempUser.timeLimit:=Mul(Val(settings[10]),60)
+        IF StrLen(settings[11])>0 THEN tempUser.chatLimit:=Mul(Val(settings[11]),60)
+        IF StrLen(settings[12])>0 THEN tempUser.timesCalled:=Val(settings[12])
+        
+        Seek(fh,-SIZEOF user,OFFSET_CURRENT)
+        Write(fh,tempUser,SIZEOF user)
+
+        Seek(fh2,-SIZEOF userMisc,OFFSET_CURRENT)
+        Write(fh2,tempUserMisc,SIZEOF userMisc)
+      ENDIF
+    ENDIF
+  UNTIL (stat2=0) AND (stat=0)
+
+  Close(fh)
+  Close(fh2)
+ENDPROC
+
+PROC calcAffected(areaName:PTR TO CHAR, secLevel:PTR TO CHAR)
+  DEF fh,tot=0,v
+  DEF stat,match
+
+  IF((fh:=Open(userDataFile,MODE_OLDFILE)))<=0 THEN RETURN RESULT_FAILURE
+
+  REPEAT
+    stat:=Read(fh,tempUser,SIZEOF user)
+    IF stat<>0
+      IF(stat<>SIZEOF user)
+        Close(fh)
+        RETURN RESULT_FAILURE
+      ENDIF
+    ENDIF
+
+    match:=FALSE
+    IF StrLen(areaName)>0
+      IF strCmpi(tempUser.conferenceAccess,areaName,ALL) THEN match:=TRUE
+    ENDIF
+
+    IF StrLen(secLevel)>0
+      v:=Val(secLevel)
+      IF v=tempUser.secStatus THEN match:=TRUE
+    ENDIF
+
+    IF (StrLen(areaName)=0) AND (StrLen(secLevel)=0) THEN match:=TRUE
+    
+    IF match THEN tot++
+  UNTIL stat<>SIZEOF user
+
+  Close(fh)
+ENDPROC tot
+
 PROC fileStatus(opt)
-  DEF i,s,j=0,n
+  DEF i,s,n
   DEF tmp[200]:STRING
   DEF bytesup[15]:STRING
   DEF bytesdown[15]:STRING
   DEF bytesavail[15]:STRING
-  DEF k 
   DEF ca=FALSE
 
   IF(opt=FALSE) THEN s:=cmds.numConf ELSE s:=currentConf
 
   IF(checkSecurity(ACS_CONFERENCE_ACCOUNTING)) THEN ca:=TRUE
 
+  aePuts('\b\n')
   aePuts('[32m              Uploads                 Downloads\b\n')
   aePuts('\b\n')
   IF sopt.toggles[TOGGLES_CREDITBYKB]
@@ -20947,8 +21586,6 @@ PROC fileStatus(opt)
     IF (opt=FALSE) OR (i=currentConf)
       IF i=(currentConf) THEN n:=3 ELSE n:=6
       IF checkConfAccess(i)
-        j++
-        IF(ca) THEN k:=j ELSE k:=i
         IF (ca=TRUE) OR (i=currentConf)
           IF (ca) THEN loadMsgPointers(i)
           formatBCD(loggedOnUserMisc.uploadBytesBCD,bytesup)
@@ -20960,16 +21597,16 @@ PROC fileStatus(opt)
           ENDIF
           
           IF(loggedOnUser.secLibrary)
-            StringF(tmp,'[33m    \r\d[4][0m> [3\dm\d[7]  \r\s[14] \r\d[7]  \r\s[14]   \r\s[9]   \d[0m:[3\dm1\b\n', relConf(k), n,loggedOnUser.uploads AND $FFFF,bytesup,loggedOnUser.downloads AND $FFFF,bytesdown,bytesavail,loggedOnUser.secLibrary,n)
+            StringF(tmp,'[33m    \r\d[4][0m> [3\dm\d[7]  \r\s[14] \r\d[7]  \r\s[14]   \r\s[9]   \d[0m:[3\dm1\b\n', relConf(i), n,loggedOnUser.uploads AND $FFFF,bytesup,loggedOnUser.downloads AND $FFFF,bytesdown,bytesavail,loggedOnUser.secLibrary,n)
           ELSE
-            StringF(tmp,'[33m    \r\d[4][0m> [3\dm\d[7]  \r\s[14] \r\d[7]  \r\s[14]   \r\s[9]  [31mDSBLD\b\n', relConf(k), n,loggedOnUser.uploads AND $FFFF,bytesup,loggedOnUser.downloads AND $FFFF,bytesdown,bytesavail)
+            StringF(tmp,'[33m    \r\d[4][0m> [3\dm\d[7]  \r\s[14] \r\d[7]  \r\s[14]   \r\s[9]  [31mDSBLD\b\n', relConf(i), n,loggedOnUser.uploads AND $FFFF,bytesup,loggedOnUser.downloads AND $FFFF,bytesdown,bytesavail)
           ENDIF
           aePuts(tmp)
         ENDIF
       ENDIF
     ENDIF
   ENDFOR
-  aePuts('[0m\b\n\b\n')
+  aePuts('[0m\b\n')
   loadMsgPointers(currentConf)
 ENDPROC
 
@@ -21014,7 +21651,7 @@ PROC who(opt)
   aePuts('[32m|[33mNd#[32m|[36m Name/Handle          [32m| [36mLocation         ')
   aePuts('[32m         |[36m Action               [32m|[0m\b\n')
   aePuts('[32m)---+----------------------+---------------------------+----------------------([0m\b\n')
-      aePuts('[32m|---+----------------------+---------------------------+----------------------|[0m\b\n')
+  aePuts('[32m|---+----------------------+---------------------------+----------------------|[0m\b\n')
   aePuts('[34m|---+---------------------+---------------------+---------------------+----|[0m\b\n')
 
 */
@@ -21060,89 +21697,89 @@ PROC who(opt)
     IF olmBlocked THEN StrCopy(chatstr,'[31mNO') ELSE StrCopy(chatstr,'[32mYES')
 
     SELECT status
-       CASE ENV_IDLE
-                StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
-                StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','IDLE',chatstr)
-       CASE ENV_DOWNLOADING
-                StringF(mes, '[34m| [33m\l\s[20] [34m|[35m \l\s[19] [34m|[0m',name,location)
-                IF checkSecurity(ACS_HIDE_FILES)
-                  StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','DOWNLOADING',chatstr)
-                ELSEIF(StrLen(fileName)>0)
-                  StringF(mes1,' DL: \l\s[16] [34m|[0m',fileName,chatstr)
-                ELSE
-                  StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','BEGINNING DL',chatstr)
-                ENDIF
-       CASE ENV_UPLOADING
-                StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
-                IF checkSecurity(ACS_HIDE_FILES)
-                  StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','UPLOADING',chatstr)
-                ELSEIF(StrLen(fileName)>0)
-                  StringF(mes1,' UL: \l\s[16] [34m|[0m',fileName,chatstr)
-                ELSE
-                  StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','BEGINNING UL',chatstr)
-                ENDIF
-       CASE ENV_DOORS
-                StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
-                IF(i=node)
-                  StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','WHO',chatstr)
-                ELSEIF(StrLen(fileName)>0)
-                  StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m',fileName,chatstr)
-                ELSE
-                  StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','MODULE',chatstr)
-                ENDIF
-       CASE ENV_MAIL
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','READING MAIL',chatstr)
-       CASE ENV_STATS
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','REVIEWING STATS',chatstr)
-       CASE ENV_ACCOUNT
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ACCOUNT EDITING',chatstr)
-       CASE ENV_ZOOM
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ZOOMING',chatstr)
-       CASE ENV_FILES
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','VIEWING DIRS',chatstr)
-       CASE ENV_BULLETINS
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','READING BULLS',chatstr)
-       CASE ENV_VIEWING
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','VIEWING FILES',chatstr)
-       CASE ENV_ACCOUNTSEQ
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ACCOUNT SEQUENCE',chatstr)
-       CASE ENV_LOGOFF
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','LOGGING OFF',chatstr)
-       CASE ENV_SYSOP
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SYSOPING',chatstr)
-       CASE ENV_SHELL
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','USING SHELL',chatstr)
-       CASE ENV_EMACS
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','EDITING',chatstr)
-       CASE ENV_JOIN
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','JOINING CONF',chatstr)
-       CASE ENV_CHAT
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','CHATTING',chatstr)
-       CASE ENV_NOTACTIVE
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','NODE INACTIVE.',chatstr)
-       CASE ENV_REQ_CHAT
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','REQUESTING CHAT',chatstr)
-       CASE ENV_CONNECT
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','CONNECTING',chatstr)
-       CASE ENV_LOGGINGON
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','LOGGING ON',chatstr)
-       CASE ENV_AWAITCONNECT
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','AWAITING CONNECT',chatstr)
-       CASE ENV_SCANNING
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SCANNING MAIL',chatstr)
-       CASE ENV_SHUTDOWN
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SHUTDOWN',chatstr)
-       CASE ENV_MULTICHAT
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','MULTICHAT',chatstr)
-       CASE ENV_SUSPEND
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SUSPENDED',chatstr)
-       CASE ENV_RESERVE
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','RESERVED',chatstr)
-       CASE ENV_ONLINEMSG
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ONLINE MESSAGE',chatstr)
-       CASE -1
-          StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','UNAVAILABLE',chatstr)
-       DEFAULT
+      CASE ENV_IDLE
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','IDLE',chatstr)
+      CASE ENV_DOWNLOADING
+        StringF(mes, '[34m| [33m\l\s[20] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        IF checkSecurity(ACS_HIDE_FILES)
+          StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','DOWNLOADING',chatstr)
+        ELSEIF(StrLen(fileName)>0)
+          StringF(mes1,' DL: \l\s[16] [34m|[0m',fileName,chatstr)
+        ELSE
+          StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','BEGINNING DL',chatstr)
+        ENDIF
+      CASE ENV_UPLOADING
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        IF checkSecurity(ACS_HIDE_FILES)
+          StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','UPLOADING',chatstr)
+        ELSEIF(StrLen(fileName)>0)
+          StringF(mes1,' UL: \l\s[16] [34m|[0m',fileName,chatstr)
+        ELSE
+          StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','BEGINNING UL',chatstr)
+        ENDIF
+      CASE ENV_DOORS
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        IF(i=node)
+          StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','WHO',chatstr)
+        ELSEIF(StrLen(fileName)>0)
+          StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m',fileName,chatstr)
+        ELSE
+          StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','MODULE',chatstr)
+        ENDIF
+      CASE ENV_MAIL
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','READING MAIL',chatstr)
+      CASE ENV_STATS
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','REVIEWING STATS',chatstr)
+      CASE ENV_ACCOUNT
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ACCOUNT EDITING',chatstr)
+      CASE ENV_ZOOM
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ZOOMING',chatstr)
+      CASE ENV_FILES
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','VIEWING DIRS',chatstr)
+      CASE ENV_BULLETINS
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','READING BULLS',chatstr)
+      CASE ENV_VIEWING
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','VIEWING FILES',chatstr)
+      CASE ENV_ACCOUNTSEQ
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ACCOUNT SEQUENCE',chatstr)
+      CASE ENV_LOGOFF
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','LOGGING OFF',chatstr)
+      CASE ENV_SYSOP
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SYSOPING',chatstr)
+      CASE ENV_SHELL
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','USING SHELL',chatstr)
+      CASE ENV_EMACS
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','EDITING',chatstr)
+      CASE ENV_JOIN
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','JOINING CONF',chatstr)
+      CASE ENV_CHAT
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','CHATTING',chatstr)
+      CASE ENV_NOTACTIVE
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','NODE INACTIVE.',chatstr)
+      CASE ENV_REQ_CHAT
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','REQUESTING CHAT',chatstr)
+      CASE ENV_CONNECT
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','CONNECTING',chatstr)
+      CASE ENV_LOGGINGON
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','LOGGING ON',chatstr)
+      CASE ENV_AWAITCONNECT
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','AWAITING CONNECT',chatstr)
+      CASE ENV_SCANNING
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SCANNING MAIL',chatstr)
+      CASE ENV_SHUTDOWN
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SHUTDOWN',chatstr)
+      CASE ENV_MULTICHAT
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','MULTICHAT',chatstr)
+      CASE ENV_SUSPEND
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SUSPENDED',chatstr)
+      CASE ENV_RESERVE
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','RESERVED',chatstr)
+      CASE ENV_ONLINEMSG
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ONLINE MESSAGE',chatstr)
+      CASE -1
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','UNAVAILABLE',chatstr)
+      DEFAULT
         StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','',chatstr)
     ENDSELECT
     StringF(mes2,'[34m| [0m\z\r\d[2]',i)
@@ -21158,7 +21795,7 @@ whonext:
   ENDFOR
   IF cmds.acLvl[LVL_LONGWHO]=FALSE THEN aePuts('[34m|---+---------------------+---------------------+---------------------+----|[0m\b\n')
   aePuts('[34m`--------------------------------------------------------------------------''[0m\b\n')
- aePuts('\b\n')
+  aePuts('\b\n')
 ENDPROC
 
 PROC sendOlmPacket(nodenum,msg:PTR TO CHAR,last)
@@ -21172,6 +21809,7 @@ PROC sendOlmPacket(nodenum,msg:PTR TO CHAR,last)
   IF(olmMsg:=AllocMem(256,MEMF_ANY OR MEMF_CLEAR))
     olmMsg.command:=SV_INCOMING_MSG
     olmMsg.msg.ln.type:=NT_FREEMSG
+    olmMsg.nodeID:=node
     olmMsg.msg.length:=256
     olmMsg.msg.replyport:=0
     
@@ -21234,21 +21872,21 @@ PROC internalCommand2(params)
 
   parseParams(params)
 
-  IF ListLen(parsedParams)>0
-    n:=Val(parsedParams[0])
+  IF parsedParams.count()>0
+    n:=Val(parsedParams.item(0))
     StringF(temp,'\sNode\d/Callerslog',cmds.bbsLoc,n)
     displayCallersLog(temp,paramsContains('NS')) 
   ELSE
-     loop:=0
-     REPEAT
-       StringF(temp,'\sNode\d/Callerslog',cmds.bbsLoc,loop)
-       IF(fh:=Open(temp,MODE_OLDFILE))>0
-         Close(fh)
-         StringF(temp,'\d - Callerslog for Node \d\b\n',loop,loop)
-         aePuts(temp)
-         loop++
-       ENDIF
-     UNTIL fh=NIL
+    loop:=0
+    REPEAT
+      StringF(temp,'\sNode\d/Callerslog',cmds.bbsLoc,loop)
+      IF(fh:=Open(temp,MODE_OLDFILE))>0
+        Close(fh)
+        StringF(temp,'\d - Callerslog for Node \d\b\n',loop,loop)
+        aePuts(temp)
+        loop++
+      ENDIF
+    UNTIL fh=NIL
 
     aePuts('\b\nWhich node to view? ')
     stat:=lineInput('','',5,INPUT_TIMEOUT,temp)
@@ -21328,10 +21966,10 @@ PROC internalCommandGT()
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandQuestionMark()
-    IF (loggedOnUser.expert="X")
-      checkScreenClear()
-      displayScreen(SCREEN_MENU)
-    ENDIF
+  IF (loggedOnUser.expert="X")
+    checkScreenClear()
+    displayScreen(SCREEN_MENU)
+  ENDIF
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandA(params)
@@ -21352,33 +21990,33 @@ PROC internalCommandB(params)
   StrCopy(str,confScreenDir)
   StrAdd(str,'Bulletins/BullHelp.txt')
   IF((fh:=Open(str,MODE_OLDFILE)))<=0
-     myError(ERR_NO_BULLS)
-     RETURN RESULT_SUCCESS
+    myError(ERR_NO_BULLS)
+    RETURN RESULT_SUCCESS
   ENDIF
   Close(fh)
 
   parseParams(params)
-  IF ListLen(parsedParams)>0
-    stat:=Val(ListItem(parsedParams,0))
+  IF parsedParams.count()>0
+    stat:=Val(parsedParams.item(0))
     nonStopDisplayFlag:=paramsContains('NS')
   ELSE
 helpAgain:
-     StrCopy(str,confScreenDir)
-     StrAdd(str,'Bulletins/BullHelp')
-     IF (findSecurityScreen(str,screenFilename)) THEN displayFile(screenFilename)
+    StrCopy(str,confScreenDir)
+    StrAdd(str,'Bulletins/BullHelp')
+    IF (findSecurityScreen(str,screenFilename)) THEN displayFile(screenFilename)
 inputAgain:
-     StringF(str,'Which Bulletin (?)=List, (Enter)=none? ')
-     aePuts(str)
-     stat2:=lineInput('','',8,INPUT_TIMEOUT,str)
-     IF(stat2<0) THEN RETURN stat2
-     IF(StrLen(str)=0)
-       aePuts('\b\n')
-       RETURN RESULT_SUCCESS
-     ENDIF
-     IF(StrCmp(str,'?')) THEN JUMP helpAgain
-     parseParams(str)
-     nonStopDisplayFlag:=paramsContains('NS')
-     stat:=Val(ListItem(parsedParams,0))
+    StringF(str,'Which Bulletin (?)=List, (Enter)=none? ')
+    aePuts(str)
+    stat2:=lineInput('','',8,INPUT_TIMEOUT,str)
+    IF(stat2<0) THEN RETURN stat2
+    IF(StrLen(str)=0)
+      aePuts('\b\n')
+      RETURN RESULT_SUCCESS
+    ENDIF
+    IF(StrCmp(str,'?')) THEN JUMP helpAgain
+    parseParams(str)
+    nonStopDisplayFlag:=paramsContains('NS')
+    stat:=Val(parsedParams.item(0))
   ENDIF
 
   StringF(str,'\sBulletins/Bull\d',confScreenDir,stat)
@@ -21431,12 +22069,27 @@ PROC internalCommandCF()
 
     FOR i:=1 TO cmds.numConf
       IF checkConfAccess(i)
-        cb:=ListItem(confBases,i-1)
+        cb:=confBases.item(i-1)
 
-    
-        IF (cb.handle[0] AND MAIL_SCAN_MASK) THEN c1:="*" ELSE c1:=" "
+        IF((checkToolTypeExists(TOOLTYPE_CONF,i,'FORCE_NEWSCAN')))
+          c1:="F"
+        ELSEIF (checkToolTypeExists(TOOLTYPE_CONF,i,'NO_NEWSCAN'))
+          c1:="D"
+        ELSEIF (cb.handle[0] AND MAIL_SCAN_MASK)
+          c1:="*"
+        ELSE
+          c1:=" "
+        ENDIF
 
-        IF (cb.handle[0] AND FILE_SCAN_MASK) THEN c2:="*" ELSE c2:=" "
+        IF((checkToolTypeExists(TOOLTYPE_CONF,i,'SHOW_NEW_FILES')))
+          c2:="F"
+        ELSEIF (checkToolTypeExists(TOOLTYPE_CONF,i,'NO_NEW_FILES'))
+          c2:="D"
+        ELSEIF(cb.handle[0] AND FILE_SCAN_MASK)
+          c2:="*"
+        ELSE
+          c2:=" "
+        ENDIF
 
         IF (cb.handle[0] AND ZOOM_SCAN_MASK) THEN c3:="*" ELSE c3:=" "
 
@@ -21476,14 +22129,14 @@ PROC internalCommandCF()
       IF StrCmp(confNums,'+')
         FOR i:=0 TO cmds.numConf-1
           IF checkConfAccess(i+1)
-            cb:=ListItem(confBases,i)
+            cb:=confBases.item(i)
             cb.handle[0]:=cb.handle[0] OR editmask
           ENDIF
         ENDFOR
       ELSEIF StrCmp(confNums,'-')
         FOR i:=0 TO cmds.numConf-1
           IF checkConfAccess(i+1)
-            cb:=ListItem(confBases,i)
+            cb:=confBases.item(i)
             cb.handle[0]:=cb.handle[0] AND (Not(editmask))
           ENDIF
         ENDFOR
@@ -21494,7 +22147,7 @@ PROC internalCommandCF()
             v:=getInverse(v)
             IF v<=cmds.numConf
               IF checkConfAccess(v)
-                cb:=ListItem(confBases,v-1)
+                cb:=confBases.item(v-1)
                 cb.handle[0]:=Eor(cb.handle[0],editmask)
               ENDIF
             ENDIF
@@ -21505,7 +22158,7 @@ PROC internalCommandCF()
           v:=getInverse(v)
           IF v<=cmds.numConf
             IF checkConfAccess(v)
-              cb:=ListItem(confBases,v-1)
+              cb:=confBases.item(v-1)
               cb.handle[0]:=Eor(cb.handle[0],editmask)
             ENDIF
           ENDIF
@@ -21562,7 +22215,7 @@ PROC internalCommandFR(params)
   setEnvStat(ENV_FILES) 
 ENDPROC displayFileList(params,TRUE);
 
-PROC internalCommandFM(params)
+PROC internalCommandFM(params) HANDLE
   DEF stat,fLLoop,i,useflagged=FALSE,dirloop
   DEF str[200]:STRING,ss[80]:STRING,ray[200]:STRING
   DEF tempfile[256]:STRING
@@ -21570,7 +22223,7 @@ PROC internalCommandFM(params)
   DEF startDir,dirScan,action
   DEF foundfile[12]:STRING
   DEF foundDateStr[20]:STRING
-  DEF flagfilelist:PTR TO LONG
+  DEF flagfilelist=NIL:PTR TO stringlist
   DEF matchpos,matchend
   DEF newstr
   DEF item:PTR TO flagFileItem
@@ -21586,20 +22239,20 @@ PROC internalCommandFM(params)
 
   aePuts('\b\n')
   IF(maxDirs=0)
-      myError(5); ->Sorry();
-      RETURN RESULT_FAILURE
-    ENDIF
+    myError(5); ->Sorry();
+    RETURN RESULT_FAILURE
+  ENDIF
  
-  IF(ListLen(parsedParams)>0)
-    flagfilelist:=List(ListLen(parsedParams))
+  IF(parsedParams.count()>0)
+    flagfilelist:=NEW flagfilelist.stringlist(parsedParams.count())
     
-    FOR i:=0 TO ListLen(parsedParams)-1
-      ListAdd(flagfilelist,[ListItem(parsedParams,i)])
+    FOR i:=0 TO parsedParams.count()-1
+      flagfilelist.add(parsedParams.item(i))
     ENDFOR
     JUMP fmSkip1
   ENDIF
 
-  IF ListLen(flagFilesList)>0
+  IF flagFilesList.count()>0
     aePuts('You have flagged files, do you wish to work with these files ')
     stat:=yesNo(1)  
     IF(stat<0) THEN RETURN stat
@@ -21607,11 +22260,10 @@ PROC internalCommandFM(params)
     IF stat
       useflagged:=TRUE
 
-      flagfilelist:=List(ListLen(flagFilesList))
-      FOR i:=0 TO ListLen(flagFilesList)-1
-        item:=ListItem(flagFilesList,i)
-        newstr:=String(StrLen(item.fileName))
-        ListAdd(flagfilelist,[newstr])
+      flagfilelist:=NEW flagfilelist.stringlist(flagFilesList.count())
+      FOR i:=0 TO flagFilesList.count()-1
+        item:=flagFilesList.item(i)
+        flagfilelist.add(item.fileName)
       ENDFOR
       JUMP fmSkip1
     ENDIF
@@ -21626,7 +22278,7 @@ PROC internalCommandFM(params)
     RETURN RESULT_SUCCESS
   ENDIF
 
-  flagfilelist:=List(countSpaces(ss)+1)
+  flagfilelist:=NEW flagfilelist.stringlist(100)
   parseList(ss,flagfilelist)
 
 fmSkip1:
@@ -21636,38 +22288,38 @@ fmSkip1:
  
   aePuts('\b\n')
 
-  IF(ListLen(flagfilelist)>0)
+  IF(flagfilelist.count()>0)
  
-      fLLoop:=startDir
-      WHILE(fLLoop<=dirScan)
-          StrCopy(str,currentConfDir)   /* get BBS conf locale dir */
-          IF(dirScan<>(-1))                /* add 'DIR' */
+    fLLoop:=startDir
+    WHILE(fLLoop<=dirScan)
+      StrCopy(str,currentConfDir)   /* get BBS conf locale dir */
+      IF(dirScan<>(-1))                /* add 'DIR' */
  ->(RTS) buff copy
-        IF(fLLoop = maxDirs)    /* at upload dir */
-          StrAdd(str,'DIR')
-              StringF(ray,'\d',fLLoop)
-              StrAdd(str,ray)
-          StringF(ray,'Scanning directory \d\b\n',fLLoop)
-          aePuts(ray)
-           /*  sprintf(tempfile,"T:tdir.%d",Cmds->AcLvl[LVL_NODE_NUMBER]);
-             /* now copy to T: and use the T: */
-             if((FileCopy(str,tempfile))) {
-                  strcpy(str,tempfile);
-                  fcopy = TRUE;
-             }
-           */
-        ELSE
-                StrAdd(str,'DIR')
-                StringF(ray,'\d',fLLoop)      /* add dir Number */
-                StrAdd(str,ray)               /* add path & name */
-                StringF(ray,'Scanning directory \d\b\n',fLLoop)
-                aePuts(ray)
-        ENDIF
-              lineCount++
-        ELSE
-              StrAdd(str,'hold/held')
-              aePuts('\b\nScanning directory HOLD\b\n')
-            ENDIF
+      IF(fLLoop = maxDirs)    /* at upload dir */
+        StrAdd(str,'DIR')
+        StringF(ray,'\d',fLLoop)
+        StrAdd(str,ray)
+        StringF(ray,'Scanning directory \d\b\n',fLLoop)
+        aePuts(ray)
+         /*  sprintf(tempfile,"T:tdir.%d",Cmds->AcLvl[LVL_NODE_NUMBER]);
+           /* now copy to T: and use the T: */
+           if((FileCopy(str,tempfile))) {
+                strcpy(str,tempfile);
+                fcopy = TRUE;
+           }
+         */
+      ELSE
+        StrAdd(str,'DIR')
+        StringF(ray,'\d',fLLoop)      /* add dir Number */
+        StrAdd(str,ray)               /* add path & name */
+        StringF(ray,'Scanning directory \d\b\n',fLLoop)
+        aePuts(ray)
+      ENDIF
+        lineCount++
+      ELSE
+        StrAdd(str,'hold/held')
+        aePuts('\b\nScanning directory HOLD\b\n')
+      ENDIF
 
       dirloop:=TRUE
 
@@ -21688,14 +22340,12 @@ fmSkip1:
           IF (action="D") OR (action="d")
             IF maintenanceFileDelete(str,dirScan=-1,foundfile,matchpos)<>RESULT_SUCCESS
               IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
-              freeList(flagfilelist)
-              RETURN RESULT_SUCCESS
+              Raise(ERR_EXCEPT)
             ENDIF
           ELSEIF (action="M") OR (action="m")
             IF maintenanceFileMove(str,dirScan=-1,foundfile,foundDateStr,matchpos)<>RESULT_SUCCESS
               IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
-              freeList(flagfilelist)
-              RETURN RESULT_SUCCESS
+              Raise(ERR_EXCEPT)
             ENDIF
           ELSEIF (action="V") OR (action="v")
             IF dirScan=-1
@@ -21705,14 +22355,13 @@ fmSkip1:
             ENDIF
           ELSEIF (action="q") OR (action="q")
             IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
-            freeList(flagfilelist)
-            RETURN RESULT_SUCCESS
+            Raise(ERR_EXCEPT)
           ENDIF      
           IF useflagged
             aePuts('\b\nRemove from flagged list')
             stat:=yesNo(1)
             IF(stat<0) 
-              freeList(flagfilelist)
+              END flagfilelist
               RETURN stat
             ENDIF
             IF stat THEN removeFlagFromList(foundfile)
@@ -21722,12 +22371,14 @@ fmSkip1:
       IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
    
       fLLoop++
-          ->if(DirScan!=-1) FLLoop+=1;
-        ENDWHILE
-    ENDIF
+      ->if(DirScan!=-1) FLLoop+=1;
+    ENDWHILE
+  ENDIF
   aePuts('\b\n')
-  freeList(flagfilelist)
+  END flagfilelist
   IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
+EXCEPT
+  IF flagfilelist THEN END flagfilelist
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandG(params)
@@ -21735,7 +22386,7 @@ PROC internalCommandG(params)
   DEF auto
 
   parseParams(params)
-  IF ListLen(parsedParams)>0
+  IF parsedParams.count()>0
     auto:=paramsContains('Y')
   ENDIF
   
@@ -21759,7 +22410,7 @@ PROC internalCommandH(params)
   DEF tempstr[255]:STRING,screen[255]:STRING
   
   parseParams(params)
-  IF ListLen(parsedParams)>0
+  IF parsedParams.count()>0
     nonStopDisplayFlag:=paramsContains('NS')
   ENDIF
   
@@ -21810,8 +22461,8 @@ PROC internalCommandJ(params)
   parseParams(params)
   
   newConf:=-1
-  IF ListLen(parsedParams)>0
-    IF StrLen(parsedParams[0])>0 THEN newConf:=Val(parsedParams[0])
+  IF parsedParams.count()>0
+    IF StrLen(parsedParams.item(0))>0 THEN newConf:=Val(parsedParams.item(0))
   ENDIF
 
   newConf:=getInverse(newConf)
@@ -21996,9 +22647,9 @@ PROC internalCommandO()
   result:=RESULT_SUCCESS
   
   IF((sysopAvail=FALSE) AND (checkSecurity(ACS_OVERRIDE_CHAT))=FALSE)
-      StringF(string,'\b\nSorry, \s, is not around right now\b\n',cmds.sysopName)
-      aePuts(string)
-      aePuts('You can use ''C'' to leave a comment.\b\n\b\n')
+    StringF(string,'\b\nSorry, \s, is not around right now\b\n',cmds.sysopName)
+    aePuts(string)
+    aePuts('You can use ''C'' to leave a comment.\b\n\b\n')
   ELSE
     result:=ccom()
   ENDIF
@@ -22020,19 +22671,27 @@ PROC internalCommandOLM(params)
   aePuts('\b\n[34m*[0mOLM MESSAGE SYSTEM[34m*[0m\b\n')
 
   parseParams(params)
-  IF(ListLen(parsedParams)>0)
-    StrCopy(nodenumstr,parsedParams[0])
+  IF(parsedParams.count()>0)
+    StrCopy(nodenumstr,parsedParams.item(0))
   ELSE
-    lineInput('\b\n[32m-[0m OLM to Which Node? [36m[[0mNode [33m#[36m][0m Or [36m[[0mQ[36m][0m To Quit[32m:[0m ','',2,INPUT_TIMEOUT,nodenumstr)
+    lineInput('\b\n[32m-[0m OLM to Which Node? [36m[[0mNode [33m#[36m][0m [36m[[0mR[36m][0m To Reply[0m Or [36m[[0mQ[36m][0m To Quit[32m:[0m ','',2,INPUT_TIMEOUT,nodenumstr)
   ENDIF
+
+  IF strCmpi(nodenumstr,'R',ALL)
+    IF (lastOlmNode=-1)
+      aePuts('\b\nNo OLM has been received in this session\b\n')
+      RETURN RESULT_SUCCESS
+    ENDIF
+    StringF(nodenumstr,'\d',lastOlmNode)
+  ENDIF  
 
   IF (StrLen(nodenumstr)=0) OR (strCmpi(nodenumstr,'Q',ALL)) THEN RETURN RESULT_SUCCESS
 
   fileattach:=FALSE
   aePuts('\b\n')
 
-  IF(ListLen(parsedParams)<2)
-    clearMsgBuf()
+  IF(parsedParams.count()<2)
+    msgBuf.clear()
     lines:=0
     IF edit()<>RESULT_SUCCESS THEN RETURN RESULT_SUCCESS
   ENDIF
@@ -22069,15 +22728,15 @@ PROC internalCommandOLM(params)
 
   StringF(tempStr,'\b\n\b\n[34m*[0mOnline Message![0m From Node[32m:[36m( [33m\d[36m )[0m User[32m: [36m[[0m\s[36m][0m\b\n\b\n',node,loggedOnUser.name)
   IF sendOlmPacket(nodenum,tempStr,0)<>RESULT_SUCCESS THEN msgsent:=FALSE
-  IF(ListLen(parsedParams)<2)
+  IF(parsedParams.count()<2)
     FOR i:=0 TO lines-1
-      StringF(tempStr,'\s\b\n',msgBuf[i])
+      StringF(tempStr,'\s\b\n',msgBuf.item(i))
       IF sendOlmPacket(nodenum,tempStr,0)<>RESULT_SUCCESS THEN msgsent:=FALSE
     ENDFOR
   ELSE
     StrCopy(tempStr,'')
-    FOR i:=1 TO ListLen(parsedParams)-1
-      StrAdd(tempStr,parsedParams[i])
+    FOR i:=1 TO parsedParams.count()-1
+      StrAdd(tempStr,parsedParams.item(i))
       StrAdd(tempStr,' ')
     ENDFOR
     StrAdd(tempStr,'\b\n')
@@ -22167,7 +22826,7 @@ PROC internalCommandS()
     StrCopy(tmp,'[32mScreen  Clr[33m:[0m NO\b\n')
   ENDIF
   aePuts(tmp)
-  StringF(tmp,'[32mProtocol   [33m:[0m \s\b\n',xprTitle[loggedOnUser.xferProtocol])
+  StringF(tmp,'[32mProtocol   [33m:[0m \s\b\n',xprTitle.item(loggedOnUser.xferProtocol))
   aePuts(tmp)
 
   IF (checkSecurity(ACS_SHOW_PAYMENTS)) AND (loggedOnUser.creditDays>0)
@@ -22185,8 +22844,8 @@ PROC internalCommandS()
     aePuts(tmp)
   ENDIF
 
-  aePuts('\b\n')
   fileStatus(1)
+  aePuts('\b\n')
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandRZ(cmdcode,params)
@@ -22288,162 +22947,162 @@ PROC internalCommandW()
 
   setEnvStat(ENV_STATS)
   WHILE (TRUE)
-      IF(logonType>=LOGON_TYPE_REMOTE)
-        stat:=checkCarrier()
-        IF(stat=FALSE) THEN RETURN RESULT_SLEEP_LOGOFF
-      ENDIF
+    IF(logonType>=LOGON_TYPE_REMOTE)
+      stat:=checkCarrier()
+      IF(stat=FALSE) THEN RETURN RESULT_SLEEP_LOGOFF
+    ENDIF
 
-     /* FormFeed Line since user indicates he wants this option */
-     checkScreenClear()
+    /* FormFeed Line since user indicates he wants this option */
+    checkScreenClear()
 
-      aePuts('\b\n')
+    aePuts('\b\n')
 
-      aePuts('                       [34m*[0m--[33mUSER CONFIGURATION[0m--[34m*[0m\b\n')
-      aePuts('\b\n')
+    aePuts('                       [34m*[0m--[33mUSER CONFIGURATION[0m--[34m*[0m\b\n')
+    aePuts('\b\n')
 
-      IF((checkSecurity(ACS_EDIT_USER_NAME))=FALSE)
-        aePuts('[34m[[0m  1[34m][31m [DISABLED][0m\b\n')
-      ELSE
-        StringF(str,'[34m[[0m  1[34m][35m LOGIN NAME.............. [33m\s[0m\b\n',loggedOnUser.name)
-        aePuts(str)
-      ENDIF
-
-      IF((checkSecurity(ACS_EDIT_REAL_NAME))=FALSE)
-        aePuts('[34m[[0m  2[34m][31m [DISABLED][0m\b\n')
-      ELSE
-        StringF(str,'[34m[[0m  2[34m][35m REAL NAME............... [33m\s[0m\b\n',loggedOnUserMisc.realName)
-        aePuts(str)
-      ENDIF
-
-      IF((checkSecurity(ACS_EDIT_INTERNET_NAME))=FALSE)
-        aePuts('[34m[[0m  3[34m][31m [DISABLED][0m\b\n')
-      ELSE
-        StringF(str,'[34m[[0m  3[34m][35m INTERNET NAME........... [33m\s[0m\b\n',loggedOnUserMisc.internetName)
-        aePuts(str)
-      ENDIF
-
-      IF((checkSecurity(ACS_EDIT_USER_LOCATION))=FALSE)
-        aePuts('[34m[[0m  4[34m][31m [DISABLED][0m\b\n')
-      ELSE
-        StringF(str,'[34m[[0m  4[34m][35m LOCATION................ [33m\s[0m\b\n',loggedOnUser.location)
-        aePuts(str)
-      ENDIF
-
-      IF((checkSecurity(ACS_EDIT_PHONE_NUMBER))=FALSE)
-        aePuts('[34m[[0m  5[34m][31m [DISABLED][0m\b\n')
-      ELSE
-        StringF(str,'[34m[[0m  5[34m][35m PHONE NUMBER............ [33m\s[0m\b\n',loggedOnUser.phoneNumber)
-        aePuts(str)
-      ENDIF
-
-      IF((checkSecurity(ACS_EDIT_PASSWORD))=FALSE)
-        aePuts('[34m[[0m  6[34m][31m [DISABLED][0m\b\n')
-      ELSE
-        StringF(str,'[34m[[0m  6[34m][35m PASSWORD................ [36mENCRYPTED[0m\b\n')
-        aePuts(str)
-      ENDIF
-
-      StringF(str,'[34m[[0m  7[34m][35m LINES PER SCREEN........ [33m\d[0m\b\n',loggedOnUser.lineLength)
+    IF((checkSecurity(ACS_EDIT_USER_NAME))=FALSE)
+      aePuts('[34m[[0m  1[34m][31m [DISABLED][0m\b\n')
+    ELSE
+      StringF(str,'[34m[[0m  1[34m][35m LOGIN NAME.............. [33m\s[0m\b\n',loggedOnUser.name)
       aePuts(str)
+    ENDIF
 
-      temp:=ListLen(computerTypes)
+    IF((checkSecurity(ACS_EDIT_REAL_NAME))=FALSE)
+      aePuts('[34m[[0m  2[34m][31m [DISABLED][0m\b\n')
+    ELSE
+      StringF(str,'[34m[[0m  2[34m][35m REAL NAME............... [33m\s[0m\b\n',loggedOnUserMisc.realName)
+      aePuts(str)
+    ENDIF
+
+    IF((checkSecurity(ACS_EDIT_INTERNET_NAME))=FALSE)
+      aePuts('[34m[[0m  3[34m][31m [DISABLED][0m\b\n')
+    ELSE
+      StringF(str,'[34m[[0m  3[34m][35m INTERNET NAME........... [33m\s[0m\b\n',loggedOnUserMisc.internetName)
+      aePuts(str)
+    ENDIF
+
+    IF((checkSecurity(ACS_EDIT_USER_LOCATION))=FALSE)
+      aePuts('[34m[[0m  4[34m][31m [DISABLED][0m\b\n')
+    ELSE
+      StringF(str,'[34m[[0m  4[34m][35m LOCATION................ [33m\s[0m\b\n',loggedOnUser.location)
+      aePuts(str)
+    ENDIF
+
+    IF((checkSecurity(ACS_EDIT_PHONE_NUMBER))=FALSE)
+      aePuts('[34m[[0m  5[34m][31m [DISABLED][0m\b\n')
+    ELSE
+      StringF(str,'[34m[[0m  5[34m][35m PHONE NUMBER............ [33m\s[0m\b\n',loggedOnUser.phoneNumber)
+      aePuts(str)
+    ENDIF
+
+    IF((checkSecurity(ACS_EDIT_PASSWORD))=FALSE)
+      aePuts('[34m[[0m  6[34m][31m [DISABLED][0m\b\n')
+    ELSE
+      StringF(str,'[34m[[0m  6[34m][35m PASSWORD................ [36mENCRYPTED[0m\b\n')
+      aePuts(str)
+    ENDIF
+
+    StringF(str,'[34m[[0m  7[34m][35m LINES PER SCREEN........ [33m\d[0m\b\n',loggedOnUser.lineLength)
+    aePuts(str)
+
+    temp:=computerTypes.count()
+    IF temp=0
+      StringF(str,'[34m[[0m  8[34m][35m COMPUTER................ [33m[0m\b\n')
+    ELSEIF(loggedOnUser.secBulletin>=temp)
+      StringF(str,'[34m[[0m  8[34m][35m COMPUTER................ [33mNOT VALID![0m\b\n')
+    ELSE
+      StringF(str,'[34m[[0m  8[34m][35m COMPUTER................ [33m\s[0m\b\n',computerTypes.item(loggedOnUser.secBulletin))
+    ENDIF
+    aePuts(str)
+
+    temp:=screenTypeTitle.count()
+    IF temp=0
+      StringF(str,'[34m[[0m  9[34m][35m SCREEN TYPE............. [33m[0m\b\n')
+    ELSEIF(loggedOnUser.screenType>=screenTypeTitle.count())
+      StringF(str,'[34m[[0m  9[34m][35m SCREEN TYPE............. [33mNOT VALID![0m\b\n')
+    ELSE
+      StringF(str,'[34m[[0m  9[34m][35m SCREEN TYPE............. [33m\s[0m\b\n',screenTypeTitle.item(loggedOnUser.screenType))
+    ENDIF
+    aePuts(str)
+
+    IF (loggedOnUserKeys.userFlags AND USER_SCRNCLR) 
+      StringF(str,'[34m[[0m 10[34m][35m SCREEN CLEAR............ [32mYES[0m\b\n')
+    ELSE
+      StringF(str,'[34m[[0m 10[34m][35m SCREEN CLEAR............ [37mNO[0m\b\n')
+    ENDIF
+    aePuts(str)
+
+    IF((checkSecurity(ACS_XPR_SEND)) OR (checkSecurity(ACS_XPR_RECEIVE)))
+      temp:=xprTitle.count()
       IF temp=0
-        StringF(str,'[34m[[0m  8[34m][35m COMPUTER................ [33m[0m\b\n')
-      ELSEIF(loggedOnUser.secBulletin>=temp)
-        StringF(str,'[34m[[0m  8[34m][35m COMPUTER................ [33mNOT VALID![0m\b\n')
+        StringF(str,'[34m[[0m 11[34m][35m TRANSFER PROTOCOL....... [33m[0m\b\n')
+      ELSEIF(loggedOnUser.xferProtocol>=temp)
+        StringF(str,'[34m[[0m 11[34m][35m TRANSFER PROTOCOL....... [33mNOT VALID![0m\b\n')
       ELSE
-        StringF(str,'[34m[[0m  8[34m][35m COMPUTER................ [33m\s[0m\b\n',computerTypes[loggedOnUser.secBulletin])
+        StringF(str,'[34m[[0m 11[34m][35m TRANSFER PROTOCOL....... [33m\s[0m\b\n',xprTitle.item(loggedOnUser.xferProtocol))
       ENDIF
       aePuts(str)
+    ELSE
+      aePuts('[34m[[0m 11[34m][31m [DISABLED][0m\b\n')
+    ENDIF
 
-      temp:=ListLen(screenTypeTitle)
-      IF temp=0
-        StringF(str,'[34m[[0m  9[34m][35m SCREEN TYPE............. [33m[0m\b\n')
-      ELSEIF(loggedOnUser.screenType>=ListLen(screenTypeTitle))
-        StringF(str,'[34m[[0m  9[34m][35m SCREEN TYPE............. [33mNOT VALID![0m\b\n')
+    option:=loggedOnUser.editorType
+    IF(checkSecurity(ACS_FULL_EDIT))
+      SELECT option
+        CASE 0
+          StringF(str,'[34m[[0m 12[34m][35m EDITOR TYPE............. [33mPROMPT[0m\b\n')
+        CASE 1
+          StringF(str,'[34m[[0m 12[34m][35m EDITOR TYPE............. [33mLINE EDITOR[0m\b\n')
+        DEFAULT
+          StringF(str,'[34m[[0m 12[34m][35m EDITOR TYPE............. [33mFULLSCREEN EDITOR[0m\b\n')
+      ENDSELECT
+    ELSE
+      aePuts('[34m[[0m 12[34m][31m [DISABLED][0m\b\n')
+    ENDIF
+
+    option:=loggedOnUser.zoomType
+    IF(checkSecurity(ACS_ZOOM_MAIL))
+      SELECT option
+        CASE 1
+          StringF(str,'[34m[[0m 13[34m][35m ZOOM TYPE............... [33mASCII[0m\b\n')
+        CASE 0
+          StringF(str,'[34m[[0m 13[34m][35m ZOOM TYPE............... [33mQWK[0m\b\n')
+      ENDSELECT
+      aePuts(str)
+    ELSE
+      aePuts('[34m[[0m 13[34m][31m [DISABLED][0m\b\n')
+    ENDIF
+
+    IF(checkSecurity(ACS_OLM))
+      IF blockOLM
+        StringF(str,'[34m[[0m 14[34m][35m AVAILABLE FOR CHAT/OLM.. [37mNO[0m\b\n')
       ELSE
-        StringF(str,'[34m[[0m  9[34m][35m SCREEN TYPE............. [33m\s[0m\b\n',screenTypeTitle[loggedOnUser.screenType])
+        StringF(str,'[34m[[0m 14[34m][35m AVAILABLE FOR CHAT/OLM.. [32mYES[0m\b\n')
       ENDIF
       aePuts(str)
+    ELSE
+      aePuts('[34m[[0m 14[34m][31m [DISABLED][0m\b\n')
+    ENDIF
 
-      IF (loggedOnUserKeys.userFlags AND USER_SCRNCLR) 
-        StringF(str,'[34m[[0m 10[34m][35m SCREEN CLEAR............ [32mYES[0m\b\n')
+    IF(checkSecurity(ACS_TRANSLATION))
+      StringF(str,'[34m[[0m 15[34m][35m TRANSLATOR.............. [33m\s[0m\b\n',userLanguage)
+      aePuts(str)
+    ENDIF
+
+    IF(checkToolTypeExists(TOOLTYPE_NODE,node,'BGFILECHECK'))
+      option:=loggedOnUserKeys.userFlags AND USER_BGFILECHECK
+      IF option
+        StringF(str,'[34m[[0m 16[34m][35m BACKGROUND FILE CHECK... [37mNO[0m\b\n')
       ELSE
-        StringF(str,'[34m[[0m 10[34m][35m SCREEN CLEAR............ [37mNO[0m\b\n')
+        StringF(str,'[34m[[0m 16[34m][35m BACKGROUND FILE CHECK... [32mYES[0m\b\n')
       ENDIF
       aePuts(str)
+    ELSE
+      aePuts('[34m[[0m 16[34m][31m [DISABLED][0m\b\n')
+    ENDIF
 
-      IF((checkSecurity(ACS_XPR_SEND)) OR (checkSecurity(ACS_XPR_RECEIVE)))
-        temp:=ListLen(xprTitle)
-        IF temp=0
-          StringF(str,'[34m[[0m 11[34m][35m TRANSFER PROTOCOL....... [33m[0m\b\n')
-        ELSEIF(loggedOnUser.xferProtocol>=temp)
-          StringF(str,'[34m[[0m 11[34m][35m TRANSFER PROTOCOL....... [33mNOT VALID![0m\b\n')
-        ELSE
-          StringF(str,'[34m[[0m 11[34m][35m TRANSFER PROTOCOL....... [33m\s[0m\b\n',xprTitle[loggedOnUser.xferProtocol])
-        ENDIF
-        aePuts(str)
-      ELSE
-        aePuts('[34m[[0m 11[34m][31m [DISABLED][0m\b\n')
-      ENDIF
-
-      option:=loggedOnUser.editorType
-      IF(checkSecurity(ACS_FULL_EDIT))
-        SELECT option
-            CASE 0
-              StringF(str,'[34m[[0m 12[34m][35m EDITOR TYPE............. [33mPROMPT[0m\b\n')
-            CASE 1
-              StringF(str,'[34m[[0m 12[34m][35m EDITOR TYPE............. [33mLINE EDITOR[0m\b\n')
-            DEFAULT
-              StringF(str,'[34m[[0m 12[34m][35m EDITOR TYPE............. [33mFULLSCREEN EDITOR[0m\b\n')
-        ENDSELECT
-      ELSE
-        aePuts('[34m[[0m 12[34m][31m [DISABLED][0m\b\n')
-      ENDIF
-
-      option:=loggedOnUser.zoomType
-      IF(checkSecurity(ACS_ZOOM_MAIL))
-        SELECT option
-            CASE 1
-              StringF(str,'[34m[[0m 13[34m][35m ZOOM TYPE............... [33mASCII[0m\b\n')
-            CASE 0
-              StringF(str,'[34m[[0m 13[34m][35m ZOOM TYPE............... [33mQWK[0m\b\n')
-        ENDSELECT
-        aePuts(str)
-      ELSE
-        aePuts('[34m[[0m 13[34m][31m [DISABLED][0m\b\n')
-      ENDIF
-
-      IF(checkSecurity(ACS_OLM))
-        IF blockOLM
-              StringF(str,'[34m[[0m 14[34m][35m AVAILABLE FOR CHAT/OLM.. [37mNO[0m\b\n')
-        ELSE
-              StringF(str,'[34m[[0m 14[34m][35m AVAILABLE FOR CHAT/OLM.. [32mYES[0m\b\n')
-        ENDIF
-        aePuts(str)
-      ELSE
-        aePuts('[34m[[0m 14[34m][31m [DISABLED][0m\b\n')
-      ENDIF
-
-      IF(checkSecurity(ACS_TRANSLATION))
-        StringF(str,'[34m[[0m 15[34m][35m TRANSLATOR.............. [33m\s[0m\b\n',userLanguage)
-        aePuts(str)
-      ENDIF
-
-      IF(checkToolTypeExists(TOOLTYPE_NODE,node,'BGFILECHECK'))
-        option:=loggedOnUserKeys.userFlags AND USER_BGFILECHECK
-        IF option
-              StringF(str,'[34m[[0m 16[34m][35m BACKGROUND FILE CHECK... [37mNO[0m\b\n')
-        ELSE
-              StringF(str,'[34m[[0m 16[34m][35m BACKGROUND FILE CHECK... [32mYES[0m\b\n')
-        ENDIF
-        aePuts(str)
-      ELSE
-        aePuts('[34m[[0m 16[34m][31m [DISABLED][0m\b\n')
-      ENDIF
-
-      
-     aePuts('\b\n')
+    
+    aePuts('\b\n')
 
     aePuts('Which to change <CR>=QUIT ? ')
 
@@ -22460,164 +23119,164 @@ PROC internalCommandW()
     option:=Val(str)
 
     SELECT option
-       CASE 1
-          ->EDIT USER NAME
-         IF (checkSecurity(ACS_EDIT_USER_NAME)=FALSE) THEN JUMP cant
-         loop1:
-         aePuts('Name: ')
-         StrCopy(str,loggedOnUser.name,31)
-         stat:=lineInput('',str,30,INPUT_TIMEOUT,str)
-         IF(stat<0) THEN RETURN stat
-         IF(strCmpi(loggedOnUserKeys.userName,str,ALL)) THEN JUMP cant
-         IF(stat:=checkIfNameAllowed(str)) THEN JUMP loop1
-         StrCopy(str2,str)
-         aePuts('\b\nChecking for duplicate name...')
-         stat:=checkForAst(str2)
-         IF(stat) 
-           aePuts('No wildcards allowed in a name.\b\n\b\n')
-           JUMP loop1
-         ENDIF
-         stat:=findUserFromName(1,NAME_TYPE_USERNAME,str2,tempUser,tempUserKeys,tempUserMisc)
-         IF(stat<>0)
-           aePuts('Already in use!, try another.\b\n\b\n')
-           JUMP loop1
-         ENDIF
-         aePuts('Ok!\b\n')
-         strCpy(loggedOnUser.name,str,31)
-         UpperStr(str)
-         strCpy(loggedOnUserKeys.userName,str,31)
-         saveAccount(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc,0,0)
-       CASE 2
-          ->EDIT REAL NAME
-         IF (checkSecurity(ACS_EDIT_REAL_NAME)=FALSE) THEN JUMP cant
-         aePuts('Real Name: (Alpha Numeric) ')
-         StrCopy(str,loggedOnUserMisc.realName,26)
-         stat:=lineInput('',str,25,INPUT_TIMEOUT,str)
-         IF(stat<0) THEN RETURN stat
-         IF(strCmpi(loggedOnUserMisc.realName,str,ALL)) THEN JUMP cant
-         aePuts('\b\nChecking for duplicate name...')
-         stat:=checkForAst(str)
-         IF(stat) 
-           aePuts('No wildcards allowed in a name.\b\n\b\n')
-           JUMP loop1
-         ENDIF
-         stat:=findUserFromName(1,NAME_TYPE_REALNAME,str,tempUser,tempUserKeys,tempUserMisc)
-         IF(stat<>0)
-           aePuts('Already in use!, try another.\b\n\b\n')
-           JUMP loop1
-         ENDIF
-         aePuts('Ok!\b\n')
-         strCpy(loggedOnUserMisc.realName,str,26)
-       CASE 3
-          ->EDIT INTERNET NAME
-         IF (checkSecurity(ACS_EDIT_INTERNET_NAME)=FALSE) THEN JUMP cant
-         aePuts('Internet Name: (Alpha Numeric No Spaces) ')
-         StrCopy(str,loggedOnUserMisc.internetName,10)
-         stat:=lineInput('',str,9,INPUT_TIMEOUT,str)
-         IF(stat<0) THEN RETURN stat
-         IF(strCmpi(loggedOnUserMisc.realName,str,ALL)) THEN JUMP cant
-         aePuts('\b\nChecking for duplicate name...')
-         stat:=checkForAst(str)
-         IF(stat) 
-           aePuts('No wildcards allowed in a name.\b\n\b\n')
-           JUMP loop1
-         ENDIF
-         stat:=findUserFromName(1,NAME_TYPE_INTERNETNAME,str,tempUser,tempUserKeys,tempUserMisc)
-         IF(stat<>0)
-           aePuts('Already in use!, try another.\b\n\b\n')
-           JUMP loop1
-         ENDIF
-         aePuts('Ok!\b\n')
-         strCpy(loggedOnUserMisc.internetName,str,10)
-       CASE 4
-          ->EDIT LOCATION
-         IF (checkSecurity(ACS_EDIT_USER_LOCATION)=FALSE) THEN JUMP cant
-         aePuts('From: ')
-         StrCopy(str,loggedOnUser.location,30)
-         stat:=lineInput('',str,29,INPUT_TIMEOUT,str)
-         IF(stat<0) THEN RETURN stat
-         IF(StrLen(str)=0) THEN JUMP cant
-         strCpy(loggedOnUser.location,str,30)
-       CASE 5
-          ->EDIT PHONE NUMBER
-         IF (checkSecurity(ACS_EDIT_PHONE_NUMBER)=FALSE) THEN JUMP cant
-         aePuts('Phone: ')
-         StrCopy(str,loggedOnUser.phoneNumber,13)
-         stat:=lineInput('',str,12,INPUT_TIMEOUT,str)
-         IF(stat<0) THEN RETURN stat
-         IF(StrLen(str)=0) THEN JUMP cant
-         strCpy(loggedOnUser.phoneNumber,str,13)
-       CASE 6
-          ->EDIT PASSWORD
-         IF (checkSecurity(ACS_EDIT_PASSWORD)=FALSE) THEN JUMP cant
-         aePuts('Password: ')
-         stat:=lineInput('','',50,INPUT_TIMEOUT,str)
-         IF(stat<0) THEN RETURN stat
-         IF(StrLen(str)=0) THEN JUMP cant
-         UpperStr(str)
-         stat:=calcPasswordHash(str)
-         StringF(str,'new hash: \h',stat)
-         debugLog(LOG_DEBUG,str)
-         loggedOnUser.pwdHash:=stat
-       CASE 7
-          ->EDIT NUMBER OF SCREEN LINES
-          REPEAT
-            stat:=numberOfLinesTest()
+      CASE 1
+         ->EDIT USER NAME
+        IF (checkSecurity(ACS_EDIT_USER_NAME)=FALSE) THEN JUMP cant
+        loop1:
+        aePuts('Name: ')
+        StrCopy(str,loggedOnUser.name,31)
+        stat:=lineInput('',str,30,INPUT_TIMEOUT,str)
+        IF(stat<0) THEN RETURN stat
+        IF(strCmpi(loggedOnUserKeys.userName,str,ALL)) THEN JUMP cant
+        IF(stat:=checkIfNameAllowed(str)) THEN JUMP loop1
+        StrCopy(str2,str)
+        aePuts('\b\nChecking for duplicate name...')
+        stat:=checkForAst(str2)
+        IF(stat) 
+          aePuts('No wildcards allowed in a name.\b\n\b\n')
+          JUMP loop1
+        ENDIF
+        stat:=findUserFromName(1,NAME_TYPE_USERNAME,str2,tempUser,tempUserKeys,tempUserMisc)
+        IF(stat<>0)
+          aePuts('Already in use!, try another.\b\n\b\n')
+          JUMP loop1
+        ENDIF
+        aePuts('Ok!\b\n')
+        strCpy(loggedOnUser.name,str,31)
+        UpperStr(str)
+        strCpy(loggedOnUserKeys.userName,str,31)
+        saveAccount(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc,0,0)
+      CASE 2
+         ->EDIT REAL NAME
+        IF (checkSecurity(ACS_EDIT_REAL_NAME)=FALSE) THEN JUMP cant
+        aePuts('Real Name: (Alpha Numeric) ')
+        StrCopy(str,loggedOnUserMisc.realName,26)
+        stat:=lineInput('',str,25,INPUT_TIMEOUT,str)
+        IF(stat<0) THEN RETURN stat
+        IF(strCmpi(loggedOnUserMisc.realName,str,ALL)) THEN JUMP cant
+        aePuts('\b\nChecking for duplicate name...')
+        stat:=checkForAst(str)
+        IF(stat) 
+          aePuts('No wildcards allowed in a name.\b\n\b\n')
+          JUMP loop1
+        ENDIF
+        stat:=findUserFromName(1,NAME_TYPE_REALNAME,str,tempUser,tempUserKeys,tempUserMisc)
+        IF(stat<>0)
+          aePuts('Already in use!, try another.\b\n\b\n')
+          JUMP loop1
+        ENDIF
+        aePuts('Ok!\b\n')
+        strCpy(loggedOnUserMisc.realName,str,26)
+      CASE 3
+         ->EDIT INTERNET NAME
+        IF (checkSecurity(ACS_EDIT_INTERNET_NAME)=FALSE) THEN JUMP cant
+        aePuts('Internet Name: (Alpha Numeric No Spaces) ')
+        StrCopy(str,loggedOnUserMisc.internetName,10)
+        stat:=lineInput('',str,9,INPUT_TIMEOUT,str)
+        IF(stat<0) THEN RETURN stat
+        IF(strCmpi(loggedOnUserMisc.realName,str,ALL)) THEN JUMP cant
+        aePuts('\b\nChecking for duplicate name...')
+        stat:=checkForAst(str)
+        IF(stat) 
+          aePuts('No wildcards allowed in a name.\b\n\b\n')
+          JUMP loop1
+        ENDIF
+        stat:=findUserFromName(1,NAME_TYPE_INTERNETNAME,str,tempUser,tempUserKeys,tempUserMisc)
+        IF(stat<>0)
+          aePuts('Already in use!, try another.\b\n\b\n')
+          JUMP loop1
+        ENDIF
+        aePuts('Ok!\b\n')
+        strCpy(loggedOnUserMisc.internetName,str,10)
+      CASE 4
+         ->EDIT LOCATION
+        IF (checkSecurity(ACS_EDIT_USER_LOCATION)=FALSE) THEN JUMP cant
+        aePuts('From: ')
+        StrCopy(str,loggedOnUser.location,30)
+        stat:=lineInput('',str,29,INPUT_TIMEOUT,str)
+        IF(stat<0) THEN RETURN stat
+        IF(StrLen(str)=0) THEN JUMP cant
+        strCpy(loggedOnUser.location,str,30)
+      CASE 5
+         ->EDIT PHONE NUMBER
+        IF (checkSecurity(ACS_EDIT_PHONE_NUMBER)=FALSE) THEN JUMP cant
+        aePuts('Phone: ')
+        StrCopy(str,loggedOnUser.phoneNumber,13)
+        stat:=lineInput('',str,12,INPUT_TIMEOUT,str)
+        IF(stat<0) THEN RETURN stat
+        IF(StrLen(str)=0) THEN JUMP cant
+        strCpy(loggedOnUser.phoneNumber,str,13)
+      CASE 6
+         ->EDIT PASSWORD
+        IF (checkSecurity(ACS_EDIT_PASSWORD)=FALSE) THEN JUMP cant
+        aePuts('Password: ')
+        stat:=lineInput('','',50,INPUT_TIMEOUT,str)
+        IF(stat<0) THEN RETURN stat
+        IF(StrLen(str)=0) THEN JUMP cant
+        UpperStr(str)
+        stat:=calcPasswordHash(str)
+        StringF(str,'new hash: \h',stat)
+        debugLog(LOG_DEBUG,str)
+        loggedOnUser.pwdHash:=stat
+      CASE 7
+        ->EDIT NUMBER OF SCREEN LINES
+        REPEAT
+          stat:=numberOfLinesTest()
+          IF(stat<0) THEN RETURN stat
+        UNTIL stat=RESULT_SUCCESS
+      CASE 8
+        ->EDIT COMPUTER
+        IF((computerTypes.count()>0))
+          IF (stat:=chooseComputer()) 
             IF(stat<0) THEN RETURN stat
-          UNTIL stat=RESULT_SUCCESS
-       CASE 8
-          ->EDIT COMPUTER
-          IF((ListLen(computerTypes)>0))
-            IF (stat:=chooseComputer()) 
-              IF(stat<0) THEN RETURN stat
-            ENDIF 
+          ENDIF 
+        ENDIF
+      CASE 9
+        ->EDIT SCREEN TYPE
+        IF(screenTypeTitle.count()>0)
+          IF (stat:=chooseScreenType())
+            IF(stat<0) THEN RETURN stat
           ENDIF
-       CASE 9
-          ->EDIT SCREEN TYPE
-          IF(ListLen(screenTypeTitle)>0)
-            IF (stat:=chooseScreenType())
-              IF(stat<0) THEN RETURN stat
-            ENDIF
-          ENDIF
-       CASE 10
-          ->EDIT SCREEN CLEAR
-          loggedOnUserKeys.userFlags:=Eor(loggedOnUserKeys.userFlags,USER_SCRNCLR)
-       CASE 11
-          ->EDIT TRANSFER PROTOCOL
-         IF ((checkSecurity(ACS_XPR_SEND) OR checkSecurity(ACS_XPR_RECEIVE))=FALSE) THEN JUMP cant
-          
-          IF(ListLen(xprTitle)>0)
-            IF (stat:=chooseProtocol())
-              IF(stat<0) THEN RETURN stat
-            ENDIF
-          ENDIF
-       CASE 12
-          ->EDIT EDITOR TYPE
-         IF (checkSecurity(ACS_FULL_EDIT)=FALSE) THEN JUMP cant
-         loggedOnUser.editorType:=loggedOnUser.editorType+1
-         IF loggedOnUser.editorType=3 THEN loggedOnUser.editorType:=0
-       CASE 13
-          ->EDIT ZOOM MAIL 
-         IF (checkSecurity(ACS_ZOOM_MAIL)=FALSE) THEN JUMP cant
-          loggedOnUser.zoomType:=((loggedOnUser.zoomType+1) AND 1)
-       CASE 14
-          ->EDIT AVAILABLE FOR CHAT/OLM 
-         IF (checkSecurity(ACS_OLM)=FALSE) THEN JUMP cant
-          blockOLM:=Not(blockOLM)
-       CASE 15
-          ->EDIT TRANSLATOR 
-         IF (checkSecurity(ACS_TRANSLATION)=FALSE) THEN JUMP cant
+        ENDIF
+      CASE 10
+        ->EDIT SCREEN CLEAR
+        loggedOnUserKeys.userFlags:=Eor(loggedOnUserKeys.userFlags,USER_SCRNCLR)
+      CASE 11
+        ->EDIT TRANSFER PROTOCOL
+        IF ((checkSecurity(ACS_XPR_SEND) OR checkSecurity(ACS_XPR_RECEIVE))=FALSE) THEN JUMP cant
          
-         stat:=chooseTranslator()
-         IF(stat<0) THEN RETURN stat
-       CASE 16
-          ->EDIT BACKGROUND FILECHECK
-         IF(checkToolTypeExists(TOOLTYPE_NODE,node,'BGFILECHECK'))
-           loggedOnUserKeys.userFlags:=Eor(loggedOnUserKeys.userFlags,USER_BGFILECHECK)
-         ENDIF
+        IF(xprTitle.count()>0)
+          IF (stat:=chooseProtocol())
+            IF(stat<0) THEN RETURN stat
+          ENDIF
+        ENDIF
+      CASE 12
+        ->EDIT EDITOR TYPE
+        IF (checkSecurity(ACS_FULL_EDIT)=FALSE) THEN JUMP cant
+        loggedOnUser.editorType:=loggedOnUser.editorType+1
+        IF loggedOnUser.editorType=3 THEN loggedOnUser.editorType:=0
+      CASE 13
+        ->EDIT ZOOM MAIL 
+        IF (checkSecurity(ACS_ZOOM_MAIL)=FALSE) THEN JUMP cant
+        loggedOnUser.zoomType:=((loggedOnUser.zoomType+1) AND 1)
+      CASE 14
+        ->EDIT AVAILABLE FOR CHAT/OLM 
+        IF (checkSecurity(ACS_OLM)=FALSE) THEN JUMP cant
+        blockOLM:=Not(blockOLM)
+      CASE 15
+        ->EDIT TRANSLATOR 
+        IF (checkSecurity(ACS_TRANSLATION)=FALSE) THEN JUMP cant
+        
+        stat:=chooseTranslator()
+        IF(stat<0) THEN RETURN stat
+      CASE 16
+        ->EDIT BACKGROUND FILECHECK
+        IF(checkToolTypeExists(TOOLTYPE_NODE,node,'BGFILECHECK'))
+          loggedOnUserKeys.userFlags:=Eor(loggedOnUserKeys.userFlags,USER_BGFILECHECK)
+        ENDIF
     ENDSELECT
   
-   cant:
+cant:
   ENDWHILE
 ENDPROC RESULT_SUCCESS
 
@@ -22641,13 +23300,13 @@ PROC internalCommandWHD()
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandX()
-    IF loggedOnUser.expert="X" 
-      aePuts('\b\nExpert mode disabled\b\n')
-      loggedOnUser.expert:="N"
-    ELSE
-      aePuts('\b\nExpert mode enabled\b\n')
-      loggedOnUser.expert:="X"
-    ENDIF
+  IF loggedOnUser.expert="X" 
+    aePuts('\b\nExpert mode disabled\b\n')
+    loggedOnUser.expert:="N"
+  ELSE
+    aePuts('\b\nExpert mode enabled\b\n')
+    loggedOnUser.expert:="X"
+  ENDIF
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandZ(params)
@@ -22666,15 +23325,15 @@ PROC internalCommandZ(params)
 
   aePuts('\b\n')
   IF(maxDirs=0)
-      myError(5); ->Sorry();
-      RETURN RESULT_FAILURE
-    ENDIF
+    myError(5); ->Sorry();
+    RETURN RESULT_FAILURE
+  ENDIF
 
   ->dupy:=0
   parseParams(params)
 
-  IF(ListLen(parsedParams)>0)
-    StrCopy(ss,parsedParams[0])
+  IF(parsedParams.count()>0)
+    StrCopy(ss,parsedParams.item(0))
     JUMP zSkip1
   ENDIF
  
@@ -22690,8 +23349,8 @@ PROC internalCommandZ(params)
 zSkip1:
   UpperStr(ss)
   
-  IF(ListLen(parsedParams)>1)
-        stat,startDir,dirScan:=getDirSpan(parsedParams[1])
+  IF(parsedParams.count()>1)
+    stat,startDir,dirScan:=getDirSpan(parsedParams.item(1))
   ELSE
     stat,startDir,dirScan:=getDirSpan('');      /* chg to "A' to search all dirs */
   ENDIF
@@ -22704,10 +23363,10 @@ zSkip1:
 
   IF(StrLen(ss)>0)
  
-      fLLoop:=startDir
-      WHILE(fLLoop<=dirScan)
-          StrCopy(str,currentConfDir)   /* get BBS conf locale dir */
-          IF(dirScan<>(-1))                /* add 'DIR' */
+    fLLoop:=startDir
+    WHILE(fLLoop<=dirScan)
+      StrCopy(str,currentConfDir)   /* get BBS conf locale dir */
+      IF(dirScan<>(-1))                /* add 'DIR' */
  ->(RTS) buff copy
         IF(fLLoop = maxDirs)    /* at upload dir */
           StrAdd(str,'DIR')
@@ -22729,23 +23388,23 @@ zSkip1:
                 StringF(ray,'Scanning directory \d\b\n',fLLoop)
                 aePuts(ray)
         ENDIF
-              lineCount++
-        ENDIF 
-            IF(dirScan=-1) 
-              StrAdd(str,'hold/held')
-              aePuts('Scanning directory HOLD\b\n')
-            ENDIF
-          stat:=zippy(str,ss)
-          IF(stat<0)
-              aePuts('\b\n')
+        lineCount++
+      ENDIF 
+      IF(dirScan=-1) 
+        StrAdd(str,'hold/held')
+        aePuts('Scanning directory HOLD\b\n')
+      ENDIF
+      stat:=zippy(str,ss)
+      IF(stat<0)
+        aePuts('\b\n')
         IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
-              RETURN stat
-            ENDIF
+        RETURN stat
+      ENDIF
            
       fLLoop++
-          ->if(DirScan!=-1) FLLoop+=1;
-        ENDWHILE
-    ENDIF
+      ->if(DirScan!=-1) FLLoop+=1;
+    ENDWHILE
+  ENDIF
   aePuts('\b\n')
   IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
 ENDPROC RESULT_SUCCESS
@@ -22769,12 +23428,12 @@ PROC internalCommandZOOM()
   
   zoomOption:=loggedOnUser.zoomType
   SELECT zoomOption
-      CASE 1
-        setEnvStat(ENV_ZOOM)
-        mystat:=asciiZoom()
-      CASE 0
-        setEnvStat(ENV_ZOOM)
-        mystat:=qwkZoom()
+    CASE 1
+      setEnvStat(ENV_ZOOM)
+      mystat:=asciiZoom()
+    CASE 0
+      setEnvStat(ENV_ZOOM)
+      mystat:=qwkZoom()
   ENDSELECT
 
   IF(mystat<0)
@@ -22859,22 +23518,26 @@ PROC internalCommandZOOM()
   IF fileExists(outputZoomName)
     SetComment(outputZoomName,'F')
     aePuts('\b\n')
-    IF(logonType>=LOGON_TYPE_REMOTE) 
-       dTBT:=0
-       tBT:=0
-       tTTM:=NIL
-       tTEFF:=NIL
-       tTCPS:=NIL
-       aePuts('[33mPrepare for ZoomMail Zmodem Download:\b\n')
-       mystat:=doPause()
-       IF(mystat<0)
-          DeleteFile(outputZoomName)
-          RETURN mystat
-       ENDIF
-       setEnvStat(ENV_DOWNLOADING)
-       downloadFile(outputZoomName)
-       DeleteFile(outputZoomName)
+    IF (logonType<>LOGON_TYPE_REMOTE) AND (checkSecurity(ACS_LOCAL_DOWNLOADS)=FALSE)
+      aePuts('[33mNot supported locally...\b\n')
+      RETURN RESULT_SUCCESS
     ENDIF
+    dTBT:=0
+    tBT:=0
+    tTTM:=NIL
+    tTEFF:=NIL
+    tTCPS:=NIL
+    aePuts('[33mPrepare for ZoomMail Zmodem Download:\b\n')
+    mystat:=doPause()
+    IF(mystat<0)
+       DeleteFile(outputZoomName)
+       RETURN mystat
+    ENDIF
+    setEnvStat(ENV_DOWNLOADING)
+    downloadFile(outputZoomName)
+    DeleteFile(outputZoomName)
+  ELSE
+    aePuts('[33mZoom did not produce any output to download\b\n') 
   ENDIF
 ENDPROC RESULT_SUCCESS
 
@@ -22911,7 +23574,7 @@ PROC asciiZoomConf(confNum,confNameType)
 
   fo:=NIL
 
-  cb:=ListItem(confBases,confNum-1)
+  cb:=confBases.item(confNum-1)
  
   IF cb.handle[0] AND ZOOM_SCAN_MASK
     StringF(tempstr,'[32mZooming Conference[33m: [0m  \s   ',getConfName(confNum))
@@ -23028,12 +23691,14 @@ customAsciiDone:
     ELSE
       aePuts('\b\n')
     ENDIF
+  ELSE
+    RETURN RESULT_ABORT
   ENDIF
 
 ENDPROC count
 
 PROC asciiZoom()
-  DEF conf
+  DEF conf,cnt
   DEF mystat,zoomConfNameType
   DEF zoomName[255]:STRING
 
@@ -23041,6 +23706,7 @@ PROC asciiZoom()
   DeleteFile(zoomName)
 
   saveMsgPointers(currentConf)
+  cnt:=0
   FOR conf:=1 TO cmds.numConf
     IF (checkConfAccess(conf))
       zoomConfNameType:=NAME_TYPE_USERNAME
@@ -23051,6 +23717,7 @@ PROC asciiZoom()
       ENDIF
 
       mystat:=asciiZoomConf(conf,zoomConfNameType)
+      IF mystat<>RESULT_ABORT THEN cnt++
     ENDIF
     EXIT mystat=RESULT_FAILURE
     IF (mystat=RESULT_TIMEOUT) OR (mystat=RESULT_NO_CARRIER) 
@@ -23058,6 +23725,12 @@ PROC asciiZoom()
       RETURN mystat
     ENDIF 
   ENDFOR
+  
+  IF cnt=0
+    aePuts('No conferences selected for zooming. Use CF to configure\b\n')
+    RETURN RESULT_ABORT
+  ENDIF
+  
   loadMsgPointers(currentConf)
 ENDPROC RESULT_SUCCESS
 
@@ -23077,13 +23750,13 @@ PROC qwkZoomConf(confNum,recNum,confNameType)
   loadMsgPointers(confNum)
  
   SELECT confNameType
-     CASE NAME_TYPE_USERNAME
-       strCpy(zoomConfMailName,loggedOnUserKeys.userName,31)
-     CASE NAME_TYPE_REALNAME
-       strCpy(zoomConfMailName,loggedOnUserMisc.realName,26)
-     CASE NAME_TYPE_INTERNETNAME
-       strCpy(zoomConfMailName,loggedOnUserMisc.internetName,10)
-   ENDSELECT
+    CASE NAME_TYPE_USERNAME
+      strCpy(zoomConfMailName,loggedOnUserKeys.userName,31)
+    CASE NAME_TYPE_REALNAME
+      strCpy(zoomConfMailName,loggedOnUserMisc.realName,26)
+    CASE NAME_TYPE_INTERNETNAME
+      strCpy(zoomConfMailName,loggedOnUserMisc.internetName,10)
+  ENDSELECT
 
   IF checkToolTypeExists(TOOLTYPE_CONF,confNum,'CUSTOM')=FALSE
     mystat:=getMailStatFile(confNum)
@@ -23098,7 +23771,7 @@ PROC qwkZoomConf(confNum,recNum,confNameType)
 
   fo:=NIL
 
-  cb:=ListItem(confBases,confNum-1)
+  cb:=confBases.item(confNum-1)
  
   IF cb.handle[0] AND ZOOM_SCAN_MASK
     StringF(tempstr,'[32mZooming Conference[33m: [0m  \s    ',getConfName(confNum))
@@ -23172,12 +23845,12 @@ PROC qwkZoomConf(confNum,recNum,confNameType)
             mystat:=loadMsg(tempstr)
             IF(mystat=FALSE) 
               lines:=1
-              setMsgBufItem(0,'MESSAGE IS MISSING\n')
+              msgBuf.setItem(0,'MESSAGE IS MISSING\n')
             ENDIF
 
             msgLen:=0
             FOR i:=0 TO lines-1
-              msgLen:=msgLen+StrLen(msgBuf[i])+1
+              msgLen:=msgLen+StrLen(msgBuf.item(i))+1
             ENDFOR
             msgLen:=msgLen+127
             msgLen:=Shr(msgLen,7)     ->divide by 128
@@ -23191,7 +23864,7 @@ PROC qwkZoomConf(confNum,recNum,confNameType)
 
             StrCopy(tempstr2,'')
             FOR i:=0 TO lines-1
-              StringF(tempstr,'\s\c',msgBuf[i],$e3)
+              StringF(tempstr,'\s\c',msgBuf.item(i),$e3)
               StrAdd(tempstr2,tempstr)
               IF (StrLen(tempstr2)>=128)
                 cnt:=Write(fo,tempstr2,128)
@@ -23236,12 +23909,14 @@ customQwkDone:
     ELSE
       aePuts('\b\n')
     ENDIF
+  ELSE
+    RETURN RESULT_ABORT,recNum
   ENDIF
 
 ENDPROC count,recNum
 
 PROC qwkZoom()
-  DEF conf
+  DEF conf,cnt
   DEF mystat
   DEF zoomName[255]:STRING
   DEF fo,count
@@ -23318,6 +23993,7 @@ PROC qwkZoom()
   Close(fo)
 
   floatMsgRecNum:=1.0
+  cnt:=0
 
   saveMsgPointers(currentConf)
   FOR conf:=1 TO cmds.numConf
@@ -23329,6 +24005,7 @@ PROC qwkZoom()
         zoomConfNameType:=NAME_TYPE_INTERNETNAME
       ENDIF
       mystat,floatMsgRecNum:=qwkZoomConf(conf,floatMsgRecNum,zoomConfNameType)
+      IF mystat<>RESULT_ABORT THEN cnt++
     ENDIF
     EXIT mystat=RESULT_FAILURE
     IF (mystat=RESULT_TIMEOUT) OR (mystat=RESULT_NO_CARRIER) 
@@ -23337,6 +24014,11 @@ PROC qwkZoom()
     ENDIF 
   ENDFOR
   loadMsgPointers(currentConf)
+  
+  IF cnt=0
+    aePuts('No conferences selected for zooming. Use CF to configure\b\n')
+    RETURN RESULT_ABORT
+  ENDIF 
 ENDPROC RESULT_SUCCESS
 
 PROC getDirSpan(pass:PTR TO CHAR)
@@ -23354,9 +24036,9 @@ PROC getDirSpan(pass:PTR TO CHAR)
       mystat:=lineInput('','',8,INPUT_TIMEOUT,str)
       IF(mystat<0) THEN RETURN RESULT_NO_CARRIER
       IF(StrLen(str)=0)
-          aePuts('\b\n')
-          RETURN RESULT_FAILURE,startDir,dirScan
-        ENDIF
+        aePuts('\b\n')
+        RETURN RESULT_FAILURE,startDir,dirScan
+      ENDIF
     ELSE
       StrCopy(str,pass)
   ENDIF
@@ -23364,32 +24046,32 @@ PROC getDirSpan(pass:PTR TO CHAR)
 ->  gnsflag=CheckForNS(str);             /* check for Non-Stop */
 
   IF((str[0]="U") OR (str[0]="u"))   /* Scan only upload directory */
-      dirScan:=maxDirs
-      startDir:=dirScan
-      JUMP mNCont
-    ENDIF
+    dirScan:=maxDirs
+    startDir:=dirScan
+    JUMP mNCont
+  ENDIF
   IF((str[0]="A") OR (str[0]="a"))                /* scan all dirs */
-      dirScan:=maxDirs
-      startDir:=1
-      JUMP mNCont
-    ENDIF
+    dirScan:=maxDirs
+    startDir:=1
+    JUMP mNCont
+  ENDIF
   IF((str[0]="L") OR (str[0]="l"))
     dirScan:=0
     startDir:=0
-      JUMP mNCont
+    JUMP mNCont
   ENDIF
   IF(((str[0]="H") OR (str[0]="h")) AND ((loggedOnUser.secStatus>=holdAccessLevel) OR (checkSecurity(ACS_HOLD_ACCESS)))) 
-      dirScan:=-1
-      startDir:=-1
-      JUMP mNCont
-    ENDIF
+    dirScan:=-1
+    startDir:=-1
+    JUMP mNCont
+  ENDIF
   ->strcat(str," ");
   dirScan:=Val(str)
   ->sscanf(str,"%d",&DirScan);
   IF((dirScan>maxDirs) OR (dirScan<1))
-      aePuts('\b\nNo such directory.\b\n\b\n')
-      RETURN RESULT_FAILURE
-    ENDIF
+    aePuts('\b\nNo such directory.\b\n\b\n')
+    RETURN RESULT_FAILURE
+  ENDIF
   startDir:=dirScan
 
 mNCont:
@@ -23405,98 +24087,98 @@ PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,match
   DEF path[255]:STRING
   DEF found,drivenum,currpos,foundit
 
-    StrCopy(padfname,fname)
-    UpperStr(padfname)
+  StrCopy(padfname,fname)
+  UpperStr(padfname)
 
-    ->pad fname to 12 charactesr
-    StrAdd(padfname,'            ')
-    SetStr(padfname,12)
+  ->pad fname to 12 charactesr
+  StrAdd(padfname,'            ')
+  SetStr(padfname,12)
 
-    StrCopy(path,dirname)
-    getFileName(path)      ->get the actual name for the file so we can preserve the casing
-    StringF(dirname,'\s\s',currentConfDir,path)
+  StrCopy(path,dirname)
+  getFileName(path)      ->get the actual name for the file so we can preserve the casing
+  StringF(dirname,'\s\s',currentConfDir,path)
 
-    StrCopy(oldDirName,dirname)
-    StrAdd(oldDirName,'.old')
+  StrCopy(oldDirName,dirname)
+  StrAdd(oldDirName,'.old')
 
-    aePuts('\b\nRemoving from directory list, please wait..')
+  aePuts('\b\nRemoving from directory list, please wait..')
 
-    DeleteFile(oldDirName)
+  DeleteFile(oldDirName)
 
-    IF Rename(dirname,oldDirName) = FALSE
-      aePuts('\b\nError during operation, delete operation aborted.\b\n')
-      RETURN RESULT_FAILURE
-    ENDIF
-    
-    foundit:=FALSE
-
-    IF (fh1:=Open(dirname,MODE_NEWFILE))>0
-      IF (fh2:=Open(oldDirName,MODE_OLDFILE))>0
-        found:=0
-        currpos:=Seek(fh2,0,OFFSET_CURRENT)
-        WHILE(Fgets(fh2,dirline,255)<>NIL)
-          IF(dirline[0]<>" ")
-            StrCopy(compareFname,dirline,12)
-            UpperStr(compareFname)
-            IF(StrCmp(compareFname,padfname)) AND (currpos=matchposition)
-              found:=1
-              foundit:=TRUE
-            ELSE
-              found:=0
-            ENDIF
-          ENDIF
-
-          IF found=0
-            Fputs(fh1,dirline)
-          ENDIF
-          currpos:=Seek(fh2,0,OFFSET_CURRENT)
-        ENDWHILE
-
-        Close(fh1)
-        Close(fh2)
-
-        IF foundit=FALSE
-          DeleteFile(dirname)
+  IF Rename(dirname,oldDirName) = FALSE
+    aePuts('\b\nError during operation, delete operation aborted.\b\n')
+    RETURN RESULT_FAILURE
+  ENDIF
   
-          ->put the old file back
-          Rename(oldDirName,dirname)
+  foundit:=FALSE
 
-          aePuts('\b\nError updating directory list, delete operation aborted.\b\n')
-          RETURN RESULT_FAILURE
+  IF (fh1:=Open(dirname,MODE_NEWFILE))>0
+    IF (fh2:=Open(oldDirName,MODE_OLDFILE))>0
+      found:=0
+      currpos:=Seek(fh2,0,OFFSET_CURRENT)
+      WHILE(Fgets(fh2,dirline,255)<>NIL)
+        IF(dirline[0]<>" ")
+          StrCopy(compareFname,dirline,12)
+          UpperStr(compareFname)
+          IF(StrCmp(compareFname,padfname)) AND (currpos=matchposition)
+            found:=1
+            foundit:=TRUE
+          ELSE
+            found:=0
+          ENDIF
         ENDIF
 
-        DeleteFile(oldDirName)
-
-        IF srchold
-          aePuts('\b\nRemoving from hold folder, please wait..')
-          StringF(path,'\sHold/\s',currentConfDir,fname)
-          DeleteFile(path)
-        ELSE
-          aePuts('\b\nRemoving from download folder, please wait..')
-          drivenum:=1
-          StringF(path,'DLPATH.\d',drivenum++)
-          WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path))
-            StrAdd(path,fname)
-            DeleteFile(path)
-            StringF(path,'DLPATH.\d',drivenum++)
-          ENDWHILE
+        IF found=0
+          Fputs(fh1,dirline)
         ENDIF
-        aePuts('\b\n\b\nDelete operation complete \b\n')
-      ELSE
-        Close(fh1)
+        currpos:=Seek(fh2,0,OFFSET_CURRENT)
+      ENDWHILE
+
+      Close(fh1)
+      Close(fh2)
+
+      IF foundit=FALSE
         DeleteFile(dirname)
-
+  
         ->put the old file back
         Rename(oldDirName,dirname)
-        aePuts('\b\nError reading directory list, delete operation aborted.\b\n')
+
+        aePuts('\b\nError updating directory list, delete operation aborted.\b\n')
         RETURN RESULT_FAILURE
       ENDIF
+
+      DeleteFile(oldDirName)
+
+      IF srchold
+        aePuts('\b\nRemoving from hold folder, please wait..')
+        StringF(path,'\sHold/\s',currentConfDir,fname)
+        DeleteFile(path)
+      ELSE
+        aePuts('\b\nRemoving from download folder, please wait..')
+        drivenum:=1
+        StringF(path,'DLPATH.\d',drivenum++)
+        WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path))
+          StrAdd(path,fname)
+          DeleteFile(path)
+          StringF(path,'DLPATH.\d',drivenum++)
+        ENDWHILE
+      ENDIF
+      aePuts('\b\n\b\nDelete operation complete \b\n')
     ELSE
+      Close(fh1)
+      DeleteFile(dirname)
+
       ->put the old file back
       Rename(oldDirName,dirname)
-      aePuts('\b\nError creating the new directory list, delete operation aborted.\b\n')
+      aePuts('\b\nError reading directory list, delete operation aborted.\b\n')
       RETURN RESULT_FAILURE
     ENDIF
+  ELSE
+    ->put the old file back
+    Rename(oldDirName,dirname)
+    aePuts('\b\nError creating the new directory list, delete operation aborted.\b\n')
+    RETURN RESULT_FAILURE
+  ENDIF
 
 ENDPROC RESULT_SUCCESS
 
@@ -23572,8 +24254,8 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
         Fgets(fh1,dirline,255)
         dirline[13]:=" "
         parseParams(dirline)
-        IF ListLen(parsedParams)>2
-          StrCopy(destDate,parsedParams[2])
+        IF parsedParams.count()>2
+          StrCopy(destDate,parsedParams.item(2))
           IF (StrLen(destDate)=8) AND (destDate[2]="-") AND (destDate[5]="-")
             destDate[2]:=" "
             destDate[5]:=" "
@@ -23651,8 +24333,8 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
                     tempstr[13]:=" "
                     parseParams(tempstr)
                     
-                    IF ListLen(parsedParams)>2
-                      StrCopy(destDate,parsedParams[2])
+                    IF parsedParams.count()>2
+                      StrCopy(destDate,parsedParams.item(2))
                       IF (StrLen(destDate)=8) AND (destDate[2]="-") AND (destDate[5]="-")
                         destDate[2]:=" "
                         destDate[5]:=" "
@@ -23855,7 +24537,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
 
 ENDPROC RESULT_SUCCESS
 
-PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,searchList: PTR TO LONG,outfname: PTR TO CHAR, outfiledate: PTR TO CHAR,startposition)
+PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,searchList: PTR TO stringlist,outfname: PTR TO CHAR, outfiledate: PTR TO CHAR,startposition)
   DEF fi,found=FALSE
   DEF image[258]:ARRAY OF CHAR
   DEF tempStr[258]:STRING
@@ -23863,7 +24545,7 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,searchList: PTR TO LONG,out
   DEF gi1,count=0,loop,ch,i
   DEF datestr[258]:STRING
   DEF test:PTR TO CHAR
-  DEF viewAllowed
+  DEF viewAllowed,prev
 
 
   fi:=Open(fname,MODE_OLDFILE)
@@ -23881,9 +24563,9 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,searchList: PTR TO LONG,out
     IF(checkInput())
       gi1:=readChar(1)
       IF gi1=3  /*  ctrl-c */
-          Close(fi)
-          aePuts('**Break\b\n')
-          RETURN RESULT_FAILURE,0,0
+        Close(fi)
+        aePuts('**Break\b\n')
+        RETURN RESULT_FAILURE,0,0
       ENDIF
     ENDIF
     IF(StrLen(image)>0) AND (image[0]<>" ")
@@ -23895,8 +24577,8 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,searchList: PTR TO LONG,out
       ENDWHILE
       SetStr(tempStr,i)
 
-      FOR i:=0 TO ListLen(searchList)-1
-        IF stcsma(tempStr,searchList[i]) THEN found:=1
+      FOR i:=0 TO searchList.count()-1
+        IF stcsma(tempStr,searchList.item(i)) THEN found:=1
       ENDFOR
     ENDIF
 
@@ -23905,7 +24587,7 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,searchList: PTR TO LONG,out
       datestr[13]:=" "
       parseParams(datestr)
       
-      test:=parsedParams[2]
+      test:=parsedParams.item(2)
       IF (StrLen(test)=8) AND (test[2]="-") AND (test[5]="-")
         StrCopy(datestr,test)
       ENDIF
@@ -23914,12 +24596,15 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,searchList: PTR TO LONG,out
       aePuts('\b\n')
       aePuts(image)
       aePuts('\b\n')
+      prev:=Seek(fi,0,OFFSET_CURRENT)
       WHILE(Fgets(fi,image,252)<>NIL) AND (image[0]=" ") AND (count<max_desclines)
         stripReturn(image)
         aePuts(image)
         aePuts('\b\n')
         count++
+        prev:=Seek(fi,0,OFFSET_CURRENT)
       ENDWHILE
+      Seek(fi,prev,OFFSET_BEGINNING)
       aePuts('\b\n')
       IF (viewAllowed=TRUE)
         aePuts('[32m([33mC[32m)[36montinue, [32m([33mD[32m)[36melete, [32m([33mM[32m)[36move, [32m([33mV[32m)[36miew, [32m([33mQ[32m)[36muit[0m? ')
@@ -24037,9 +24722,9 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
       found++
       gi1:=flagPause(1)
       IF(gi1<0)
-                Close(fi)
+        Close(fi)
         FreeMem(myzip,25600)
-                RETURN gi1
+        RETURN gi1
       ENDIF
     ENDWHILE
   ENDIF
@@ -24060,17 +24745,17 @@ PROC displayFileList(params, reverse=FALSE)
  
   aePuts('\b\n')
   IF(maxDirs=0) 
-      myError(5); ->Sorry();
-      RETURN RESULT_FAILURE
-    ENDIF
+    myError(5); ->Sorry();
+    RETURN RESULT_FAILURE
+  ENDIF
  
   parseParams(params)
-  IF(ListLen(parsedParams)>0)
-        stat,startDir,dirScan:=getDirSpan(parsedParams[0])
+  IF(parsedParams.count()>0)
+    stat,startDir,dirScan:=getDirSpan(parsedParams.item(0))
   ELSE
     displayScreen(SCREEN_FILEHELP) ->IF(displayScreen(SCREEN_FILEHELP))=FALSE THEN unAvailNotice(GSTR3,GSTR1);
-      stat,startDir,dirScan:=getDirSpan('')
-    ENDIF
+    stat,startDir,dirScan:=getDirSpan('')
+  ENDIF
  
   IF(stat=RESULT_FAILURE) THEN RETURN RESULT_SUCCESS
  
@@ -24082,12 +24767,12 @@ PROC displayFileList(params, reverse=FALSE)
     fLLoop:=startDir
   ENDIF
   WHILE(fLLoop<=dirScan) AND (fLLoop>=startDir)
-      StrCopy(str,currentConfDir)
-      IF(dirScan<>(-1))
+    StrCopy(str,currentConfDir)
+    IF(dirScan<>(-1))
       IF(fLLoop = maxDirs)    /* at upload dir */
         StrAdd(str,'DIR')
-            StringF(ray,'\d',fLLoop)
-            StrAdd(str,ray)
+          StringF(ray,'\d',fLLoop)
+          StrAdd(str,ray)
         IF reverse
           StringF(ray,'Reverse scanning directory \d\b\n',fLLoop)
         ELSE
@@ -24102,18 +24787,18 @@ PROC displayFileList(params, reverse=FALSE)
           fcopy:=TRUE
         ENDIF
       ELSE
-          StrAdd(str,'DIR')
-            StringF(ray,'\d',fLLoop)
-            StrAdd(str,ray)
-          StringF(ray,'Scanning directory \d\b\n',fLLoop)
-            aePuts(ray)
+        StrAdd(str,'DIR')
+        StringF(ray,'\d',fLLoop)
+        StrAdd(str,ray)
+        StringF(ray,'Scanning directory \d\b\n',fLLoop)
+        aePuts(ray)
       ENDIF
-        ELSE
-          StrAdd(str,'hold/held')
-          aePuts('Scanning directory HOLD\b\n')
-        ENDIF
-      stat:=flagPause(1)
-      IF(stat<0) 
+    ELSE
+      StrAdd(str,'hold/held')
+      aePuts('Scanning directory HOLD\b\n')
+    ENDIF
+    stat:=flagPause(1)
+    IF(stat<0) 
       IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
       RETURN stat
     ENDIF
@@ -24128,16 +24813,16 @@ PROC displayFileList(params, reverse=FALSE)
     ENDIF
     IF(stat=RESULT_FAILURE) THEN RETURN RESULT_SUCCESS
     IF(stat=RESULT_NO_CARRIER) THEN RETURN RESULT_NO_CARRIER
-      IF(stat=RESULT_TIMEOUT) THEN RETURN stat
+    IF(stat=RESULT_TIMEOUT) THEN RETURN stat
     ->if(DirScan == MaxDirs)  return(stat);
  
-      aePuts('\b\n')
+    aePuts('\b\n')
     IF reverse
       fLLoop--
     ELSE
       fLLoop++
     ENDIF
-    ENDWHILE
+  ENDWHILE
   IF(fcopy) THEN DeleteFile(tempfile);  ->(RTS)
 ENDPROC RESULT_SUCCESS
 
@@ -24146,9 +24831,9 @@ PROC displayIt(fname: PTR TO CHAR)
 
   fp:=Open(fname,MODE_OLDFILE)
   IF(fp<=0)
-      myError(4) ->(RTS) FileListError();
-      RETURN RESULT_SUCCESS
-    ENDIF
+    myError(4) ->(RTS) FileListError();
+    RETURN RESULT_SUCCESS
+  ENDIF
  
  /* We should check for the file in ram: if there, show it, if not, copy it */
  
@@ -24163,20 +24848,20 @@ PROC displayIt2(fp)
   WHILE(Fgets(fp,str,180)<>NIL)
     str[181]:=0
     SetStr(str,StrLen(str))
-      IF(str[StrLen(str)-1]="\n")
-        IF(nonStopDisplayFlag=FALSE) THEN   lineCount++
-        StrAdd(str,'\b')
-        ENDIF
+    IF(str[StrLen(str)-1]="\n")
+      IF(nonStopDisplayFlag=FALSE) THEN   lineCount++
+      StrAdd(str,'\b')
+    ENDIF
  
     IF(color=1) THEN aePuts('[0m')
     aePuts(str)
  
-      IF(sCheckInput()) 
-        stat:=readChar(1)
-        IF(stat<0) 
+    IF(sCheckInput()) 
+      stat:=readChar(1)
+      IF(stat<0) 
         RETURN stat
       ENDIF
-          SELECT stat
+      SELECT stat
         CASE 23  /* Pause */
           stat:=readChar(INPUT_TIMEOUT)
           IF(stat<0)
@@ -24185,17 +24870,17 @@ PROC displayIt2(fp)
         CASE 3 /* ^C */
           aePuts('**Break\b\n\b\n')
           RETURN RESULT_FAILURE
-            ENDSELECT
-        ENDIF
+      ENDSELECT
+    ENDIF
     IF newFilesPauseFlag
       moreStat:=checkForPause()
     ELSE
       moreStat:=flagPause(0)
     ENDIF
-      IF(moreStat<0) 
-        RETURN moreStat
+    IF(moreStat<0) 
+      RETURN moreStat
     ENDIF
-    ENDWHILE 
+  ENDWHILE 
 ENDPROC RESULT_SUCCESS
 
 PROC displayIt3(buffer:PTR TO CHAR)
@@ -24218,20 +24903,20 @@ PROC displayIt3(buffer:PTR TO CHAR)
     ENDIF
     str[count++]:=0
     SetStr(str,StrLen(str))
-      IF(str[StrLen(str)-1]="\n")
-        IF(nonStopDisplayFlag=FALSE) THEN   lineCount++
-        StrAdd(str,'\b')
-        ENDIF
+    IF(str[StrLen(str)-1]="\n")
+      IF(nonStopDisplayFlag=FALSE) THEN   lineCount++
+      StrAdd(str,'\b')
+    ENDIF
  
     IF(color=1) THEN aePuts('[0m')
     aePuts(str)
  
-      IF(sCheckInput()) 
-        stat:=readChar(1)
-        IF(stat<0) 
+    IF(sCheckInput()) 
+      stat:=readChar(1)
+      IF(stat<0) 
         RETURN stat
       ENDIF
-          SELECT stat
+      SELECT stat
         CASE 23  /* Pause */
           stat:=readChar(INPUT_TIMEOUT)
           IF(stat<0)
@@ -24240,17 +24925,17 @@ PROC displayIt3(buffer:PTR TO CHAR)
         CASE 3 /* ^C */
           aePuts('**Break\b\n\b\n')
           RETURN RESULT_FAILURE
-            ENDSELECT
-        ENDIF
+      ENDSELECT
+    ENDIF
     IF newFilesPauseFlag
       moreStat:=checkForPause()
     ELSE
       moreStat:=flagPause(0)
     ENDIF
-      IF(moreStat<0) 
-        RETURN moreStat
+    IF(moreStat<0) 
+      RETURN moreStat
     ENDIF
-    ENDWHILE 
+  ENDWHILE 
 ENDPROC RESULT_SUCCESS
 
 PROC myNewFiles(params)
@@ -24274,34 +24959,34 @@ PROC myNewFiles(params)
   aePuts('\b\n')
   IF(maxDirs=0)
     myError(5) -> Sorry();
-      RETURN RESULT_FAILURE
-    ENDIF
+    RETURN RESULT_FAILURE
+  ENDIF
  
   timeVar:=loggedOnUser.newSinceDate
   formatLongDate(timeVar,ray)
   StrCopy(str,'')
  
   parseParams(params)
-  IF(ListLen(parsedParams)>0)
-    pchar:=parsedParams[0]
+  IF(parsedParams.count()>0)
+    pchar:=parsedParams.item(0)
     IF(pchar[0]="s") OR (pchar[0]="S")
       StrCopy(str,ray)
     ELSE
-      StrCopy(str,parsedParams[0])
+      StrCopy(str,parsedParams.item(0))
     ENDIF
-    ENDIF
+  ENDIF
 
   nonStopDisplayFlag:=paramsContains('NS')
  
   WHILE(StrLen(str)<>8)
     comstat:=1
-      StringF(str,'Date as (mm-dd-yy) to search from (Enter)=\s: ',ray)
+    StringF(str,'Date as (mm-dd-yy) to search from (Enter)=\s: ',ray)
     aePuts(str)
-      mystat:=lineInput('','',8,INPUT_TIMEOUT,str)
+    mystat:=lineInput('','',8,INPUT_TIMEOUT,str)
     IF(mystat<0) THEN RETURN RESULT_NO_CARRIER
-      IF(StrLen(str)=0) THEN StrCopy(str,ray)
+    IF(StrLen(str)=0) THEN StrCopy(str,ray)
     IF(StrLen(str)<>8) THEN aePuts('\b\n')
-    ENDWHILE
+  ENDWHILE
   StringF(c,'\tDirectory Scan for (\s)',str)
   callersLog(c)
  
@@ -24318,12 +25003,12 @@ PROC myNewFiles(params)
   tv:=0
 
   StrCopy(c,'')
-  IF(ListLen(parsedParams)>1)
-    StrCopy(c,parsedParams[1])
+  IF(parsedParams.count()>1)
+    StrCopy(c,parsedParams.item(1))
   ENDIF
-  IF(ListLen(parsedParams)>2)
+  IF(parsedParams.count()>2)
     StrAdd(c,' ')
-      StrAdd(c,parsedParams[2]);
+    StrAdd(c,parsedParams.item(2));
   ENDIF
   mystat,startDir,dirScan:=getDirSpan(c)
   IF(mystat=RESULT_FAILURE) THEN RETURN RESULT_SUCCESS
@@ -24336,123 +25021,123 @@ PROC myNewFiles(params)
   fLLoop:=startDir;
   WHILE(fLLoop<=dirScan)
     StrCopy(str,currentConfDir)
-      IF(dirScan<>(-1)) 
+    IF(dirScan<>(-1)) 
  ->(RTS)   buffer upload dir
       IF(fLLoop = maxDirs) 
         StrAdd(str,'DIR')
-            StringF(ray,'\d',fLLoop)
-            StrAdd(str,ray)
-          StringF(ray,'Scanning directory \d\b\n',fLLoop)
+        StringF(ray,'\d',fLLoop)
+        StrAdd(str,ray)
+        StringF(ray,'Scanning directory \d\b\n',fLLoop)
         aePuts(ray)
          
         StringF(tempfile,'T:tdir.\d',node)
-             /* now copy to T: and use T: copy */
+        /* now copy to T: and use T: copy */
         IF((fileCopy(str,tempfile)))
           StrCopy(str,tempfile)
           fcopy:=TRUE
         ENDIF
-        ELSE
+      ELSE
         StrAdd(str,'DIR')
-            StringF(ray,'\d',fLLoop)
-            StrAdd(str,ray)
-          StringF(ray,'Scanning directory \d\b\n',fLLoop)
-            aePuts(ray)
+        StringF(ray,'\d',fLLoop)
+        StrAdd(str,ray)
+        StringF(ray,'Scanning directory \d\b\n',fLLoop)
+        aePuts(ray)
       ENDIF
-        ELSE
+    ELSE
       StrAdd(str,'hold/held')
-        aePuts('Scanning directory HOLD\b\n')
-        ENDIF
+      aePuts('Scanning directory HOLD\b\n')
+    ENDIF
     IF newFilesPauseFlag
       stat:=checkForPause()
     ELSE
       stat:=flagPause(1)
     ENDIF
-      IF(stat<0)
+    IF(stat<0)
       IF(fcopy) THEN DeleteFile(tempfile)
       RETURN stat
     ENDIF
     fp1:=Open(str,MODE_OLDFILE)
-      IF(fp1<=0)
-        aePuts('No Files are available.\b\n\b\n')
+    IF(fp1<=0)
+      aePuts('No Files are available.\b\n\b\n')
       IF(fcopy) THEN DeleteFile(tempfile)
-        RETURN RESULT_SUCCESS
-        ENDIF
+      RETURN RESULT_SUCCESS
+    ENDIF
  
     WHILE(Fgets(fp1,c,250)<>NIL) 
-        c[250]:=0
+      c[250]:=0
       SetStr(c,StrLen(c))
-        IF((c[0]=" ") OR (c[0]=0) OR(c[0]="\n")) THEN JUMP fgetnext
+      IF((c[0]=" ") OR (c[0]=0) OR(c[0]="\n")) THEN JUMP fgetnext
 
       parseParams(c)
-      IF(ListLen(parsedParams)>0) THEN StrCopy(fn,parsedParams[0])
-      IF(ListLen(parsedParams)>1) THEN StrCopy(sz,parsedParams[1])
-      IF(ListLen(parsedParams)>2) THEN StrCopy(dt,parsedParams[2])
-      IF(ListLen(parsedParams)>3) THEN StrCopy(cmt,parsedParams[3])
-        ->scanf(c,"%s %s %s %s",&fn,&sz,&dt,&cmt);
+      IF(parsedParams.count()>0) THEN StrCopy(fn,parsedParams.item(0))
+      IF(parsedParams.count()>1) THEN StrCopy(sz,parsedParams.item(1))
+      IF(parsedParams.count()>2) THEN StrCopy(dt,parsedParams.item(2))
+      IF(parsedParams.count()>3) THEN StrCopy(cmt,parsedParams.item(3))
+      ->scanf(c,"%s %s %s %s",&fn,&sz,&dt,&cmt);
 
-        IF((dt[0]<="9") AND (dt[0]>="0") AND (StrLen(dt)=8))
-            IF(Not((dt[2]="-") AND (dt[5]="-") AND (dt[6]<="9") AND (dt[6]>="0")))
-                StrCopy(sz,dt)
-                StrCopy(dt,cmt)
-                ENDIF
-            ELSE
-            StrCopy(sz,dt)
-            StrCopy(dt,cmt)
-            ENDIF
+      IF((dt[0]<="9") AND (dt[0]>="0") AND (StrLen(dt)=8))
+        IF(Not((dt[2]="-") AND (dt[5]="-") AND (dt[6]<="9") AND (dt[6]>="0")))
+          StrCopy(sz,dt)
+          StrCopy(dt,cmt)
+        ENDIF
+      ELSE
+        StrCopy(sz,dt)
+        StrCopy(dt,cmt)
+      ENDIF
           
       dt[2]:=" "
-            dt[5]:=" "
+      dt[5]:=" "
       mdt:=Val(dt)
       ddt:=Val(dt+3)
       ydt:=Val(dt+6)
       IF (ydt>TWODIGITYEARSWITCHOVER) THEN ydt:=1900+ydt ELSE ydt:=2000+ydt
       
-        ->sscanf(dt,"%d %d %d",&mdt,&ddt,&ydt);
+      ->sscanf(dt,"%d %d %d",&mdt,&ddt,&ydt);
         
       IF(ydt>year)
         tv:=1
-        ELSE
-            IF(ydt=year)
-                IF(mdt>month)
+      ELSE
+        IF(ydt=year)
+          IF(mdt>month)
             tv:=1
-                ELSEIF(mdt=month)   
-                    IF(ddt>=day) THEN   tv:=1
-                    ENDIF
-                ENDIF
-            ENDIF
-        EXIT tv
+          ELSEIF(mdt=month)   
+            IF(ddt>=day) THEN   tv:=1
+          ENDIF
+        ENDIF
+      ENDIF
+      EXIT tv
 fgetnext:
-        ENDWHILE 
+    ENDWHILE 
  
     IF(tv<>0)
-        c[StrLen(c)-1]:=0
-        aePuts(c)
-          aePuts('\b\n')
+      c[StrLen(c)-1]:=0
+      aePuts(c)
+      aePuts('\b\n')
       IF newFilesPauseFlag
         stat:=checkForPause()
       ELSE
         stat:=flagPause(1)
       ENDIF
-        IF(stat<0)
-            Close(fp1)
-        IF(fcopy) THEN DeleteFile(tempfile)
-              RETURN stat
-        ENDIF
- 
- ->     stat=DisplayIt();      /* Mikes unbuffered */
-      stat:=displayIt2(fp1)   /* my buffered dir code */
+      IF(stat<0)
         Close(fp1)
+        IF(fcopy) THEN DeleteFile(tempfile)
+        RETURN stat
+      ENDIF
+ 
+ ->   stat=DisplayIt();      /* Mikes unbuffered */
+      stat:=displayIt2(fp1)   /* my buffered dir code */
+      Close(fp1)
       tv:=0
       IF(stat<0)
         IF(fcopy) THEN DeleteFile(tempfile)
         RETURN stat
       ENDIF
-        ELSE
+    ELSE
       Close(fp1)
     ENDIF
     tv:=0
     fLLoop++
-    ENDWHILE
+  ENDWHILE
   aePuts('\b\n')
   nonStopDisplayFlag:=0
   IF(fcopy) THEN DeleteFile(tempfile)
@@ -24492,11 +25177,11 @@ PROC flagPause(count)
           ->if(AnsiColor)
           aePuts('[A[K')
       ENDIF
-        ENDWHILE
+    ENDWHILE
 fpbrk:
     ->if(AnsiColor)
-        aePuts('[1A[K')
-    ENDIF
+      aePuts('[1A[K')
+  ENDIF
 ENDPROC RESULT_SUCCESS
 
 
@@ -24547,7 +25232,7 @@ PROC confScan()
       ->//AEPutStr("\b\n[35m  --[32mChecking for PartUploads\b\n[0m");
       FOR conf:=1 TO cmds.numConf
         IF (checkConfAccess(conf))
-           mystat:=joinConf(conf,TRUE,FALSE,FORCE_MAILSCAN_SKIP)
+          mystat:=joinConf(conf,TRUE,FALSE,FORCE_MAILSCAN_SKIP)
           IF (mystat=RESULT_SUCCESS)
 
             mystat:=partUploadOK(1)
@@ -24590,7 +25275,11 @@ PROC captureRealAndInternetNames()
 
   IF ((realNamesUsed=TRUE) AND (StrLen(loggedOnUserMisc.realName)=0))
     valid:=FALSE
-    aePuts('\b\nReal Names are required in some conferences\b\non this system\b\n\b\n')
+    aePuts('\b\n')
+    IF displayScreen(SCREEN_REALNAMES)=FALSE
+      aePuts('Real Names are required in some conferences\b\non this system\b\n')
+    ENDIF
+    aePuts('\b\n')
     REPEAT
       aePuts('Real Name (Alpha Numeric): ')
       stat:=lineInput('','',25,INPUT_TIMEOUT,tempstr)
@@ -24614,7 +25303,13 @@ PROC captureRealAndInternetNames()
 
   IF ((internetNamesUsed=TRUE) AND (StrLen(loggedOnUserMisc.internetName)=0))
     valid:=FALSE
-    aePuts('\b\nInternet Names are required in some conferences\b\non this system\b\n\b\n')
+
+    aePuts('\b\n')
+    IF displayScreen(SCREEN_INTERNETNAMES)=FALSE
+      aePuts('Internet Names are required in some conferences\b\non this system\b\n')
+    ENDIF
+    aePuts('\b\n')
+
     REPEAT
       aePuts('Internet Name (Alpha Numeric No Spaces): ')
       stat:=lineInput('','',9,INPUT_TIMEOUT,tempstr)
@@ -24810,180 +25505,196 @@ PROC displayMenuPrompt()
 ENDPROC
 
 PROC processLoggedOnUser()
-    DEF subState: PTR TO loggedOnState
-    DEF wasControl,ch
-    DEF string[255]:STRING
-    DEF temp
-    DEF lastDay,currDay
-    DEF currTime
-    IF (stateData=0)
-        StrCopy(securityFlags,'')
-        
-        StringF(string,'LANGUAGE.\d',loggedOnUser.translatorID AND 127)
-        IF readToolType(TOOLTYPE_LANGUAGES,'',string,userLanguage)=FALSE THEN StrCopy(userLanguage,hostLanguage)
-        
-        blockOLM:=FALSE
-        messageMenuChar:=0
-        disallowFileAttach:=FALSE
-        statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
-        IF(cmds.acLvl[LVL_SCREEN_TO_FRONT] AND scropen) THEN expressToFront()
+  DEF subState: PTR TO loggedOnState
+  DEF wasControl,ch
+  DEF string[255]:STRING
+  DEF temp
+  DEF lastDay,currDay
+  DEF currTime
+  IF (stateData=0)
+    StrCopy(securityFlags,'')
+    
+    StringF(string,'LANGUAGE.\d',loggedOnUser.translatorID AND 127)
+    IF readToolType(TOOLTYPE_LANGUAGES,'',string,userLanguage)=FALSE THEN StrCopy(userLanguage,hostLanguage)
+    
+    blockOLM:=FALSE
+    messageMenuChar:=0
+    disallowFileAttach:=FALSE
+    statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
+    IF(cmds.acLvl[LVL_SCREEN_TO_FRONT] AND scropen) THEN expressToFront()
 
-        newSinceFlag:=0
-        currTime:=getSystemTime()
-        currDay:=Div(currTime-21600,86400)
-        lastDay:=Div(loggedOnUser.timeLastOn-21600,86400)
-        IF (lastDay<>currDay)
-          StringF(string,'timeused debug: \s logon new day reset,  currday \d, lastday \d',loggedOnUser.name, currDay,lastDay)
-          debugLog(LOG_WARN,string)
+    newSinceFlag:=0
+    currTime:=getSystemTime()
+    currDay:=Div(currTime-21600,86400)
+    lastDay:=Div(loggedOnUser.timeLastOn-21600,86400)
+    IF (lastDay<>currDay)
+      StringF(string,'timeused debug: \s logon new day reset,  currday \d, lastday \d',loggedOnUser.name, currDay,lastDay)
+      debugLog(LOG_WARN,string)
 
-          loggedOnUser.timeUsed:=0
-          loggedOnUser.chatRemain:=loggedOnUser.chatLimit
-          loggedOnUser.dailyBytesDld:=0
-          loggedOnUser.timeTotal:=loggedOnUser.timeLimit
-          ->loggedOnUser.timeLastOn:=currTime
-        ELSE
-          StringF(string,'timeused debug: \s logon same day,  currday \d, lastday \d, timeused \d',loggedOnUser.name,currDay,lastDay,loggedOnUser.timeUsed)
-          debugLog(LOG_WARN,string)
-        ENDIF
-
-        timeLimit:=loggedOnUser.timeTotal-loggedOnUser.timeUsed
-        IF (loggedOnUser.dailyBytesLimit<>0)
-          bytesADL:=loggedOnUser.dailyBytesLimit
-        ELSE
-          bytesADL:=$7fffffff
-        ENDIF
-        updateTimeUsed()
-
-        pagesAllowed:=readToolTypeInt(TOOLTYPE_ACCESS,acsLevel,'ACS.MAX_PAGES')
-        chatF:=0
-        currentConf:=0
-        subState:=NEW subState
-        IF reqState<>REQ_STATE_LOGOFF THEN subState.subState:=SUBSTATE_DISPLAY_BULL ELSE subState.subState:=-1
-        relogon:=FALSE
-        nonStopDisplayFlag:=FALSE
-        doorTimeout:=INPUT_TIMEOUT
-        
-        stateData:=subState
+      loggedOnUser.timeUsed:=0
+      loggedOnUser.chatRemain:=loggedOnUser.chatLimit
+      loggedOnUser.dailyBytesDld:=0
+      loggedOnUser.timeTotal:=loggedOnUser.timeLimit
+      ->loggedOnUser.timeLastOn:=currTime
     ELSE
-        subState:=stateData
+      StringF(string,'timeused debug: \s logon same day,  currday \d, lastday \d, timeused \d',loggedOnUser.name,currDay,lastDay,loggedOnUser.timeUsed)
+      debugLog(LOG_WARN,string)
     ENDIF
 
-    IF subState.subState=SUBSTATE_DISPLAY_BULL
-        IF (displayScreen(SCREEN_BULL)) THEN doPause()
-        IF (displayScreen(SCREEN_NODE_BULL)) THEN doPause()
-        confScan()
-        captureRealAndInternetNames()
-        subState.subState:=SUBSTATE_DISPLAY_CONF_BULL
-    ELSEIF subState.subState=SUBSTATE_DISPLAY_CONF_BULL
-      joinConf(loggedOnUser.confRJoin,FALSE,FORCE_MAILSCAN_SKIP)
-      loadFlagged()
-      IF StrLen(historyFolder)>0 THEN loadHistory()
-      blockOLM:=FALSE
-
-      subState.subState:=SUBSTATE_DISPLAY_MENU
-    ELSEIF subState.subState=SUBSTATE_DISPLAY_MENU
-      IF (loggedOnUser.expert="N") AND (doorExpertMode=FALSE)
-        doPause()
-        checkScreenClear()
-        displayScreen(SCREEN_MENU)
-      ENDIF
-      doorExpertMode:=FALSE
-      aePuts('\b\n')
-      IF checkOnlineStatus()<>RESULT_SUCCESS THEN reqState:=REQ_STATE_LOGOFF
-      updateTimeUsed()
-
-      ->show queued olm messages
-      processOlmMessageQueue(TRUE)
-
-      setEnvStat(ENV_IDLE)
-      displayMenuPrompt()
-      subState.subState:=SUBSTATE_READ_COMMAND
-      StrCopy(commandText,'',ALL)
-    ELSEIF subState.subState=SUBSTATE_READ_COMMAND
-      temp:=rawArrow
-      rawArrow:=FALSE
-      temp:=lineInput('','',255,INPUT_TIMEOUT,commandText)
-      IF temp<>RESULT_SUCCESS
-        IF timeoutLC THEN lostCarrier:=TRUE
-        aePuts('Input timeout\b\n')
-        aePuts('Goodbye\b\n\b\n')
-        aePuts('Disconnecting..\b\n')
-        saveFlagged()
-        IF StrLen(historyFolder)>0 THEN saveHistory()
-        quickFlag:=TRUE
-        IF reqState=REQ_STATE_NONE THEN reqState:=REQ_STATE_LOGOFF
-      ENDIF
-      rawArrow:=temp
-      IF state=STATE_SHUTDOWN THEN RETURN
-
-      subState.subState:=SUBSTATE_PROCESS_COMMAND
-    ELSEIF subState.subState=SUBSTATE_PROCESS_COMMAND
-      IF (debugLogLevel>LOG_NONE)
-        StringF(string,'\tMenu Command >: \s',commandText)
-        callersLog(string)
-      ENDIF
-
-      UpperStr(commandText)
-      processCommand(commandText)
-      subState.subState:=SUBSTATE_DISPLAY_MENU
+    timeLimit:=loggedOnUser.timeTotal-loggedOnUser.timeUsed
+    IF (loggedOnUser.dailyBytesLimit<>0)
+      bytesADL:=loggedOnUser.dailyBytesLimit
+    ELSE
+      bytesADL:=$7fffffff
     ENDIF
+    updateTimeUsed()
+
+    pagesAllowed:=readToolTypeInt(TOOLTYPE_ACCESS,acsLevel,'ACS.MAX_PAGES')
+    chatF:=0
+    currentConf:=0
+    lastOlmNode:=-1
+    subState:=NEW subState
+    IF reqState<>REQ_STATE_LOGOFF THEN subState.subState:=SUBSTATE_DISPLAY_BULL ELSE subState.subState:=-1
+    relogon:=FALSE
+    nonStopDisplayFlag:=FALSE
+    doorTimeout:=INPUT_TIMEOUT
+    
+    stateData:=subState
+  ELSE
+    subState:=stateData
+  ENDIF
+
+  IF subState.subState=SUBSTATE_DISPLAY_BULL
+    IF (displayScreen(SCREEN_BULL)) THEN doPause()
+    IF (displayScreen(SCREEN_NODE_BULL)) THEN doPause()
+    confScan()
+    captureRealAndInternetNames()
+    subState.subState:=SUBSTATE_DISPLAY_CONF_BULL
+  ELSEIF subState.subState=SUBSTATE_DISPLAY_CONF_BULL
+    joinConf(loggedOnUser.confRJoin,FALSE,FORCE_MAILSCAN_SKIP)
+    loadFlagged()
+    IF StrLen(historyFolder)>0 THEN loadHistory()
+    blockOLM:=FALSE
+
+    subState.subState:=SUBSTATE_DISPLAY_MENU
+  ELSEIF subState.subState=SUBSTATE_DISPLAY_MENU
+    IF (loggedOnUser.expert="N") AND (doorExpertMode=FALSE)
+      doPause()
+      checkScreenClear()
+      displayScreen(SCREEN_MENU)
+    ENDIF
+    doorExpertMode:=FALSE
+    aePuts('\b\n')
+    IF checkOnlineStatus()<>RESULT_SUCCESS THEN reqState:=REQ_STATE_LOGOFF
+    updateTimeUsed()
+
+    ->show queued olm messages
+    processOlmMessageQueue(TRUE)
+
+    setEnvStat(ENV_IDLE)
+    displayMenuPrompt()
+    subState.subState:=SUBSTATE_READ_COMMAND
+    StrCopy(commandText,'',ALL)
+  ELSEIF subState.subState=SUBSTATE_READ_COMMAND
+    temp:=rawArrow
+    rawArrow:=FALSE
+    temp:=lineInput('','',255,INPUT_TIMEOUT,commandText)
+    IF temp<>RESULT_SUCCESS
+      IF timeoutLC THEN lostCarrier:=TRUE
+      aePuts('Input timeout\b\n')
+      aePuts('Goodbye\b\n\b\n')
+      aePuts('Disconnecting..\b\n')
+      saveFlagged()
+      IF StrLen(historyFolder)>0 THEN saveHistory()
+      quickFlag:=TRUE
+      IF reqState=REQ_STATE_NONE THEN reqState:=REQ_STATE_LOGOFF
+    ENDIF
+    rawArrow:=temp
+    IF state=STATE_SHUTDOWN THEN RETURN
+
+    subState.subState:=SUBSTATE_PROCESS_COMMAND
+  ELSEIF subState.subState=SUBSTATE_PROCESS_COMMAND
+    IF (debugLogLevel>LOG_NONE)
+      StringF(string,'\tMenu Command >: \s',commandText)
+      callersLog(string)
+    ENDIF
+
+    UpperStr(commandText)
+    processCommand(commandText)
+    subState.subState:=SUBSTATE_DISPLAY_MENU
+  ENDIF
   
   IF reqState<>REQ_STATE_NONE THEN END subState
 ENDPROC
 
 PROC processSysopLogon()
-    setEnvStat(ENV_CONNECT)
-    logonTime:=getSystemTime()
-    lastTimeUpdate:=logonTime
-    loggedOnUser:=NEW loggedOnUser
-    loggedOnUserKeys:=NEW loggedOnUserKeys
-    loggedOnUserMisc:=NEW loggedOnUserMisc
-    IF cacheResetOn=CACHE_RESET_LOGON THEN clearDiskObjectCache()
+  DEF tempstr[255]:STRING
+  
+  setEnvStat(ENV_CONNECT)
+  logonTime:=getSystemTime()
+  lastTimeUpdate:=logonTime
+  loggedOnUser:=NEW loggedOnUser
+  loggedOnUserKeys:=NEW loggedOnUserKeys
+  loggedOnUserMisc:=NEW loggedOnUserMisc
+  IF cacheResetOn=CACHE_RESET_LOGON THEN clearDiskObjectCache()
 
-    sendCLS()
+  sendCLS()
 
-    -> load sysop user data
-    IF loadAccount(1,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)<>RESULT_SUCCESS
-      IF newUserAccount(cmds.sysopName)<>RESULT_SUCCESS
-        END loggedOnUser
-        END loggedOnUserKeys
-        END loggedOnUserMisc
-        reqState:=REQ_STATE_LOGOFF
-        RETURN
-      ENDIF
+  -> load sysop user data
+  IF loadAccount(1,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)<>RESULT_SUCCESS
+    IF newUserAccount(cmds.sysopName)<>RESULT_SUCCESS
+      END loggedOnUser
+      END loggedOnUserKeys
+      END loggedOnUserMisc
+      reqState:=REQ_STATE_LOGOFF
+      RETURN
     ENDIF
-    
-    masterLoadPointers(loggedOnUser)
-    convertAccess()
-    logonType:=LOGON_TYPE_SYSOP
-    confNameType:=NAME_TYPE_USERNAME
-    displayUserToCallersLog(0)
-    updateCallerNum()
-    checkUserOnLine(loggedOnUser,0)
-    validUser:=1
-    ximPort:=CONSOLE_PORT
-    state:=STATE_LOGGEDON
-    setEnvStat(ENV_LOGGINGON)
-    lostCarrier:=FALSE
-    ripMode:=FALSE
-    ansiColour:=TRUE
-    mcioff:=FALSE
-    mciViewSafe:=TRUE
+  ENDIF
+  
+  masterLoadPointers(loggedOnUser)
+  convertAccess()
+  logonType:=LOGON_TYPE_SYSOP
+  confNameType:=NAME_TYPE_USERNAME
+  displayUserToCallersLog(0)
+  updateCallerNum()
+  checkUserOnLine(loggedOnUser,0)
+  validUser:=1
+  ximPort:=CONSOLE_PORT
+  state:=STATE_LOGGEDON
+  setEnvStat(ENV_LOGGINGON)
+  lostCarrier:=FALSE
+  ripMode:=FALSE
+  ansiColour:=TRUE
+  mcioff:=FALSE
+  mciViewSafe:=TRUE
+  
+  IF readToolType(TOOLTYPE_NODE,node,'FORCE_ANSI',tempstr)
+    UpperStr(tempstr)
 
+    IF (InStr(tempstr,'N',0)>=0)
+      ansiColour:=FALSE
+    ENDIF
+
+    IF (InStr(tempstr,'Q',0)>=0) AND (sopt.qLogon<>0) THEN quickFlag:=TRUE
+    IF (InStr(tempstr,'R',0)>=0) THEN ripMode:=TRUE
+  ELSE
     runSysCommand('ANSI','')
-    stateData:=0
+  ENDIF
+  
+  stateData:=0
 ENDPROC
 
 PROC processOlmMessageQueue(showMessages)
   DEF temp
   
-  IF ListLen(olmQueue)>0
-    IF showMessages THEN aePuts('\b\nDisplaying Message Queue\b\n')
-    FOR temp:=0 TO ListLen(olmQueue)-1
-      IF showMessages THEN aePuts(olmQueue[temp])
-      DisposeLink(olmQueue[temp])
-    ENDFOR
-    SetList(olmQueue,0)
+  IF olmQueue.count()>0
+    IF showMessages
+      aePuts('\b\nDisplaying Message Queue\b\n')
+      FOR temp:=0 TO olmQueue.count()-1
+        aePuts(olmQueue.item(temp))
+      ENDFOR
+    ENDIF
+    olmQueue.clear()
   ENDIF
 ENDPROC
 
@@ -24996,12 +25707,12 @@ PROC displayReserveNotice()
 
 PROC doReserve(username:PTR TO CHAR)
   IF(StrLen(reservedName)>0) 
-      IF(strCmpi(username,reservedName,ALL))=FALSE
-          displayReserveNotice()
-          Delay(60)
-          RETURN 1
-        ENDIF
+    IF(strCmpi(username,reservedName,ALL))=FALSE
+      displayReserveNotice()
+      Delay(60)
+      RETURN 1
     ENDIF
+  ENDIF
 ENDPROC 0
 
 
@@ -25010,71 +25721,71 @@ PROC checkPassword()
   DEF tempStr[255]:STRING
   DEF tempStr2[255]:STRING
   WHILE TRUE
-         
-        displayUserToCallersLog(0)
-         
-        REPEAT
-            IF(tries>2)
-                aePuts('\b\nExcessive Password Failure\b\n')
-          runSysCommand('PWFAIL','')
-                JUMP logoffErr
-              ENDIF
-            stat:=getPass2('PassWord: ',0,loggedOnUser.pwdHash,50,tempStr)
-            IF(stat<0) THEN RETURN RESULT_SLEEP_LOGOFF
-        IF(stat<>RESULT_SUCCESS)
-                StringF(tempStr2,'\tPassword Failure (\s)',tempStr)
-                callersLog(tempStr2)
-                aePuts('Invalid PassWord\b\n')
-                tries++
-              ENDIF
-      UNTIL stat=RESULT_SUCCESS
+       
+    displayUserToCallersLog(0)
+       
+    REPEAT
+      IF(tries>2)
+        aePuts('\b\nExcessive Password Failure\b\n')
+        runSysCommand('PWFAIL','')
+        JUMP logoffErr
+      ENDIF
+      stat:=getPass2(passwordPrompt,0,loggedOnUser.pwdHash,50,tempStr)
+      IF(stat<0) THEN RETURN RESULT_SLEEP_LOGOFF
+      IF(stat<>RESULT_SUCCESS)
+        StringF(tempStr2,'\tPassword Failure (\s)',tempStr)
+        callersLog(tempStr2)
+        aePuts('Invalid PassWord\b\n')
+        tries++
+      ENDIF
+    UNTIL stat=RESULT_SUCCESS
     
-        IF(checkToolTypeExists(TOOLTYPE_NODE,node,'PHONECHECK'))
-            tries:=0
-            REPEAT
-                IF(tries>2) 
-                    aePuts('\b\nExcessive PhoneNumber Failure\b\n')
-                    JUMP logoffErr
-                  ENDIF
-                StrCopy(tempStr,loggedOnUser.phoneNumber)
-                RightStr(tempStr2,tempStr,4)
-
-                aePuts('Last 4 digits of your PhoneNumber: ')
-                stat:=lineInput('','',4,INPUT_TIMEOUT,tempStr)
-                IF(stat<0) THEN RETURN RESULT_SLEEP_LOGOFF
-                IF(logonType>=LOGON_TYPE_REMOTE) 
-                    stat:=checkCarrier()
-                    IF(stat=FALSE) THEN RETURN RESULT_SLEEP_LOGOFF
-                  ENDIF
-            
-                stat:=stringCompare(tempStr,tempStr2)
-                IF(stat<>RESULT_SUCCESS)
-                    StringF(tempStr2,'\tPhoneNumber Failure (\s)',tempStr)
-                    callersLog(tempStr2)
-                    aePuts('Invalid PhoneNumber\b\n')
-                    tries++
-          ENDIF
-             UNTIL stat=RESULT_SUCCESS
-         ENDIF
-       statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
-
-       IF(uucp)
-          IF(loggedOnUser.uucpa)
-              validUser:=3
-              conPuts('\b\nSystem dropping to UUCP...')
-              callersLog('\tReceiving UUCP feed')
-              purgeLineEnd()
-              IF(lfh:=Open('NIL:',MODE_OLDFILE))>0
-                  StringF(tempStr,'\sUtils/uucico -D \s -U \d -Getty -xx',cmds.bbsLoc,cmds.serDev,cmds.serDevUnit)
-                  Execute(tempStr,IF debug THEN 0 ELSE lfh,IF debug THEN 0 ELSE lfh)
-                  Close(lfh)
-              ENDIF
-              purgeLineStart()
-              dropDTR()
-              RETURN RESULT_FAILURE
-            ENDIF
-          aePuts('UUCP access has been denied!\b\n\b\n')
+    IF(checkToolTypeExists(TOOLTYPE_NODE,node,'PHONECHECK'))
+      tries:=0
+      REPEAT
+        IF(tries>2) 
+          aePuts('\b\nExcessive PhoneNumber Failure\b\n')
+          JUMP logoffErr
         ENDIF
+        StrCopy(tempStr,loggedOnUser.phoneNumber)
+        RightStr(tempStr2,tempStr,4)
+
+        aePuts('Last 4 digits of your PhoneNumber: ')
+        stat:=lineInput('','',4,INPUT_TIMEOUT,tempStr)
+        IF(stat<0) THEN RETURN RESULT_SLEEP_LOGOFF
+        IF(logonType>=LOGON_TYPE_REMOTE) 
+          stat:=checkCarrier()
+          IF(stat=FALSE) THEN RETURN RESULT_SLEEP_LOGOFF
+        ENDIF
+      
+        stat:=stringCompare(tempStr,tempStr2)
+        IF(stat<>RESULT_SUCCESS)
+          StringF(tempStr2,'\tPhoneNumber Failure (\s)',tempStr)
+          callersLog(tempStr2)
+          aePuts('Invalid PhoneNumber\b\n')
+          tries++
+        ENDIF
+      UNTIL stat=RESULT_SUCCESS
+    ENDIF
+    statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
+
+    IF(uucp)
+      IF(loggedOnUser.uucpa)
+        validUser:=3
+        conPuts('\b\nSystem dropping to UUCP...')
+        callersLog('\tReceiving UUCP feed')
+        purgeLineEnd()
+        IF(lfh:=Open('NIL:',MODE_OLDFILE))>0
+          StringF(tempStr,'\sUtils/uucico -D \s -U \d -Getty -xx',cmds.bbsLoc,cmds.serDev,cmds.serDevUnit)
+          Execute(tempStr,IF debug THEN 0 ELSE lfh,IF debug THEN 0 ELSE lfh)
+          Close(lfh)
+        ENDIF
+        purgeLineStart()
+        dropDTR()
+        RETURN RESULT_FAILURE
+      ENDIF
+      aePuts('UUCP access has been denied!\b\n\b\n')
+    ENDIF
     RETURN RESULT_SUCCESS
   ENDWHILE
 logoffErr:
@@ -25115,13 +25826,13 @@ PROC baudTime()
 
   stat:=checkBaudCallingTime()
   IF(stat=FALSE)
-      IF(stat:=displayScreen(SCREEN_NOT_TIME)=FALSE)
-        StringF(tempstr,'\b\n\d baud is not allowed at this time.\b\n\b\n',onlineBaud)
-        aePuts(tempstr)
-        ENDIF
+    IF(stat:=displayScreen(SCREEN_NOT_TIME)=FALSE)
+      StringF(tempstr,'\b\n\d baud is not allowed at this time.\b\n\b\n',onlineBaud)
+      aePuts(tempstr)
+    ENDIF
     stat:=FALSE
     Delay(120)
-    ENDIF
+  ENDIF
 ENDPROC stat
 
 PROC doSystemPassword()
@@ -25133,11 +25844,11 @@ PROC doSystemPassword()
   runSysCommand('SYSTEMPW','')
   IF(logonType>=LOGON_TYPE_REMOTE)
     stat:=checkCarrier()
-      IF(stat=FALSE)
+    IF(stat=FALSE)
       state:=STATE_LOGGING_OFF
       RETURN RESULT_FAILURE
     ENDIF
-    ENDIF
+  ENDIF
   IF reqState=REQ_STATE_LOGOFF
     state:=STATE_LOGGING_OFF
     RETURN RESULT_FAILURE
@@ -25146,30 +25857,30 @@ PROC doSystemPassword()
   IF (StrLen(cmds.sysPass)=0) THEN RETURN RESULT_SUCCESS
 
   aePuts('\b\n')
-    IF readToolType(TOOLTYPE_NODE,node,'SYS_PWRD_PROMPT',sysprompt)=FALSE THEN StrCopy(sysprompt,'>: ')
+  IF readToolType(TOOLTYPE_NODE,node,'SYS_PWRD_PROMPT',sysprompt)=FALSE THEN StrCopy(sysprompt,'>: ')
 
-    tries:=1
-    WHILE tries<4
-      displayScreen(SCREEN_PRIVATE)
-      stat:=getPass2(sysprompt,cmds.sysPass,0,30,tempStr)
-          IF(stat<0)
-        state:=STATE_LOGGING_OFF
-      RETURN RESULT_FAILURE
-      ENDIF
-        EXIT stat=RESULT_SUCCESS
-    aePuts('Invalid PassWord\b\n')
-      StringF(tempStr2,'\t**System Password Failure \s **',tempStr)
-          callersLog(tempStr2)
-      tries++
-        ENDWHILE
-
-      IF(tries=4)
-          callersLog('System Password Failure')
-    runSysCommand('SYSPWDFAIL','')
+  tries:=1
+  WHILE tries<4
+    displayScreen(SCREEN_PRIVATE)
+    stat:=getPass2(sysprompt,cmds.sysPass,0,30,tempStr)
+    IF(stat<0)
       state:=STATE_LOGGING_OFF
-    RETURN RESULT_FAILURE
+      RETURN RESULT_FAILURE
     ENDIF
-    aePuts('\b\n')
+    EXIT stat=RESULT_SUCCESS
+    aePuts('Invalid PassWord\b\n')
+    StringF(tempStr2,'\t**System Password Failure \s **',tempStr)
+    callersLog(tempStr2)
+    tries++
+  ENDWHILE
+
+  IF(tries=4)
+    callersLog('System Password Failure')
+    runSysCommand('SYSPWDFAIL','')
+    state:=STATE_LOGGING_OFF
+    RETURN RESULT_FAILURE
+  ENDIF
+  aePuts('\b\n')
 ENDPROC RESULT_SUCCESS
 
 PROC processLogon()
@@ -25197,7 +25908,7 @@ PROC processLogon()
 
   IF (checkToolTypeExists(TOOLTYPE_NODE,node,'STEALTH_MODE'))
     IF doSystemPassword()<>RESULT_SUCCESS THEN RETURN
-    ENDIF
+  ENDIF
 
   conPuts('[ p',-1)
   
@@ -25218,150 +25929,152 @@ PROC processLogon()
   ENDIF
   aePuts(tempStr)
 
- StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018 Darren Coles\b\n',expressVer)
- aePuts(tempStr)
- aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
- StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
- aePuts(tempStr)
- ->strcpy(GSTR2,GetTheTime(Time_system))
- ->strcpy(GSTR3,GetTheDate(Time_system))
- formatLongDateTime(getSystemTime(),dateStr)
- StringF(tempStr,'\b\nConnection occured at \s.\b\n',dateStr)
+  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018 Darren Coles\b\n',expressVer)
+  aePuts(tempStr)
+  aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
+  StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
+  aePuts(tempStr)
+  ->strcpy(GSTR2,GetTheTime(Time_system))
+  ->strcpy(GSTR3,GetTheDate(Time_system))
+  formatLongDateTime(getSystemTime(),dateStr)
+  StringF(tempStr,'\b\nConnection occured at \s.\b\n',dateStr)
 
-   aePuts(tempStr)
-   aePuts('\b\n')
+  aePuts(tempStr)
+  aePuts('\b\n')
 
+  runSysCommand('FRONTEND','')
 
-   runSysCommand('FRONTEND','')
-
-   IF (runSysCommand('ANSI','')=FALSE)
-
-     aePuts('ANSI, RIP or No graphics (A/r/n)? ')
-    
-     stat:=lineInput('','',10,INPUT_TIMEOUT/2,tempStr,FALSE)
-     IF stat<>RESULT_SUCCESS
-       state:=STATE_LOGGING_OFF
-       RETURN
-     ENDIF
-
-     UpperStr(tempStr)
-
-     IF (InStr(tempStr,'N',0)>=0)
-       ansiColour:=FALSE
-     ENDIF
-
-     IF (InStr(tempStr,'Q',0)>=0) AND (sopt.qLogon<>0) THEN quickFlag:=TRUE
-     IF (InStr(tempStr,'R',0)>=0) THEN ripMode:=TRUE
+  IF readToolType(TOOLTYPE_NODE,node,'FORCE_ANSI',tempStr)=FALSE
+    IF (runSysCommand('ANSI','')=FALSE)
+      IF readToolType(TOOLTYPE_NODE,node,'FORCE_ANSI',tempStr)=FALSE
+        aePuts('ANSI, RIP or No graphics (A/r/n)? ')
+       
+        stat:=lineInput('','',10,INPUT_TIMEOUT/2,tempStr,FALSE)
+        IF stat<>RESULT_SUCCESS
+          state:=STATE_LOGGING_OFF
+          RETURN
+        ENDIF
+      ENDIF
+    ELSE
+     StrCopy(tempStr,'')
+    ENDIF
   ENDIF
+  UpperStr(tempStr)
+
+  IF (InStr(tempStr,'N',0)>=0)
+    ansiColour:=FALSE
+  ENDIF
+
+  IF (InStr(tempStr,'Q',0)>=0) AND (sopt.qLogon<>0) THEN quickFlag:=TRUE
+  IF (InStr(tempStr,'R',0)>=0) THEN ripMode:=TRUE
  
   IF (Not(checkToolTypeExists(TOOLTYPE_NODE,node,'STEALTH_MODE')))
     IF doSystemPassword()<>RESULT_SUCCESS THEN RETURN
-    ENDIF
+  ENDIF
 
   displayScreen(SCREEN_BBSTITLE)
 
   IF(StrLen(reservedName)>0)
-      StringF(tempStr,'\b\n*** Node \d is reserved right now, for \s ***\b\n',node,reservedName)
-      aePuts(tempStr)
-    ENDIF
+    StringF(tempStr,'\b\n*** Node \d is reserved right now, for \s ***\b\n',node,reservedName)
+    aePuts(tempStr)
+  ENDIF
 
- IF logonType=LOGON_TYPE_REMOTE THEN ximPort:=SERIAL_PORT ELSE ximPort:=CONSOLE_PORT
- retryCount:=0
- userFound:=FALSE
- newUser:=FALSE
+  IF logonType=LOGON_TYPE_REMOTE THEN ximPort:=SERIAL_PORT ELSE ximPort:=CONSOLE_PORT
+  retryCount:=0
+  userFound:=FALSE
+  newUser:=FALSE
  
- updateCallerNum()
+  updateCallerNum()
 
- validUser:=2
+  validUser:=2
 
 logonLoop:
- REPEAT
+  REPEAT
 
-  StringF(tempStr,'\b\nEnter your \s: ',sopt.namePrompt)
+  StringF(tempStr,'\b\n\s ',namePrompt)
+  stat:=lineInput(tempStr,'',28,INPUT_TIMEOUT/2,userName)
+  IF stat<>RESULT_SUCCESS
+    state:=STATE_LOGGING_OFF
+    RETURN
+  ENDIF
+
+  IF (StrLen(userName)>0)
+
+    uucp:=0
+    StrCopy(tempStr,userName)
+    IF StrCmp(tempStr,'UUCP.',5)
+      uucp:=1
+      StrCopy(userName,tempStr+5)
+    ENDIF
  
- stat:=lineInput(tempStr,'',28,INPUT_TIMEOUT/2,userName)
- IF stat<>RESULT_SUCCESS
-   state:=STATE_LOGGING_OFF
-   RETURN
- ENDIF
-
- IF (StrLen(userName)>0)
-
-   uucp:=0
-   StrCopy(tempStr,userName)
-   IF StrCmp(tempStr,'UUCP.',5)
-     uucp:=1
-     StrCopy(userName,tempStr+5)
-   ENDIF
- 
-   userNum:=Val(userName)
-   IF (checkToolTypeExists(TOOLTYPE_NODE,node,'USERNUMBER_LOGIN')) AND (userNum>0)
-     IF loadAccount(userNum,tempUser,tempUserKeys,tempUserMisc)=RESULT_SUCCESS THEN stat:=userNum ELSE stat:=0
-   ELSE
-     stat:=chooseAName(userName,tempUser,tempUserKeys,tempUserMisc,0) 
-   ENDIF
-
-   setEnvStat(ENV_ACCOUNTSEQ)
-
-   IF (stat=RESULT_FAILURE)
-    StringF(tempStr,'\b\nThe name \s is not used on this BBS.\b\n',userName)
-    aePuts(tempStr)
-    stat:=lineInput('[R]etry your name or [C]ontinue as a new user? ','',28,INPUT_TIMEOUT/2,tempStr)
-    IF stat<>RESULT_SUCCESS 
-      state:=STATE_LOGGING_OFF
-      RETURN
+    userNum:=Val(userName)
+    IF (checkToolTypeExists(TOOLTYPE_NODE,node,'USERNUMBER_LOGIN')) AND (userNum>0)
+      IF loadAccount(userNum,tempUser,tempUserKeys,tempUserMisc)=RESULT_SUCCESS THEN stat:=userNum ELSE stat:=0
+    ELSE
+      stat:=chooseAName(userName,tempUser,tempUserKeys,tempUserMisc,0) 
     ENDIF
 
-    UpperStr(tempStr)
-    IF StrCmp(tempStr,'C') THEN newUser:=TRUE ELSE retryCount++
-   ELSE
-     userNum:=tempUser.slotNumber
-     userFound:=TRUE
-   ENDIF
- ELSE
-   retryCount++
- ENDIF
+    setEnvStat(ENV_ACCOUNTSEQ)
 
- UNTIL (userFound) OR (newUser) OR (retryCount=5)
+    IF (stat=RESULT_FAILURE)
+      StringF(tempStr,'\b\nThe name \s is not used on this BBS.\b\n',userName)
+      aePuts(tempStr)
+      stat:=lineInput('[R]etry your name or [C]ontinue as a new user? ','',28,INPUT_TIMEOUT/2,tempStr)
+      IF stat<>RESULT_SUCCESS 
+        state:=STATE_LOGGING_OFF
+        RETURN
+      ENDIF
 
- IF retryCount=5
+      UpperStr(tempStr)
+      IF StrCmp(tempStr,'C') THEN newUser:=TRUE ELSE retryCount++
+    ELSE
+      userNum:=tempUser.slotNumber
+      userFound:=TRUE
+    ENDIF
+  ELSE
+    retryCount++
+  ENDIF
+
+  UNTIL (userFound) OR (newUser) OR (retryCount=5)
+
+  IF retryCount=5
     aePuts('\b\nToo Many Errors, Goodbye!\b\n')
     Delay(50)
     state:=STATE_LOGGING_OFF
     RETURN
- ENDIF
+  ENDIF
 
- stat:=doReserve(userName)
- IF(stat)
-  state:=STATE_LOGGING_OFF
-  RETURN
- ENDIF
+  stat:=doReserve(userName)
+  IF(stat)
+    state:=STATE_LOGGING_OFF
+    RETURN
+  ENDIF
 
- IF newUser
-   IF newUserAccount(userName)<>RESULT_SUCCESS
-     state:=STATE_LOGGING_OFF
-     RETURN
-   ENDIF
- ELSE
-   logonTime:=getSystemTime()
-   lastTimeUpdate:=logonTime
-   loggedOnUser:=NEW loggedOnUser
-   loggedOnUserKeys:=NEW loggedOnUserKeys
-   loggedOnUserMisc:=NEW loggedOnUserMisc
+  IF newUser
+    IF newUserAccount(userName)<>RESULT_SUCCESS
+      state:=STATE_LOGGING_OFF
+      RETURN
+    ENDIF
+  ELSE
+    logonTime:=getSystemTime()
+    lastTimeUpdate:=logonTime
+    loggedOnUser:=NEW loggedOnUser
+    loggedOnUserKeys:=NEW loggedOnUserKeys
+    loggedOnUserMisc:=NEW loggedOnUserMisc
    
-   stat:=loadAccount(userNum,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
-   IF(stat=RESULT_FAILURE) 
-       aePuts('That account has problems\b\n')
-       retryCount++
-       JUMP logonLoop
-     ENDIF
- ENDIF
+    stat:=loadAccount(userNum,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
+    IF(stat=RESULT_FAILURE) 
+      aePuts('That account has problems\b\n')
+      retryCount++
+      JUMP logonLoop
+    ENDIF
+  ENDIF
 
- setEnvStat(ENV_LOGGINGON)
- sendQuietFlag(quietFlag)
+  setEnvStat(ENV_LOGGINGON)
+  sendQuietFlag(quietFlag)
  
- IF(loggedOnUser.slotNumber=0)
-      aePuts('That account has been deleted.\b\n')
+  IF(loggedOnUser.slotNumber=0)
+    aePuts('That account has been deleted.\b\n')
     END loggedOnUser
     loggedOnUser:=NIL
     END loggedOnUserKeys
@@ -25376,7 +26089,7 @@ logonLoop:
   stat:=checkUserOnLine(loggedOnUser,1)
   IF(stat=FALSE)
     StringF(tempStr,'User \s already on another node!',loggedOnUser.name)
-      callersLog(tempStr)
+    callersLog(tempStr)
     IF displayScreen(SCREEN_ONENODE)=FALSE THEN aePuts('\b\nYou are already logged into another node!\b\n')
     state:=STATE_LOGGING_OFF
     Delay(50)
@@ -25386,35 +26099,35 @@ logonLoop:
     loggedOnUserKeys:=NIL
     END loggedOnUserMisc
     loggedOnUserMisc:=NIL
-      RETURN
+    RETURN
   ENDIF
 
- IF newUser=FALSE
-   IF logonType>=LOGON_TYPE_REMOTE
-     stat:=checkPassword()
-     IF stat<>RESULT_SUCCESS
-       END loggedOnUser
-       loggedOnUser:=NIL
-       END loggedOnUserKeys
-       loggedOnUserKeys:=NIL
-       END loggedOnUserMisc
-       loggedOnUserMisc:=NIL
-       state:=STATE_LOGGING_OFF
-       RETURN
-     ENDIF
-   ELSE
-     displayUserToCallersLog(0)
-   ENDIF
- ENDIF
+  IF newUser=FALSE
+    IF logonType>=LOGON_TYPE_REMOTE
+      stat:=checkPassword()
+      IF stat<>RESULT_SUCCESS
+        END loggedOnUser
+        loggedOnUser:=NIL
+        END loggedOnUserKeys
+        loggedOnUserKeys:=NIL
+        END loggedOnUserMisc
+        loggedOnUserMisc:=NIL
+        state:=STATE_LOGGING_OFF
+        RETURN
+      ENDIF
+    ELSE
+      displayUserToCallersLog(0)
+    ENDIF
+  ENDIF
 
- validUser:=1
- convertAccess()
+  validUser:=1
+  convertAccess()
 
- loggedOnUserKeys.baud:=onlineBaud
- masterLoadPointers(loggedOnUser) 
+  loggedOnUserKeys.baud:=onlineBaud
+  masterLoadPointers(loggedOnUser) 
 
- stat:=baudTime()
- IF(stat=FALSE)
+  stat:=baudTime()
+  IF(stat=FALSE)
     state:=STATE_LOGGING_OFF
     RETURN
   ENDIF
@@ -25471,101 +26184,101 @@ PROC displayKeys()
 ENDPROC
 
 PROC processAwait()
-    DEF tempstr[255]:STRING
-    DEF wasControl,ch
-    DEF subState: PTR TO awaitState
+  DEF tempstr[255]:STRING
+  DEF wasControl,ch
+  DEF subState: PTR TO awaitState
 
-    IF (stateData=0)
-        ansiColour:=TRUE
-        quickFlag:=FALSE
-        lostCarrier:=FALSE
-        subState:=NEW subState
-        serShared:=FALSE
-        subState.subState:=SUBSTATE_DISPLAY_AWAIT
-        subState.redrawScreen:=FALSE
-        IF(sopt.trapDoor=FALSE) THEN resetSystem(1)
+  IF (stateData=0)
+    ansiColour:=TRUE
+    quickFlag:=FALSE
+    lostCarrier:=FALSE
+    subState:=NEW subState
+    serShared:=FALSE
+    subState.subState:=SUBSTATE_DISPLAY_AWAIT
+    subState.redrawScreen:=FALSE
+    IF(sopt.trapDoor=FALSE) THEN resetSystem(1)
 
-        stateData:=subState
-        logonType:=LOGON_TYPE_LOGGED_OFF
-        servercmd:=-1
-    ELSE
-        subState:=stateData
-    ENDIF
-    
-    IF (subState.subState=SUBSTATE_DISPLAY_AWAIT) OR subState.redrawScreen
-        subState.redrawScreen:=FALSE
-        ioFlags[IOFLAG_SCR_OUT]:=-1
-        ioFlags[IOFLAG_SER_OUT]:=0
-        setEnvStat(ENV_AWAITCONNECT)
-        statPrintUser(NIL,NIL,NIL)
-        IF dStatBar THEN clearStatusPane()
-
-        IF (sopt.trapDoor=FALSE)
-          IF (KickVersion(40)) AND (bitPlanes>2)
-            aePuts('[37m[ s')
-          ENDIF
-          aePuts('[0 p')
-
-          send017()
-          sendCLS()     
-
-          StringF(tempstr,'\b\n           [33m© 1992-1995 AmiExpress [37mby[35m Light Speed Technologies Inc.[0m\b\n')
-          aePuts(tempstr)
-          StringF(tempstr,'\b\n                              [33m Version 5 ©2018[0m\b\n')
-          aePuts(tempstr)
-
-          StringF(tempstr,'\b\n                       [37m Programming by: [33m Darren Coles')
-          aePuts(tempstr)
-          aePuts('\b\n  [33m\b\n')
-
-          IF displayScreen(SCREEN_AWAIT)=FALSE        
-            displayKeys()
-            IF(StrLen(reservedName)>0)
-              StringF(tempstr,'         [44;33m     The BBS is reserved for [31m\s[30]  [0m\b\n',reservedName)
-              aePuts(tempstr)
-            ENDIF
-          ENDIF
-        ENDIF
-      
-        IF subState.subState=SUBSTATE_DISPLAY_AWAIT THEN subState.subState:=SUBSTATE_INPUT
-        ioFlags[IOFLAG_SCR_OUT]:=0
-        ioFlags[IOFLAG_SER_IN]:=0
-    ENDIF
+    stateData:=subState
+    logonType:=LOGON_TYPE_LOGGED_OFF
+    servercmd:=-1
+  ELSE
+    subState:=stateData
+  ENDIF
+  
+  IF (subState.subState=SUBSTATE_DISPLAY_AWAIT) OR subState.redrawScreen
+    subState.redrawScreen:=FALSE
+    ioFlags[IOFLAG_SCR_OUT]:=-1
+    ioFlags[IOFLAG_SER_OUT]:=0
+    setEnvStat(ENV_AWAITCONNECT)
+    statPrintUser(NIL,NIL,NIL)
+    IF dStatBar THEN clearStatusPane()
 
     IF (sopt.trapDoor=FALSE)
-      wasControl,ch:=processInputMessage(1,Shl(1,ownDevSignal))
-      IF (ch=RESULT_SIGNALLED)
-        suspendBBS(TRUE)
-        displayInitialisingLogo()
-        reInitModem()
+      IF (KickVersion(40)) AND (bitPlanes>2)
+        aePuts('[37m[ s')
       ENDIF
-      IF dStatBar THEN clearStatusPane()
+      aePuts('[0 p')
+
+      send017()
+      sendCLS()     
+
+      StringF(tempstr,'\b\n           [33m© 1992-1995 AmiExpress [37mby[35m Light Speed Technologies Inc.[0m\b\n')
+      aePuts(tempstr)
+      StringF(tempstr,'\b\n                              [33m Version 5 ©2018[0m\b\n')
+      aePuts(tempstr)
+
+      StringF(tempstr,'\b\n                       [37m Programming by: [33m Darren Coles')
+      aePuts(tempstr)
+      aePuts('\b\n  [33m\b\n')
+
+      IF displayScreen(SCREEN_AWAIT)=FALSE        
+        displayKeys()
+        IF(StrLen(reservedName)>0)
+          StringF(tempstr,'         [44;33m     The BBS is reserved for [31m\s[30]  [0m\b\n',reservedName)
+          aePuts(tempstr)
+        ENDIF
+      ENDIF
     ENDIF
     
-    IF (checkSer()) OR (sopt.trapDoor) OR (instantLogon)
-      IF checkIncomingCall()=RESULT_CONNECT
-        debugLog(LOG_DEBUG,'REMOTE LOGON')
-        ioFlags[IOFLAG_SCR_OUT]:=-1
+    IF subState.subState=SUBSTATE_DISPLAY_AWAIT THEN subState.subState:=SUBSTATE_INPUT
+    ioFlags[IOFLAG_SCR_OUT]:=0
+    ioFlags[IOFLAG_SER_IN]:=0
+  ENDIF
 
-        logonType:=LOGON_TYPE_REMOTE
-        reqState:=REQ_STATE_LOGON
-      ENDIF
+  IF (sopt.trapDoor=FALSE)
+    wasControl,ch:=processInputMessage(1,Shl(1,ownDevSignal))
+    IF (ch=RESULT_SIGNALLED)
+      suspendBBS(TRUE)
+      displayInitialisingLogo()
+      reInitModem()
     ENDIF
+    IF dStatBar THEN clearStatusPane()
+  ENDIF
+  
+  IF (checkSer()) OR (sopt.trapDoor) OR (instantLogon)
+    IF checkIncomingCall()=RESULT_CONNECT
+      debugLog(LOG_DEBUG,'REMOTE LOGON')
+      ioFlags[IOFLAG_SCR_OUT]:=-1
 
-    IF reqState<>REQ_STATE_NONE
-      END subState
-      IF loggedOnUser<>NIL THEN state:=STATE_LOGGING_OFF
-      stateData:=0
-      IF reqState=REQ_STATE_SYSOPLOGON 
-        state:=STATE_SYSOPLOGON
-        reqState:=REQ_STATE_NONE
-      ENDIF
-      IF reqState=REQ_STATE_LOGON 
-        state:=STATE_LOGON
-        reqState:=REQ_STATE_NONE
-      ENDIF
-      RETURN
+      logonType:=LOGON_TYPE_REMOTE
+      reqState:=REQ_STATE_LOGON
     ENDIF
+  ENDIF
+
+  IF reqState<>REQ_STATE_NONE
+    END subState
+    IF loggedOnUser<>NIL THEN state:=STATE_LOGGING_OFF
+    stateData:=0
+    IF reqState=REQ_STATE_SYSOPLOGON 
+      state:=STATE_SYSOPLOGON
+      reqState:=REQ_STATE_NONE
+    ENDIF
+    IF reqState=REQ_STATE_LOGON 
+      state:=STATE_LOGON
+      reqState:=REQ_STATE_NONE
+    ENDIF
+    RETURN
+  ENDIF
 ENDPROC
 
 PROC newUserAccount(userName: PTR TO CHAR)
@@ -25603,11 +26316,11 @@ PROC newUserAccount(userName: PTR TO CHAR)
         callersLog(tempStr2)
         aePuts('Invalid PassWord\b\n')
         tries++   
-            IF(tries>2)
-                aePuts('\b\nExcessive Password Failure\b\n')
+        IF(tries>2)
+          aePuts('\b\nExcessive Password Failure\b\n')
           runSysCommand('NUPFAIL','')
-                RETURN RESULT_SLEEP_LOGOFF
-              ENDIF
+          RETURN RESULT_SLEEP_LOGOFF
+        ENDIF
       ENDIF
     UNTIL (stat=RESULT_SUCCESS)
 
@@ -25624,7 +26337,7 @@ PROC newUserAccount(userName: PTR TO CHAR)
   IF displayScreen(SCREEN_JOIN) THEN doPause()
 
   stat:=doNewUser()
-  IF stat<>RESULT_SUCCESS THEN RETURN stat
+  IF stat<>RESULT_SUCCESS THEN RETURN   
 
   ->InitUser(&User,&User_keys);
   IF (loggedOnUser.dailyBytesLimit<>0)
@@ -25684,10 +26397,6 @@ ENDPROC stat
 PROC doNewUser()
   DEF ch,i,stat
   DEF string[255]:STRING
-  ->DEF namePrompt[255]:STRING
-
-  ->StrCopy(namePrompt,'Name')
-  ->readToolType(TOOLTYPE_NODE,node,'NAME_PROMPT',namePrompt)
   
 jLoop1:
   aePuts('\b\n')
@@ -25697,7 +26406,7 @@ jLoop1:
 iJLoop:
 
   FOR i:=0  TO 4
-    StringF(string,'\b\nenter your \s: ',sopt.namePrompt)
+    StringF(string,'\b\n\s ',namePrompt)
     aePuts(string)
                                          /*** MAKE KEYBOARD_TIMEOUT A VARIABLE */
     stat:=lineInput('',loggedOnUser.name,30,INPUT_TIMEOUT,string)
@@ -25705,18 +26414,18 @@ iJLoop:
     strCpy(loggedOnUser.name,string,31)
 
     IF(StrLen(loggedOnUser.name)=0)
-        ch++
-        IF(ch>5)
-            aePuts('\b\nToo Many Errors, Goodbye!\b\n')
-            RETURN RESULT_FAILURE
-          ENDIF
-      JUMP floopc
+      ch++
+      IF(ch>5)
+        aePuts('\b\nToo Many Errors, Goodbye!\b\n')
+        RETURN RESULT_FAILURE
       ENDIF
+      JUMP floopc
+    ENDIF
 
     IF(StrLen(loggedOnUser.name)=1)
-        aePuts('Get REAL!!  One Character???\b\n')
+      aePuts('Get REAL!!  One Character???\b\n')
       JUMP floopc
-      ENDIF
+    ENDIF
     strCpy(string,loggedOnUser.name,31)
 
     IF(stat:=checkIfNameAllowed(string))
@@ -25729,15 +26438,15 @@ iJLoop:
     stat:=checkForAst(string)
 
     IF(stat) 
-        aePuts('No wildcards allowed in a name.\b\n')
+      aePuts('No wildcards allowed in a name.\b\n')
       JUMP floopc
-      ENDIF
+    ENDIF
 
     stat:=findUserFromName(1,NAME_TYPE_USERNAME,string,tempUser,tempUserKeys,tempUserMisc)
     IF(stat<>0)
-        aePuts('Already in use!, try another.\b\n')
+      aePuts('Already in use!, try another.\b\n')
       JUMP floopc
-      ENDIF
+    ENDIF
     aePuts('Ok!\b\n\b\n')
     JUMP jLoop2
 
@@ -25794,12 +26503,12 @@ jLoop3:
   aePuts('You want Screen Clears after Messages ? ')
   ch:=checkOnlineStatus()
   IF(ch<0) THEN RETURN ch
-    ch:=readChar(INPUT_TIMEOUT)
+  ch:=readChar(INPUT_TIMEOUT)
   IF(ch<0) THEN RETURN ch
-    IF((ch="Y") OR (ch="y"))
+  IF((ch="Y") OR (ch="y"))
     loggedOnUserKeys.userFlags:=loggedOnUserKeys.userFlags OR USER_SCRNCLR         /* screen clear code sent */
     aePuts('Yes..\b\n\b\n')
-    ELSE
+  ELSE
     aePuts('No!\b\n\b\n')
   ENDIF
 
@@ -25813,7 +26522,7 @@ jLoop3:
   aePuts(string)
   StringF(string,'PassWord : \s\b\n','ENCRYPTED')
   aePuts(string)
-  StringF(string,'Computer : \s\b\n',computerTypes[loggedOnUser.secBulletin])
+  StringF(string,'Computer : \s\b\n',computerTypes.item(loggedOnUser.secBulletin))
   aePuts(string)
   aePuts('Scrn Clr : ')
   IF(loggedOnUserKeys.userFlags AND USER_SCRNCLR) THEN aePuts('YES\b\n') ELSE aePuts('NO\b\n')
@@ -25826,10 +26535,10 @@ jLoop3:
     IF(ch<0) THEN RETURN ch
       ch:=readChar(INPUT_TIMEOUT)
     IF(ch<0) THEN RETURN ch
-      IF((ch="N") OR (ch="n") OR (ch="Q") OR (ch="q"))
+    IF((ch="N") OR (ch="n") OR (ch="Q") OR (ch="q"))
       aePuts('No!\b\n\b\n')
-        JUMP jLoop1
-        ENDIF
+      JUMP jLoop1
+    ENDIF
     EXIT ((ch="Y") OR (ch="y"))
   ENDWHILE
   aePuts('Yes..\b\n\b\n')
@@ -25906,7 +26615,7 @@ qAgain:
        JUMP qAgain
         ENDIF
     IF((ch="Y") OR (ch="y")) THEN JUMP qbreak
-    ENDWHILE
+  ENDWHILE
 qbreak:
   aePuts('Yes..\b\n\b\n')
  
@@ -25914,17 +26623,17 @@ qbreak:
     fp1:=Open(afilename,MODE_NEWFILE)
   ELSE
     Seek(fp1,0,OFFSET_END)
-    ENDIF
+  ENDIF
  
   StringF(string,'\sNode\d/TempAns',cmds.bbsLoc,node)
   IF((fp2:=Open(string,MODE_OLDFILE)))>0
     WHILE(TRUE)
       EXIT ((ReadStr(fp2,c))=-1) AND (StrLen(c)=0)
       fileWriteLn(fp1,c)
-        ENDWHILE
-      Close(fp1)
-      Close(fp2)
-    ENDIF
+    ENDWHILE
+    Close(fp1)
+    Close(fp2)
+  ENDIF
 ENDPROC RESULT_SUCCESS
 
 PROC initNewUser(userData:PTR TO user,userKeys: PTR TO userKeys,userMisc: PTR TO userMisc,slotNumber)
@@ -26083,7 +26792,7 @@ PROC closezModemStats()
     zModemStatWriteMP:=NIL
   ENDIF
   
-    IF(windowZmodem<>NIL) THEN CloseWindow(windowZmodem)
+  IF(windowZmodem<>NIL) THEN CloseWindow(windowZmodem)
   windowZmodem:=NIL
 ENDPROC
 
@@ -26094,9 +26803,9 @@ PROC openZmodemStat()
         WA_SIZEGADGET,1,
         WA_DRAGBAR,1,
         WA_LEFT,170,
-        WA_TOP,50,
+        WA_TOP,45,
         WA_WIDTH,350,
-        WA_HEIGHT,140,
+        WA_HEIGHT,150,
         WA_DETAILPEN,0,
         WA_BLOCKPEN,7,
         WA_TITLE,
@@ -26104,7 +26813,7 @@ PROC openZmodemStat()
         WA_IDCMP,IDCMP_CLOSEWINDOW,
         WA_FLAGS,WFLG_ACTIVATE,NIL]
   IF (windowZmodem=NIL) AND (screen<>NIL)
-      windowZmodem:=OpenWindowTagList(NIL,tags)
+    windowZmodem:=OpenWindowTagList(NIL,tags)
     initZmodemStatCon()
     IF (KickVersion(40) AND (bitPlanes>2)) THEN zmodemStatPrint('[37m[ s')
     zmodemStatPrint('[H[J[0 p[H\n FileName:\n FileSize: 0\n ETA Time:\n Curr Time:\n Position: 0\n Complete: 0%\n LastTime:\n      CPS: 0\n\n Z Status: Starting\n Errors: 0\n ErrorPos: 0')    
@@ -26187,11 +26896,11 @@ PROC openExpressScreen()
   
   IF fontHandle=NIL
     readToolType(TOOLTYPE_NODE,node,'EXPFONT',fontName)
-      defaultfontattr.name:=fontName
-      defaultfontattr.ysize:=8
+    defaultfontattr.name:=fontName
+    defaultfontattr.ysize:=8
 
-      fontHandle:=OpenFont(defaultfontattr)
-      IF fontHandle=NIL THEN fontHandle:=OpenDiskFont(defaultfontattr)
+    fontHandle:=OpenFont(defaultfontattr)
+    IF fontHandle=NIL THEN fontHandle:=OpenDiskFont(defaultfontattr)
   ENDIF
 
   IF pub=FALSE
@@ -26353,8 +27062,8 @@ ENDPROC ERR_NONE
 
 PROC closeExpressScreen()
 
-    closeAEStats()
-    closezModemStats()
+  closeAEStats()
+  closezModemStats()
     
   IF consoleReadIO
     IF CheckIO(consoleReadIO)=FALSE THEN AbortIO(consoleReadIO)
@@ -26363,25 +27072,25 @@ PROC closeExpressScreen()
       CloseDevice(consoleReadIO)
     ENDIF
     deleteExtIO(consoleReadIO)
-  consoleReadIO:=NIL
+    consoleReadIO:=NIL
   ENDIF  
 
-    IF consoleIO
-      IF CheckIO(consoleIO)=FALSE THEN AbortIO(consoleIO)
+  IF consoleIO
+    IF CheckIO(consoleIO)=FALSE THEN AbortIO(consoleIO)
 ->    WaitIO(consoleIO)
-      CloseDevice(consoleIO)
-      deleteExtIO(consoleIO)
+    CloseDevice(consoleIO)
+    deleteExtIO(consoleIO)
     consoleIO:=NIL
-    ENDIF 
+  ENDIF 
 
   IF consoleMP 
-  deletePort(consoleMP)
-  consoleMP:=NIL
+    deletePort(consoleMP)
+    consoleMP:=NIL
   ENDIF
 
   IF consoleReadMP
-  deletePort(consoleReadMP)
-  consoleReadMP:=NIL
+    deletePort(consoleReadMP)
+    consoleReadMP:=NIL
   ENDIF 
   
 
@@ -26396,7 +27105,7 @@ PROC closeExpressScreen()
   ENDIF
   
   IF screen
-  IF CloseScreen(screen) THEN screen:=NIL
+    IF CloseScreen(screen) THEN screen:=NIL
   ENDIF
   
   IF fontHandle
@@ -26411,14 +27120,14 @@ PROC main() HANDLE
   DEF temppath[255]:STRING
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
-  DEF msg,cb: PTR TO confBase
-  DEF i,notfound
+  DEF cb: PTR TO confBase
+  DEF i,notfound,msg
   DEF p : PTR TO CHAR
   DEF tempfh
   DEF transptr:PTR TO mln
    
   StrCopy(expressVer,'v5.1.0alpha',ALL)
-  StrCopy(expressDate,'14-Mar-2019',ALL)
+  StrCopy(expressDate,'02-Apr-2019',ALL)
 
   InitSemaphore(bgData)
  
@@ -26450,30 +27159,29 @@ PROC main() HANDLE
 
   IF (iconbase:=OpenLibrary('icon.library',33))=NIL THEN Raise(ERR_NOICON)
 
-   IF (diskfontbase:=OpenLibrary('diskfont.library', 37))=NIL THEN Raise(ERR_NO_DISKFONT)
+  IF (diskfontbase:=OpenLibrary('diskfont.library', 37))=NIL THEN Raise(ERR_NO_DISKFONT)
 
 
-  recFileNames:=List(1024)
+  recFileNames:=NEW recFileNames.stringlist()
 
-  historyBuf:=List(20)
+  historyBuf:=NEW historyBuf.stringlist(20)
   historyNum:=0
   historyCycle:=0
 
-  scomment:=List(max_desclines)
+  scomment:=NEW scomment.stringlist(max_desclines)
   FOR i:=1 TO max_desclines
-    msg:=String(200)
-    ListAdd(scomment,[msg])
+    scomment.add('')
   ENDFOR
 
-    skipdFiles:=AllocMem(32000,MEMF_CLEAR OR MEMF_PUBLIC)
+  skipdFiles:=NEW skipdFiles.stringlist(100)
 
-  flagFilesList:=List(MAX_FLAGGED_FILES)
+  flagFilesList:=NEW flagFilesList.stdlist(MAX_FLAGGED_FILES)
  
   StrCopy(fontName,'topaz.font')
 
   StrCopy(securityFlags,'')
 
-  parsedParams:=List(100)
+  parsedParams:=NEW parsedParams.stringlist(100)
   
   ioFlags[IOFLAG_FIL_IN]:=0
   ioFlags[IOFLAG_KBD_IN]:=-1
@@ -26504,7 +27212,7 @@ PROC main() HANDLE
   IF i<0   
     i:=DEFAULT_DISK_OBJECT_CACHE_SIZE
   ENDIF
-  IF i>0 THEN diskObjectCache:=List(i)
+  IF i>0 THEN diskObjectCache:=NEW diskObjectCache.stdlist(i)
 
   cacheResetOn:=CACHE_RESET_LOGON
   IF readToolType(TOOLTYPE_NODE,node,'ICON_CACHE_RESET',tempstr)
@@ -26517,7 +27225,7 @@ PROC main() HANDLE
     maxMsgLines:=Val(tempstr)
   ENDIF
   IF maxMsgLines=0 THEN maxMsgLines:=800 
-  msgBuf:=List(maxMsgLines)
+  msgBuf:=NEW msgBuf.stringlist(maxMsgLines)
 
   i:=readToolTypeInt(TOOLTYPE_NODE,node,'SERIAL_CACHE_SIZE')
   IF i>=0   
@@ -26623,26 +27331,35 @@ PROC main() HANDLE
   ENDIF
   
   /**** If MultiCom port initialized in ACP then setup appropriate links ****/
- IF(sopt.toggles[TOGGLES_MULTICOM])
+  IF(sopt.toggles[TOGGLES_MULTICOM])
     singleNode:=sopt.singleSemi
     masterNode:=sopt.masterSemi
- ENDIF
+  ENDIF
 
   IF(StrLen(sopt.offHook)=0)
     strCpy(sopt.offHook,'ATM0H1',ALL)
   ENDIF
 
-  IF (StrLen(sopt.namePrompt)=0)
-    strCpy(sopt.namePrompt,'Name',ALL)
+  IF readToolType(TOOLTYPE_NODE,node,'NAME_PROMPT2',namePrompt)=FALSE
+    IF readToolType(TOOLTYPE_NODE,node,'NAME_PROMPT',tempstr)
+      StringF(namePrompt,'Enter your \s:',tempstr)
+    ELSE
+      StrCopy(namePrompt,'Enter your Name:')
+    ENDIF
   ENDIF
    
+  StrCopy(passwordPrompt,'Password: ')
+  IF readToolType(TOOLTYPE_NODE,node,'PASSWORD_PROMPT',passwordPrompt)
+    StrAdd(passwordPrompt,' ')
+  ENDIF
+
   timeoutOverride:=readToolTypeInt(TOOLTYPE_NODE,node,'OVERRIDE_TIMEOUT')
 
   i:=readToolTypeInt(TOOLTYPE_NODE,node,'MAX_MSG_QUE')
   IF i=-1 THEN i:=5
-  olmQueue:=List(i)
+  olmQueue:=NEW olmQueue.stringlist(i)
 
-  olmBuf:=List(100)
+  olmBuf:=NEW olmBuf.stringlist(100)
  
   cmds.numConf:=readToolTypeInt(TOOLTYPE_CONFCONFIG,'','NCONFS')
   IF cmds.numConf<1 THEN cmds.numConf:=1
@@ -26683,6 +27400,10 @@ PROC main() HANDLE
     consoleDebugLevel:=LOG_DEBUG
   ENDIF
 
+  IF (InStr(tempstr,' NO_DEBUG '))<>-1
+    consoleDebugLevel:=LOG_NONE
+  ENDIF
+
   IF checkToolTypeExists(TOOLTYPE_NODE,node,'DEBUG_LOG') THEN debugLogLevel:=LOG_WARN ELSE debugLogLevel:=LOG_NONE
   
   StrCopy(consoleOutputDeviceName,'console.device')
@@ -26691,14 +27412,14 @@ PROC main() HANDLE
   StrCopy(consoleInputDeviceName,'console.device')
   readToolType(TOOLTYPE_NODE,node,'CONSOLE_INPUT_DEVICE',consoleInputDeviceName)
 
-  confBases:=List(cmds.numConf)
+  confBases:=NEW confBases.stdlist(cmds.numConf)
   FOR i:=1 TO cmds.numConf
     cb:=NEW cb
-    ListAdd(confBases,[cb])
+    confBases.add(cb)
   ENDFOR
 
-  xprTitle:=List(100)
-  xprLib:=List(100)
+  xprTitle:=NEW xprTitle.stringlist(100)
+  xprLib:=NEW xprLib.stringlist(100)
   i:=1
   REPEAT
     notfound:=FALSE
@@ -26713,20 +27434,14 @@ PROC main() HANDLE
     ENDIF
 
     IF notfound=FALSE
-      msg:=String(80)
-      StrCopy(msg,tempstr)
-      ListAdd(xprTitle,[msg])
-
-      msg:=String(80)
-      StrCopy(msg,tempstr2)
-      ListAdd(xprLib,[msg])
-
+      xprTitle.add(tempstr)
+      xprLib.add(tempstr2)
     ENDIF
     i++
   UNTIL notfound
   
-  screenTypeTitle:=List(100)
-  screenTypeExt:=List(100)
+  screenTypeTitle:=NEW screenTypeTitle.stringlist(100)
+  screenTypeExt:=NEW screenTypeExt.stringlist(100)
   i:=1
   REPEAT
     notfound:=FALSE
@@ -26743,17 +27458,13 @@ PROC main() HANDLE
     IF (StrLen(tempstr)=0) OR (StrLen(tempstr2)=0) THEN notfound:=TRUE
 
     IF notfound=FALSE
-      msg:=String(80)
-      StrCopy(msg,tempstr)
-      ListAdd(screenTypeTitle,[msg])
-
-      msg:=String(80)
+      screenTypeTitle.add(tempstr)
       IF (tempstr2[0]<>".")
-        StringF(msg,'.\s',tempstr2)
+        StringF(tempstr,'.\s',tempstr2)
+        screenTypeExt.add(tempstr)
       ELSE
-        StrCopy(msg,tempstr2)
+        screenTypeExt.add(tempstr2)
       ENDIF
-      ListAdd(screenTypeExt,[msg])
 
     ENDIF
     i++
@@ -26784,25 +27495,23 @@ PROC main() HANDLE
 
   autoDeactivateDays:=readToolTypeInt(TOOLTYPE_BBSCONFIG,'','AUTO_DEACTIVATE_DAYS')
 
-  confNames:=List(cmds.numConf)
-  confDirs:=List(cmds.numConf)
+  confNames:=NEW confNames.stringlist(cmds.numConf)
+  confDirs:=NEW confDirs.stringlist(cmds.numConf)
   FOR i:=1 TO cmds.numConf
-    msg:=String(255)
     StringF(tempstr,'NAME.\d',i)
-    readToolType(TOOLTYPE_CONFCONFIG,'',tempstr,msg)
-    ListAdd(confNames,[msg])
+    readToolType(TOOLTYPE_CONFCONFIG,'',tempstr,tempstr2)
+    confNames.add(tempstr2)
     IF i<11
       p:=cmds.conf1Name
-      strCpy(p+((i-1)*54),msg,54)
+      strCpy(p+((i-1)*54),tempstr2,54)
     ENDIF
 
-    msg:=String(255)
     StringF(tempstr,'LOCATION.\d',i)
-    readToolType(TOOLTYPE_CONFCONFIG,'',tempstr,msg)
-    ListAdd(confDirs,[msg])
+    readToolType(TOOLTYPE_CONFCONFIG,'',tempstr,tempstr2)
+    confDirs.add(tempstr2)
     IF i<11
       p:=cmds.conf1Loc
-      strCpy(p+((i-1)*54),msg,54)
+      strCpy(p+((i-1)*54),tempstr2,54)
     ENDIF
   ENDFOR
 
@@ -26812,12 +27521,11 @@ PROC main() HANDLE
   onlineBaudR:=cmds.openingBaud
 
   IF (computerEntries>0)
-    computerTypes:=List(computerEntries)
+    computerTypes:=NEW computerTypes.stringlist(computerEntries)
     FOR i:=1 TO computerEntries
-      msg:=String(255)
       StringF(temppath,'COMPUTER.\d',i)
-      readToolType(TOOLTYPE_COMPUTERLIST,'',temppath,msg)
-      ListAdd(computerTypes,[msg])
+      readToolType(TOOLTYPE_COMPUTERLIST,'',temppath,tempstr)
+      computerTypes.add(tempstr)
     ENDFOR
   ENDIF
   IF computerEntries=0
@@ -26910,42 +27618,36 @@ PROC main() HANDLE
 
   unloadTranslators()
 
-  freeList(scomment)
-  freeList(parsedParams)
-  freeList(computerTypes)
-  freeList(historyBuf)
-  freeList(msgBuf)
+  END scomment
+  END parsedParams
+  END computerTypes
+  END historyBuf
+  END msgBuf
 
-  IF confBases
-    FOR i:=0 TO ListLen(confBases)-1
-      cb:=ListItem(confBases,i)
-      END cb
-    ENDFOR
-    DisposeLink(confBases)
-  ENDIF
-
+  END confBases
+  
   IF flagFilesList
     clearFlagItems(flagFilesList)
-    DisposeLink(flagFilesList)
+    END flagFilesList
   ENDIF
   
-  freeList(recFileNames)
+  END recFileNames
 
-  freeList(confNames)
-  freeList(confDirs)
-  freeList(olmBuf)
-  freeList(olmQueue)
+  END confNames
+  END confDirs
+  END olmBuf
+  END olmQueue
 
-  freeList(xprLib)
-  freeList(xprTitle)
+  END xprLib
+  END xprTitle
 
-  freeList(screenTypeTitle)
-  freeList(screenTypeExt)
+  END screenTypeTitle
+  END screenTypeExt
   
   clearDiskObjectCache()
-  IF diskObjectCache<>NIL THEN DisposeLink(diskObjectCache)
+  IF diskObjectCache<>NIL THEN END diskObjectCache
 
-  FreeMem(skipdFiles,32000)
+  END skipdFiles
   
   IF (loggedOnUser) THEN END loggedOnUser
   IF (loggedOnUserKeys) THEN END loggedOnUserKeys

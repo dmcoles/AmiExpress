@@ -1832,7 +1832,7 @@ ENDPROC
 
 PROC showCPS(node,incps:PTR TO CHAR)
   DEF cps[10]:STRING
-  StringF(cps,'\d[7]',incps)
+  StringF(cps,'\s[7]',incps)
 
   drawPen:=chat[node]
   IF(quietNode[node]) THEN drawPen:=3
