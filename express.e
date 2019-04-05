@@ -322,11 +322,13 @@ OBJECT userKeys
   userName[31]: ARRAY OF CHAR
   number: LONG
   newUser: CHAR
-  upCPS: INT               /* highest upload cps rate */
-  dnCPS: INT               /* highest dnload cps rate */
+  oldUpCPS: INT            /* highest upload cps rate (max 64k) */
+  oldDnCPS: INT            /* highest dnload cps rate (max 64k)*/
   userFlags: INT           /*                         */
   baud: INT                /* last online baud rate   */
-  pad[9]: ARRAY OF CHAR    /* ?? should be 15         */
+  upCPS2: LONG             /* new high upload cps with support for >64k */
+  dnCPS2: LONG             /* new high download cps with support for >64k */
+  pad[1]: ARRAY OF CHAR
 ENDOBJECT
 
 OBJECT userMisc
@@ -699,6 +701,7 @@ DEF maxMsgLines = 800
 DEF confNames: PTR TO stringlist
 DEF confDirs: PTR TO stringlist
 DEF historyFolder[255]:STRING
+DEF userNotesFolder[255]:STRING
 DEF historyBuf : PTR TO stringlist
 DEF historyNum
 DEF historyCycle
@@ -5984,7 +5987,7 @@ PROC processMciCmd(mcidata,len,pos)
       aePuts2(tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'UB',ALL))
       pos:=pos+2+t
-      formatUnsignedLong(loggedOnUser.bytesUpload,tempstr)
+      ->formatUnsignedLong(loggedOnUser.bytesUpload,tempstr)
       formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstr)
       aePuts2(tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'DB',ALL))
@@ -6375,7 +6378,7 @@ PROC processMciCmd2(mcidata,len,pos,outdata)
       StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'UB',ALL))
       pos:=pos+2+t
-      formatUnsignedLong(loggedOnUser.bytesUpload,tempstr)
+      ->formatUnsignedLong(loggedOnUser.bytesUpload,tempstr)
       formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstr)
       StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'DB',ALL))
@@ -8346,9 +8349,11 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE)
       loggedOnUser:=NEW loggedOnUser
       loggedOnUserKeys:=NEW loggedOnUserKeys
       loggedOnUserMisc:=NEW loggedOnUserMisc
+      acsLevel:=255
       loadAccount(1,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
       masterLoadPointers(loggedOnUser)
       editAccounts(FALSE)
+      acsLevel:=-1
       END loggedOnUser
       END loggedOnUserKeys
       END loggedOnUserMisc
@@ -8638,7 +8643,7 @@ PROC convertConfUDBytesTOBCD(confPtr: PTR TO confBase)
   ENDIF
 ENDPROC
 
-PROC loadAccount(slot,userPtr, userKeysPtr, userMiscPtr)
+PROC loadAccount(slot,userPtr:PTR TO user, userKeysPtr:PTR TO userKeys, userMiscPtr:PTR TO userMisc)
   DEF l,fh
   DEF result
 
@@ -8674,8 +8679,14 @@ PROC loadAccount(slot,userPtr, userKeysPtr, userMiscPtr)
     ENDIF
   ENDIF
 
-  IF (result=RESULT_SUCCESS) AND userPtr AND userMiscPtr
+  IF (result=RESULT_SUCCESS) AND userPtr AND userKeysPtr AND userMiscPtr
+
+    ->populate bcd download and upload bytes if not already done
     convertUserUDBytesTOBCD(userPtr,userMiscPtr)
+    
+    ->populate long download and upload cps if not already done
+    IF ((userKeysPtr.upCPS2 AND $ffffff)=0) THEN userKeysPtr.upCPS2:=userKeysPtr.oldUpCPS
+    IF ((userKeysPtr.dnCPS2 AND $ffffff)=0) THEN userKeysPtr.dnCPS2:=userKeysPtr.oldDnCPS
   ENDIF
 ENDPROC result
 
@@ -10410,13 +10421,14 @@ PROC loadMsg(s)
     ->IF StrLen(msgBuf.item(lines))>0 THEN lines++
 
     Close(f)
-    /* temp:=lines-1
+
+    temp:=lines-1
     WHILE(temp>0)
-      stripReturn(&MsgBuf.item(temp)[0])
-      if(MsgBuf.item(temp)[0]=='\0') temp--
-      else break
+      EXIT (StrLen(msgBuf.item(temp))<>0)
+      msgBuf.remove(temp)
+      temp--
     ENDWHILE
-    lines:=temp+1*/
+    lines:=temp+1
     RETURN 1
   ENDIF
 
@@ -10544,7 +10556,7 @@ PROC editAnyFile(params)
 ENDPROC
 
 
-PROC edit(allowFullscreen=TRUE,maxLineLen=75)
+PROC edit(allowFullscreen=TRUE,maxLineLen=75,updatePosted=FALSE)
   DEF c
   DEF cn,i,j,x,back,bkFlag,helplist=0
   DEF str[200]:STRING
@@ -10593,7 +10605,7 @@ PROC edit(allowFullscreen=TRUE,maxLineLen=75)
 
       IF(runSysCommand('FULLEDIT','',1))
         IF(loadMsg(editorFileName))
-          loggedOnUser.messagesPosted:=loggedOnUser.messagesPosted+1
+          IF updatePosted THEN loggedOnUser.messagesPosted:=loggedOnUser.messagesPosted+1
 
           SetProtection(editorFileName,FIBF_OTR_DELETE)
           DeleteFile(editorFileName)
@@ -10939,7 +10951,11 @@ brk3:
       aePuts('\b\n')
       lines--
       IF(lines<0) THEN lines:=0
-      StrCopy(space,msgBuf.item(lines),ALL)
+      IF lines<msgBuf.count()
+        StrCopy(space,msgBuf.item(lines),ALL)
+      ELSE
+        StrCopy(space,'')
+      ENDIF
       msgBuf.setSize(lines)
 
       bkFlag:=0
@@ -11059,13 +11075,13 @@ loopHere:
 
     ENDIF
     IF((str[0]="S") OR (str[0]="s"))
-      loggedOnUser.messagesPosted:=loggedOnUser.messagesPosted+1
+      IF updatePosted THEN loggedOnUser.messagesPosted:=loggedOnUser.messagesPosted+1
       RETURN RESULT_SUCCESS
     ENDIF
 
     IF(fileattach AND ((str[0]="X") OR (str[0]="x")) AND ((checkSecurity(ACS_PRI_MSGFILES) AND (mailHeader.status="R")) OR (checkSecurity(ACS_PUB_MSGFILES) AND (mailHeader.status="P"))))
       rzmsg:=1
-      loggedOnUser.messagesPosted:=loggedOnUser.messagesPosted+1
+      IF updatePosted THEN loggedOnUser.messagesPosted:=loggedOnUser.messagesPosted+1
       RETURN RESULT_SUCCESS
     ENDIF
     IF((str[0]="A") OR(str[0]="a"))
@@ -11377,7 +11393,7 @@ skipAll:
     lines:=0
   ENDIF
 
-  stat:=edit()
+  stat:=edit(TRUE,75,TRUE)
   IF((stat=RESULT_TIMEOUT) OR (stat=RESULT_NO_CARRIER))
     RETURN stat
   ENDIF
@@ -12022,7 +12038,6 @@ PROC searchNewMail(gfh, cn)
   msgcnt:=0
   dcnt:=0
 
-
   mailFlag:=0
   nonStopMail:=FALSE
   kMsgFlag:=FALSE
@@ -12042,6 +12057,7 @@ PROC searchNewMail(gfh, cn)
   IF(msgNum<mailStat.lowestKey) THEN msgNum:=mailStat.lowestKey
   IF(msgNum>=mailStat.highMsgNum)
     IF(currentConf=0) THEN aePuts('No mail today!\b\n') ELSE aePuts('\b\n')
+    IF(nonStopDisplayFlag=FALSE) THEN lineCount++
     RETURN RESULT_SUCCESS
   ENDIF
 
@@ -12065,11 +12081,14 @@ PROC searchNewMail(gfh, cn)
           aePuts('[32mType     From                           Subject                Msg    \b\n')
           aePuts('[33m-------  -----------------------------  ---------------------  -------\b\n')
           aePuts('[0m')
+          IF(nonStopDisplayFlag=FALSE) THEN lineCount:=lineCount+4
           mailFlag:=1
         ENDIF
         IF (mailHeader="P") OR (mailHeader="p") THEN StrCopy(mailStatus,'Public ') ELSE StrCopy(mailStatus,'Private')
         StringF(tempStr,'\s  \l\s[29]  \l\s[21]  [0m\z\r\d[6]\b\n',mailStatus,mailHeader.fromName,mailHeader.subject,mailHeader.msgNumb)
         aePuts(tempStr)
+
+        IF checkForPause()=RESULT_FAILURE THEN RETURN RESULT_SUCCESS
 
       ELSE
         IF mailFlag=0
@@ -17474,9 +17493,10 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   StringF(string,' \d file(s), \dk bytes, \d minute(s). \d second(s), \d cps, \d% efficiency.',onlineNFiles+bgCnt,Div(tBT+bgBytes,1024),Div(tTTM,60),Mod(tTTM,60),pcps,peff)
   aePuts(string)
 
-  IF pcps>65535 THEN pcps:=65535
-  IF (pcps > loggedOnUserKeys.upCPS)
-    loggedOnUserKeys.upCPS:=pcps
+  IF (pcps > loggedOnUserKeys.upCPS2)
+    loggedOnUserKeys.upCPS2:=pcps
+    IF pcps>65535 THEN pcps:=65535
+    loggedOnUserKeys.oldUpCPS:=pcps
   ENDIF
 
   IF bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
@@ -18641,10 +18661,11 @@ sysopDL:
   aePuts(string)
   aePuts('\b\n\b\n')
 
-  IF pcps>65535 THEN pcps:=65535
-  IF(pcps > loggedOnUserKeys.dnCPS)
-    loggedOnUserKeys.dnCPS:=pcps
-    /* is this baud higher then max cps up ? */
+  /* is this baud higher then max cps up ? */
+  IF(pcps > loggedOnUserKeys.dnCPS2)
+    loggedOnUserKeys.dnCPS2:=pcps
+    IF pcps>65535 THEN pcps:=65535
+    loggedOnUserKeys.oldDnCPS:=pcps
   ENDIF
 
   clearFlagItems(finalList)
@@ -18699,31 +18720,33 @@ PROC ccom()
 
   conPuts('\b\nF1 Toggles chat\b\n',-1)
 
-  /* show our page sign to user */
-  StringF(buff,'\s\b\n\b\nPaging \s (CTRL-C to Abort). .',display_time,cmds.sysopName)
-  aePuts(buff)
-  FOR i:=0 TO 19
-    DisplayBeep(NIL)
-    aePuts(' .')
-    FOR i2:=1 TO 50
-      Delay(1)
-      IF(logonType>=LOGON_TYPE_REMOTE)
-        stat:=checkCarrier()
-        IF(stat=FALSE) THEN RETURN RESULT_NO_CARRIER
-      ENDIF
-      IF(checkInput())
-        stat:=readChar(1)
-        IF(chatF=1)
-          aePuts('\b\n\b\n')
-          RETURN RESULT_SUCCESS
+  IF (runSysCommand('PAGER','')=FALSE)
+    /* show our page sign to user */
+    StringF(buff,'\s\b\n\b\nPaging \s (CTRL-C to Abort). .',display_time,cmds.sysopName)
+    aePuts(buff)
+    FOR i:=0 TO 19
+      DisplayBeep(NIL)
+      aePuts(' .')
+      FOR i2:=1 TO 50
+        Delay(1)
+        IF(logonType>=LOGON_TYPE_REMOTE)
+          stat:=checkCarrier()
+          IF(stat=FALSE) THEN RETURN RESULT_NO_CARRIER
         ENDIF
-        IF(stat=3)
-            aePuts('Aborted!\b\n\b\n')
-          RETURN RESULT_SUCCESS
+        IF(checkInput())
+          stat:=readChar(1)
+          IF(chatF=1)
+            aePuts('\b\n\b\n')
+            RETURN RESULT_SUCCESS
+          ENDIF
+          IF(stat=3)
+              aePuts('Aborted!\b\n\b\n')
+            RETURN RESULT_SUCCESS
+          ENDIF
         ENDIF
-      ENDIF
+      ENDFOR
     ENDFOR
-  ENDFOR
+  ENDIF
 
   aePuts('\b\n\b\nThe Sysop has been paged\b\n')
   aePuts('You may continue using the system\b\n')
@@ -18900,13 +18923,15 @@ PROC showVoteTopics()
 ENDPROC
 
 PROC createVoteTopic()
-  DEF topicNum
+  DEF topicNum,lock
   DEF votefile[255]:STRING
   DEF tempStr[255]:STRING
   DEF i,ans,questNum,fh
 
   StringF(votefile,'\sVote',currentConfDir)
-  CreateDir(votefile)
+  IF(lock:=CreateDir(votefile))
+    UnLock(lock)
+  ENDIF
 
   StringF(votefile,'\sVote/VoteLock',currentConfDir)
   IF fileExists(votefile)=FALSE
@@ -19615,6 +19640,9 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
       CASE "!" /* Credit Maintenance */
         creditMaintenance(which,hoozer,hoozer2,hoozer3,f6)
         displayAccount(which,hoozer,hoozer2,hoozer3,f6)
+      CASE "*" /* User Notes */
+        userNotes(which,hoozer,hoozer2,hoozer3,f6)
+        displayAccount(which,hoozer,hoozer2,hoozer3,f6)
       CASE "@" /* Conference Accounting */
         IF checkToolTypeExists(TOOLTYPE_ACCESS,hoozer.secStatus,ListItem(securityNames,ACS_CONFERENCE_ACCOUNTING))
           conferenceAccounting(which,hoozer,hoozer2,hoozer3,f6)
@@ -19641,8 +19669,10 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
           hoozer.dailyBytesLimit:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.DAILY_BYTE_LIMIT')
           hoozer.timeUsed:=0
           hoozer.timeTotal:=hoozer.timeLimit
-          hoozer2.upCPS:=0
-          hoozer2.dnCPS:=0
+          hoozer2.oldUpCPS:=0
+          hoozer2.upCPS2:=0
+          hoozer2.oldDnCPS:=0
+          hoozer2.dnCPS2:=0
           aePuts('Preset All Conferences with Ratios & RatioType ')
           stat:=yesNo(1)
           IF stat THEN applyConfPresets(hoozer,preset)
@@ -19837,11 +19867,13 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
           ENDIF
         CASE "S"         /* zero upcps rate */
           aePuts('[12;47H')          /* offset by 11 */
-          hoozer2.upCPS:=numberInput(hoozer2.upCPS)
+          hoozer2.upCPS2:=longNumberInput(hoozer2.upCPS2)
+          IF hoozer2.upCPS2>65535 THEN hoozer2.oldUpCPS:=65535 ELSE hoozer2.oldUpCPS:=hoozer2.upCPS2
           flag:=0;
         CASE "T"         /* zero dncps rate */
-          aePuts('[12;68H')          /* offset by 11 */
-          hoozer2.dnCPS:=numberInput(hoozer2.dnCPS)
+          aePuts('[12;69H')          /* offset by 11 */
+          hoozer2.dnCPS2:=longNumberInput(hoozer2.dnCPS2)
+          IF hoozer2.dnCPS2>65535 THEN hoozer2.oldDnCPS:=65535 ELSE hoozer2.oldDnCPS:=hoozer2.dnCPS2
           flag:=0
         CASE "U" /* Time_Limit */
           aePuts('[13;17H')
@@ -19912,6 +19944,68 @@ PROC applyConfPresets(hoozer:PTR TO user, preset:LONG)
   masterSavePointers(hoozer)
 
   IF loggedOnUser<>NIL THEN masterLoadPointers(loggedOnUser)
+ENDPROC
+
+PROC userNotes(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3:PTR TO userMisc, onlineEdit)
+  DEF flag
+  DEF tempstr[255]:STRING
+  DEF command,lock
+  DEF fname[255]:STRING
+
+  fileattach:=FALSE
+  REPEAT
+
+    sendCLS()
+    aePuts('[2;1H                          [33mUSER ACCOUNT NOTES[0m')
+
+    conPuts('[0 p')
+
+    aePuts('[4;0H[0m')
+
+    StringF(tempstr,'[\z\d[4]] \s[32]',hoozer.slotNumber,hoozer.name)
+    aePuts(tempstr)
+
+    IF(lock:=CreateDir(userNotesFolder))
+      UnLock(lock)
+    ENDIF
+    StringF(fname,'\s\d',userNotesFolder,hoozer.slotNumber)
+
+    aePuts('[6;0H[33mUSER NOTES[0m\b\n\b\n')
+    aePuts('[34m------------------------------------------------------------------------------[0m\b\n')
+    IF displayFile(fname)=FALSE THEN aePuts('None\b\n')
+    aePuts('[34m------------------------------------------------------------------------------[0m\b\n')
+    aePuts('\b\n')
+    aePuts('[33m<TAB>[36m=[0mExit [33mE[36m=[0mEdit\b\n')
+    flag:=0
+    command:=readChar(INPUT_TIMEOUT)
+    IF(command<0) THEN RETURN command
+    command:=charToUpper(command)
+
+    flag:=0
+
+    SELECT command
+      CASE "+"
+        IF(onlineEdit=FALSE)
+          which:=which+1
+          IF(loadAccount(which,hoozer,hoozer2,hoozer3)=RESULT_FAILURE)
+            which:=1
+            loadAccount(which,hoozer,hoozer2,hoozer3)
+          ENDIF
+        ENDIF
+      CASE "-"
+        IF(onlineEdit=FALSE)
+          which:=which-1
+          IF(which<1) THEN which:=findLastAccount()
+          loadAccount(which,hoozer,hoozer2,hoozer3)
+        ENDIF
+      CASE "E"
+        loadMsg(fname)
+        IF(edit()=RESULT_SUCCESS) THEN saveMsg(fname)
+      CASE "\t"
+        flag:=1
+    ENDSELECT
+  UNTIL flag
+
 ENDPROC
 
 PROC listNewAccounts(f6)
@@ -20336,7 +20430,7 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
 
     aePuts('[14;1H  [33m-/+[36m=[0mPrev/Next Conference      [33m~[36m=[0mSAVE[0m\n')
 
-    aePuts('[15;1H  [33mTAB[36m=[0mEXIT Conference Accounting[0m\b\n')
+    aePuts('[15;1H  [33m<TAB>[36m=[0mEXIT Conference Accounting[0m\b\n')
 
     aePuts('[16;1H')
 
@@ -20437,6 +20531,8 @@ ENDPROC flag
 
 PROC doOnLineEdit(f6)
   DEF charStr[1]:STRING
+  DEF oldAcsLevel
+
 
   StrCopy(charStr,' ')
   charStr[0]:=12
@@ -20446,7 +20542,10 @@ PROC doOnLineEdit(f6)
     ioFlags[IOFLAG_SER_OUT]:=0
   ENDIF
   conPuts(charStr)
+  oldAcsLevel:=acsLevel
+  acsLevel:=255
   onlineEditor(f6)
+  acsLevel:=oldAcsLevel
   statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
   IF(logonType>=LOGON_TYPE_REMOTE)
     ioFlags[IOFLAG_SER_IN]:=-1
@@ -21048,10 +21147,12 @@ PROC displayAccount(who:LONG, hoozer:PTR TO user, hoozer2: PTR TO userKeys, hooz
   StringF(tempStr,'[12;1H[33mR> [32mTime_Total[36m:[0m [36m[[0m\l\d[8][36m][0m mins    ',Div(hoozer.timeTotal,60))
   aePuts(tempStr)
 
-  StringF(tempStr,'[12;36H[33mS> [32mCps UP[36m:[0m \l\d[7] ',hoozer2.upCPS AND $FFFF)
+  formatUnsignedLong(hoozer2.upCPS2,tempStr2)
+  StringF(tempStr,'[12;36H[33mS> [32mCps UP[36m:[0m \l\s[10]',tempStr2)
   aePuts(tempStr)
 
-  StringF(tempStr,'[12;57H[33mT> [32mCps DN[36m:[0m \l\d[7] ',hoozer2.dnCPS AND $FFFF)
+  formatUnsignedLong(hoozer2.dnCPS2,tempStr2)
+  StringF(tempStr,'[12;58H[33mT> [32mCps DN[36m:[0m \l\s[10]',tempStr2)
   aePuts(tempStr)
 
   StringF(tempStr,'[13;1H[33mU> [32mTime_Limit[36m:[0m [36m[[0m\l\d[8][36m][0m mins    ',Div(hoozer.timeLimit,60))
@@ -21066,8 +21167,8 @@ PROC displayAccount(who:LONG, hoozer:PTR TO user, hoozer2: PTR TO userKeys, hooz
 
   aePuts('\b\n')
 
-  aePuts('[16;1H[33mX  [36m=[0mEXIT-NOSAVE [33m~[36m=[0mSAVE  [33m1-8[36m=[0mPRESETS  [33m9[36m=[0mRE-ACTIVATE  [33mDEL[36m=[0mDELETE[0m\b\n')
-  aePuts('[33mTAB[36m=[0mCONT [33m@[36m=[0mCONFERENCE ACCOUNTING [33m![36m=[0mCREDIT ACCOUNT MAINTENANCE\b\n')
+  aePuts('[16;1H[33mX  [36m=[0mEXIT-NOSAVE [33m~[36m=[0mSAVE  [33m1-8[36m=[0mPRESETS  [33m9[36m=[0mRE-ACTIVATE  [33m<DEL>[36m=[0mDELETE[0m\b\n')
+  aePuts('[33m<TAB>[36m=[0mCONT [33m@[36m=[0mCONFERENCE ACCOUNTING [33m![36m=[0mCREDIT ACCOUNT MAINTENANCE [33m*[36m=[0mUSER NOTES\b\n')
 ENDPROC
 
 
@@ -21206,10 +21307,12 @@ PROC displayAccountInfo(who:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, h
   StringF(tempStr,'[12;17H\l\d[6]',Div(hoozer.timeTotal,60))
   aePuts(tempStr)
 
-  StringF(tempStr,'[12;39H[32mCps UP[36m:[0m \l\d[7] ',hoozer2.upCPS AND $FFFF)
+  formatUnsignedLong(hoozer2.upCPS2,tempStr2)
+  StringF(tempStr,'[12;39H[32mCps UP[36m:[0m \l\s[10]',tempStr2)
   aePuts(tempStr)
 
-  StringF(tempStr,'[12;60H[32mCps DN[36m:[0m \l\d[7] ',hoozer2.dnCPS AND $FFFF)
+  formatUnsignedLong(hoozer2.dnCPS2,tempStr2)
+  StringF(tempStr,'[12;61H[32mCps DN[36m:[0m \l\s[10]',tempStr2)
   aePuts(tempStr)
 
   StringF(tempStr,'[13;17H\l\d[6]',Div(hoozer.timeLimit,60))
@@ -21228,7 +21331,7 @@ ENDPROC
 
 PROC bulkAccountEditor(f6)
   DEF flag,command
-  DEF settings[13]:ARRAY OF LONG
+  DEF settings[15]:ARRAY OF LONG
   DEF areaName[255]:STRING
   DEF secLevel[3]:STRING
   DEF i,v,r
@@ -21239,7 +21342,7 @@ PROC bulkAccountEditor(f6)
 
   displayBulkScreen()
 
-  FOR i:=0 TO 12
+  FOR i:=0 TO 14
     settings[i]:=String(15)
   ENDFOR
   StrCopy(areaName,'')
@@ -21254,76 +21357,93 @@ PROC bulkAccountEditor(f6)
     command:=charToUpper(command)
 
     SELECT command
-      CASE "G"
+      CASE "@"
+        IF bulkPresets()=RESULT_ABORT
+          flag:=1
+        ELSE
+          sendCLS()
+          conPuts('[0 p'); /* turn console cursor off */
+
+          displayBulkScreen()
+        ENDIF
+      CASE "F"
         aePuts('[6;21H               [6;21H')
+        lineInput('',settings[13],15,INPUT_TIMEOUT,settings[13])
+      CASE "G"
+        aePuts('[6;59H               [6;59H')
         lineInput('',settings[0],15,INPUT_TIMEOUT,settings[0])
         v,r:=Val(settings[0])
         IF r=0 THEN StrCopy(settings[0],'') ELSE StringF(settings[0],'\d',v)
+      CASE "H"
+        aePuts('[7;21H               [7;21H')
+        lineInput('',settings[14],3,INPUT_TIMEOUT,settings[14])
+        v,r:=Val(settings[14])
+        IF r=0 THEN StrCopy(settings[14],'') ELSE StringF(settings[14],'\d',v)
       CASE "I"
-        aePuts('[6;59H               [6;59H')
+        aePuts('[7;59H               [7;59H')
         lineInput('',settings[1],15,INPUT_TIMEOUT,settings[1])
         v,r:=Val(settings[1])
         IF (r=0) OR (v<0) OR (v>2) THEN StrCopy(settings[1],'') ELSE StringF(settings[1],'\d',v)
       CASE "J"
-        aePuts('[7;21H               [7;21H')
+        aePuts('[8;21H               [8;21H')
         lineInput('',settings[2],15,INPUT_TIMEOUT,settings[2])
         v,r:=Val(settings[2])
         IF (r=0) OR (v<1) OR (v>cmds.numConf) THEN StrCopy(settings[2],'') ELSE StringF(settings[2],'\d',v)
       CASE "K"
-        aePuts('[8;21H               [8;21H')
+        aePuts('[9;21H               [9;21H')
         lineInput('',settings[3],15,INPUT_TIMEOUT,settings[3])
         v,r:=Val(settings[3])
         IF r=0 THEN StrCopy(settings[3],'') ELSE StringF(settings[3],'\d',v)
       CASE "L"
-        aePuts('[8;59H               [8;59H')
+        aePuts('[9;59H               [9;59H')
         lineInput('',settings[4],15,INPUT_TIMEOUT,settings[4])
         v,r:=Val(settings[4])
         IF r=0 THEN StrCopy(settings[4],'') ELSE StringF(settings[4],'\d',v)
       CASE "M"
-        aePuts('[9;21H               [9;21H')
+        aePuts('[10;21H               [10;21H')
         lineInput('',settings[5],15,INPUT_TIMEOUT,settings[5])
         v,r:=Val(settings[5])
         IF r=0 THEN StrCopy(settings[5],'') ELSE StringF(settings[5],'\d',v)
       CASE "O"
-        aePuts('[10;21H               [10;21H')
+        aePuts('[11;21H               [11;21H')
         lineInput('',settings[6],15,INPUT_TIMEOUT,settings[6])
         v,r:=Val(settings[6])
         IF r=0 THEN StrCopy(settings[6],'') ELSE StringF(settings[6],'\d',v)
       CASE "P"
-        aePuts('[10;59H               [10;59H')
+        aePuts('[11;59H               [11;59H')
         lineInput('',settings[7],15,INPUT_TIMEOUT,settings[7])
         v,r:=Val(settings[7])
         IF r=0 THEN StrCopy(settings[7],'') ELSE StringF(settings[7],'\d',v)
       CASE "Q"
-        aePuts('[11;21H               [11;21H')
+        aePuts('[12;21H               [12;21H')
         lineInput('',settings[8],15,INPUT_TIMEOUT,settings[8])
         v,r:=Val(settings[8])
         IF r=0 THEN StrCopy(settings[8],'') ELSE StringF(settings[8],'\d',v)
       CASE "R"
-        aePuts('[12;21H               [12;21H')
+        aePuts('[13;21H               [13;21H')
         lineInput('',settings[9],15,INPUT_TIMEOUT,settings[9])
         v,r:=Val(settings[9])
         IF r=0 THEN StrCopy(settings[9],'') ELSE StringF(settings[9],'\d',v)
       CASE "U"
-        aePuts('[12;59H               [12;59H')
+        aePuts('[13;59H               [13;59H')
         lineInput('',settings[10],15,INPUT_TIMEOUT,settings[10])
         v,r:=Val(settings[10])
         IF r=0 THEN StrCopy(settings[10],'') ELSE StringF(settings[10],'\d',v)
       CASE "Y"
-        aePuts('[13;21H               [13;21H')
+        aePuts('[14;21H               [14;21H')
         lineInput('',settings[11],15,INPUT_TIMEOUT,settings[11])
         v,r:=Val(settings[11])
         IF r=0 THEN StrCopy(settings[11],'') ELSE StringF(settings[11],'\d',v)
       CASE "#"
-        aePuts('[14;21H               [14;21H')
+        aePuts('[15;21H               [15;21H')
         lineInput('',settings[12],15,INPUT_TIMEOUT,settings[12])
         v,r:=Val(settings[12])
         IF r=0 THEN StrCopy(settings[12],'') ELSE StringF(settings[12],'\d',v)
       CASE "1" /* select area Name */
-        aePuts('[18;23H          [18;23H')
+        aePuts('[19;23H          [19;23H')
         lineInput('',areaName,10,INPUT_TIMEOUT,areaName)
       CASE "2" /* select access Level */
-        aePuts('[19;23H   [23;19H')
+        aePuts('[20;23H   [20;23H')
         lineInput('',secLevel,3,INPUT_TIMEOUT,secLevel)
         v,r:=Val(secLevel)
         IF r=0 THEN StrCopy(secLevel,'')
@@ -21332,13 +21452,11 @@ PROC bulkAccountEditor(f6)
         v:=applyBulkChanges(settings,areaName,secLevel)
         IF (logonType>=LOGON_TYPE_REMOTE)
           StringF(tempstr,'\tREMOTE Bulk User Update, Area=\s, SecLevel=\s, RecordsAffected=\d',areaName,secLevel,v)
-          callersLog(tempstr)
         ELSE
           StringF(tempstr,'\tLOCAL  Bulk User Update, Area=\s, SecLevel=\s RecordsAffected=\d',areaName,secLevel,v)
-          callersLog(tempstr)
         ENDIF
         callersLog(tempstr)
-        aePuts('[22;1H                                     ')
+        aePuts('[23;1H                                     ')
       CASE "\t"
         flag:=1
     ENDSELECT
@@ -21351,95 +21469,101 @@ PROC displayBulkScreen()
 
   aePuts('[4;1H Updates to apply:')
 
-  aePuts('[6;1H[33mG> [32mRatio .........[36m:')
-  aePuts('[6;39H[33mI> [32mRatio Type ....[36m:')
-  aePuts('[7;1H[33mJ> [32mAutoRejoin ....[36m:')
-  aePuts('[8;1H[33mK> [32mUploads .......[36m:')
-  aePuts('[8;39H[33mL> [32mMessages Posted[36m:')
-  aePuts('[9;1H[33mM> [32mDownloads .....[36m:')
+  aePuts('[6;1H[33mF> [32mArea Name .....[36m:')
+  aePuts('[6;39H[33mG> [32mRatio .........[36m:')
+  aePuts('[7;1H[33mH> [32mSec_Level .....[36m:')
+  aePuts('[7;39H[33mI> [32mRatio Type ....[36m:')
+  aePuts('[8;1H[33mJ> [32mAutoRejoin ....[36m:')
+  aePuts('[9;1H[33mK> [32mUploads .......[36m:')
+  aePuts('[9;39H[33mL> [32mMessages Posted[36m:')
+  aePuts('[10;1H[33mM> [32mDownloads .....[36m:')
 
   IF sopt.toggles[TOGGLES_CREDITBYKB]
-    aePuts('[10;1H[33mO> [32mKBytes Uled ...[36m:')
+    aePuts('[11;1H[33mO> [32mKBytes Uled ...[36m:')
   ELSE
-    aePuts('[10;1H[33mO> [32mBytes Uled ....[36m:')
+    aePuts('[11;1H[33mO> [32mBytes Uled ....[36m:')
   ENDIF
 
   IF sopt.toggles[TOGGLES_CREDITBYKB]
-    aePuts('[10;39H[33mP> [32mKBytes Dled ...[36m:')
+    aePuts('[11;39H[33mP> [32mKBytes Dled ...[36m:')
   ELSE
-    aePuts('[10;39H[33mP> [32mBytes Dled ....[36m:')
+    aePuts('[11;39H[33mP> [32mBytes Dled ....[36m:')
   ENDIF
 
   IF sopt.toggles[TOGGLES_CREDITBYKB]
-    aePuts('[11;1H[33mQ> [32mKByte Limit ...[36m:')
+    aePuts('[12;1H[33mQ> [32mKByte Limit ...[36m:')
   ELSE
-    aePuts('[11;1H[33mQ> [32mByte Limit ....[36m:')
+    aePuts('[12;1H[33mQ> [32mByte Limit ....[36m:')
   ENDIF
 
-  aePuts('[12;1H[33mR> [32mTime Total ....[36m:')
-  aePuts('[12;39H[33mU> [32mTime Limit ....[36m:')
-  aePuts('[13;1H[33mY> [32mChat Limit ....[36m:')
-  aePuts('[14;1H[33m#> [32mTimes Called ..[36m:')
+  aePuts('[13;1H[33mR> [32mTime Total ....[36m:')
+  aePuts('[13;39H[33mU> [32mTime Limit ....[36m:')
+  aePuts('[14;1H[33mY> [32mChat Limit ....[36m:')
+  aePuts('[15;1H[33m#> [32mTimes Called ..[36m:')
 
-  aePuts('[16;2H[0mFilter Settings:')
+  aePuts('[17;2H[0mFilter Settings:')
 
-  aePuts('[18;1H[33m1> [32mSelect Area Name [36m:')
-  aePuts('[19;1H[33m2> [32mSelect Sec Level [36m:')
-  aePuts('[21;1H[33m~[36m=[0mApply Changes [33mTAB[36m=[0mExit\b\n')
+  aePuts('[19;1H[33m1> [32mSelect Area Name [36m:')
+  aePuts('[20;1H[33m2> [32mSelect Sec Level [36m:')
+  aePuts('[22;1H[33m~[36m=[0mApply Changes [33m@[36m=[0mPresets [33m<TAB>[36m=[0mExit\b\n')
 ENDPROC
 
 PROC displayBulkSettings(settings:PTR TO LONG, areaName:PTR TO CHAR, secLevel:PTR TO CHAR)
   DEF tempStr[255]:STRING
   DEF i,v
 
-  StringF(tempStr,'[6;20H[0m \s',IF StrLen(settings[0])=0 THEN 'Leave Unchanged' ELSE settings[0])
+  StringF(tempStr,'[6;58H[0m \s',IF StrLen(settings[0])=0 THEN 'Leave Unchanged' ELSE settings[0])
   aePuts(tempStr)
 
   IF StrLen(settings[1])=0
-    StringF(tempStr,'[6;58H[0m Leave Unchanged')
+    StringF(tempStr,'[7;58H[0m Leave Unchanged')
   ELSE
     v:=Val(settings[1])
-    IF(v=0) THEN StringF(tempStr,'[6;58H[0m \d [32m<-[33mByte[32m)[0m',v)
-    IF(v=1) THEN StringF(tempStr,'[6;58H[0m \d [32m<-[33mB/F[32m)[0m',v)
-    IF(v=2) THEN StringF(tempStr,'[6;58H[0m \d [32m<-[33mFile[32m)[0m',v)
+    IF(v=0) THEN StringF(tempStr,'[7;58H[0m \d [32m<-[33mByte[32m)[0m',v)
+    IF(v=1) THEN StringF(tempStr,'[7;58H[0m \d [32m<-[33mB/F[32m)[0m',v)
+    IF(v=2) THEN StringF(tempStr,'[7;58H[0m \d [32m<-[33mFile[32m)[0m',v)
   ENDIF
   aePuts(tempStr)
 
-  StringF(tempStr,'[7;20H[0m \s',IF StrLen(settings[2])=0 THEN 'Leave Unchanged' ELSE settings[2])
+  StringF(tempStr,'[8;20H[0m \s',IF StrLen(settings[2])=0 THEN 'Leave Unchanged' ELSE settings[2])
   aePuts(tempStr)
-  StringF(tempStr,'[8;20H[0m \s',IF StrLen(settings[3])=0 THEN 'Leave Unchanged' ELSE settings[3])
+  StringF(tempStr,'[9;20H[0m \s',IF StrLen(settings[3])=0 THEN 'Leave Unchanged' ELSE settings[3])
   aePuts(tempStr)
-  StringF(tempStr,'[8;58H[0m \s',IF StrLen(settings[4])=0 THEN 'Leave Unchanged' ELSE settings[4])
+  StringF(tempStr,'[9;58H[0m \s',IF StrLen(settings[4])=0 THEN 'Leave Unchanged' ELSE settings[4])
   aePuts(tempStr)
-  StringF(tempStr,'[9;20H[0m \s',IF StrLen(settings[5])=0 THEN 'Leave Unchanged' ELSE settings[5])
+  StringF(tempStr,'[10;20H[0m \s',IF StrLen(settings[5])=0 THEN 'Leave Unchanged' ELSE settings[5])
   aePuts(tempStr)
-  StringF(tempStr,'[10;20H[0m \s',IF StrLen(settings[6])=0 THEN 'Leave Unchanged' ELSE settings[6])
+  StringF(tempStr,'[11;20H[0m \s',IF StrLen(settings[6])=0 THEN 'Leave Unchanged' ELSE settings[6])
   aePuts(tempStr)
-  StringF(tempStr,'[10;58H[0m \s',IF StrLen(settings[7])=0 THEN 'Leave Unchanged' ELSE settings[7])
+  StringF(tempStr,'[11;58H[0m \s',IF StrLen(settings[7])=0 THEN 'Leave Unchanged' ELSE settings[7])
   aePuts(tempStr)
-  StringF(tempStr,'[11;20H[0m \s',IF StrLen(settings[8])=0 THEN 'Leave Unchanged' ELSE settings[8])
+  StringF(tempStr,'[12;20H[0m \s',IF StrLen(settings[8])=0 THEN 'Leave Unchanged' ELSE settings[8])
   aePuts(tempStr)
-  StringF(tempStr,'[12;20H[0m \s',IF StrLen(settings[9])=0 THEN 'Leave Unchanged' ELSE settings[9])
+  StringF(tempStr,'[13;20H[0m \s',IF StrLen(settings[9])=0 THEN 'Leave Unchanged' ELSE settings[9])
   aePuts(tempStr)
-  StringF(tempStr,'[12;58H[0m \s',IF StrLen(settings[10])=0 THEN 'Leave Unchanged' ELSE settings[10])
+  StringF(tempStr,'[13;58H[0m \s',IF StrLen(settings[10])=0 THEN 'Leave Unchanged' ELSE settings[10])
   aePuts(tempStr)
-  StringF(tempStr,'[13;20H[0m \s',IF StrLen(settings[11])=0 THEN 'Leave Unchanged' ELSE settings[11])
+  StringF(tempStr,'[14;20H[0m \s',IF StrLen(settings[11])=0 THEN 'Leave Unchanged' ELSE settings[11])
   aePuts(tempStr)
-  StringF(tempStr,'[14;20H[0m \s',IF StrLen(settings[12])=0 THEN 'Leave Unchanged' ELSE settings[12])
+  StringF(tempStr,'[15;20H[0m \s',IF StrLen(settings[12])=0 THEN 'Leave Unchanged' ELSE settings[12])
+  aePuts(tempStr)
+  StringF(tempStr,'[6;20H[0m \s',IF StrLen(settings[13])=0 THEN 'Leave Unchanged' ELSE settings[13])
+  aePuts(tempStr)
+  StringF(tempStr,'[7;20H[0m \s',IF StrLen(settings[14])=0 THEN 'Leave Unchanged' ELSE settings[14])
   aePuts(tempStr)
 
   i:=calcAffected(areaName,secLevel)
 
-  StringF(tempStr,'[16;19H[34m[[0m\d[34m][0m Users will be updated.     ',i)
+  StringF(tempStr,'[17;19H[34m[[0m\d[34m][0m Users will be updated.     ',i)
   aePuts(tempStr)
 
-  StringF(tempStr,'[18;23H\s',IF StrLen(areaName)=0 THEN 'N/A' ELSE areaName)
+  StringF(tempStr,'[19;23H\s',IF StrLen(areaName)=0 THEN 'N/A' ELSE areaName)
   aePuts(tempStr)
 
-  StringF(tempStr,'[19;23H\s',IF StrLen(secLevel)=0 THEN 'N/A' ELSE secLevel)
+  StringF(tempStr,'[20;23H\s',IF StrLen(secLevel)=0 THEN 'N/A' ELSE secLevel)
   aePuts(tempStr)
 
-  aePuts('[22;1H')
+  aePuts('[23;1H')
 ENDPROC
 
 PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO CHAR)
@@ -21507,6 +21631,250 @@ PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO 
         IF StrLen(settings[10])>0 THEN tempUser.timeLimit:=Mul(Val(settings[10]),60)
         IF StrLen(settings[11])>0 THEN tempUser.chatLimit:=Mul(Val(settings[11]),60)
         IF StrLen(settings[12])>0 THEN tempUser.timesCalled:=Val(settings[12])
+        IF StrLen(settings[13])>0 THEN strCpy(tempUser.conferenceAccess,settings[13],10)
+        IF StrLen(settings[14])>0 THEN tempUser.secStatus:=Val(settings[14])
+
+        Seek(fh,-SIZEOF user,OFFSET_CURRENT)
+        Write(fh,tempUser,SIZEOF user)
+
+        Seek(fh2,-SIZEOF userMisc,OFFSET_CURRENT)
+        Write(fh2,tempUserMisc,SIZEOF userMisc)
+      ENDIF
+    ENDIF
+  UNTIL (stat2=0) AND (stat=0)
+
+  Close(fh)
+  Close(fh2)
+ENDPROC
+
+PROC bulkPresets()
+  DEF flag,command
+  DEF preset:LONG,allConf:LONG
+  DEF areaName[255]:STRING
+  DEF secLevel[3]:STRING
+  DEF i,v,r
+  DEF tempstr[255]:STRING
+
+  sendCLS()
+  conPuts('[0 p'); /* turn console cursor off */
+
+  displayBulkPresetScreen()
+
+  preset:=-1
+  allConf:=0
+  StrCopy(areaName,'')
+  StrCopy(secLevel,'')
+
+  REPEAT
+    flag:=0
+    displayBulkPresetSettings(preset,allConf,areaName,secLevel)
+    conPuts('[ p') /* turn console cursor on */
+    command:=readChar(INPUT_TIMEOUT)
+    IF(command<0) THEN RETURN command
+    command:=charToUpper(command)
+
+    SELECT command
+      CASE "1"
+        IF checkToolTypeExists(TOOLTYPE_PRESET,1,'PRESET.AREA')
+          IF preset=1 THEN preset:=-1 ELSE preset:=1
+        ENDIF
+      CASE "2"
+        IF checkToolTypeExists(TOOLTYPE_PRESET,2,'PRESET.AREA')
+          IF preset=2 THEN preset:=-1 ELSE preset:=2
+        ENDIF
+      CASE "3"
+        IF checkToolTypeExists(TOOLTYPE_PRESET,3,'PRESET.AREA')
+          IF preset=3 THEN preset:=-1 ELSE preset:=3
+        ENDIF
+      CASE "4"
+        IF checkToolTypeExists(TOOLTYPE_PRESET,4,'PRESET.AREA')
+          IF preset=4 THEN preset:=-1 ELSE preset:=4
+        ENDIF
+      CASE "5"
+        IF checkToolTypeExists(TOOLTYPE_PRESET,5,'PRESET.AREA')
+          IF preset=5 THEN preset:=-1 ELSE preset:=5
+        ENDIF
+      CASE "6"
+        IF checkToolTypeExists(TOOLTYPE_PRESET,6,'PRESET.AREA')
+          IF preset=6 THEN preset:=-1 ELSE preset:=6
+        ENDIF
+      CASE "7"
+        IF checkToolTypeExists(TOOLTYPE_PRESET,7,'PRESET.AREA')
+          IF preset=7 THEN preset:=-1 ELSE preset:=7
+        ENDIF
+      CASE "8"
+        IF checkToolTypeExists(TOOLTYPE_PRESET,8,'PRESET.AREA')
+          IF preset=8 THEN preset:=-1 ELSE preset:=8
+        ENDIF
+      CASE "9"
+        allConf:=Not(allConf)
+      CASE "A" /* select area Name */
+        aePuts('[19;23H          [19;23H')
+        lineInput('',areaName,10,INPUT_TIMEOUT,areaName)
+      CASE "B" /* select access Level */
+        aePuts('[20;23H   [20;23H')
+        lineInput('',secLevel,3,INPUT_TIMEOUT,secLevel)
+        v,r:=Val(secLevel)
+        IF r=0 THEN StrCopy(secLevel,'')
+      CASE "@"
+        flag:=2
+      CASE "~"
+        IF preset<>-1
+          aePuts('[0mUpdating users...')
+          v:=applyBulkPresetChanges(preset,allConf,areaName,secLevel)
+          IF (logonType>=LOGON_TYPE_REMOTE)
+            StringF(tempstr,'\tREMOTE Bulk Preset Apply, Area=\s, SecLevel=\s, Preset=\d, AllConfs=\s, RecordsAffected=\d',areaName,secLevel,preset,IF allConf THEN 'Yes' ELSE 'No',v)
+          ELSE
+            StringF(tempstr,'\tLOCAL  Bulk Preset Apply, Area=\s, SecLevel=\s, Preset=\d, AllConfs=\s, RecordsAffected=\d',areaName,secLevel,preset,IF allConf THEN 'Yes' ELSE 'No',v)
+          ENDIF
+          callersLog(tempstr)
+          aePuts('[23;1H                                     ')
+        ENDIF
+      CASE "\t"
+        flag:=1
+    ENDSELECT
+    conPuts('[0 p'); /* turn console cursor off */
+  UNTIL flag
+  
+  IF flag=1 THEN RETURN RESULT_ABORT
+ENDPROC RESULT_SUCCESS
+
+PROC displayBulkPresetScreen()
+  aePuts('[2;1H                     [33mBULK ACCOUNT MAINTENANCE[0m')
+
+  aePuts('[4;1H Preset to apply:')
+
+  IF checkToolTypeExists(TOOLTYPE_PRESET,1,'PRESET.AREA') THEN aePuts('[6;1H[33m1> [32mApply Preset 1...[36m:')
+  IF checkToolTypeExists(TOOLTYPE_PRESET,2,'PRESET.AREA') THEN aePuts('[7;1H[33m2> [32mApply Preset 2...[36m:')
+  IF checkToolTypeExists(TOOLTYPE_PRESET,3,'PRESET.AREA') THEN aePuts('[8;1H[33m3> [32mApply Preset 3...[36m:')
+  IF checkToolTypeExists(TOOLTYPE_PRESET,4,'PRESET.AREA') THEN aePuts('[9;1H[33m4> [32mApply Preset 4...[36m:')
+  IF checkToolTypeExists(TOOLTYPE_PRESET,5,'PRESET.AREA') THEN aePuts('[10;1H[33m5> [32mApply Preset 5...[36m:')
+  IF checkToolTypeExists(TOOLTYPE_PRESET,6,'PRESET.AREA') THEN aePuts('[11;1H[33m6> [32mApply Preset 6...[36m:')
+  IF checkToolTypeExists(TOOLTYPE_PRESET,7,'PRESET.AREA') THEN aePuts('[12;1H[33m7> [32mApply Preset 7...[36m:')
+  IF checkToolTypeExists(TOOLTYPE_PRESET,8,'PRESET.AREA') THEN aePuts('[13;1H[33m8> [32mApply Preset 8...[36m:')
+
+  aePuts('[15;1H[33m9> [32mApply All Conf Ratio Presets...[36m:')
+
+  aePuts('[17;2H[0mFilter Settings:')
+
+  aePuts('[19;1H[33mA> [32mSelect Area Name [36m:')
+  aePuts('[20;1H[33mB> [32mSelect Sec Level [36m:')
+  aePuts('[22;1H[33m~[36m=[0mApply Changes [33m@[36m=[0mUpdates [33m<TAB>[36m=[0mExit\b\n')
+ENDPROC
+
+PROC displayBulkPresetSettings(preset:LONG, allConfs:LONG, areaName:PTR TO CHAR, secLevel:PTR TO CHAR)
+  DEF tempStr[255]:STRING
+  DEF i,v
+
+  IF checkToolTypeExists(TOOLTYPE_PRESET,1,'PRESET.AREA')
+    StringF(tempStr,'[6;22H[0m \s',IF preset=1 THEN 'Yes' ELSE 'No ')
+    aePuts(tempStr)
+  ENDIF
+  IF checkToolTypeExists(TOOLTYPE_PRESET,2,'PRESET.AREA')
+    StringF(tempStr,'[7;22H[0m \s',IF preset=2 THEN 'Yes' ELSE 'No ')
+    aePuts(tempStr)
+  ENDIF
+  IF checkToolTypeExists(TOOLTYPE_PRESET,3,'PRESET.AREA')
+    StringF(tempStr,'[8;22H[0m \s',IF preset=3 THEN 'Yes' ELSE 'No ')
+    aePuts(tempStr)
+  ENDIF
+  IF checkToolTypeExists(TOOLTYPE_PRESET,4,'PRESET.AREA')
+    StringF(tempStr,'[9;22H[0m \s',IF preset=4 THEN 'Yes' ELSE 'No ')
+    aePuts(tempStr)
+  ENDIF
+  IF checkToolTypeExists(TOOLTYPE_PRESET,5,'PRESET.AREA')
+    StringF(tempStr,'[10;22H[0m \s',IF preset=5 THEN 'Yes' ELSE 'No ')
+    aePuts(tempStr)
+  ENDIF
+  IF checkToolTypeExists(TOOLTYPE_PRESET,6,'PRESET.AREA')
+    StringF(tempStr,'[11;22H[0m \s',IF preset=6 THEN 'Yes' ELSE 'No ')
+    aePuts(tempStr)
+  ENDIF
+  IF checkToolTypeExists(TOOLTYPE_PRESET,7,'PRESET.AREA')
+    StringF(tempStr,'[12;22H[0m \s',IF preset=7 THEN 'Yes' ELSE 'No ')
+    aePuts(tempStr)
+  ENDIF
+  IF checkToolTypeExists(TOOLTYPE_PRESET,8,'PRESET.AREA')
+    StringF(tempStr,'[13;22H[0m \s',IF preset=8 THEN 'Yes' ELSE 'No ')
+    aePuts(tempStr)
+  ENDIF
+
+  StringF(tempStr,'[15;36H[0m \s',IF allConfs THEN 'Yes' ELSE 'No ')
+  aePuts(tempStr)
+
+  i:=calcAffected(areaName,secLevel)
+
+  StringF(tempStr,'[17;19H[34m[[0m\d[34m][0m Users will be updated.     ',i)
+  aePuts(tempStr)
+
+  StringF(tempStr,'[19;23H\s',IF StrLen(areaName)=0 THEN 'N/A' ELSE areaName)
+  aePuts(tempStr)
+
+  StringF(tempStr,'[20;23H\s',IF StrLen(secLevel)=0 THEN 'N/A' ELSE secLevel)
+  aePuts(tempStr)
+
+  aePuts('[23;1H')
+ENDPROC
+
+PROC applyBulkPresetChanges(preset:LONG,allConf:LONG,areaName:PTR TO CHAR,secLevel:PTR TO CHAR)
+  DEF fh,fh2,v
+  DEF stat,stat2,match
+  DEF tempStr[255]:STRING
+
+  IF((fh:=Open(userDataFile,MODE_OLDFILE)))<=0 THEN RETURN RESULT_FAILURE
+
+  IF((fh2:=Open(userMiscFile,MODE_OLDFILE)))<=0
+    Close(fh)
+    RETURN RESULT_FAILURE
+  ENDIF
+
+  REPEAT
+    stat:=Read(fh,tempUser,SIZEOF user)
+    IF stat<>0
+      IF(stat<>SIZEOF user)
+        Close(fh)
+        Close(fh2)
+        RETURN RESULT_FAILURE
+      ENDIF
+    ENDIF
+
+    stat2:=Read(fh2,tempUserMisc,SIZEOF userMisc)
+    IF stat2<>0
+      IF(stat2<>SIZEOF userMisc)
+        Close(fh)
+        Close(fh2)
+        RETURN RESULT_FAILURE
+      ENDIF
+    ENDIF
+
+    IF ((stat<>0) AND (stat2<>0))
+
+      match:=FALSE
+      IF StrLen(areaName)>0
+        IF strCmpi(tempUser.conferenceAccess,areaName,ALL) THEN match:=TRUE
+      ENDIF
+
+      IF StrLen(secLevel)>0
+        v:=Val(secLevel)
+        IF v=tempUser.secStatus THEN match:=TRUE
+      ENDIF
+
+      IF (StrLen(areaName)=0) AND (StrLen(secLevel)=0) THEN match:=TRUE
+
+      IF match
+        IF readToolType(TOOLTYPE_PRESET,preset,'PRESET.AREA',tempStr)
+          strCpy(tempUser.conferenceAccess,tempStr,10)
+
+          tempUser.newUser:=0
+          tempUser.confRJoin:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.CONFRJOIN')
+          tempUser.secStatus:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.ACCESS')
+          tempUser.secLibrary:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.RATIO')
+          tempUser.timeLimit:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.TIME_LIMIT')
+          tempUser.secBoard:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.RATIO_TYPE')
+          tempUser.dailyBytesLimit:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.DAILY_BYTE_LIMIT')
+          tempUser.timeTotal:=tempUser.timeLimit
+          IF allConf THEN applyConfPresets(tempUser,preset)
+        ENDIF
 
         Seek(fh,-SIZEOF user,OFFSET_CURRENT)
         Write(fh,tempUser,SIZEOF user)
@@ -22503,8 +22871,10 @@ ENDPROC RESULT_SUCCESS
 PROC internalCommandMS()
   DEF conf,mystat,oldconf
 
+  nonStopDisplayFlag:=FALSE
   oldconf:=currentConf
   currentConf:=0
+  lineCount:=2
   aePuts('\b\nScanning conferences for mail...\b\n\b\n')
   mciViewSafe:=FALSE
   FOR conf:=1 TO cmds.numConf
@@ -22811,9 +23181,9 @@ PROC internalCommandS()
   aePuts(tmp)
   StringF(tmp,'[32mOnline Baud[33m:[0m \d\b\n',onlineBaud)
   aePuts(tmp)
-  StringF(tmp,'[32mRate CPS UP[33m:[0m \d\b\n',loggedOnUserKeys.upCPS AND $FFFF)
+  StringF(tmp,'[32mRate CPS UP[33m:[0m \d\b\n',loggedOnUserKeys.upCPS2)
   aePuts(tmp)
-  StringF(tmp,'[32mRate CPS DN[33m:[0m \d\b\n',loggedOnUserKeys.dnCPS AND $FFFF)
+  StringF(tmp,'[32mRate CPS DN[33m:[0m \d\b\n',loggedOnUserKeys.dnCPS2)
   aePuts(tmp)
   IF(loggedOnUserKeys.userFlags AND USER_SCRNCLR)
     StrCopy(tmp,'[32mScreen  Clr[33m:[0m YES\b\n')
@@ -25197,6 +25567,7 @@ PROC confScan()
   IF (prompt=FALSE) OR (mscan=TRUE)
 
     aePuts('\b\nScanning conferences for mail...\b\n\b\n')
+    lineCount:=2
     mciViewSafe:=FALSE
     FOR conf:=1 TO cmds.numConf
       IF (checkConfAccess(conf))
@@ -26689,8 +27060,10 @@ PROC initNewUser(userData:PTR TO user,userKeys: PTR TO userKeys,userMisc: PTR TO
   userKeys.number:=slotNumber
   strCpy(userKeys.userName,userData.name,ALL)
 
-  userKeys.dnCPS:=0
-  userKeys.upCPS:=0
+  userKeys.oldDnCPS:=0
+  userKeys.dnCPS2:=0
+  userKeys.oldUpCPS:=0
+  userKeys.upCPS2:=0
   userKeys.baud:=0    /* hold last logged on baud rate */
 
 ENDPROC
@@ -27121,8 +27494,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
 
-  StrCopy(expressVer,'v5.1.0alpha',ALL)
-  StrCopy(expressDate,'02-Apr-2019',ALL)
+  StrCopy(expressVer,'v5.1.0beta1',ALL)
+  StrCopy(expressDate,'04-Apr-2019',ALL)
 
   InitSemaphore(bgData)
 
@@ -27363,6 +27736,10 @@ PROC main() HANDLE
 
   StrCopy(historyFolder,'')
   readToolType(TOOLTYPE_BBSCONFIG,'','HISTORY',historyFolder)
+
+  IF readToolType(TOOLTYPE_BBSCONFIG,'','USERNOTES',userNotesFolder)=FALSE
+    StringF(userNotesFolder,'\suserNotes/',cmds.bbsLoc)
+  ENDIF
 
   i:=readToolTypeInt(TOOLTYPE_BBSCONFIG,node,'MAX_DESCLINES')
   IF i<>-1 THEN max_desclines:=i
