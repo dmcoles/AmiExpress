@@ -2305,7 +2305,12 @@ PROC formatSpaceValue(spaceInKB,outstr)
 ENDPROC
 
 PROC formatUnsignedLong(val,outStr)
-  RawDoFmt('%lu',{val},{asmputchar},outStr)
+  DEF outputTxt
+  
+  outputTxt:=NEW [0,0,0,0,0,0,0,0,0,0]:CHAR
+  RawDoFmt('%lu',{val},{asmputchar},outputTxt)
+  StrCopy(outStr,outputTxt)
+  END outputTxt
 ENDPROC
 
 PROC formatBCD(valArrayBCD:PTR TO CHAR, outStr)
@@ -8685,8 +8690,8 @@ PROC loadAccount(slot,userPtr:PTR TO user, userKeysPtr:PTR TO userKeys, userMisc
     convertUserUDBytesTOBCD(userPtr,userMiscPtr)
     
     ->populate long download and upload cps if not already done
-    IF ((userKeysPtr.upCPS2 AND $ffffff)=0) THEN userKeysPtr.upCPS2:=userKeysPtr.oldUpCPS
-    IF ((userKeysPtr.dnCPS2 AND $ffffff)=0) THEN userKeysPtr.dnCPS2:=userKeysPtr.oldDnCPS
+    IF (userKeysPtr.oldUpCPS<>-1) AND ((userKeysPtr.upCPS2 AND $ffff)<>(userKeysPtr.oldUpCPS AND $ffff)) THEN userKeysPtr.upCPS2:=userKeysPtr.oldUpCPS AND $ffff
+    IF (userKeysPtr.oldDnCPS<>-1) AND ((userKeysPtr.dnCPS2 AND $fffF)<>(userKeysPtr.oldDnCPS AND $ffff)) THEN userKeysPtr.dnCPS2:=userKeysPtr.oldDnCPS AND $ffff
   ENDIF
 ENDPROC result
 
@@ -12955,7 +12960,7 @@ PROC displayULStats(u: PTR TO user, um:PTR TO userMisc)
 
   CopyMem(um.downloadBytesBCD,totBCD,8)
   IF sopt.toggles[TOGGLES_CREDITBYKB]=FALSE
-    divBCD(totBCD,1024)
+    divBCD1024(totBCD)
   ENDIF
   formatBCD(totBCD,ktot)
 
@@ -12964,7 +12969,7 @@ PROC displayULStats(u: PTR TO user, um:PTR TO userMisc)
 
   CopyMem(um.uploadBytesBCD,totBCD,8)
   IF sopt.toggles[TOGGLES_CREDITBYKB]=FALSE
-    divBCD(totBCD,1024)
+    divBCD1024(totBCD)
   ENDIF
   formatBCD(totBCD,ktot)
   StringF(string,'Number of Uploads        : \d (\sk total)\b\n',u.uploads AND $FFFF,ktot)
@@ -18362,9 +18367,7 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params) HANDLE
 
     addFlagItems(tempList,currentConf,params)
   ELSE
-    IF(mystat>1)
-      addFlagItems(tempList,currentConf,params)
-    ENDIF
+    addFlagItems(tempList,currentConf,params)
 
     FOR i:=0 TO flagFilesList.count()-1
       item:=flagFilesList.item(i)
@@ -19545,28 +19548,34 @@ PROC addBCD(bcdTotal:PTR TO CHAR, valToAdd)
   addBCD2(bcdTotal,bcdVal)
 ENDPROC
 
-/*doesnt handle negative numbers and very ineffecient*/
-PROC divBCD(bcdVal:PTR TO CHAR,n)
-  DEF bcdVal2[8]:ARRAY OF CHAR
-  DEF bcdVal3[8]:ARRAY OF CHAR
+PROC divBCD1024(bcdVal:PTR TO CHAR)
 
-  convertToBCD(n,bcdVal2)
-  convertToBCD(0,bcdVal3)
-
-  REPEAT
-    subBCD2(bcdVal,bcdVal2)
-    IF bcdVal[0]<$50 THEN addBCD(bcdVal3,1)
-  UNTIL isZeroBCD(bcdVal) OR (bcdVal[0]>=$50)
-
-  CopyMem(bcdVal3,bcdVal,8)
-ENDPROC
-
-PROC isZeroBCD(bcdVal:PTR TO CHAR)
-  DEF i
+  DEF decVal[16]:ARRAY OF CHAR
+  DEF i,i2,n=0,c=0
+  
   FOR i:=0 TO 7
-    IF bcdVal[i]<>0 THEN RETURN FALSE
+    decVal[n]:=Shr(bcdVal[i] AND $f0,4)
+    n++
+    decVal[n]:=bcdVal[i] AND $f
+    n++
   ENDFOR
-ENDPROC TRUE
+  
+  FOR i2:=0 TO 9
+    c:=0
+    FOR i:=0 TO 15
+      n:=Shr(decVal[i],1)
+      IF c THEN n:=n+5
+      c:=decVal[i] AND 1
+      decVal[i]:=n
+    ENDFOR
+  ENDFOR
+
+  n:=0
+  FOR i:=0 TO 7
+    bcdVal[i]:=Shl(decVal[n],4)+decVal[n+1]
+    n:=n+2
+  ENDFOR
+ENDPROC
 
 PROC checkLockAccounts(f6)
   DEF tempstr[255]:STRING
@@ -23181,9 +23190,11 @@ PROC internalCommandS()
   aePuts(tmp)
   StringF(tmp,'[32mOnline Baud[33m:[0m \d\b\n',onlineBaud)
   aePuts(tmp)
-  StringF(tmp,'[32mRate CPS UP[33m:[0m \d\b\n',loggedOnUserKeys.upCPS2)
+  formatUnsignedLong(loggedOnUserKeys.upCPS2,tmp2)
+  StringF(tmp,'[32mRate CPS UP[33m:[0m \s\b\n',tmp2)
   aePuts(tmp)
-  StringF(tmp,'[32mRate CPS DN[33m:[0m \d\b\n',loggedOnUserKeys.dnCPS2)
+  formatUnsignedLong(loggedOnUserKeys.dnCPS2,tmp2)
+  StringF(tmp,'[32mRate CPS DN[33m:[0m \s\b\n',tmp2)
   aePuts(tmp)
   IF(loggedOnUserKeys.userFlags AND USER_SCRNCLR)
     StrCopy(tmp,'[32mScreen  Clr[33m:[0m YES\b\n')
@@ -27495,7 +27506,7 @@ PROC main() HANDLE
   DEF transptr:PTR TO mln
 
   StrCopy(expressVer,'v5.1.0beta1',ALL)
-  StrCopy(expressDate,'04-Apr-2019',ALL)
+  StrCopy(expressDate,'06-Apr-2019',ALL)
 
   InitSemaphore(bgData)
 
