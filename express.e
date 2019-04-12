@@ -1922,8 +1922,10 @@ PROC checkDoorMsg(mode)
         ELSE
           ->calculate the new password hash
           StrCopy(tempstring,servermsg.string)
-          UpperStr(tempstring)
-          loggedOnUser.pwdHash:=calcPasswordHash(tempstring)
+          IF StrLen(tempstring)>0
+            UpperStr(tempstring)
+            loggedOnUser.pwdHash:=calcPasswordHash(tempstring)
+          ENDIF
         ENDIF
       CASE DT_LOCATION
         IF (servermsg.data)
@@ -2272,18 +2274,20 @@ PROC getPass2(prompt: PTR TO CHAR,password:PTR TO CHAR,pwdhash:LONG, max:LONG,ou
 
     IF(j>max) THEN SetStr(pass,max)
 
-    IF (password<>NIL)
-      IF(strCmpi(pass,password,ALL))
-        purgeLine()
-        aePuts('\b\n')
-        RETURN RESULT_SUCCESS
-      ENDIF
-    ELSE
-      UpperStr(pass)
-      IF calcPasswordHash(pass)=pwdhash
-        purgeLine()
-        aePuts('\b\n')
-        RETURN RESULT_SUCCESS
+    IF j>0
+      IF (password<>NIL)
+        IF(strCmpi(pass,password,ALL))
+          purgeLine()
+          aePuts('\b\n')
+          RETURN RESULT_SUCCESS
+        ENDIF
+      ELSE
+        UpperStr(pass)
+        IF calcPasswordHash(pass)=pwdhash
+          purgeLine()
+          aePuts('\b\n')
+          RETURN RESULT_SUCCESS
+        ENDIF
       ENDIF
     ENDIF
     aePuts('\b\n')
@@ -4507,8 +4511,10 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
             ELSE
               ->calculate the new password hash
               StrCopy(tempstring,msg.string)
-              UpperStr(tempstring)
-              loggedOnUser.pwdHash:=calcPasswordHash(tempstring)
+              IF StrLen(tempstring)>0 
+                UpperStr(tempstring)
+                loggedOnUser.pwdHash:=calcPasswordHash(tempstring)
+              ENDIF
             ENDIF
           CASE DT_LOCATION
             IF (msg.data)
@@ -7985,6 +7991,51 @@ PROC doFax()
   setEnvStat(ENV_AWAITCONNECT)
 ENDPROC
 
+PROC checkForCallerId(string:PTR TO CHAR)
+  DEF tempstr[255]:STRING
+  DEF n,r
+  
+  r:=FALSE
+  IF InStr(string,'CID')>=0
+    IF (n:=InStr(string,'='))<>-1
+      StrCopy(tempstr,TrimStr(string+n+1))
+      
+      ->does this string include a host name
+      IF (n:=InStr(tempstr,' ('))<>-1
+      
+        ->grab ip part
+        StrCopy(hostIP,tempstr,n)
+        
+        ->grab hostname part
+        StrCopy(hostName,TrimStr(tempstr+n+2))
+        
+        ->remove last character (closing bracket)
+        SetStr(hostName,StrLen(hostName)-1)
+      ELSE
+        r:=TRUE
+        FOR n:=0 TO StrLen(tempstr)-1
+          IF ((tempstr[n]<"0") OR (tempstr[n]>"9")) AND (tempstr[n]<>".") THEN r:=FALSE
+        ENDFOR
+        IF r THEN StrCopy(hostIP,tempstr) ELSE StrCopy(hostName,tempstr)
+      ENDIF
+      
+    ENDIF
+    r:=TRUE
+  ENDIF
+  IF InStr(string,'HOST NAME')>=0
+    IF (n:=InStr(string,'='))<>-1
+      StrCopy(hostName,TrimStr(string+n+1))
+    ENDIF
+    r:=TRUE
+  ENDIF
+  IF InStr(string,'HOST IP ADDR')>=0
+    IF (n:=InStr(string,'='))<>-1
+      StrCopy(hostIP,TrimStr(string+n+1))
+    ENDIF
+    r:=TRUE
+  ENDIF 
+ENDPROC r
+
 PROC checkIncomingCall()
   DEF rCount,input
   DEF string[255]:STRING
@@ -8013,19 +8064,10 @@ PROC checkIncomingCall()
   WHILE(rCount)
     stat:=lineInput('','',80,5,string)
     IF stat<>RESULT_SUCCESS THEN RETURN
-
+    checkForCallerId(string)
     IF StrLen(string)>0
-      IF InStr(string,'HOST NAME')>=0
-        IF (n:=InStr(string,'='))<>-1
-          StrCopy(hostName,TrimStr(string+n+1))
-        ENDIF
-      ENDIF
-      IF InStr(string,'HOST IP ADDR')>=0
-        IF (n:=InStr(string,'='))<>-1
-          StrCopy(hostIP,TrimStr(string+n+1))
-        ENDIF
-      ENDIF
       IF(stringCompare(string,cmds.mRing))=RESULT_SUCCESS THEN rCount--
+      IF(StrCmp(string,'CONNECT',7)) THEN JUMP go2
     ENDIF
   ENDWHILE
   IF(rCount) THEN RETURN
@@ -8046,21 +8088,25 @@ go:
   IF(sopt.trapDoor=FALSE)
     StringF(string,'\s\b',cmds.mAnswer)
     serPuts(string)
+    
+    StrCopy(string,'')
+go2:
     n:=0
-    IF(input=RESULT_TIMEOUT) THEN JUMP timedout
     REPEAT
-      input:=lineInput('','',80,40,string)
       IF(input=RESULT_TIMEOUT) THEN JUMP timedout
-      IF strCmpi(string,'+FCO',ALL)
-        doFax()
-        RESULT_SUCCESS
-      ELSEIF (StrCmp(string,'CONNECT',7))
-        isConnected:=TRUE
-      ELSEIF (StrLen(string)>0) AND (StrCmp(string,cmds.mRing,ALL)=FALSE) AND (StrCmp(string,cmds.mAnswer,ALL)=FALSE)
-        n++
-        StringF(tempstr,'\tINVALID CONNECT    = \s',string)
-        callersLog(tempstr)
+      IF checkForCallerId(string)=FALSE
+        IF strCmpi(string,'+FCO',ALL)
+          doFax()
+          RESULT_SUCCESS
+        ELSEIF (StrCmp(string,'CONNECT',7))
+          isConnected:=TRUE
+        ELSEIF (StrLen(string)>0) AND (StrCmp(string,cmds.mRing,ALL)=FALSE) AND (StrCmp(string,cmds.mAnswer,ALL)=FALSE)
+          n++
+          StringF(tempstr,'\tINVALID CONNECT    = \s',string)
+          callersLog(tempstr)
+        ENDIF
       ENDIF
+      IF isConnected=FALSE THEN input:=lineInput('','',80,40,string)
     UNTIL((isConnected) OR (n=5))
     IF isConnected=FALSE THEN JUMP timedout
   ELSE
@@ -8138,7 +8184,7 @@ reserveRedo:
   StrCopy(reservedName,tempUserKeys.userName)
 ENDPROC
 
-PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE)
+PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
   DEF consolesig=0,windowsig=0,obuf[255]:STRING
   DEF ch=0,lch,wasControl=0,signals
   DEF doorsig=0,rexxsig=0,serialsig=0,timersig=0,timedout=0
@@ -8215,7 +8261,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE)
     ENDIF
   ENDIF
 
-  IF (ch=0) AND signals AND serialsig
+  IF (ch=0) AND allowSer AND signals AND serialsig
     IF rawMode
       lch:=readMayGetChar(serialReadMP,{serbuff})
       IF lch<>-1 THEN ch:=lch
@@ -8776,8 +8822,8 @@ PROC loadAccount(slot,userPtr:PTR TO user, userKeysPtr:PTR TO userKeys, userMisc
     convertUserUDBytesTOBCD(userPtr,userMiscPtr)
     
     ->populate long download and upload cps if not already done
-    IF (userKeysPtr.oldUpCPS<>-1) AND ((userKeysPtr.upCPS2 AND $ffff)<>(userKeysPtr.oldUpCPS AND $ffff)) THEN userKeysPtr.upCPS2:=userKeysPtr.oldUpCPS AND $ffff
-    IF (userKeysPtr.oldDnCPS<>-1) AND ((userKeysPtr.dnCPS2 AND $fffF)<>(userKeysPtr.oldDnCPS AND $ffff)) THEN userKeysPtr.dnCPS2:=userKeysPtr.oldDnCPS AND $ffff
+    IF (userKeysPtr.oldUpCPS<>-1) AND ((userKeysPtr.upCPS2)<>(userKeysPtr.oldUpCPS AND $ffff)) THEN userKeysPtr.upCPS2:=userKeysPtr.oldUpCPS AND $ffff
+    IF (userKeysPtr.oldDnCPS<>-1) AND ((userKeysPtr.dnCPS2)<>(userKeysPtr.oldDnCPS AND $ffff)) THEN userKeysPtr.dnCPS2:=userKeysPtr.oldDnCPS AND $ffff
   ENDIF
 ENDPROC result
 
@@ -19877,8 +19923,10 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
               ENDFOR
               aePuts(tempStr)
               lineInput('','',50,INPUT_TIMEOUT,tempStr)
-              UpperStr(tempStr)
-              hoozer.pwdHash:=calcPasswordHash(tempStr)
+              IF StrLen(tempStr)>0
+                UpperStr(tempStr)
+                hoozer.pwdHash:=calcPasswordHash(tempStr)
+              ENDIF
             ENDIF
           ELSE
             StrCopy(tempStr,'[3;56H')
@@ -19888,8 +19936,10 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
             ENDFOR
             aePuts(tempStr)
             lineInput('','',50,INPUT_TIMEOUT,tempStr)
-            UpperStr(tempStr)
-            hoozer.pwdHash:=calcPasswordHash(tempStr)
+            IF StrLen(tempStr)>0
+              UpperStr(tempStr)
+              hoozer.pwdHash:=calcPasswordHash(tempStr)
+            ENDIF
           ENDIF
           flag:=0
         CASE "E" /* Phone number */
@@ -26760,7 +26810,7 @@ PROC processAwait()
   ENDIF
 
   IF (sopt.trapDoor=FALSE)
-    wasControl,ch:=processInputMessage(1,Shl(1,ownDevSignal))
+    wasControl,ch:=processInputMessage(1,Shl(1,ownDevSignal),FALSE,FALSE)
     IF (ch=RESULT_SIGNALLED)
       suspendBBS(TRUE)
       displayInitialisingLogo()
@@ -27650,8 +27700,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
 
-  StrCopy(expressVer,'v5.1.0beta2',ALL)
-  StrCopy(expressDate,'11-Apr-2019',ALL)
+  StrCopy(expressVer,'v5.1.0beta3',ALL)
+  StrCopy(expressDate,'12-Apr-2019',ALL)
 
   InitSemaphore(bgData)
 
@@ -27766,10 +27816,20 @@ PROC main() HANDLE
   IF checkToolTypeExists(TOOLTYPE_NODE,node,'TELNETD')
     ringCount:=2;
     strCpy(cmds.mInit,'',ALL)
-    strCpy(cmds.mReset,'AT*C1\b',ALL)
+    strCpy(cmds.mReset,'ATS0=1*C1\b',ALL)
     strCpy(cmds.mRing,'RING',ALL)
     strCpy(cmds.mAnswer,'ATA',ALL)
     strCpy(sopt.offHook,'',ALL)
+  ENDIF
+
+  IF checkToolTypeExists(TOOLTYPE_NODE,node,'TELSERD')
+    ringCount:=2;
+    strCpy(cmds.mInit,'',ALL)
+    strCpy(cmds.mReset,'+++ATH0S0=1+CID=3\b',ALL)
+    strCpy(cmds.mRing,'RING',ALL)
+    strCpy(cmds.mAnswer,'ATA',ALL)
+    strCpy(sopt.offHook,'',ALL)
+    sopt.toggles[TOGGLES_SERIALRESET]:=1
   ENDIF
 
   StringF(amixnetOutboundDir,'\sAmiXnet/OutBound/',cmds.bbsLoc)
