@@ -1,10 +1,10 @@
 # Compile ACP and EXPRESS and any dependencies
 
-options=DEBUG
+options=DEBUG IGNORECACHE
 
 all:					acp express5 jsonimport icon2cfg
 
-release:				options = 
+release:				options = IGNORECACHE 
 release:				acp express5 jsonimport icon2cfg
 
 acp:					acp.e axcommon.m miscfuncs.m jsonparser.m

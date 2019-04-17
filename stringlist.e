@@ -1,13 +1,10 @@
-
-
 /*
 
 string list class that manages the freeing of its own strings and hides access to the underlying list implementation
 
 */
 
-  OPT MODULE
-
+OPT MODULE
 
 EXPORT OBJECT stringlist
   PRIVATE items:PTR TO LONG
@@ -42,10 +39,12 @@ EXPORT PROC clear() OF stringlist
 ENDPROC
 
 EXPORT PROC expand() OF stringlist
-  DEF old,len
+  DEF old,len,inc
   old:=self.items
   len:=ListLen(old)
-  len:=len+Shr(len,2)
+  inc:=Shr(len,2)
+  IF inc<5 THEN inc:=5
+  len:=len+inc
   self.items:=List(len)
   ListAdd(self.items,old)
   DisposeLink(old)
@@ -55,7 +54,7 @@ EXPORT PROC add(stringVal:PTR TO CHAR) OF stringlist
   DEF s,c
   
   c:=ListLen(self.items)
-  IF c=ListMax(self.items) THEN c:=self.expand()
+  IF c=ListMax(self.items) THEN self.expand()
   
   s:=String(StrLen(stringVal))
   StrCopy(s,stringVal)
@@ -72,7 +71,7 @@ EXPORT PROC setItem(n,stringVal:PTR TO CHAR) OF stringlist
   DisposeLink(self.items[n])
   self.items[n]:=s
 ENDPROC
-
+  
 EXPORT PROC remove(n) OF stringlist
   DEF i,t
   DisposeLink(self.items[n])
@@ -131,10 +130,12 @@ EXPORT PROC clear() OF stdlist
 ENDPROC
 
 EXPORT PROC expand() OF stdlist
-  DEF old,len
+  DEF old,len,inc
   old:=self.items
   len:=ListLen(old)
-  len:=len+Shr(len,2)
+  inc:=Shr(len,2)
+  IF inc<5 THEN inc:=5
+  len:=len+inc
   self.items:=List(len)
   ListAdd(self.items,old)
   DisposeLink(old)
@@ -144,7 +145,7 @@ EXPORT PROC add(v:LONG) OF stdlist
   DEF s,c
   
   c:=ListLen(self.items)
-  IF c=ListMax(self.items) THEN c:=self.expand()
+  IF c=ListMax(self.items) THEN self.expand()
   
   ListAdd(self.items,[0])
   self.items[c]:=v

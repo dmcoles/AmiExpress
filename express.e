@@ -3548,7 +3548,7 @@ PROC addFlagItem(list:PTR TO stdlist,confNum,fileName)
 
   item:=NEW item
   item.fileName:=String(StrLen(fileName))
-  StrCopy(item.fileName,fileName)
+  fullTrim(fileName,item.fileName)
   item.confNum:=confNum
   list.add(item)
 ENDPROC
@@ -12952,25 +12952,28 @@ PROC addFlagToList(s:PTR TO CHAR, confNum = -1)
   DEF p: PTR TO CHAR
   DEF stat
   DEF item:PTR TO flagFileItem
+  DEF fileName
 
-  s:=TrimStr(s)
+  fileName:=String(StrLen(s))
+  fullTrim(s,fileName)
 
   IF confNum=-1 THEN confNum:=currentConf
 
-  IF(StrLen(s)>1)
-    UpperStr(s)
-    stat:=isInFlaggedList(s,confNum)
+  IF(StrLen(fileName)>1)
+    UpperStr(fileName)
+    stat:=isInFlaggedList(fileName,confNum)
     IF(stat=FALSE)
       /*IF flagFilesList.count()=flagFilesList.maxSize()
         aePuts('Too many flags\b\n')
         RETURN 1
       ENDIF*/
 
-      addFlagItem(flagFilesList,confNum,s)
-
+      addFlagItem(flagFilesList,confNum,fileName)
+      Dispose(fileName)
       RETURN 2
     ENDIF
   ENDIF
+  Dispose(fileName)
 ENDPROC 0
 
 PROC removeFlagFromList(s: PTR TO CHAR, c=-1)
@@ -13306,10 +13309,12 @@ gotit:
                 flagFile:=NEW flagFile
                 flagFile.confNum:=checkConfNum
                 flagFile.fileName:=String(StrLen(final))
-                StrCopy(flagFile.fileName,final)
+                fullTrim(final,flagFile.fileName)
                 cfn.add(flagFile)
-                IF((p:=isInFlaggedList(fBlock.filename,checkConfNum)))=FALSE
-                  addFlagToList(fBlock.filename,checkConfNum)
+                IF sysopdl=FALSE
+                  IF((p:=isInFlaggedList(fBlock.filename,checkConfNum)))=FALSE
+                    addFlagToList(fBlock.filename,checkConfNum)
+                  ENDIF
                 ENDIF
               ELSE
                 aePuts('   File is already selected!\b\n')
@@ -18410,6 +18415,7 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params) HANDLE
   DEF badBCD[8]:ARRAY OF CHAR
   DEF bcdStr[20]:STRING
   DEF tempStr[255]:STRING
+  DEF tempStr2[255]:STRING
   DEF tempList=NIL:PTR TO stdlist
   DEF item:PTR TO flagFileItem
   DEF finalList:PTR TO stdlist
@@ -18686,7 +18692,9 @@ arestart:
     ENDIF
     aePuts(tempStr)
 
-    status:=lineInput('','',200,INPUT_TIMEOUT,tempStr)
+    status:=lineInput('','',200,INPUT_TIMEOUT,tempStr2)
+    fullTrim(tempStr2,tempStr)
+    
     IF(status<0)
       Throw(ERR_EXCEPT,RESULT_NO_CARRIER)
     ENDIF
@@ -27734,8 +27742,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
 
-  StrCopy(expressVer,'v5.1.0-b4',ALL)
-  StrCopy(expressDate,'15-Apr-2019',ALL)
+  StrCopy(expressVer,'v5.1.0-b5',ALL)
+  StrCopy(expressDate,'17-Apr-2019',ALL)
 
   InitSemaphore(bgData)
 
