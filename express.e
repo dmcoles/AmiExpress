@@ -3027,9 +3027,10 @@ PROC lineInput(promptText,defaultOutput,maxLen,timeout,outputString,addToHistory
   REPEAT
 redoinput:
     wasControl,ch:=processInputMessage(timeout)
-    IF ch=RESULT_ABORT
+    IF (ch=RESULT_ABORT) OR (ch=RESULT_NO_CARRIER)
       StrCopy(outputString,'')
-      ch:=13
+      result:=ch
+      ch:=RESULT_ABORT
     ENDIF
 
     timedout:=(ch=RESULT_TIMEOUT)
@@ -3163,7 +3164,7 @@ redoinput:
         ENDIF
       ENDIF
     ENDIF
-  UNTIL (ch=13) OR (timedout) OR (reqState<>REQ_STATE_NONE)
+  UNTIL (ch=13) OR (ch=RESULT_ABORT) OR (timedout) OR (reqState<>REQ_STATE_NONE)
 
   conPuts('[0 p'); /* turn console cursor off */
 
@@ -5854,7 +5855,9 @@ PROC doPause()
   UNTIL (ch=13) OR (ch=32) OR (ch<0) OR (reqState<>REQ_STATE_NONE)
   lineCount:=0
   aePuts('\b\n')
-ENDPROC
+  IF reqState<>REQ_STATE_NONE THEN ch:=RESULT_NO_CARRIER
+  IF ch<0 THEN RETURN ch
+ENDPROC 0
 
 PROC readRawChar(timeout,extsig = 0)
   DEF wasControl,ch
@@ -7692,6 +7695,9 @@ PROC displayFile(filename, allowMCI=TRUE, resetNonStop=TRUE)
           stat:=checkForPause()
         ENDIF
       ENDIF
+      IF(logonType>=LOGON_TYPE_REMOTE)
+        IF(checkCarrier()=FALSE) THEN stat:=RESULT_NO_CARRIER
+      ENDIF
       EXIT (stat<>RESULT_SUCCESS) OR (reqState<>REQ_STATE_NONE)
       firstline:=FALSE
 ripCont:
@@ -8703,6 +8709,9 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
 
   checkShutDown()
 
+  IF(logonType>=LOGON_TYPE_REMOTE)
+    IF(checkCarrier()=FALSE) THEN ch:=RESULT_NO_CARRIER
+  ENDIF
 ENDPROC wasControl, ch
 
 PROC convertFromBCD(inArray:PTR TO CHAR)
@@ -25775,7 +25784,9 @@ PROC confScan()
         mystat:=joinConf(conf,TRUE,FALSE,IF mscan=FALSE THEN FORCE_MAILSCAN_SKIP ELSE FORCE_MAILSCAN_NOFORCE)
         IF (mystat=RESULT_SUCCESS) AND (fscan)
           newFilesPauseFlag:=TRUE
+          currentConf:=conf
           runSysCommand('N','S U')
+          currentConf:=0
           newFilesPauseFlag:=FALSE
         ELSE
           mystat:=RESULT_SUCCESS
@@ -25892,7 +25903,7 @@ PROC captureRealAndInternetNames()
     strCpy(loggedOnUserMisc.internetName,tempstr,10)
   ENDIF
 
-ENDPROC
+ENDPROC RESULT_SUCCESS
 
 PROC processCommand(cmdtext,internalOnly=FALSE)
   DEF cmdcode[255]:STRING
@@ -26069,7 +26080,7 @@ PROC processLoggedOnUser()
   DEF subState: PTR TO loggedOnState
   DEF wasControl,ch
   DEF string[255]:STRING
-  DEF temp
+  DEF temp,stat
   DEF lastDay,currDay
   DEF currTime
   IF (stateData=0)
@@ -26131,9 +26142,24 @@ PROC processLoggedOnUser()
   IF subState.subState=SUBSTATE_DISPLAY_BULL
     IF (displayScreen(SCREEN_BULL)) THEN doPause()
     IF (displayScreen(SCREEN_NODE_BULL)) THEN doPause()
-    confScan()
-    captureRealAndInternetNames()
-    subState.subState:=SUBSTATE_DISPLAY_CONF_BULL
+    IF logonType>=LOGON_TYPE_REMOTE
+      stat:=checkCarrier()   
+    ELSE
+      stat:=TRUE
+    ENDIF
+    IF (stat) AND (reqState=REQ_STATE_NONE)
+      stat:=confScan()
+      IF stat=RESULT_SUCCESS
+        stat:=captureRealAndInternetNames()
+      ENDIF
+      IF stat=RESULT_SUCCESS
+        subState.subState:=SUBSTATE_DISPLAY_CONF_BULL
+      ELSE
+        reqState:=REQ_STATE_LOGOFF
+      ENDIF
+    ELSE
+      reqState:=REQ_STATE_LOGOFF
+    ENDIF
   ELSEIF subState.subState=SUBSTATE_DISPLAY_CONF_BULL
     joinConf(loggedOnUser.confRJoin,FALSE,FORCE_MAILSCAN_SKIP)
     loadFlagged()
@@ -26295,7 +26321,9 @@ PROC checkPassword()
         JUMP logoffErr
       ENDIF
       stat:=getPass2(passwordPrompt,0,loggedOnUser.pwdHash,50,tempStr)
-      IF(stat<0) THEN RETURN RESULT_SLEEP_LOGOFF
+      IF(stat<0)
+        IF stat=RESULT_NO_CARRIER THEN RETURN RESULT_NO_CARRIER ELSE RETURN RESULT_SLEEP_LOGOFF
+      ENDIF
       IF(stat<>RESULT_SUCCESS)
         StringF(tempStr2,'\tPassword Failure (\s)',tempStr)
         callersLog(tempStr2)
@@ -26670,6 +26698,12 @@ logonLoop:
     IF logonType>=LOGON_TYPE_REMOTE
       stat:=checkPassword()
       IF stat<>RESULT_SUCCESS
+        IF stat=RESULT_NO_CARRIER 
+          logoffLog('Loss Carrier')
+        ELSE
+          logoffLog('N')
+        ENDIF
+        
         END loggedOnUser
         loggedOnUser:=NIL
         END loggedOnUserKeys
@@ -27700,8 +27734,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
 
-  StrCopy(expressVer,'v5.1.0beta3',ALL)
-  StrCopy(expressDate,'12-Apr-2019',ALL)
+  StrCopy(expressVer,'v5.1.0-b4',ALL)
+  StrCopy(expressDate,'15-Apr-2019',ALL)
 
   InitSemaphore(bgData)
 
