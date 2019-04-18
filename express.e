@@ -834,6 +834,8 @@ DEF serialCacheLastFlush2=0
 DEF serialCache=0
 DEF serialCacheEnabled=FALSE
 
+DEF includeDeact=FALSE
+
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
       ERR_ASL  IF AllocAslRequest()=NIL
@@ -12029,15 +12031,15 @@ PROC findUserFromName(start,nameType,name, hoozer: PTR TO user, hoozer2: PTR TO 
     slot++
     SELECT nameType
       CASE NAME_TYPE_USERNAME
-        IF ((nameCompare(hoozer2.userName,tempStr)=RESULT_SUCCESS) AND (hoozer2.number<>0))
+        IF ((nameCompare(hoozer2.userName,tempStr)=RESULT_SUCCESS) AND (includeDeact OR (hoozer2.number<>0)))
           Throw(ERR_EXCEPT,start+slot)
         ENDIF
       CASE NAME_TYPE_REALNAME
-        IF ((nameCompare(hoozer3.realName,tempStr)=RESULT_SUCCESS) AND (hoozer2.number<>0))
+        IF ((nameCompare(hoozer3.realName,tempStr)=RESULT_SUCCESS) AND (includeDeact OR (hoozer2.number<>0)))
           Throw(ERR_EXCEPT,start+slot)
         ENDIF
       CASE NAME_TYPE_INTERNETNAME
-        IF ((nameCompare(hoozer3.internetName,tempStr)=RESULT_SUCCESS) AND (hoozer2.number<>0))
+        IF ((nameCompare(hoozer3.internetName,tempStr)=RESULT_SUCCESS) AND (includeDeact OR (hoozer2.number<>0)))
           Throw(ERR_EXCEPT,start+slot)
         ENDIF
     ENDSELECT
@@ -20219,12 +20221,12 @@ PROC listNewAccounts(f6)
         StringF(tempStr,'FILE-FAULT[\d], ',x)
         aePuts(tempStr)
       ELSE
-        IF((tempUserKeys.newUser=1) AND (tempUserKeys.number<>0))
+        IF((tempUserKeys.newUser=1) AND (includeDeact OR (tempUserKeys.number<>0)))
           foflag:=1
           loadAccount(x,tempUser,tempUserKeys,tempUserMisc)
           stat:=editInfo(x,tempUser,tempUserKeys,tempUserMisc,f6)
           IF(stat=1)
-            aePuts('\b\nAbort\b\n')
+            aePuts('\b\nAbort')
             JUMP acctMark1
           ENDIF
           aePuts('Searching...')
@@ -20312,7 +20314,7 @@ PROC listCreditAccounts(f6)
         StringF(tempStr,'FILE-FAULT[\d], ',x)
         aePuts(tempStr)
       ELSE
-        IF((tempUser.creditDays>0) AND (tempUser.slotNumber<>0))
+        IF((tempUser.creditDays>0) AND (includeDeact OR (tempUser.slotNumber<>0)))
           foflag:=1
           loadAccount(x,tempUser,tempUserKeys,tempUserMisc)
           stat:=creditMaintenance(x,tempUser,tempUserKeys,tempUserMisc,f6)
@@ -20814,12 +20816,19 @@ PROC editAccounts(f6)
   DEF which,lw
   DEF tempStr[255]:STRING
 
+  includeDeact:=FALSE
+  
   setEnvStat(ENV_ACCOUNT)
   IF runSysCommand('ACCOUNTS','')=FALSE
 
     WHILE TRUE
-      aePuts('\b\nS>earch by name  N>ew account editing  C>redit Accounts  B>ulk editing\b\nEdit which account? ')
-          stat:=lineInput('','',5,INPUT_TIMEOUT,tempStr)
+        IF includeDeact
+          aePuts('\b\nI>nactive accounts: Include')
+        ELSE
+          aePuts('\b\nI>nactive accounts: Exclude')
+        ENDIF
+      aePuts('  S>earch by name  N>ew account editing\b\nC>redit Accounts  B>ulk editing\b\nEdit which account? ')
+      stat:=lineInput('','',5,INPUT_TIMEOUT,tempStr)
       IF(stat) THEN JUMP returnf
       IF(charToUpper(tempStr[0])="N")
         listNewAccounts(f6)
@@ -20827,6 +20836,8 @@ PROC editAccounts(f6)
         bulkAccountEditor(f6)
       ELSEIF(charToUpper(tempStr[0])="C")
         listCreditAccounts(f6)
+      ELSEIF(charToUpper(tempStr[0])="I")
+        includeDeact:=Not(includeDeact)
       ELSEIF(charToUpper(tempStr[0])="S")
         aePuts('\b\nUserName: ')
         stat:=lineInput('','',30,INPUT_TIMEOUT,tempStr)
@@ -20853,6 +20864,7 @@ PROC editAccounts(f6)
 returnf:
     aePuts('\b\n')
   ENDIF
+  includeDeact:=FALSE
 
 ENDPROC RESULT_SUCCESS
 
@@ -21648,13 +21660,15 @@ PROC bulkAccountEditor(f6)
         v,r:=Val(settings[12])
         IF r=0 THEN StrCopy(settings[12],'') ELSE StringF(settings[12],'\d',v)
       CASE "1" /* select area Name */
-        aePuts('[19;23H          [19;23H')
+        aePuts('[19;26H          [19;26H')
         lineInput('',areaName,10,INPUT_TIMEOUT,areaName)
       CASE "2" /* select access Level */
-        aePuts('[20;23H   [20;23H')
+        aePuts('[20;26H   [20;26H')
         lineInput('',secLevel,3,INPUT_TIMEOUT,secLevel)
         v,r:=Val(secLevel)
         IF r=0 THEN StrCopy(secLevel,'')
+      CASE "3" /* select access Level */
+        includeDeact:=Not(includeDeact)
       CASE "~"
         aePuts('[0mUpdating users...')
         v:=applyBulkChanges(settings,areaName,secLevel)
@@ -21664,7 +21678,7 @@ PROC bulkAccountEditor(f6)
           StringF(tempstr,'\tLOCAL  Bulk User Update, Area=\s, SecLevel=\s RecordsAffected=\d',areaName,secLevel,v)
         ENDIF
         callersLog(tempstr)
-        aePuts('[23;1H                                     ')
+        aePuts('[24;1H                                     ')
       CASE "\t"
         flag:=1
     ENDSELECT
@@ -21713,12 +21727,13 @@ PROC displayBulkScreen()
 
   aePuts('[19;1H[33m1> [32mSelect Area Name [36m:')
   aePuts('[20;1H[33m2> [32mSelect Sec Level [36m:')
-  aePuts('[22;1H[33m~[36m=[0mApply Changes [33m@[36m=[0mPresets [33m<TAB>[36m=[0mExit\b\n')
+  aePuts('[21;1H[33m3> [32mInclude deactivated [36m:')
+  aePuts('[23;1H[33m~[36m=[0mApply Changes [33m@[36m=[0mPresets [33m<TAB>[36m=[0mExit\b\n')
 ENDPROC
 
 PROC displayBulkSettings(settings:PTR TO LONG, areaName:PTR TO CHAR, secLevel:PTR TO CHAR)
   DEF tempStr[255]:STRING
-  DEF i,v
+  DEF i,tot,v
 
   StringF(tempStr,'[6;58H[0m \s',IF StrLen(settings[0])=0 THEN 'Leave Unchanged' ELSE settings[0])
   aePuts(tempStr)
@@ -21760,28 +21775,37 @@ PROC displayBulkSettings(settings:PTR TO LONG, areaName:PTR TO CHAR, secLevel:PT
   StringF(tempStr,'[7;20H[0m \s',IF StrLen(settings[14])=0 THEN 'Leave Unchanged' ELSE settings[14])
   aePuts(tempStr)
 
-  i:=calcAffected(areaName,secLevel)
+  i,tot:=calcAffected(areaName,secLevel)
 
-  StringF(tempStr,'[17;19H[34m[[0m\d[34m][0m Users will be updated.     ',i)
+  StringF(tempStr,'[17;19H[34m[[0m\d/\d[34m][0m Users will be updated.     ',i,tot)
   aePuts(tempStr)
 
-  StringF(tempStr,'[19;23H\s',IF StrLen(areaName)=0 THEN 'N/A' ELSE areaName)
+  StringF(tempStr,'[19;26H\s',IF StrLen(areaName)=0 THEN 'N/A' ELSE areaName)
   aePuts(tempStr)
 
-  StringF(tempStr,'[20;23H\s',IF StrLen(secLevel)=0 THEN 'N/A' ELSE secLevel)
+  StringF(tempStr,'[20;26H\s',IF StrLen(secLevel)=0 THEN 'N/A' ELSE secLevel)
   aePuts(tempStr)
 
-  aePuts('[23;1H')
+  StringF(tempStr,'[21;26H\s',IF includeDeact THEN 'Yes' ELSE 'No ')
+  aePuts(tempStr)
+
+  aePuts('[24;1H')
 ENDPROC
 
 PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO CHAR)
-  DEF fh,fh2,v
-  DEF stat,stat2,match
+  DEF fh,fh2,fh3,v
+  DEF stat,stat2,stat3,match
 
   IF((fh:=Open(userDataFile,MODE_OLDFILE)))<=0 THEN RETURN RESULT_FAILURE
 
   IF((fh2:=Open(userMiscFile,MODE_OLDFILE)))<=0
     Close(fh)
+    RETURN RESULT_FAILURE
+  ENDIF
+
+  IF((fh3:=Open(userKeysFile,MODE_OLDFILE)))<=0
+    Close(fh)
+    Close(fh2)
     RETURN RESULT_FAILURE
   ENDIF
 
@@ -21791,6 +21815,7 @@ PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO 
       IF(stat<>SIZEOF user)
         Close(fh)
         Close(fh2)
+        Close(fh3)
         RETURN RESULT_FAILURE
       ENDIF
     ENDIF
@@ -21800,11 +21825,22 @@ PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO 
       IF(stat2<>SIZEOF userMisc)
         Close(fh)
         Close(fh2)
+        Close(fh3)
         RETURN RESULT_FAILURE
       ENDIF
     ENDIF
 
-    IF ((stat<>0) AND (stat2<>0))
+    stat3:=Read(fh3,tempUserKeys,SIZEOF userKeys)
+    IF stat3<>0
+      IF(stat3<>SIZEOF userKeys)
+        Close(fh)
+        Close(fh2)
+        Close(fh3)
+        RETURN RESULT_FAILURE
+      ENDIF
+    ENDIF
+
+    IF ((stat<>0) AND (stat2<>0) AND (stat3<>0))
 
       match:=FALSE
       IF StrLen(areaName)>0
@@ -21817,6 +21853,8 @@ PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO 
       ENDIF
 
       IF (StrLen(areaName)=0) AND (StrLen(secLevel)=0) THEN match:=TRUE
+
+      IF ((includeDeact=FALSE) AND (tempUserKeys.number=0)) THEN match:=FALSE
 
       IF match
         IF StrLen(settings[0])>0 THEN tempUser.secLibrary:=Val(settings[0])
@@ -21849,7 +21887,7 @@ PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO 
         Write(fh2,tempUserMisc,SIZEOF userMisc)
       ENDIF
     ENDIF
-  UNTIL (stat2=0) AND (stat=0)
+  UNTIL (stat2=0) OR (stat=0) OR (stat3=0)
 
   Close(fh)
   Close(fh2)
@@ -21917,13 +21955,15 @@ PROC bulkPresets()
       CASE "9"
         allConf:=Not(allConf)
       CASE "A" /* select area Name */
-        aePuts('[19;23H          [19;23H')
+        aePuts('[19;26H          [19;26H')
         lineInput('',areaName,10,INPUT_TIMEOUT,areaName)
       CASE "B" /* select access Level */
-        aePuts('[20;23H   [20;23H')
+        aePuts('[20;26H   [20;26H')
         lineInput('',secLevel,3,INPUT_TIMEOUT,secLevel)
         v,r:=Val(secLevel)
         IF r=0 THEN StrCopy(secLevel,'')
+      CASE "C"
+        includeDeact:=Not(includeDeact)
       CASE "@"
         flag:=2
       CASE "~"
@@ -21936,7 +21976,7 @@ PROC bulkPresets()
             StringF(tempstr,'\tLOCAL  Bulk Preset Apply, Area=\s, SecLevel=\s, Preset=\d, AllConfs=\s, RecordsAffected=\d',areaName,secLevel,preset,IF allConf THEN 'Yes' ELSE 'No',v)
           ENDIF
           callersLog(tempstr)
-          aePuts('[23;1H                                     ')
+          aePuts('[24;1H                                     ')
         ENDIF
       CASE "\t"
         flag:=1
@@ -21948,6 +21988,7 @@ PROC bulkPresets()
 ENDPROC RESULT_SUCCESS
 
 PROC displayBulkPresetScreen()
+  DEF tempStr[255]:STRING
   aePuts('[2;1H                     [33mBULK ACCOUNT MAINTENANCE[0m')
 
   aePuts('[4;1H Preset to apply:')
@@ -21967,12 +22008,13 @@ PROC displayBulkPresetScreen()
 
   aePuts('[19;1H[33mA> [32mSelect Area Name [36m:')
   aePuts('[20;1H[33mB> [32mSelect Sec Level [36m:')
-  aePuts('[22;1H[33m~[36m=[0mApply Changes [33m@[36m=[0mUpdates [33m<TAB>[36m=[0mExit\b\n')
+  aePuts('[21;1H[33mC> [32mInclude deactivated [36m:')
+  aePuts('[23;1H[33m~[36m=[0mApply Changes [33m@[36m=[0mUpdates [33m<TAB>[36m=[0mExit\b\n')
 ENDPROC
 
 PROC displayBulkPresetSettings(preset:LONG, allConfs:LONG, areaName:PTR TO CHAR, secLevel:PTR TO CHAR)
   DEF tempStr[255]:STRING
-  DEF i,v
+  DEF i,tot,v
 
   IF checkToolTypeExists(TOOLTYPE_PRESET,1,'PRESET.AREA')
     StringF(tempStr,'[6;22H[0m \s',IF preset=1 THEN 'Yes' ELSE 'No ')
@@ -22010,23 +22052,26 @@ PROC displayBulkPresetSettings(preset:LONG, allConfs:LONG, areaName:PTR TO CHAR,
   StringF(tempStr,'[15;36H[0m \s',IF allConfs THEN 'Yes' ELSE 'No ')
   aePuts(tempStr)
 
-  i:=calcAffected(areaName,secLevel)
+  i,tot:=calcAffected(areaName,secLevel)
 
-  StringF(tempStr,'[17;19H[34m[[0m\d[34m][0m Users will be updated.     ',i)
+  StringF(tempStr,'[17;19H[34m[[0m\d/\d[34m][0m Users will be updated.     ',i,tot)
   aePuts(tempStr)
 
-  StringF(tempStr,'[19;23H\s',IF StrLen(areaName)=0 THEN 'N/A' ELSE areaName)
+  StringF(tempStr,'[19;26H\s',IF StrLen(areaName)=0 THEN 'N/A' ELSE areaName)
   aePuts(tempStr)
 
-  StringF(tempStr,'[20;23H\s',IF StrLen(secLevel)=0 THEN 'N/A' ELSE secLevel)
+  StringF(tempStr,'[20;26H\s',IF StrLen(secLevel)=0 THEN 'N/A' ELSE secLevel)
   aePuts(tempStr)
 
-  aePuts('[23;1H')
+  StringF(tempStr,'[21;26H\s',IF includeDeact THEN 'Yes' ELSE 'No ')
+  aePuts(tempStr)
+
+  aePuts('[24;1H')
 ENDPROC
 
 PROC applyBulkPresetChanges(preset:LONG,allConf:LONG,areaName:PTR TO CHAR,secLevel:PTR TO CHAR)
-  DEF fh,fh2,v
-  DEF stat,stat2,match
+  DEF fh,fh2,fh3,v
+  DEF stat,stat2,stat3,match
   DEF tempStr[255]:STRING
 
   IF((fh:=Open(userDataFile,MODE_OLDFILE)))<=0 THEN RETURN RESULT_FAILURE
@@ -22036,12 +22081,19 @@ PROC applyBulkPresetChanges(preset:LONG,allConf:LONG,areaName:PTR TO CHAR,secLev
     RETURN RESULT_FAILURE
   ENDIF
 
+  IF((fh3:=Open(userKeysFile,MODE_OLDFILE)))<=0
+    Close(fh)
+    Close(fh2)
+    RETURN RESULT_FAILURE
+  ENDIF
+
   REPEAT
     stat:=Read(fh,tempUser,SIZEOF user)
     IF stat<>0
       IF(stat<>SIZEOF user)
         Close(fh)
         Close(fh2)
+        Close(fh3)
         RETURN RESULT_FAILURE
       ENDIF
     ENDIF
@@ -22051,11 +22103,22 @@ PROC applyBulkPresetChanges(preset:LONG,allConf:LONG,areaName:PTR TO CHAR,secLev
       IF(stat2<>SIZEOF userMisc)
         Close(fh)
         Close(fh2)
+        Close(fh3)
         RETURN RESULT_FAILURE
       ENDIF
     ENDIF
 
-    IF ((stat<>0) AND (stat2<>0))
+    stat3:=Read(fh3,tempUserKeys,SIZEOF userKeys)
+    IF stat3<>0
+      IF(stat3<>SIZEOF userKeys)
+        Close(fh)
+        Close(fh2)
+        Close(fh3)
+        RETURN RESULT_FAILURE
+      ENDIF
+    ENDIF
+
+    IF ((stat<>0) AND (stat2<>0) AND (stat3<>0))
 
       match:=FALSE
       IF StrLen(areaName)>0
@@ -22068,6 +22131,8 @@ PROC applyBulkPresetChanges(preset:LONG,allConf:LONG,areaName:PTR TO CHAR,secLev
       ENDIF
 
       IF (StrLen(areaName)=0) AND (StrLen(secLevel)=0) THEN match:=TRUE
+
+      IF ((includeDeact=FALSE) AND (tempUserKeys.number=0)) THEN match:=FALSE
 
       IF match
         IF readToolType(TOOLTYPE_PRESET,preset,'PRESET.AREA',tempStr)
@@ -22091,44 +22156,66 @@ PROC applyBulkPresetChanges(preset:LONG,allConf:LONG,areaName:PTR TO CHAR,secLev
         Write(fh2,tempUserMisc,SIZEOF userMisc)
       ENDIF
     ENDIF
-  UNTIL (stat2=0) AND (stat=0)
+  UNTIL (stat2=0) OR (stat=0) OR (stat3=0)
 
   Close(fh)
   Close(fh2)
+  Close(fh3)
 ENDPROC
 
 PROC calcAffected(areaName:PTR TO CHAR, secLevel:PTR TO CHAR)
-  DEF fh,tot=0,v
-  DEF stat,match
+  DEF fh,fh2,tot=0,all=0,v
+  DEF stat,stat2, match
 
   IF((fh:=Open(userDataFile,MODE_OLDFILE)))<=0 THEN RETURN RESULT_FAILURE
+
+  IF((fh2:=Open(userKeysFile,MODE_OLDFILE)))<=0
+    Close(fh)
+    RETURN RESULT_FAILURE
+  ENDIF
 
   REPEAT
     stat:=Read(fh,tempUser,SIZEOF user)
     IF stat<>0
       IF(stat<>SIZEOF user)
         Close(fh)
+        Close(fh2)
         RETURN RESULT_FAILURE
       ENDIF
     ENDIF
 
-    match:=FALSE
-    IF StrLen(areaName)>0
-      IF strCmpi(tempUser.conferenceAccess,areaName,ALL) THEN match:=TRUE
+    stat2:=Read(fh2,tempUserKeys,SIZEOF userKeys)
+    IF stat2<>0
+      IF(stat2<>SIZEOF userKeys)
+        Close(fh)
+        Close(fh2)
+        RETURN RESULT_FAILURE
+      ENDIF
     ENDIF
 
-    IF StrLen(secLevel)>0
-      v:=Val(secLevel)
-      IF v=tempUser.secStatus THEN match:=TRUE
+    IF (stat<>0) AND (stat2<>0)
+      all++
+      match:=FALSE
+      IF StrLen(areaName)>0
+        IF strCmpi(tempUser.conferenceAccess,areaName,ALL) THEN match:=TRUE
+      ENDIF
+
+      IF StrLen(secLevel)>0
+        v:=Val(secLevel)
+        IF v=tempUser.secStatus THEN match:=TRUE
+      ENDIF
+
+      IF (StrLen(areaName)=0) AND (StrLen(secLevel)=0) THEN match:=TRUE
+      
+      IF ((includeDeact=FALSE) AND (tempUserKeys.number=0)) THEN match:=FALSE
+
+      IF match THEN tot++
     ENDIF
-
-    IF (StrLen(areaName)=0) AND (StrLen(secLevel)=0) THEN match:=TRUE
-
-    IF match THEN tot++
-  UNTIL stat<>SIZEOF user
+  UNTIL (stat<>SIZEOF user) OR (stat2<>SIZEOF userKeys)
 
   Close(fh)
-ENDPROC tot
+  Close(fh2)
+ENDPROC tot,all
 
 PROC fileStatus(opt)
   DEF i,s,n
