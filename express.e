@@ -15465,7 +15465,6 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   zModemInfo.downloading:=TRUE
   result:=XprotocolSend(xprio)
   time2:=getSystemTime()
-  END x
 
   IF zModemInfo.transPos<>zModemInfo.filesize THEN result:=FALSE
 
@@ -15478,6 +15477,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
       xprfnext2(NIL,x)
     ENDIF
   ENDIF
+  END x
 
   /*REPEAT
     fileItem:=fileList.item(i)
@@ -27829,8 +27829,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
 
-  StrCopy(expressVer,'v5.1.0-b5',ALL)
-  StrCopy(expressDate,'17-Apr-2019',ALL)
+  StrCopy(expressVer,'v5.1.0-b6',ALL)
+  StrCopy(expressDate,'23-Apr-2019',ALL)
 
   InitSemaphore(bgData)
 
