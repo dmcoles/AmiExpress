@@ -345,6 +345,8 @@ DEF ndUser[MAX_NODES]:ARRAY OF nodeUsers
 DEF ndUploads[MAX_NODES]:ARRAY OF nodeUsers
 DEF ndDownloads[MAX_NODES]:ARRAY OF nodeUsers
 
+DEF bbsPath[41]:STRING
+
 DEF buttons[20]:ARRAY OF button
 
 DEF users[MAX_NODES]:ARRAY OF user
@@ -403,6 +405,8 @@ DEF translators=NIL: PTR TO translator
 DEF minNode=NIL: PTR TO mln
 
 DEF lockedNodes=-1
+
+DEF persistState=TRUE
 
 DEF shellMode=FALSE
 
@@ -1468,6 +1472,7 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
       CASE LAST_DOWNLOADS
         showLastDownloads(eWin)
     ENDSELECT
+    saveState()
   ENDIF
 ENDPROC
 
@@ -1893,6 +1898,8 @@ PROC checkMasterSig(signals)
               ENDIF
           CASE JH_DOWNLOAD
               regLastDownloads(msg.user,msg.node)
+              saveState()
+              IF topOption = LAST_DOWNLOADS THEN showLastDownloads(eWin)
               StringF(temp,'DL: \s',msg.user)
               StringF(temp1,'\d',SV_NEWMSG)
               updateNode(temp,msg.location,temp1,msg.baud,msg.node)
@@ -1902,6 +1909,8 @@ PROC checkMasterSig(signals)
               ENDIF
           CASE JH_UPLOAD
               regLastUploads(msg.user,msg.node)
+              saveState()
+              IF topOption = LAST_UPLOADS THEN showLastUploads(eWin)
               StringF(temp,'UL: \s',msg.user)
               StringF(temp1,'\d',SV_NEWMSG)
               updateNode(temp,msg.location,temp1,msg.baud,msg.node)
@@ -2672,6 +2681,7 @@ PROC readStartUp(s:PTR TO CHAR)
   
   IF(t:=FindToolType(oldtooltypes,'BBS_GEOGRAPHIC')) THEN StrCopy(mybbslocation,t)
   IF(t:=FindToolType(oldtooltypes,'BBS_LOCATION'))
+    StrCopy(bbsPath,t)
     FOR i:=0 TO nodeCount-1
       cmd:=cmds[i]
       strcpy(cmd.bbsLoc,t)
@@ -2751,6 +2761,10 @@ PROC readStartUp(s:PTR TO CHAR)
         sopt.translation:=minNode
       ENDFOR 
     ENDIF
+  ENDIF
+
+  IF(t:=FindToolType(oldtooltypes,'NO_SAVESTATE'))
+    persistState:=FALSE
   ENDIF
 
   freeToolTypes(dobj,cfg)
@@ -3029,6 +3043,54 @@ PROC attemptShutdown()
         IF(users[i].actionVal<>ENV_SHUTDOWN) THEN notDone:=1 
       ENDIF
     ENDFOR
+  ENDIF
+ENDPROC
+
+PROC loadState()
+  DEF stateFile[255]:STRING
+  DEF tempStr[255]:STRING
+  DEF fh,i,j
+  
+  IF persistState=FALSE THEN RETURN
+
+  StringF(stateFile,'\sacp.dat',bbsPath)
+  fh:=Open(stateFile,MODE_OLDFILE)
+  IF fh>0
+    FOR i:=0 TO MAX_NODES-1
+      FOR j:=0 TO 4
+        ReadStr(fh,tempStr)
+        IF StrLen(tempStr)>0 THEN regLastUser(tempStr,i)
+        ReadStr(fh,tempStr)
+        IF StrLen(tempStr)>0 THEN regLastUploads(tempStr,i)
+        ReadStr(fh,tempStr)
+        IF StrLen(tempStr)>0 THEN regLastDownloads(tempStr,i)
+      ENDFOR
+    ENDFOR
+    Close(fh)
+  ENDIF
+ENDPROC
+
+PROC saveState()
+  DEF stateFile[255]:STRING
+  DEF tempStr[255]:STRING
+  DEF fh,i,j
+  
+  IF persistState=FALSE THEN RETURN
+  
+  StringF(stateFile,'\sacp.dat',bbsPath)
+  fh:=Open(stateFile,MODE_NEWFILE)
+  IF fh>0
+    FOR i:=0 TO MAX_NODES-1
+      FOR j:=0 TO 4
+        StringF(tempStr,'\s\n',ndUser[i].lastUsers[j])
+        Write(fh,tempStr,StrLen(tempStr))
+        StringF(tempStr,'\s\n',ndUploads[i].lastUsers[j])
+        Write(fh,tempStr,StrLen(tempStr))
+        StringF(tempStr,'\s\n',ndDownloads[i].lastUsers[j])
+        Write(fh,tempStr,StrLen(tempStr))
+      ENDFOR
+    ENDFOR
+    Close(fh)
   ENDIF
 ENDPROC
 
@@ -3337,6 +3399,9 @@ PROC main() HANDLE
             ENDIF
           ENDFOR
         ENDIF
+
+        loadState()
+
         WHILE (notDone)
           signals:=Wait(masterSig OR windowSig OR myappsig OR cxsigflag)
           
@@ -3440,6 +3505,7 @@ EXCEPT DO
   IF appicon THEN do_appicon(myappport)
   
   shutDownMaster()
+  saveState()
   IF oldDirLock THEN CurrentDir(oldDirLock)
   IF newlock<>NIL THEN UnLock(newlock)
 

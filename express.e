@@ -8635,7 +8635,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     ENDIF
 
     ->F6 - account edit
-    IF (servercmd=SV_ACCOUNTS) OR ((wasControl=1) AND (ch="5") AND (loggedOnUser<>NIL))
+    IF (servercmd=SV_ACCOUNTS) OR ((wasControl=1) AND (ch="5")) AND (loggedOnUser<>NIL)
       servercmd:=-1
       doOnLineEdit(TRUE)
       checkUserOnLine(loggedOnUser,0)
@@ -8643,7 +8643,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     ENDIF
 
     ->Shift F6 - grant/remove temporary access
-    IF ((wasControl=2) AND (ch="5"))
+    IF ((wasControl=2) AND (ch="5") AND (loggedOnUser<>NIL))
       servercmd:=-1
       IF(tempAccessGranted)
         loggedOnUser.secStatus:=tempAccess.accessLevel;
@@ -8690,8 +8690,10 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       servercmd:=-1
       dropDTR()
       ioFlags[IOFLAG_SER_OUT]:=0
-      saveFlagged()
-      IF StrLen(historyFolder)>0 THEN saveHistory()
+      IF loggedOnUser<>NIL
+        saveFlagged()
+        IF StrLen(historyFolder)>0 THEN saveHistory()
+      ENDIF
       reqState:=REQ_STATE_LOGOFF
       setEnvStat(ENV_LOGOFF)
     ENDIF
@@ -9778,6 +9780,7 @@ PROC displayCallersLog(filename: PTR TO CHAR,tf)
   DEF fh
   DEF memsize=4096
   DEF tempstr[255]:STRING
+  DEF count
 
   readSize:=memsize
   lineCount:=0
@@ -9805,6 +9808,13 @@ PROC displayCallersLog(filename: PTR TO CHAR,tf)
             FOR loop:=readSize TO 1 STEP -1
               IF(buf[loop]="\n")
                 StringF(tempstr,'\s\b\n',buf+loop+1)
+                
+                ->bit of a hack to the lineCount to try and take account of long log lines that wrap around
+                ->usually log lines start with a tab so anything over 72 characters would probably wrap around
+                count:=StrLen(buf+loop+1)
+                IF count>72
+                  lineCount:=lineCount+(Div(count-72,80))+1
+                ENDIF
                 aePuts(tempstr)
                 buf[loop]:=0
                 lnlp:=loop+1
@@ -26633,14 +26643,12 @@ PROC processLogon()
 
   IF readToolType(TOOLTYPE_NODE,node,'FORCE_ANSI',tempStr)=FALSE
     IF (runSysCommand('ANSI','')=FALSE)
-      IF readToolType(TOOLTYPE_NODE,node,'FORCE_ANSI',tempStr)=FALSE
-        aePuts('ANSI, RIP or No graphics (A/r/n)? ')
+      aePuts('ANSI, RIP or No graphics (A/r/n)? ')
 
-        stat:=lineInput('','',10,INPUT_TIMEOUT/2,tempStr,FALSE)
-        IF stat<>RESULT_SUCCESS
-          state:=STATE_LOGGING_OFF
-          RETURN
-        ENDIF
+      stat:=lineInput('','',10,INPUT_TIMEOUT/2,tempStr,FALSE)
+      IF stat<>RESULT_SUCCESS
+        state:=STATE_LOGGING_OFF
+        RETURN
       ENDIF
     ELSE
      StrCopy(tempStr,'')
@@ -27829,8 +27837,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
 
-  StrCopy(expressVer,'v5.1.0-b6',ALL)
-  StrCopy(expressDate,'23-Apr-2019',ALL)
+  StrCopy(expressVer,'v5.1.0-b7',ALL)
+  StrCopy(expressDate,'25-Apr-2019',ALL)
 
   InitSemaphore(bgData)
 
