@@ -836,6 +836,8 @@ DEF serialCacheEnabled=FALSE
 
 DEF includeDeact=FALSE
 
+DEF bgChecking=FALSE
+
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
       ERR_ASL  IF AllocAslRequest()=NIL
@@ -8199,6 +8201,10 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
   DEF temp[255]:STRING
   DEF statePtr: PTR TO awaitState
 
+  IF (transfering)
+    RETURN TRUE,RESULT_TIMEOUT
+  ENDIF
+
   flushSerialCache()
 
   chatSerFlag:=0
@@ -8223,10 +8229,6 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
   signals:=0
   IF checkSer() THEN signals:=signals OR serialsig
   IF checkCon() THEN signals:=signals OR consolesig
-
-  IF (transfering)
-    RETURN TRUE,RESULT_TIMEOUT
-  ENDIF
 
   IF signals=0
     IF timeout<>0
@@ -13716,6 +13718,8 @@ PROC setEnvStat(statCode)
   DEF environ[200]:STRING
   DEF status[200]:STRING
 
+  IF bgChecking THEN RETURN 1
+
   currentStat:=statCode
   IF sopt<>NIL
     IF (sopt.toggles[TOGGLES_MULTICOM]<>0)
@@ -13757,7 +13761,7 @@ PROC setEnvMsg(s: PTR TO CHAR)
   DEF debugstr[255]:STRING
   DEF port: PTR TO mp
 
-  IF (serverRP=NIL) THEN RETURN
+  IF (serverRP=NIL) OR (bgChecking) THEN RETURN
   StringF(debugstr,'setenvmsg: \s',s)
   debugLog(LOG_DEBUG,debugstr)
   strCpy(masterMsg.user,s,ALL)
@@ -14277,7 +14281,7 @@ PROC xprfclose()
         msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
         IF msg
           msg.command:=BG_CHECKFILE
-          strCpy(msg.string,zModemInfo.fileName,200)
+          strCpy(msg.string,FilePart(zModemInfo.fileName),200)
           msg.msg.ln.type:=NT_FREEMSG
           msg.msg.length:=SIZEOF jhMessage
 
@@ -15913,6 +15917,7 @@ PROC xprReceive(file) HANDLE
   ReleaseSemaphore(bgData)
 
   IF bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
+    bgChecking:=TRUE
     tags:=NEW [NP_ENTRY,{backgroundFileCheckThread},NP_STACKSIZE,10000,0]:LONG
     Forbid()
     proc:=CreateNewProc(tags)
@@ -15943,6 +15948,7 @@ PROC xprReceive(file) HANDLE
           WHILE FindPort(tempstr)
             Delay(10)
           ENDWHILE
+          bgChecking:=FALSE
         ENDIF
       ENDIF
     ENDIF
@@ -17146,6 +17152,7 @@ PROC backgroundFileCheckThread()
     ENDWHILE
   ENDWHILE
   deletePort(bgCheckPort)
+  Exit(0)
 ENDPROC 0
 
 PROC displayOutPutofTest()
