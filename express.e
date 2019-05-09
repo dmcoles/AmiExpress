@@ -12311,7 +12311,7 @@ getOUT:
     ENDIF
   ELSE
     lastNewReadConf:=msgNum
-    aePuts('No mail today!\b\n')
+    IF(currentConf=0) THEN aePuts('No mail today!\b\n') ELSE aePuts('\b\n')
   ENDIF
 
 ENDPROC RESULT_SUCCESS
@@ -27844,8 +27844,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
 
-  StrCopy(expressVer,'v5.1.0-b7',ALL)
-  StrCopy(expressDate,'25-Apr-2019',ALL)
+  StrCopy(expressVer,'v5.1.0-b8',ALL)
+  StrCopy(expressDate,'09-May-2019',ALL)
 
   InitSemaphore(bgData)
 
