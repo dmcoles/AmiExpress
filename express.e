@@ -639,6 +639,7 @@ DEF onlineEdit=0
 DEF quietFlag=FALSE
 DEF chatFlag=FALSE
 DEF blockOLM=TRUE
+
 DEF chatF=0
 DEF pagesAllowed=-1
 DEF ownPartFiles=FALSE
@@ -11811,6 +11812,7 @@ ENDPROC FALSE
 PROC checkIfNameAllowed(name)
   DEF num,loop
   DEF disallowedName[255]:STRING
+  DEF nameStr[20]:STRING
 
   IF strCmpi(name,'',ALL)
     aePuts('Username not allowed!!\b\n\b\n')
@@ -11825,7 +11827,8 @@ PROC checkIfNameAllowed(name)
   num:=1
   loop:=TRUE
   WHILE loop
-    IF readToolType(TOOLTYPE_NAMESNOTALLOWED,'',num,disallowedName)=FALSE
+    StringF(nameStr,'NAME.\d',num)
+    IF readToolType(TOOLTYPE_NAMESNOTALLOWED,'',nameStr,disallowedName)=FALSE
       loop:=FALSE
     ELSE
       IF(strCmpi(name,disallowedName,ALL))
@@ -27045,7 +27048,7 @@ PROC newUserAccount(userName: PTR TO CHAR)
   IF displayScreen(SCREEN_JOIN) THEN doPause()
 
   stat:=doNewUser()
-  IF stat<>RESULT_SUCCESS THEN RETURN
+  IF stat<>RESULT_SUCCESS THEN RETURN RESULT_SLEEP_LOGOFF
 
   ->InitUser(&User,&User_keys);
   IF (loggedOnUser.dailyBytesLimit<>0)
@@ -27834,6 +27837,19 @@ PROC closeExpressScreen()
   scropen:=FALSE
 ENDPROC
 
+PROC waitSocketLib()
+  DEF n=0
+
+  socketbase:=OpenLibrary('bsdsocket.library', 4)
+  WHILE (socketbase=NIL) AND (n<60)
+    Delay(50)
+    n++
+    socketbase:=OpenLibrary('bsdsocket.library', 4)
+  ENDWHILE
+  IF socketbase THEN CloseLibrary(socketbase)
+  socketbase:=NIL
+ENDPROC
+
 PROC main() HANDLE
   DEF temppath[255]:STRING
   DEF tempstr[255]:STRING
@@ -27844,8 +27860,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
 
-  StrCopy(expressVer,'v5.1.0-b8',ALL)
-  StrCopy(expressDate,'09-May-2019',ALL)
+  StrCopy(expressVer,'v5.1.0-b9',ALL)
+  StrCopy(expressDate,'13-May-2019',ALL)
 
   InitSemaphore(bgData)
 
@@ -27964,6 +27980,7 @@ PROC main() HANDLE
     strCpy(cmds.mRing,'RING',ALL)
     strCpy(cmds.mAnswer,'ATA',ALL)
     strCpy(sopt.offHook,'',ALL)
+    waitSocketLib()
   ENDIF
 
   IF checkToolTypeExists(TOOLTYPE_NODE,node,'TELSERD')
@@ -27974,6 +27991,7 @@ PROC main() HANDLE
     strCpy(cmds.mAnswer,'ATA',ALL)
     strCpy(sopt.offHook,'',ALL)
     sopt.toggles[TOGGLES_SERIALRESET]:=1
+    waitSocketLib()
   ENDIF
 
   StringF(amixnetOutboundDir,'\sAmiXnet/OutBound/',cmds.bbsLoc)
