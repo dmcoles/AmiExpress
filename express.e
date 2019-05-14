@@ -15359,9 +15359,14 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   DEF oldshared
   DEF fileItem:PTR TO flagFileItem
   DEF x: PTR TO xprData
-
+  
   IF (logonType<>LOGON_TYPE_REMOTE) AND (checkSecurity(ACS_LOCAL_DOWNLOADS)=FALSE)
     aePuts('\b\nNot supported locally...')
+    RETURN 0
+  ENDIF
+
+  IF xprLib.count()=0
+    aePuts('\b\nNo transfer protocols are currently configured')
     RETURN 0
   ENDIF
 
@@ -15371,13 +15376,16 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   ENDIF
 
   IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
-    StringF(tempstr,'XPR Zmodem: Ready to Send\b\n')
+    StringF(tempstr,'Zmodem: Ready to Send\b\n')
+  ELSEIF(checkSecurity(ACS_XPR_SEND))
+    aePuts('\b\nYou are not allowed to download using external xpr protocols')
+    RETURN 0
   ELSE
     StringF(tempstr,'\s: Ready to Send\b\n',xprTitle.item(loggedOnUser.xferProtocol))
   ENDIF
 
   aePuts(tempstr)
-  aePuts('Control-X to Cancel\b\n')
+  ->aePuts('Control-X to Cancel\b\n')
 
   IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
     StrCopy(tempstr,'xprzmodem.library')
@@ -16605,6 +16613,11 @@ PROC zmodemReceive(flname:PTR TO CHAR,uLFType)
   DEF temp[100]:STRING
   IF((logonType>=LOGON_TYPE_REMOTE) AND (localUpload=FALSE) AND (lcFileXfr=FALSE))
 
+    IF xprLib.count()=0
+      aePuts('\b\nNo transfer protocols are currently configured')
+      RETURN RESULT_FAILURE
+    ENDIF
+
     IF ((strCmpi(xprLib.item(loggedOnUser.xferProtocol),'HYDRA',ALL)))
       aePuts('\b\nHYDRA protocol is not currently supported')
       RETURN RESULT_FAILURE
@@ -16612,18 +16625,19 @@ PROC zmodemReceive(flname:PTR TO CHAR,uLFType)
 
     IF(uLFType=FALSE)
       IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
-        StringF(temp,'\b\nXPR Zmodem: Ready to Receive\b\n')
+        StringF(temp,'\b\nZmodem: Ready to Receive\b\n')
+      ELSEIF(checkSecurity(ACS_XPR_RECEIVE))
+        aePuts('\b\nYou are not allowed to upload using external xpr protocols')
+        RETURN RESULT_FAILURE
       ELSE
         StringF(temp,'\b\n\s: Ready to Receive\b\n',xprTitle.item(loggedOnUser.xferProtocol))
       ENDIF
       aePuts(temp);
-      aePuts('Control-X to Cancel\b\n')
+      ->aePuts('Control-X to Cancel\b\n')
     ENDIF
 
-    IF(checkSecurity(ACS_XPR_RECEIVE))
-      xprReceive(flname)
-      RETURN 1
-    ENDIF
+    xprReceive(flname)
+    RETURN 1
 
     /* still to do
     StringF(temp,'[Node \d] Receive Window',node)
@@ -26204,6 +26218,9 @@ PROC processLoggedOnUser()
     StringF(string,'LANGUAGE.\d',loggedOnUser.translatorID AND 127)
     IF readToolType(TOOLTYPE_LANGUAGES,'',string,userLanguage)=FALSE THEN StrCopy(userLanguage,hostLanguage)
 
+    ->reset protocol if out of range or not valid
+    IF (loggedOnUser.xferProtocol<0) OR (loggedOnUser.xferProtocol>=xprLib.count()) OR ((checkSecurity(ACS_XPR_SEND)=FALSE) AND (checkSecurity(ACS_XPR_RECEIVE)=FALSE)) THEN loggedOnUser.xferProtocol:=0
+
     blockOLM:=FALSE
     messageMenuChar:=0
     disallowFileAttach:=FALSE
@@ -27838,15 +27855,23 @@ PROC closeExpressScreen()
 ENDPROC
 
 PROC waitSocketLib()
-  DEF n=0
-
-  socketbase:=OpenLibrary('bsdsocket.library', 4)
+  DEF n=0,id=0
+  socketbase:=OpenLibrary('bsdsocket.library', 2)
   WHILE (socketbase=NIL) AND (n<60)
     Delay(50)
     n++
-    socketbase:=OpenLibrary('bsdsocket.library', 4)
+    socketbase:=OpenLibrary('bsdsocket.library', 2)
   ENDWHILE
-  IF socketbase THEN CloseLibrary(socketbase)
+  IF socketbase
+    n:=0
+    id:=GetHostId()
+    WHILE(id=0) AND (n<60)
+      Delay(50)
+      n++
+      id:=GetHostId()
+    ENDWHILE
+    CloseLibrary(socketbase)
+  ENDIF
   socketbase:=NIL
 ENDPROC
 
@@ -27860,8 +27885,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
 
-  StrCopy(expressVer,'v5.1.0-b9',ALL)
-  StrCopy(expressDate,'13-May-2019',ALL)
+  StrCopy(expressVer,'v5.1.0-b10',ALL)
+  StrCopy(expressDate,'14-May-2019',ALL)
 
   InitSemaphore(bgData)
 
