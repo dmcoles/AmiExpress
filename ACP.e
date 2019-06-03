@@ -419,6 +419,8 @@ DEF commodityEnabled=TRUE
 
 DEF broker=NIL, broker_mp=NIL:PTR TO mp, cxsigflag=0
 
+DEF starting=TRUE
+
 /* some global variables used to replace the statics from the C version 
 they are prefixed with the procdure name to prevent any name clashes
 */
@@ -429,6 +431,8 @@ DEF setTheGadsSet=FALSE
 DEF do_appiconi=0
 DEF do_appiconj=0
 DEF maddItemi=0
+
+DEF startupCompleteScript[255]:STRING
 
 PROC init() OF itemsList  ->constructor
   self.lastUsers[0]:=String(36)
@@ -1884,6 +1888,21 @@ PROC showCPS(node,incps:PTR TO CHAR)
   Text(eWin.rport,cps,7)
 ENDPROC
 
+PROC checkStartingScript()
+  DEF i,allStarted=TRUE
+  IF starting
+    FOR i:=0 TO MAX_NODES-1
+      IF (StrLen(startNode[i])>0) AND (nodeIdle[i]=FALSE)
+        IF (users[i].active=FALSE) OR (users[i].actionVal=ENV_NOTACTIVE) THEN allStarted:=FALSE
+      ENDIF
+    ENDFOR
+    IF allStarted
+      IF StrLen(startupCompleteScript)>0 THEN Execute(startupCompleteScript,NIL,NIL)
+      starting:=FALSE
+    ENDIF
+  ENDIF
+ENDPROC
+
 PROC checkMasterSig(signals)
   DEF temp[100]:STRING
   DEF temp1[10]:STRING
@@ -1932,6 +1951,7 @@ PROC checkMasterSig(signals)
         SELECT c
           CASE JH_UPDATE
               updateNode(msg.user,msg.location,msg.action,msg.baud,msg.node)
+              checkStartingScript()
               IF(showAbout)
                 showNodes()
                 showAbout:=0
@@ -2736,6 +2756,10 @@ PROC readStartUp(s:PTR TO CHAR)
     ENDFOR
   ENDIF
 
+  IF(t:=FindToolType(oldtooltypes,'EXECUTE_ON_STARTUP_COMPLETE'))
+    StrCopy(startupCompleteScript,t)
+  ENDIF
+
   IF(t:=FindToolType(oldtooltypes,'SYSOP_NAME'))
     FOR i:=0 TO nodeCount-1
       cmd:=cmds[i]
@@ -3471,6 +3495,7 @@ PROC main() HANDLE
         ENDIF
 
         loadState()
+        checkStartingScript()
 
         WHILE (notDone)
           signals:=Wait(masterSig OR windowSig OR myappsig OR cxsigflag)

@@ -399,12 +399,12 @@ OBJECT doorMsg
 ENDOBJECT
 
 OBJECT awaitState
-  subState
-  redrawScreen
+  subState: LONG
+  redrawScreen: LONG
 ENDOBJECT
 
 OBJECT loggedOnState
-  subState
+  subState: LONG
 ENDOBJECT
 
 OBJECT ansi
@@ -523,8 +523,8 @@ ENDOBJECT
 
 OBJECT bgCheckData
   semi: ss
-  checkedCount
-  checkedBytes
+  checkedCount: LONG
+  checkedBytes: LONG
 ENDOBJECT
 
 OBJECT diskObjectCacheItem
@@ -7670,6 +7670,14 @@ PROC displayFile(filename, allowMCI=TRUE, resetNonStop=TRUE)
         JUMP ripCont
       ENDIF
       len:=StrLen(linedata)-1
+      lf:=FALSE
+      IF (len>1)
+        IF (linedata[len-1]="\b") AND (linedata[len]="\n")
+          SetStr(linedata,len-1)
+          lf:=TRUE
+        ENDIF
+      ENDIF
+      IF (lf=FALSE)
       IF linedata[len]="\n"
         SetStr(linedata,len)
         lf:=TRUE
@@ -7677,6 +7685,7 @@ PROC displayFile(filename, allowMCI=TRUE, resetNonStop=TRUE)
         len++
         SetStr(linedata,len)
         lf:=FALSE
+        ENDIF
       ENDIF
       IF (firstline)
         IF len>0
@@ -22368,7 +22377,7 @@ PROC who(opt)
 
     status:=s.status
     StrCopy(name,s.handle)
-    StrCopy(location,s.location)
+    StrCopy(location,s.location-1)
     StrCopy(fileName,s.misc1)
     IF(opt)
       StringF(mes, '[34m| [0m\l\d[20] [32m|[0m \l\d[25] [32m|[0m',s,masterNode)
@@ -27885,8 +27894,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
 
-  StrCopy(expressVer,'v5.1.0-b10',ALL)
-  StrCopy(expressDate,'14-May-2019',ALL)
+  StrCopy(expressVer,'v5.1.0',ALL)
+  StrCopy(expressDate,'03-Jun-2019',ALL)
 
   InitSemaphore(bgData)
 
