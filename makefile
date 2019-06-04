@@ -1,16 +1,16 @@
 # Compile ACP and EXPRESS and any dependencies
 
-options=DEBUG
+options=DEBUG IGNORECACHE
 
 all:					acp express5 jsonimport icon2cfg
 
-release:				options = 
+release:				options = IGNORECACHE 
 release:				acp express5 jsonimport icon2cfg
 
 acp:					acp.e axcommon.m miscfuncs.m jsonparser.m
 							ec acp $(options)
 
-express5:			express.e axcommon.m
+express5:			express.e axcommon.m stringlist.m
 							ec express $(options)
 							copy express express5
 							delete express
@@ -23,6 +23,9 @@ jsonimport:		jsonimport.e jsonparser.m
 
 jsonparser.m: jsonparser.e miscfuncs.m
 							ec jsonparser $(options)
+
+stringlist.m:	stringlist.e
+							ec stringlist $(options)
 
 miscfuncs.m:	miscfuncs.e
 							ec miscfuncs $(options)

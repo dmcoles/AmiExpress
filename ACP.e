@@ -10,6 +10,7 @@
        'exec/semaphores',
        'exec/io',
        'exec/lists',
+       'dos/datetime',
        'dos/dos',
        'dos/dosextens',
        'commodities',
@@ -86,7 +87,7 @@ CONST CHAT_NTXT=6
 CONST WLEF=0
 CONST WTOP=0
 CONST WWID=640
-CONST WHEI=90
+CONST WHEI=88
 
 CONST GAD_SYSOPLOGIN=0
 CONST GAD_INSTANTLOGIN=1
@@ -245,8 +246,9 @@ CONST BTOP_TOPSBOX=38 ->148
 CONST BWID_TOPSBOX=300
 CONST BHEI_TOPSBOX=50
 
-OBJECT nodeUsers
-  lastUsers[5]:ARRAY OF LONG ->array[6,44]
+OBJECT itemsList
+  PRIVATE lastUsers[5]:ARRAY OF LONG ->array[6,44]
+  PRIVATE lastUserDates[5]:ARRAY OF LONG
   num:INT
 ENDOBJECT
 
@@ -280,6 +282,7 @@ OBJECT screenPref
   nodes:INT
   ->WORD Zoom[5];
 ENDOBJECT
+
   
 DEF ngAry[ALL_GADS]:ARRAY OF LONG
 
@@ -337,13 +340,17 @@ DEF cpymsg:PTR TO acpMessage
 
 DEF portName[255]:STRING
 
-DEF lastUsers[5]:ARRAY OF LONG    -> array[6,44]
-DEF lastUploads[5]:ARRAY OF LONG  -> array[6,44]
-DEF lastDownloads[5]:ARRAY OF LONG-> array[6,44]
 
-DEF ndUser[MAX_NODES]:ARRAY OF nodeUsers
-DEF ndUploads[MAX_NODES]:ARRAY OF nodeUsers
-DEF ndDownloads[MAX_NODES]:ARRAY OF nodeUsers
+
+DEF lastUsers=NIL: PTR TO itemsList
+DEF lastUploads=NIL: PTR TO itemsList
+DEF lastDownloads=NIL: PTR TO itemsList
+
+DEF ndUser[MAX_NODES]: ARRAY OF LONG
+DEF ndUploads[MAX_NODES]: ARRAY OF LONG
+DEF ndDownloads[MAX_NODES]: ARRAY OF LONG
+
+DEF bbsPath[41]:STRING
 
 DEF buttons[20]:ARRAY OF button
 
@@ -404,11 +411,15 @@ DEF minNode=NIL: PTR TO mln
 
 DEF lockedNodes=-1
 
+DEF persistState=FALSE
+
 DEF shellMode=FALSE
 
 DEF commodityEnabled=TRUE
 
 DEF broker=NIL, broker_mp=NIL:PTR TO mp, cxsigflag=0
+
+DEF starting=TRUE
 
 /* some global variables used to replace the statics from the C version 
 they are prefixed with the procdure name to prevent any name clashes
@@ -417,12 +428,110 @@ they are prefixed with the procdure name to prevent any name clashes
 DEF initGadsagain=FALSE
 DEF setTheGadsj=0
 DEF setTheGadsSet=FALSE
-DEF regLastUserNum=0
-DEF regLastUploadsNum=0
-DEF regLastDownloadsNum=0
 DEF do_appiconi=0
 DEF do_appiconj=0
 DEF maddItemi=0
+
+DEF startupCompleteScript[255]:STRING
+
+PROC init() OF itemsList  ->constructor
+  self.lastUsers[0]:=String(36)
+  self.lastUsers[1]:=String(36)
+  self.lastUsers[2]:=String(36)
+  self.lastUsers[3]:=String(36)
+  self.lastUsers[4]:=String(36)
+
+  self.lastUserDates[0]:=String(20)
+  self.lastUserDates[1]:=String(20)
+  self.lastUserDates[2]:=String(20)
+  self.lastUserDates[3]:=String(20)
+  self.lastUserDates[4]:=String(20)
+  self.num:=0
+ENDPROC
+
+PROC end() OF itemsList				-> destructor
+  DisposeLink(self.lastUsers[0])
+  DisposeLink(self.lastUsers[1])
+  DisposeLink(self.lastUsers[2])
+  DisposeLink(self.lastUsers[3])
+  DisposeLink(self.lastUsers[4])
+
+  DisposeLink(self.lastUserDates[0])
+  DisposeLink(self.lastUserDates[1])
+  DisposeLink(self.lastUserDates[2])
+  DisposeLink(self.lastUserDates[3])
+  DisposeLink(self.lastUserDates[4])
+ENDPROC
+
+PROC getItem(num) OF itemsList IS self.lastUsers[num]
+PROC getItemDate(num) OF itemsList IS self.lastUserDates[num]
+
+PROC getDisplayText(num,outText:PTR TO CHAR) OF itemsList
+  IF EstrLen(self.lastUserDates[num])>0
+    StringF(outText,'\s [\s]',self.lastUsers[num],self.lastUserDates[num])
+  ELSE
+    StrCopy(outText,self.lastUsers[num])
+  ENDIF
+ENDPROC
+
+PROC add(name:PTR TO CHAR, dateStr:PTR TO CHAR) OF itemsList
+  DEF i=0
+  
+  IF((self.num>0) AND (self.num<6))
+    IF(StrCmp(self.lastUsers[self.num-1],name))
+->      StrCopy(self.lastUsers[self.num-1],name)
+      StrCopy(self.lastUserDates[self.num-1],dateStr)
+      RETURN
+    ENDIF
+  ENDIF
+  
+  IF(self.num=5)
+    WHILE(i<4)
+      StrCopy(self.lastUsers[i],self.lastUsers[i+1])
+      StrCopy(self.lastUserDates[i],self.lastUserDates[i+1])
+      i++
+    ENDWHILE
+    self.num:=4;
+  ENDIF
+  StrCopy(self.lastUsers[self.num],name)
+  StrCopy(self.lastUserDates[self.num],dateStr)
+  self.num:=self.num+1 
+ENDPROC
+
+PROC getSystemDate(outDateStr:PTR TO CHAR)
+  DEF dt : datetime
+  DEF datestr[255]:STRING
+  DEF timestr[255]:STRING
+
+  DateStamp(dt.stamp)
+  
+  dt.format:=FORMAT_DOS
+  dt.flags:=0
+  dt.strday:=NIL
+  dt.strdate:=datestr
+  dt.strtime:=timestr
+
+  IF DateToStr(dt)
+    StringF(outDateStr,'\s[6] \s[5]',datestr,timestr)
+  ENDIF
+  
+ENDPROC
+
+PROC trimStr(src:PTR TO CHAR, dest:PTR TO CHAR)
+  DEF i
+  StrCopy(dest,TrimStr(src))
+
+  i:=StrLen(dest)-1
+  WHILE (i>=0)
+    IF dest[i]<>" "
+      i:=-1
+    ELSE
+      SetStr(dest,i)
+      i--
+    ENDIF
+  ENDWHILE
+  
+ENDPROC
 
 PROC myrequest(s:PTR TO CHAR)
   DEF myES
@@ -542,26 +651,19 @@ PROC initNgAry()
 ENDPROC
 
 PROC initCycles()
-  DEF i
-  FOR i:=0 TO 4
-    lastUsers[i]:=String(44)
-    lastUploads[i]:=String(44)
-    lastDownloads[i]:=String(44)
-  ENDFOR
+  lastUsers:=NEW lastUsers.init()
+  lastUploads:=NEW lastUploads.init()
+  lastDownloads:=NEW lastDownloads.init()
   initNdCycles()
 ENDPROC
 
 PROC initNdCycles()
   DEF i,x
+  DEF list:PTR TO itemsList
   FOR x:=0 TO MAX_NODES-1
-    FOR i:=0 TO 4
-      ndUser[x].lastUsers[i]:=String(44)
-      ndUploads[x].lastUsers[i]:=String(44)
-      ndDownloads[x].lastUsers[i]:=String(44)
-    ENDFOR
-    ndUser[x].num:=0
-    ndUploads[x].num:=0
-    ndDownloads[x].num:=0
+    ndUser[x]:=NEW list.init()
+    ndUploads[x]:=NEW list.init()
+    ndDownloads[x]:=NEW list.init()
   ENDFOR
 ENDPROC
 
@@ -1032,69 +1134,69 @@ PROC doControl(node)
       StringF(cmd,'run >nil: bbs:utils/mcp.script')
       Execute(cmd,NIL,NIL)
     CASE SV_SETNRAMS
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_SETNRAMS)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_SYSOPLOG
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_SYSOPLOG)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_LOCALLOG
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_LOCALLOG)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_ACCOUNTS
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_ACCOUNTS)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_EXITNODE
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_EXITNODE)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_NODEOFFHOOK
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_NODEOFFHOOK)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_RESERVE
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_RESERVE)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_CHAT
       cd:=users[node].actionVal
-      IF((cd<>26) AND (cd<>1) AND (cd<>2) AND (cd<>11) AND (cd<>12) AND (cd<>15) AND (cd<>18) AND (cd<>20) AND (cd<>21) AND (cd<>22) AND (cd<>24))
+      IF((cd<>ENV_SUSPEND) AND (cd<>ENV_DOWNLOADING) AND (cd<>ENV_UPLOADING) AND (cd<>ENV_ACCOUNTSEQ) AND (cd<>ENV_LOGOFF) AND (cd<>ENV_EMACS) AND (cd<>ENV_NOTACTIVE) AND (cd<>ENV_CONNECT) AND (cd<>ENV_LOGGINGON) AND (cd<>ENV_AWAITCONNECT) AND (cd<>ENV_SHUTDOWN))
         callNode(node,SV_CHAT)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_INITMODEM
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_INITMODEM)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_INSTANT
-      IF(users[node].actionVal=22)
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
         callNode(node,SV_INSTANT)
       ELSE
         DisplayBeep(scr)
       ENDIF
     CASE SV_AESHELL
       IF shellMode
-        IF(users[node].actionVal=22)
+        IF(users[node].actionVal=ENV_AWAITCONNECT)
           callNode(node,SV_AESHELL)
         ELSE
           DisplayBeep(scr)
@@ -1102,7 +1204,7 @@ PROC doControl(node)
       ENDIF
     CASE SV_CHATTOGGLE
       cd:=users[node].actionVal
-      IF((cd<>24) AND (cd<>26))
+      IF((cd<>ENV_SHUTDOWN) AND (cd<>ENV_SUSPEND))
        /* if(TChat[node]) TChat[node]=0; else TChat[node]=1;
 
         SetAPen(eWin.rport,getNodeTextColour(node))
@@ -1120,7 +1222,7 @@ PROC doControl(node)
       ENDIF
     CASE SV_QUIETNODE
       cd:=users[node].actionVal
-      IF((cd<>24) AND (cd<>26))
+      IF((cd<>ENV_SHUTDOWN) AND (cd<>ENV_SUSPEND))
         callNode(node,SV_QUIETNODE)
       ELSE
         DisplayBeep(scr)
@@ -1339,6 +1441,8 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
   DEF action2[50]:STRING
   DEF v,a,top
   DEF tempstr[25]:STRING
+  DEF datestr[255]:STRING
+  DEF tempstr2[255]:STRING
 
   StrCopy(action2,'')
   v:=Val(action)
@@ -1457,9 +1561,12 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
   
   users[node].active:=1
   
-  IF(Val(action)=27) THEN users[node].actionVal:=22 ELSE users[node].actionVal:=Val(action)
-  IF(users[node].actionVal=21)
-    regLastUser(users[node].user,node);
+  IF(Val(action)=ENV_RESERVE) THEN users[node].actionVal:=ENV_AWAITCONNECT ELSE users[node].actionVal:=Val(action)
+  IF(users[node].actionVal=ENV_LOGGINGON)
+    trimStr(users[node].user,tempstr2)
+    getSystemDate(datestr)
+      
+    regLastUser(tempstr2,datestr,node);
     SELECT topOption
       CASE LAST_CALLERS
         showLastUser(eWin)
@@ -1468,6 +1575,7 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
       CASE LAST_DOWNLOADS
         showLastDownloads(eWin)
     ENDSELECT
+    saveState()
   ENDIF
 ENDPROC
 
@@ -1575,89 +1683,32 @@ PROC maddRem()
   FreeMem(eWinMenu,(SIZEOF newmenu)*maxMenus)
 ENDPROC
 
-PROC regLastDownloads(name:PTR TO CHAR,node)
+PROC regLastDownloads(name:PTR TO CHAR,dateStr:PTR TO CHAR,node)
   DEF i=0
   ->DEF num=0   was static
   
-  regNodeDownloads(name,node)
-  IF((regLastDownloadsNum>0) AND (regLastDownloadsNum<5))
-    IF(StrCmp(lastDownloads[regLastDownloadsNum-1],name))=FALSE THEN RETURN
-  ENDIF
-  
-  IF(regLastDownloadsNum=5)
-    WHILE(i<4)
-      strcpy(lastDownloads[i],lastDownloads[i+1])
-      i++
-    ENDWHILE
-    regLastDownloadsNum:=4
-    strcpy(lastDownloads[regLastDownloadsNum],name)    
-  ELSE
-    strcpy(lastDownloads[regLastDownloadsNum],name)
-  ENDIF
-  regLastDownloadsNum++ 
+  regNodeDownloads(name,dateStr,node)
+  lastDownloads.add(name,dateStr)
 ENDPROC
 
-PROC regNodeDownloads(name:PTR TO CHAR, node)
-  DEF i=0
-  
-  IF((ndDownloads[node].num>0) AND (ndDownloads[node].num<5))
-    IF(StrCmp(ndDownloads[node].lastUsers[ndDownloads[node].num-1],name))=FALSE THEN RETURN
-  ENDIF
-  
-  IF(ndDownloads[node].num=5)
-    WHILE(i<4)
-      strcpy(ndDownloads[node].lastUsers[i],ndDownloads[node].lastUsers[i+1])
-      i++
-    ENDWHILE
-    ndDownloads[node].num:=4;
-    strcpy(ndDownloads[node].lastUsers[ndDownloads[node].num],name)
-  ELSE
-    strcpy(ndDownloads[node].lastUsers[ndDownloads[node].num],name)
-  ENDIF
-  ndDownloads[node].num:=ndDownloads[node].num+1 
-
+PROC regNodeDownloads(name:PTR TO CHAR, dateStr:PTR TO CHAR,node)
+  DEF list: PTR TO itemsList
+  list:=ndDownloads[node]
+  list.add(name,dateStr)
 ENDPROC
 
-PROC regLastUploads(name:PTR TO CHAR,node)
+PROC regLastUploads(name:PTR TO CHAR,dateStr:PTR TO CHAR,node)
   DEF i=0
   ->DEF num=0   was static
   
-  regNodeUploads(name,node)
-  IF((regLastUploadsNum>0) AND (regLastUploadsNum<5))
-    IF(StrCmp(lastUploads[regLastUploadsNum-1],name))=FALSE THEN RETURN
-  ENDIF
-  
-  IF(regLastUploadsNum=5)
-    WHILE(i<4)
-      strcpy(lastUploads[i],lastUploads[i+1])
-      i++
-    ENDWHILE
-    regLastUploadsNum:=4;
-    strcpy(lastUploads[regLastUploadsNum],name); 
-  ELSE
-    strcpy(lastUploads[regLastUploadsNum],name)
-  ENDIF
-  regLastUploadsNum++ 
+  regNodeUploads(name,dateStr,node)
+  lastUploads.add(name,dateStr)
 ENDPROC
 
-PROC regNodeUploads(name:PTR TO CHAR,node)
-  DEF i=0
-  
-  IF((ndUploads[node].num>0) AND (ndUploads[node].num<5))
-    IF(StrCmp(ndUploads[node].lastUsers[ndUploads[node].num-1],name))=FALSE THEN RETURN
-  ENDIF
-  
-  IF(ndUploads[node].num=5)
-    WHILE(i<4)
-      strcpy(ndUploads[node].lastUsers[i],ndUploads[node].lastUsers[i+1])
-      i++
-    ENDWHILE
-    ndUploads[node].num:=4
-    strcpy(ndUploads[node].lastUsers[ndUploads[node].num],name); 
-  ELSE
-    strcpy(ndUploads[node].lastUsers[ndUploads[node].num],name);
-  ENDIF
-  ndUploads[node].num:=ndUploads[node].num+1 
+PROC regNodeUploads(name:PTR TO CHAR,dateStr:PTR TO CHAR, node)
+  DEF list: PTR TO itemsList
+  list:=ndUploads[node]
+  list.add(name,dateStr)
 ENDPROC
 
 PROC showQuiet(i)
@@ -1681,49 +1732,26 @@ PROC showQuiet(i)
   Text(eWin.rport,users[i].baud,7)
 ENDPROC
 
-PROC regLastUser(name:PTR TO CHAR,node)
+PROC regLastUser(name:PTR TO CHAR,dateStr:PTR TO CHAR,node)
   DEF i=0
+  DEF tempStr[44]:STRING
   ->DEF num=0;  was static
-  regNodeUser(name,node)
-  IF((regLastUserNum>0) AND (regLastUserNum<5))
-    IF(StrCmp(lastUsers[regLastUserNum-1],name)) THEN RETURN
-  ENDIF
-  IF(regLastUserNum=5)
-    WHILE(i<4)
-      strcpy(lastUsers[i],lastUsers[i+1])
-      i++
-    ENDWHILE
-    regLastUserNum:=4
-    strcpy(lastUsers[regLastUserNum],name)
-  ELSE
-    strcpy(lastUsers[regLastUserNum],name)
-  ENDIF
-  regLastUserNum++
+  
+  StringF(tempStr,'\d: \s',node,name)
+  regNodeUser(name,dateStr,node)
+  lastUsers.add(tempStr,dateStr)
 ENDPROC
 
-PROC regNodeUser(name:PTR TO CHAR,node)
-  DEF i=0
-  
-  IF((ndUser[node].num>0) AND (ndUser[node].num<5))
-    IF(StrCmp(ndUser[node].lastUsers[ndUser[node].num-1],name)) THEN RETURN
-  ENDIF
-
-  IF(ndUser[node].num=5)
-    WHILE(i<4)
-      strcpy(ndUser[node].lastUsers[i],ndUser[node].lastUsers[i+1])
-      i++
-    ENDWHILE
-    ndUser[node].num:=4
-    strcpy(ndUser[node].lastUsers[ndUser[node].num],name);
-  ELSE
-    strcpy(ndUser[node].lastUsers[ndUser[node].num],name)
-  ENDIF
-  ndUser[node].num:=ndUser[node].num+1
+PROC regNodeUser(name:PTR TO CHAR,dateStr:PTR TO CHAR, node)
+  DEF list: PTR TO itemsList
+  list:=ndUser[node]
+  list.add(name,dateStr)
 ENDPROC
 
 PROC showLastUser(win:PTR TO window)
   DEF i=0
   DEF rowTop
+  DEF tempStr[255]:STRING
 
   rowTop:=topOffset+(theight*11)+BTOP_TOPSBOX
   SetAPen(win.rport,0)
@@ -1731,7 +1759,8 @@ PROC showLastUser(win:PTR TO window)
   SetAPen(win.rport,1)
   WHILE(i<5)
     rowTop:=topOffset+155+(i*10)-110+(theight*11)
-    printMyText(win.rport,lastUsers[i],GLEF_TOPS+5,rowTop)
+    lastUsers.getDisplayText(i,tempStr)
+    printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
     i++
   ENDWHILE
 ENDPROC
@@ -1739,13 +1768,18 @@ ENDPROC
 PROC showNdLastUser(win:PTR TO window,node)
   DEF i=0
   DEF rowTop
+  DEF list: PTR TO itemsList
+  DEF tempStr[255]:STRING
+
   rowTop:=topOffset+(theight*11)+BTOP_TOPSBOX
   SetAPen(win.rport,0)
   RectFill(win.rport,BLEF_TOPSBOX+5,rowTop+1,BLEF_TOPSBOX+BWID_TOPSBOX-10,rowTop+BHEI_TOPSBOX-2)
   SetAPen(win.rport,1)
   WHILE(i<5)
     rowTop:=topOffset+155+(i*10)-110+(theight*11)
-    printMyText(win.rport,ndUser[node].lastUsers[i],GLEF_TOPS+5,rowTop)
+    list:=ndUser[node]
+    list.getDisplayText(i,tempStr)
+    printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
     i++
   ENDWHILE
 ENDPROC
@@ -1753,13 +1787,16 @@ ENDPROC
 PROC showLastUploads(win:PTR TO window)
   DEF i=0
   DEF rowTop
+  DEF tempStr[255]:STRING
+
   rowTop:=topOffset+(theight*11)+BTOP_TOPSBOX
   SetAPen(win.rport,0)
   RectFill(win.rport,BLEF_TOPSBOX+5,rowTop+1,BLEF_TOPSBOX+BWID_TOPSBOX-10,rowTop+BHEI_TOPSBOX-2)
   SetAPen(win.rport,1)
   WHILE(i<5)
     rowTop:=topOffset+155+(i*10)-110+(theight*11)
-    printMyText(win.rport,lastUploads[i],GLEF_TOPS+5,rowTop)
+    lastUploads.getDisplayText(i,tempStr)
+    printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
     i++
   ENDWHILE
 ENDPROC
@@ -1767,13 +1804,18 @@ ENDPROC
 PROC showNdLastUploads(win:PTR TO window,node)
   DEF i=0
   DEF rowTop
+  DEF list: PTR TO itemsList
+  DEF tempStr[255]:STRING
+
   rowTop:=topOffset+(theight*11)+BTOP_TOPSBOX
   SetAPen(win.rport,0)
   RectFill(win.rport,BLEF_TOPSBOX+5,rowTop+1,BLEF_TOPSBOX+BWID_TOPSBOX-10,rowTop+BHEI_TOPSBOX-2)
   SetAPen(win.rport,1)
   WHILE(i<5)
     rowTop:=topOffset+155+(i*10)-110+(theight*11)
-    printMyText(win.rport,ndUploads[node].lastUsers[i],GLEF_TOPS+5,rowTop)
+    list:=ndUploads[node]
+    list.getDisplayText(i,tempStr)
+    printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
     i++
   ENDWHILE
 ENDPROC
@@ -1781,13 +1823,16 @@ ENDPROC
 PROC showLastDownloads(win:PTR TO window)
   DEF i=0
   DEF rowTop
+  DEF tempStr[255]:STRING
+
   rowTop:=topOffset+(theight*11)+BTOP_TOPSBOX
   SetAPen(win.rport,0)
   RectFill(win.rport,BLEF_TOPSBOX+5,rowTop+1,BLEF_TOPSBOX+BWID_TOPSBOX-10,rowTop+BHEI_TOPSBOX-2)
   SetAPen(win.rport,1)
   WHILE(i<5)
     rowTop:=topOffset+155+(i*10)-110+(theight*11)
-    printMyText(win.rport,FilePart(lastDownloads[i]),GLEF_TOPS+5,rowTop)
+    lastDownloads.getDisplayText(i,tempStr)
+    printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
     i++
   ENDWHILE
 ENDPROC
@@ -1795,13 +1840,18 @@ ENDPROC
 PROC showNdLastDownloads(win:PTR TO window,node)
   DEF i=0
   DEF rowTop
+  DEF list: PTR TO itemsList
+  DEF tempStr[255]:STRING
+
   rowTop:=topOffset+(theight*11)+BTOP_TOPSBOX
   SetAPen(win.rport,0)
   RectFill(win.rport,BLEF_TOPSBOX+5,rowTop+1,BLEF_TOPSBOX+BWID_TOPSBOX-10,rowTop+BHEI_TOPSBOX-2)
   SetAPen(win.rport,1)
   WHILE(i<5)
     rowTop:=topOffset+155+(i*10)-110+(theight*11)
-    printMyText(win.rport,FilePart(ndDownloads[node].lastUsers[i]),GLEF_TOPS+5,rowTop)
+    list:=ndDownloads[node]
+    list.getDisplayText(i,tempStr)
+    printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
     i++
   ENDWHILE
 ENDPROC
@@ -1829,7 +1879,7 @@ ENDPROC
 
 PROC showCPS(node,incps:PTR TO CHAR)
   DEF cps[10]:STRING
-  StringF(cps,'\d[7]',incps)
+  StringF(cps,'\s[7]',incps)
 
   drawPen:=chat[node]
   IF(quietNode[node]) THEN drawPen:=3
@@ -1838,9 +1888,26 @@ PROC showCPS(node,incps:PTR TO CHAR)
   Text(eWin.rport,cps,7)
 ENDPROC
 
+PROC checkStartingScript()
+  DEF i,allStarted=TRUE
+  IF starting
+    FOR i:=0 TO MAX_NODES-1
+      IF (StrLen(startNode[i])>0) AND (nodeIdle[i]=FALSE)
+        IF (users[i].active=FALSE) OR (users[i].actionVal=ENV_NOTACTIVE) THEN allStarted:=FALSE
+      ENDIF
+    ENDFOR
+    IF allStarted
+      IF StrLen(startupCompleteScript)>0 THEN Execute(startupCompleteScript,NIL,NIL)
+      starting:=FALSE
+    ENDIF
+  ENDIF
+ENDPROC
+
 PROC checkMasterSig(signals)
   DEF temp[100]:STRING
   DEF temp1[10]:STRING
+  DEF datestr[20]:STRING
+  DEF tempstr2[255]:STRING
   DEF i,c
 
   IF(signals AND masterSig)
@@ -1884,12 +1951,19 @@ PROC checkMasterSig(signals)
         SELECT c
           CASE JH_UPDATE
               updateNode(msg.user,msg.location,msg.action,msg.baud,msg.node)
+              checkStartingScript()
               IF(showAbout)
                 showNodes()
                 showAbout:=0
               ENDIF
           CASE JH_DOWNLOAD
-              regLastDownloads(msg.user,msg.node)
+              trimStr(msg.user,tempstr2)
+
+              getSystemDate(datestr)
+               
+              regLastDownloads(tempstr2,datestr,msg.node)
+              saveState()
+              IF topOption = LAST_DOWNLOADS THEN showLastDownloads(eWin)
               StringF(temp,'DL: \s',msg.user)
               StringF(temp1,'\d',SV_NEWMSG)
               updateNode(temp,msg.location,temp1,msg.baud,msg.node)
@@ -1898,7 +1972,13 @@ PROC checkMasterSig(signals)
                 showAbout:=0
               ENDIF
           CASE JH_UPLOAD
-              regLastUploads(msg.user,msg.node)
+              trimStr(msg.user,tempstr2)
+
+              getSystemDate(datestr)
+                
+              regLastUploads(tempstr2,datestr,msg.node)
+              saveState()
+              IF topOption = LAST_UPLOADS THEN showLastUploads(eWin)
               StringF(temp,'UL: \s',msg.user)
               StringF(temp1,'\d',SV_NEWMSG)
               updateNode(temp,msg.location,temp1,msg.baud,msg.node)
@@ -2440,21 +2520,21 @@ PROC setTheGads()
   DEF s
   
   IF(setTheGadsj=FALSE)
-    strcpy(setOriText[0],'Sysop Login')
-    strcpy(setOriText[1],'Instant Login')
-    strcpy(setOriText[2],'AEShell')
-    strcpy(setOriText[3],'Toggle Chat')
-    strcpy(setOriText[4],'Exit Node')
-    strcpy(setOriText[5],'Local Login')
-    strcpy(setOriText[6],'Reserve Node')
-    strcpy(setOriText[7],'Accounts')
-    strcpy(setOriText[8],'Init Modem')
-    strcpy(setOriText[9],'Node(offhook)')
-    strcpy(setOriText[10],'Quiet Node')
-    strcpy(setOriText[11],'Config Node')
-    strcpy(setOriText[12],'Node Chat')
-    strcpy(setOriText[13],'Save Win')
-    strcpy(setOriText[14],'Set NRAMS')
+    StrCopy(setOriText[0],'Sysop Login')
+    StrCopy(setOriText[1],'Instant Login')
+    StrCopy(setOriText[2],'AEShell')
+    StrCopy(setOriText[3],'Toggle Chat')
+    StrCopy(setOriText[4],'Exit Node')
+    StrCopy(setOriText[5],'Local Login')
+    StrCopy(setOriText[6],'Reserve Node')
+    StrCopy(setOriText[7],'Accounts')
+    StrCopy(setOriText[8],'Init Modem')
+    StrCopy(setOriText[9],'Node(offhook)')
+    StrCopy(setOriText[10],'Quiet Node')
+    StrCopy(setOriText[11],'Config Node')
+    StrCopy(setOriText[12],'Node Chat')
+    StrCopy(setOriText[13],'Save Win')
+    StrCopy(setOriText[14],'Set NRAMS')
     setTheGadsj:=1
     RETURN
   ENDIF
@@ -2669,10 +2749,15 @@ PROC readStartUp(s:PTR TO CHAR)
   
   IF(t:=FindToolType(oldtooltypes,'BBS_GEOGRAPHIC')) THEN StrCopy(mybbslocation,t)
   IF(t:=FindToolType(oldtooltypes,'BBS_LOCATION'))
+    StrCopy(bbsPath,t)
     FOR i:=0 TO nodeCount-1
       cmd:=cmds[i]
       strcpy(cmd.bbsLoc,t)
     ENDFOR
+  ENDIF
+
+  IF(t:=FindToolType(oldtooltypes,'EXECUTE_ON_STARTUP_COMPLETE'))
+    StrCopy(startupCompleteScript,t)
   ENDIF
 
   IF(t:=FindToolType(oldtooltypes,'SYSOP_NAME'))
@@ -2748,6 +2833,11 @@ PROC readStartUp(s:PTR TO CHAR)
         sopt.translation:=minNode
       ENDFOR 
     ENDIF
+  ENDIF
+
+  persistState:=TRUE
+  IF(t:=FindToolType(oldtooltypes,'NO_SAVESTATE'))
+    persistState:=FALSE
   ENDIF
 
   freeToolTypes(dobj,cfg)
@@ -3017,15 +3107,77 @@ PROC attemptShutdown()
   ELSE
     FOR i:=0 TO MAX_NODES-1
       IF(StrLen(startNode[i])>0)
-        IF((users[i].actionVal=22) AND (down[i])=FALSE)
+        IF((users[i].actionVal=ENV_AWAITCONNECT) AND (down[i])=FALSE)
           control:=SV_NODEOFFHOOK
           down[i]:=TRUE
           doControl(i)
         ENDIF                     
       ELSE
-        IF(users[i].actionVal<>24) THEN notDone:=1 
+        IF(users[i].actionVal<>ENV_SHUTDOWN) THEN notDone:=1 
       ENDIF
     ENDFOR
+  ENDIF
+ENDPROC
+
+PROC loadState()
+  DEF stateFile[255]:STRING
+  DEF tempStr[255]:STRING
+  DEF tempStr2[255]:STRING
+  DEF fh,i,j
+  
+  IF persistState=FALSE THEN RETURN
+
+  StringF(stateFile,'\sacp.dat',bbsPath)
+  fh:=Open(stateFile,MODE_OLDFILE)
+  IF fh>0
+    FOR i:=0 TO MAX_NODES-1
+      FOR j:=0 TO 4
+        ReadStr(fh,tempStr)
+        ReadStr(fh,tempStr2)
+        IF StrLen(tempStr)>0 THEN regLastUser(tempStr,tempStr2,i)
+        ReadStr(fh,tempStr)
+        ReadStr(fh,tempStr2)
+        IF StrLen(tempStr)>0 THEN regLastUploads(tempStr,tempStr2,i)
+        ReadStr(fh,tempStr)
+        ReadStr(fh,tempStr2)
+        IF StrLen(tempStr)>0 THEN regLastDownloads(tempStr,tempStr2,i)
+      ENDFOR
+    ENDFOR
+    Close(fh)
+  ENDIF
+ENDPROC
+
+PROC saveState()
+  DEF stateFile[255]:STRING
+  DEF tempStr[255]:STRING
+  DEF fh,i,j
+  DEF list:PTR TO itemsList
+  
+  IF persistState=FALSE THEN RETURN
+  
+  StringF(stateFile,'\sacp.dat',bbsPath)
+  fh:=Open(stateFile,MODE_NEWFILE)
+  IF fh>0
+    FOR i:=0 TO MAX_NODES-1
+      FOR j:=0 TO 4
+        list:=ndUser[i]
+        StringF(tempStr,'\s\n',list.getItem(j))
+        Write(fh,tempStr,StrLen(tempStr))
+        StringF(tempStr,'\s\n',list.getItemDate(j))
+        Write(fh,tempStr,StrLen(tempStr))
+        list:=ndUploads[i]
+        StringF(tempStr,'\s\n',list.getItem(j))
+        Write(fh,tempStr,StrLen(tempStr))
+        StringF(tempStr,'\s\n',list.getItemDate(j))
+        Write(fh,tempStr,StrLen(tempStr))
+        list:=ndDownloads[i]
+        StringF(tempStr,'\s\n',list.getItem(j))
+        Write(fh,tempStr,StrLen(tempStr))
+        StringF(tempStr,'\s\n',list.getItemDate(j))
+        Write(fh,tempStr,StrLen(tempStr))
+      ENDFOR
+    ENDFOR
+    Close(fh)
   ENDIF
 ENDPROC
 
@@ -3056,7 +3208,14 @@ PROC main() HANDLE
  
   KickVersion(37)  -> E-Note: requires V37
 
-  StringF(myVerStr,'v5.0.0')
+  StringF(myVerStr,'v5.1.0')
+
+  FOR i:=0 TO MAX_NODES-1
+    ndUser[i]:=NIL
+    ndUploads[i]:=NIL
+    ndDownloads[i]:=NIL
+  ENDFOR
+
 
   dim:=[1,1,1,1]:INT  /*** Dimensions of ZIP window default ***/
   zim:=[10,100]:INT
@@ -3227,7 +3386,7 @@ PROC main() HANDLE
 
   IF scr
     topOffset:=scr.wbortop+scr.font.ysize+1-11
-    height:=height+topOffset
+    height:=height+topOffset+scr.wborbottom
     initNgAry()
 
     IF(zipOn)
@@ -3334,6 +3493,10 @@ PROC main() HANDLE
             ENDIF
           ENDFOR
         ENDIF
+
+        loadState()
+        checkStartingScript()
+
         WHILE (notDone)
           signals:=Wait(masterSig OR windowSig OR myappsig OR cxsigflag)
           
@@ -3437,6 +3600,7 @@ EXCEPT DO
   IF appicon THEN do_appicon(myappport)
   
   shutDownMaster()
+  saveState()
   IF oldDirLock THEN CurrentDir(oldDirLock)
   IF newlock<>NIL THEN UnLock(newlock)
 
@@ -3452,18 +3616,15 @@ EXCEPT DO
     DisposeLink(setOriText[i])
   ENDFOR
 
-  FOR i:=0 TO 4
-    DisposeLink(lastUsers[i])
-    DisposeLink(lastUploads[i])
-    DisposeLink(lastDownloads[i])
-  ENDFOR
+  END lastUsers
+  END lastUploads
+  END lastDownloads
+
   FOR i:=0 TO MAX_NODES-1
     DisposeLink(startNode[i])
-    FOR j:=0 TO 4
-      DisposeLink(ndUser[i].lastUsers[j])
-      DisposeLink(ndUploads[i].lastUsers[j])
-      DisposeLink(ndDownloads[i].lastUsers[j])
-    ENDFOR
+    END ndUser[i]
+    END ndDownloads[i]
+    END ndUploads[i]
   ENDFOR
 
   

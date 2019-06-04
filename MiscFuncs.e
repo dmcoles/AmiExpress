@@ -96,6 +96,19 @@ EXPORT PROC charToUpper(c)
   UpperStr(str)
 ENDPROC str[0]
 
+/* trim spaces from both ends of a string and puts it in the destination estring*/
+EXPORT PROC fullTrim(src:PTR TO CHAR,dest:PTR TO CHAR)
+  DEF n,v=0
+  StrCopy(dest,TrimStr(src))
+  n:=EstrLen(dest)
+  IF n>0 THEN v:=dest[n-1]
+  WHILE (n>0) AND (v=" ")
+    SetStr(dest,n-1)
+    n:=EstrLen(dest)
+    IF n>0 THEN v:=dest[n-1]
+  ENDWHILE
+ENDPROC
+
 EXPORT PROC findAssign(name: PTR TO CHAR)
 /* checks to see if a specified assign exists, returns 0 if it exists otherwise it returns 20 */
   DEF db: doslibrary
