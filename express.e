@@ -255,7 +255,8 @@ MODULE 'intuition/screens',
 
   MODULE '*axcommon',
          '*miscfuncs',
-         '*stringlist'
+         '*stringlist',
+         '*ftpd'
 
 OBJECT user
   name[30]:ARRAY OF CHAR
@@ -368,6 +369,8 @@ OBJECT zModem
   inProgress: LONG
   downloading: CHAR
   freeDFlag: LONG
+  current: LONG
+  total: LONG
 ENDOBJECT
 
 OBJECT confBase
@@ -757,6 +760,8 @@ DEF lastTimeUpdate
 DEF bitPlanes=3
 DEF ximPort=0
 
+DEF mimicVersion[255]:STRING
+
 DEF namePrompt[255]:STRING
 DEF passwordPrompt[255]:STRING
 
@@ -838,6 +843,8 @@ DEF serialCacheEnabled=FALSE
 DEF includeDeact=FALSE
 
 DEF bgChecking=FALSE
+
+DEF ftptime=0
 
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
@@ -5381,7 +5388,11 @@ ENDPROC
 
 PROC getExpressMajorVer(outExpressVer)
   DEF i,temp
-
+  IF StrLen(mimicVersion)>0
+    StrCopy(outExpressVer,mimicVersion)
+    RETURN
+  ENDIF
+  
   IF (expressVer[0]="v") OR (expressVer[0]="V") THEN i:=1 ELSE i:=0
   IF ((temp:=InStr(expressVer,'.'))>=0)
     StringF(outExpressVer,'v\d.\d',Val(expressVer+i),Val(expressVer+temp+1))
@@ -5551,8 +5562,10 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
 
     doorTrap:=checkToolTypeExists(tooltype,cmd,'TRAPON')
 
+    readToolType(tooltype,cmd,'MIMICVER',mimicVersion)
     runDoor(commandfile,commandTypeCode,cmd,params,resident,doorTrap,privcmd,pri,stacksize)
-
+    StrCopy(mimicVersion,'')
+    
   ENDIF
 ENDPROC cmdfound
 
@@ -11543,10 +11556,9 @@ skipBegin:
           ELSE
             lines:=(ListMax(msgBuf)-3)
           ENDIF*/
-          StringF(str,' ^^^-[ \s ]',mailHeader.fromName)
-          WHILE(StrLen(str)<70)
-            StrAdd(str,'-')
-          ENDWHILE
+          formatLongDateTime(mailHeader.msgDate,tempStr)
+          StringF(str,' -----[ \s ]--[ \s ]----------------------------------------------------------------------',mailHeader.fromName,tempStr)
+          SetStr(str,70)
           msgBuf.setItem(lines,str)
 
           lines++
@@ -14246,6 +14258,8 @@ PROC xprfopen()
     ENDFOR
   ENDIF
 
+  IF (filemode<>MODE_OLDFILE) AND (zModemInfo.inProgress=ZMODEM_UPLOAD) THEN zModemInfo.current:=zModemInfo.current+1
+
   zModemInfo.resumePos:=0
   res:=Open(fn,filemode)
 
@@ -15000,6 +15014,8 @@ PROC xprffirst()
   sendMasterDownload(fileItem.fileName)
   zModemInfo.freeDFlag:=checkFree(fileItem.fileName)
   zModemInfo.resumePos:=0
+  zModemInfo.current:=1
+
 ENDPROC TRUE
 
 PROC xprfnextAsm()
@@ -15029,7 +15045,6 @@ ENDPROC xprfnext2(buffer,xprObj)
 
 PROC xprfnext2(buffer:PTR TO CHAR, xprObj:PTR TO xprData)
   DEF fileItem:PTR TO flagFileItem
-  DEF cb:PTR TO confBase
   DEF tempsize
 
   fileItem:=xprObj.fileList.item(xprObj.currentFile)
@@ -15039,51 +15054,11 @@ PROC xprfnext2(buffer:PTR TO CHAR, xprObj:PTR TO xprData)
   ENDIF
 
   IF (zModemInfo.transPos<>0) AND (zModemInfo.resumePos<>zModemInfo.filesize) AND (zModemInfo.transPos=zModemInfo.filesize)
-    onlineNFiles++
-    IF(zModemInfo.freeDFlag=FALSE) THEN donf++
-
-    tempsize:=zModemInfo.filesize
-    tBT:=tBT+tempsize
-    dTBT:=dTBT+tempsize
-
-    IF xprObj.updateDownloadStats
-      IF sopt.toggles[TOGGLES_CREDITBYKB]
-        tempsize:=Shr(tempsize,10)
-      ENDIF
-
-      IF(checkSecurity(ACS_CONFERENCE_ACCOUNTING))
-        saveMsgPointers(currentConf)
-
-        IF(freeDownloads=FALSE)
-          IF creditAccountTrackDownloads(loggedOnUser)
-            cb:=confBases.item(fileItem.confNum)
-
-            ->cb.bytesDownload:=cb.bytesDownload+tempsize
-            addBCD(cb.downloadBytesBCD,tempsize)
-            cb.bytesDownload:=convertFromBCD(cb.downloadBytesBCD)
-            cb.downloads:=cb.downloads+1
-          ENDIF
-        ENDIF
-        cb.dailyBytesDld:=cb.dailyBytesDld+tempsize
-        IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
-        loadMsgPointers(currentConf)
-      ELSE
-        IF(freeDownloads=FALSE)
-          IF creditAccountTrackDownloads(loggedOnUser)
-
-            ->loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+tempsize
-            addBCD(loggedOnUserMisc.downloadBytesBCD,tempsize)
-            loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
-            loggedOnUser.downloads:=loggedOnUser.downloads+1
-          ENDIF
-        ENDIF
-        loggedOnUser.dailyBytesDld:=loggedOnUser.dailyBytesDld+tempsize
-        IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
-      ENDIF
-    ENDIF
+    updateDownloadStats(xprObj,fileItem)
   ENDIF
 
   xprObj.currentFile:=xprObj.currentFile+1
+  zModemInfo.current:=zModemInfo.current+1
 
   IF buffer=NIL THEN RETURN FALSE
 
@@ -15245,7 +15220,16 @@ PROC updateZDisplay()
 
   /* transfer window not open */
 
+  IF zModemInfo.downloading
+    StringF(tempstr,'[Node \d] Send Window (\d/\d)',node,zModemInfo.current,zModemInfo.total)
+    strCpy(zModemInfo.titleBar,tempstr,ALL)
+  ELSE
+    StringF(tempstr,'[Node \d] Receive Window (\d/??)',node,zModemInfo.current)
+    strCpy(zModemInfo.titleBar,tempstr,ALL)
+  ENDIF
+
   IF(windowZmodem<>NIL)
+    SetWindowTitles(windowZmodem,zModemInfo.titleBar,zModemInfo.titleBar)
     zmodemStatPrint('[H[J[0 p')
     IF (KickVersion(40) AND (bitPlanes>2))
       zmodemStatPrint('[37m[ s')
@@ -15256,7 +15240,7 @@ PROC updateZDisplay()
     zmodemStatPrint(tempstr)
     StringF(tempstr,' ETA Time: \s\n',zModemInfo.apxTime)
     zmodemStatPrint(tempstr)
-    StringF(tempstr,' Curr Time: \s\n',zModemInfo.elapsedTime)
+    StringF(tempstr,' Cur Time: \s\n',zModemInfo.elapsedTime)
     zmodemStatPrint(tempstr)
     StringF(tempstr,' Position: \d\n',zModemInfo.transPos)
     zmodemStatPrint(tempstr)
@@ -15356,6 +15340,178 @@ PROC downloadFile(str: PTR TO CHAR)
   END tempstringlist
 ENDPROC res
 
+PROC ftpUploadFileStart(xprInfo:PTR TO xprData, fileName:PTR TO CHAR,filelen)
+  DEF fileItem:PTR TO flagFileItem
+  DEF item:PTR TO flagFileItem
+  DEF i
+  fileItem:=NIL
+  sendMasterUpload(FilePart(fileName))
+  zModemInfo.filesize:=0
+  zModemInfo.resumePos:=0
+  ftptime:=getSystemTime()
+
+ENDPROC
+
+PROC ftpUploadFileEnd(xprInfo:PTR TO xprData, fileName:PTR TO CHAR)
+  tTTM:=tTTM+getSystemTime()-ftptime
+ENDPROC
+
+PROC ftpDownloadFileStart(xprInfo:PTR TO xprData, fileName:PTR TO CHAR,filelen)
+  DEF fileItem:PTR TO flagFileItem
+  DEF item:PTR TO flagFileItem
+  DEF i
+  fileItem:=NIL
+  FOR i:=0 TO xprInfo.fileList.count()-1
+    item:=xprInfo.fileList.item(i)
+    IF strCmpi(FilePart(item.fileName),fileName,ALL) THEN fileItem:=item
+  ENDFOR
+  IF fileItem<>NIL 
+    sendMasterDownload(fileItem.fileName)
+    zModemInfo.freeDFlag:=checkFree(fileItem.fileName)
+  ELSE
+    sendMasterDownload(FilePart(fileName))
+    zModemInfo.freeDFlag:=FALSE
+  ENDIF
+  zModemInfo.filesize:=filelen
+  zModemInfo.resumePos:=0
+ENDPROC
+
+PROC ftpDownloadFileEnd(xprInfo:PTR TO xprData, fileName:PTR TO CHAR)
+  DEF fileItem:PTR TO flagFileItem
+  DEF item:PTR TO flagFileItem
+  DEF i
+  
+  fileItem:=NIL
+  FOR i:=0 TO xprInfo.fileList.count()-1
+    item:=xprInfo.fileList.item(i)
+    IF strCmpi(FilePart(item.fileName),fileName,ALL) THEN fileItem:=item
+  ENDFOR
+
+  IF fileItem=NIL THEN RETURN
+
+  IF (zModemInfo.transPos<>0) AND (zModemInfo.transPos=zModemInfo.filesize)
+    removeFlagFromList(FilePart(fileItem.fileName),fileItem.confNum)
+  ENDIF
+
+  IF (zModemInfo.transPos<>0) AND (zModemInfo.resumePos<>zModemInfo.filesize) AND (zModemInfo.transPos=zModemInfo.filesize)
+    updateDownloadStats(xprInfo,fileItem)
+  ENDIF
+ENDPROC
+
+PROC ftpTransferFileProgress(xprInfo:PTR TO xprData, fileName:PTR TO CHAR,pos)
+  zModemInfo.transPos:=pos
+ENDPROC
+
+PROC updateDownloadStats(xprObj:PTR TO xprData, fileItem:PTR TO flagFileItem)
+  DEF tempsize
+  DEF cb:PTR TO confBase
+
+  onlineNFiles++
+  IF(zModemInfo.freeDFlag=FALSE) THEN donf++
+
+  tempsize:=zModemInfo.filesize
+  tBT:=tBT+tempsize
+  dTBT:=dTBT+tempsize
+
+  IF xprObj.updateDownloadStats
+    IF sopt.toggles[TOGGLES_CREDITBYKB]
+      tempsize:=Shr(tempsize,10)
+    ENDIF
+
+    IF(checkSecurity(ACS_CONFERENCE_ACCOUNTING))
+      saveMsgPointers(currentConf)
+
+      IF(freeDownloads=FALSE)
+        IF creditAccountTrackDownloads(loggedOnUser)
+          cb:=confBases.item(fileItem.confNum)
+
+          ->cb.bytesDownload:=cb.bytesDownload+tempsize
+          addBCD(cb.downloadBytesBCD,tempsize)
+          cb.bytesDownload:=convertFromBCD(cb.downloadBytesBCD)
+          cb.downloads:=cb.downloads+1
+        ENDIF
+      ENDIF
+      cb.dailyBytesDld:=cb.dailyBytesDld+tempsize
+      IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
+      loadMsgPointers(currentConf)
+    ELSE
+      IF(freeDownloads=FALSE)
+        IF creditAccountTrackDownloads(loggedOnUser)
+
+          ->loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+tempsize
+          addBCD(loggedOnUserMisc.downloadBytesBCD,tempsize)
+          loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
+          loggedOnUser.downloads:=loggedOnUser.downloads+1
+        ENDIF
+      ENDIF
+      loggedOnUser.dailyBytesDld:=loggedOnUser.dailyBytesDld+tempsize
+      IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
+    ENDIF
+  ENDIF
+ENDPROC
+
+PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPort)
+  DEF ramDir[100]:STRING
+  DEF execStr[100]:STRING
+  DEF x: PTR TO xprData
+  DEF tmpstr[100]:STRING
+
+  x:=NEW x
+  x.currentFile:=0
+  x.fileList:=NIL
+  x.updateDownloadStats:=FALSE
+
+  StrCopy(ramDir,'1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890')
+  StrCopy(execStr,'1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890')
+
+  StringF(tmpstr,'\h',execStr+20)
+  aePuts(tmpstr)
+
+  doftp(node,'localhost',ftpPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},TRUE)
+  
+  aePuts(ramDir)
+  aePuts('\b\n')
+  aePuts(execStr)
+  aePuts('\b\n')
+  END x 
+
+ENDPROC
+
+PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort)
+  DEF i
+  DEF dirLock
+  DEF ramDir[255]:STRING
+  DEF execStr[255]:STRING
+  DEF item:PTR TO flagFileItem
+  DEF x: PTR TO xprData
+  
+  aePuts('\b\nCreating FTP file area\b\n')
+  StringF(ramDir,'RAM:ftp\d',node)
+  dirLock:=CreateDir(ramDir)
+  StrAdd(ramDir,'/')
+  IF dirLock<>NIL THEN UnLock(dirLock)
+  ->create links in ram
+  IF fileList<>NIL
+    FOR i:=0 TO fileList.count()-1
+      item:=fileList.item(i)
+      StringF(execStr,'MAKELINK RAM:ftp\d/\s \s SOFT',node,FilePart(item.fileName),item.fileName)
+      Execute(execStr,NIL,NIL)
+    ENDFOR
+  ENDIF
+  
+  x:=NEW x
+  x.currentFile:=0
+  x.fileList:=fileList
+  x.updateDownloadStats:=updateDownloadStats
+
+  doftp(node,'localhost',ftpPort,ramDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},FALSE)
+  
+  ->clean up ram links
+  StringF(execStr,'DELETE RAM:ftp\d ALL',node)
+  Execute(execStr,NIL,NIL)
+  END x 
+ENDPROC
+
 ->this returns 0 = fail, 1 = success unlike most of the routines
 PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   DEF tempstr[255]:STRING
@@ -15368,6 +15524,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   DEF oldshared
   DEF fileItem:PTR TO flagFileItem
   DEF x: PTR TO xprData
+  DEF ftpPort
   
   IF (logonType<>LOGON_TYPE_REMOTE) AND (checkSecurity(ACS_LOCAL_DOWNLOADS)=FALSE)
     aePuts('\b\nNot supported locally...')
@@ -15382,6 +15539,12 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   IF (strCmpi(xprLib.item(loggedOnUser.xferProtocol),'HYDRA',ALL))
     aePuts('\b\nHYDRA protocol is not currently supported')
     RETURN 0
+  ENDIF
+
+  IF (strCmpi(xprLib.item(loggedOnUser.xferProtocol),'FTP',ALL))
+    ftpPort:=readToolTypeInt(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPPORT')
+    IF ftpPort=-1 THEN ftpPort:=10000+node
+    RETURN ftpDownload(fileList,updateDownloadStats,ftpPort)
   ENDIF
 
   IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
@@ -15410,9 +15573,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
     RETURN 0
   ENDIF
 
-  StringF(tempstr,'[Node \d] Send Window',node)
-  strCpy(zModemInfo.titleBar,tempstr,ALL)
-  zModemInfo.transPos:=0;zModemInfo.filesize:=0;zModemInfo.errorCount:=0;zModemInfo.errorPos:=0;zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
+  zModemInfo.current:=0;zModemInfo.total:=fileList.count();zModemInfo.transPos:=0;zModemInfo.filesize:=0;zModemInfo.errorCount:=0;zModemInfo.errorPos:=0;zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
   strCpy(zModemInfo.zStat,'',ALL)
   strCpy(zModemInfo.fileName,'',ALL)
   strCpy(zModemInfo.lastTime,'',ALL)
@@ -15833,12 +15994,30 @@ PROC xprReceive(file) HANDLE
   DEF oldshared,bgport
   DEF msg:PTR TO jhMessage,tags=NIL,count,ch
   DEF proc:PTR TO process
+  DEF ftpPort
 
   IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
     StrCopy(tempstr,'xprzmodem.library')
   ELSEIF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'HYDRA',ALL))
     aePuts('\b\nHYDRA transfers are not currently supported\b\n')
     RETURN RESULT_FAILURE
+  ELSEIF (strCmpi(xprLib.item(loggedOnUser.xferProtocol),'FTP',ALL))
+    IF(StrLen(sopt.ramPen)>0) THEN StringF(tempstr,'\s/',sopt.ramPen) ELSE StringF(tempstr,'\sNode\d/PlayPen/',cmds.bbsLoc,node)
+
+    ftpPort:=readToolTypeInt(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPPORT')
+    IF ftpPort=-1 THEN ftpPort:=10000+node
+    
+    ftpUpload(tempstr,ftpPort)
+    checkOffhookFlag()
+    receivePlayPen()
+    IF (tBT>0) AND (tTTM>0)
+      tTEFF:=Div(Mul(Div(tBT,tTTM),100),Div(onlineBaud,10))
+    ELSE
+      tTEFF:=0
+    ENDIF
+    Delay(50)
+    aePuts('FTP upload complete\b\n')
+    RETURN 
   ELSE
     StringF(tempstr,'\s.library',xprLib.item(loggedOnUser.xferProtocol))
   ENDIF
@@ -15851,9 +16030,7 @@ PROC xprReceive(file) HANDLE
 
   xprio:=NEW xprio
 
-  StringF(tempstr,'[Node \d] Receive Window',node)
-  strCpy(zModemInfo.titleBar,tempstr,ALL)
-  zModemInfo.transPos:=0; zModemInfo.filesize:=0; zModemInfo.errorCount:=0; zModemInfo.errorPos:=0; zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
+  zModemInfo.current:=0; zModemInfo.transPos:=0; zModemInfo.filesize:=0; zModemInfo.errorCount:=0; zModemInfo.errorPos:=0; zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
   strCpy(zModemInfo.zStat,'',ALL)
   strCpy(zModemInfo.fileName,'',ALL)
   strCpy(zModemInfo.apxTime,'',ALL)
@@ -17780,6 +17957,7 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   /* dunno why cause we dont return shit */
   checkOnlineStatus()    /* can return no carrier */
 
+
   IF(cmds.acLvl[LVL_KEEP_UPLOAD_CREDIT]>0) THEN loggedOnUser.timeTotal:=loggedOnUser.timeTotal+(Div(peff,2))
 
   moveToLCFILES:=0
@@ -18154,6 +18332,7 @@ move_It:     /* gets here if lostcarrier, and file is complete but not when file
   ENDFOR       /* else */
 
 eit:
+
   ->purgeLine();
 
   cleanPlayPen()
@@ -26318,7 +26497,6 @@ PROC processLoggedOnUser()
     aePuts('\b\n')
     IF checkOnlineStatus()<>RESULT_SUCCESS THEN reqState:=REQ_STATE_LOGOFF
     updateTimeUsed()
-
     ->show queued olm messages
     processOlmMessageQueue(TRUE)
 
@@ -27543,8 +27721,18 @@ PROC closezModemStats()
   windowZmodem:=NIL
 ENDPROC
 
-PROC openZmodemStat()
+PROC openZmodemStat() 
   DEF tags,tags2,vi
+  DEF tempstr[255]:STRING
+
+  IF zModemInfo.downloading
+    StringF(tempstr,'[Node \d] Send Window (??/??)',node)
+    strCpy(zModemInfo.titleBar,tempstr,ALL)
+  ELSE
+    StringF(tempstr,'[Node \d] Receive Window (??/??)',node)
+    strCpy(zModemInfo.titleBar,tempstr,ALL)
+  ENDIF
+
   tags:=NEW [WA_CLOSEGADGET,1,
         WA_CUSTOMSCREEN,screen,
         WA_SIZEGADGET,1,
@@ -27563,7 +27751,7 @@ PROC openZmodemStat()
     windowZmodem:=OpenWindowTagList(NIL,tags)
     initZmodemStatCon()
     IF (KickVersion(40) AND (bitPlanes>2)) THEN zmodemStatPrint('[37m[ s')
-    zmodemStatPrint('[H[J[0 p[H\n FileName:\n FileSize: 0\n ETA Time:\n Curr Time:\n Position: 0\n Complete: 0%\n LastTime:\n      CPS: 0\n\n Z Status: Starting\n Errors: 0\n ErrorPos: 0')
+    zmodemStatPrint('[H[J[0 p[H\n FileName:\n FileSize: 0\n ETA Time:\n Cur Time:\n Position: 0\n Complete: 0%\n LastTime:\n      CPS: 0\n\n Z Status: Starting\n Errors: 0\n ErrorPos: 0')
 
     IF (gadtoolsbase:=OpenLibrary('gadtools.library',0))<>NIL
       vi:=GetVisualInfoA(screen, [NIL])
@@ -27677,7 +27865,6 @@ PROC openExpressScreen()
               SA_PUBNAME,IF StrLen(pubScreen)>0 THEN pubScreen ELSE 0,
               SA_PENS,pens,
               SA_INTERLEAVED,1,
-              ->SA_FULLPALETTE,1,
               SA_FONT,defaultfontattr,
               SA_COLORS,cols,NIL]
       screen:=OpenScreenTagList(NIL,opentags)
@@ -27894,8 +28081,8 @@ PROC main() HANDLE
   DEF tempfh
   DEF transptr:PTR TO mln
 
-  StrCopy(expressVer,'v5.1.0',ALL)
-  StrCopy(expressDate,'03-Jun-2019',ALL)
+  StrCopy(expressVer,'v5.1.1-alpha',ALL)
+  StrCopy(expressDate,'19-Aug-2019',ALL)
 
   InitSemaphore(bgData)
 
@@ -28502,6 +28689,7 @@ PROC main() HANDLE
 ENDPROC
 
 PROC saveA4()
+  MOVEM.L D0-D7/A0-A6,-(A7)
   MOVE.L 4,A6
   SUB.L A1,A1
   JSR -$126(A6)     ->findtask
@@ -28514,9 +28702,11 @@ PROC saveA4()
   ADD.W D0,D0
   MOVE.L A4,0(A0,D0.W)
   MOVE.L D7,0(A1,D0.W)
+  MOVEM.L (A7)+,D0-D7/A0-A6 
 ENDPROC
 
 PROC saveA4thread(taskID)
+  MOVEM.L D0-D7/A0-A6,-(A7)
   MOVE.L taskID,D7
 
   LEA regA4(PC),A0
@@ -28526,9 +28716,12 @@ PROC saveA4thread(taskID)
   ADD.W D0,D0
   MOVE.L A4,0(A0,D0.W)
   MOVE.L D7,0(A1,D0.W)
+  MOVEM.L (A7)+,D0-D7/A0-A6 
 ENDPROC
 
 PROC loadA4()
+  MOVEM.L D0-D7/A0-A3/A5-A6,-(A7)
+
   MOVE.L 4,A6
   SUB.L A1,A1
   JSR -$126(A6)     ->findtask
@@ -28551,9 +28744,11 @@ findA4task:
 
 taskfound:
   MOVE.L 0(A0,D0),A4
+  MOVEM.L (A7)+,D0-D7/A0-A3/A5-A6
 ENDPROC
 
 PROC loadA4thread()
+  MOVEM.L D0-D7/A0-A3/A5-A6,-(A7)
   MOVE.L 4,A6
   SUB.L A1,A1
   JSR -$126(A6)     ->findtask
@@ -28576,6 +28771,8 @@ findA4threadtask:
 
 threadtaskfound:
   MOVE.L 0(A0,D0),A4
+  MOVEM.L (A7)+,D0-D7/A0-A3/A5-A6
+
 ENDPROC
 
 tasksA4:
