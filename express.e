@@ -2743,7 +2743,7 @@ PROC cacheSerialData(serialData,dataLen)
 ENDPROC
 
 PROC flushSerialCache()
-  IF (serialWriteIO<>NIL) AND (serialCache<>NIL)
+  IF (serialWriteIO<>NIL) AND (serialCache<>NIL) AND (serialCacheCurrentSize>0)
     serialWriteIO.iostd.command:=CMD_WRITE
     serialWriteIO.iostd.data:=serialCache
     serialWriteIO.iostd.length:=serialCacheCurrentSize
@@ -15450,40 +15450,42 @@ PROC updateDownloadStats(xprObj:PTR TO xprData, fileItem:PTR TO flagFileItem)
   ENDIF
 ENDPROC
 
-PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPort)
-  DEF ramDir[100]:STRING
-  DEF execStr[100]:STRING
+PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPort,ftpDataPort)
   DEF x: PTR TO xprData
-  DEF tmpstr[100]:STRING
+  DEF tempstr[100]:STRING
+  DEF oldSerCache
 
   x:=NEW x
   x.currentFile:=0
   x.fileList:=NIL
   x.updateDownloadStats:=FALSE
 
-  StrCopy(ramDir,'1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890')
-  StrCopy(execStr,'1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890')
+  oldSerCache:=serialCacheEnabled
+  flushSerialCache()
+  serialCacheEnabled:=FALSE
+  IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPHOST',tempstr)=FALSE
+    StrCopy(tempstr,'localhost')
+  ENDIF
 
-  StringF(tmpstr,'\h',execStr+20)
-  aePuts(tmpstr)
-
-  doftp(node,'localhost',ftpPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},TRUE)
-  
-  aePuts(ramDir)
-  aePuts('\b\n')
-  aePuts(execStr)
-  aePuts('\b\n')
+  doftp(node,tempstr,ftpPort,ftpDataPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},TRUE)
+  serialCacheEnabled:=oldSerCache
   END x 
 
 ENDPROC
 
-PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort)
+PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort,ftpDataPort)
   DEF i
   DEF dirLock
+  DEF tempstr[255]:STRING
   DEF ramDir[255]:STRING
   DEF execStr[255]:STRING
   DEF item:PTR TO flagFileItem
   DEF x: PTR TO xprData
+  DEF oldSerCache
+
+  IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPHOST',tempstr)=FALSE
+    StrCopy(tempstr,'localhost')
+  ENDIF
   
   aePuts('\b\nCreating FTP file area\b\n')
   StringF(ramDir,'RAM:ftp\d',node)
@@ -15503,9 +15505,13 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort)
   x.currentFile:=0
   x.fileList:=fileList
   x.updateDownloadStats:=updateDownloadStats
-
-  doftp(node,'localhost',ftpPort,ramDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},FALSE)
-  
+ 
+  oldSerCache:=serialCacheEnabled
+  flushSerialCache()
+  serialCacheEnabled:=FALSE
+  doftp(node,tempstr,ftpPort,ftpDataPort,ramDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},FALSE)
+  serialCacheEnabled:=oldSerCache
+ 
   ->clean up ram links
   StringF(execStr,'DELETE RAM:ftp\d ALL',node)
   Execute(execStr,NIL,NIL)
@@ -15524,7 +15530,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   DEF oldshared
   DEF fileItem:PTR TO flagFileItem
   DEF x: PTR TO xprData
-  DEF ftpPort
+  DEF ftpPort,ftpDataPort
   
   IF (logonType<>LOGON_TYPE_REMOTE) AND (checkSecurity(ACS_LOCAL_DOWNLOADS)=FALSE)
     aePuts('\b\nNot supported locally...')
@@ -15542,14 +15548,18 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   ENDIF
 
   IF (strCmpi(xprLib.item(loggedOnUser.xferProtocol),'FTP',ALL))
-    ftpPort:=readToolTypeInt(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPPORT')
-    IF ftpPort=-1 THEN ftpPort:=10000+node
-    RETURN ftpDownload(fileList,updateDownloadStats,ftpPort)
+    ftpPort:=readToolTypeInt(TOOLTYPE_NODE,node,'FTPPORT')
+    ftpDataPort:=readToolTypeInt(TOOLTYPE_NODE,node,'FTPDATAPORT')
+    IF ftpPort=-1 THEN ftpPort:=10000+(node*2)
+    IF ftpDataPort=-1 THEN ftpDataPort:=10001+(node*2)
+    RETURN ftpDownload(fileList,updateDownloadStats,ftpPort,ftpDataPort)
   ENDIF
 
   IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
     StringF(tempstr,'Zmodem: Ready to Send\b\n')
-  ELSEIF(checkSecurity(ACS_XPR_SEND))
+  ELSEIF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'FTP',ALL))
+    StringF(tempstr,'FTP: Ready to Send\b\n')
+  ELSEIF(checkSecurity(ACS_XPR_SEND)=FALSE)
     aePuts('\b\nYou are not allowed to download using external xpr protocols')
     RETURN 0
   ELSE
@@ -15994,7 +16004,7 @@ PROC xprReceive(file) HANDLE
   DEF oldshared,bgport
   DEF msg:PTR TO jhMessage,tags=NIL,count,ch
   DEF proc:PTR TO process
-  DEF ftpPort
+  DEF ftpPort,ftpDataPort
 
   IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
     StrCopy(tempstr,'xprzmodem.library')
@@ -16004,10 +16014,12 @@ PROC xprReceive(file) HANDLE
   ELSEIF (strCmpi(xprLib.item(loggedOnUser.xferProtocol),'FTP',ALL))
     IF(StrLen(sopt.ramPen)>0) THEN StringF(tempstr,'\s/',sopt.ramPen) ELSE StringF(tempstr,'\sNode\d/PlayPen/',cmds.bbsLoc,node)
 
-    ftpPort:=readToolTypeInt(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPPORT')
-    IF ftpPort=-1 THEN ftpPort:=10000+node
+    ftpPort:=readToolTypeInt(TOOLTYPE_NODE,node,'FTPPORT')
+    ftpDataPort:=readToolTypeInt(TOOLTYPE_NODE,node,'FTPDATAPORT')
+    IF ftpPort=-1 THEN ftpPort:=10000+(node*2)
+    IF ftpDataPort=-1 THEN ftpDataPort:=10001+(node*2)
     
-    ftpUpload(tempstr,ftpPort)
+    ftpUpload(tempstr,ftpPort,ftpDataPort)
     checkOffhookFlag()
     receivePlayPen()
     IF (tBT>0) AND (tTTM>0)
@@ -16015,8 +16027,6 @@ PROC xprReceive(file) HANDLE
     ELSE
       tTEFF:=0
     ENDIF
-    Delay(50)
-    aePuts('FTP upload complete\b\n')
     RETURN 
   ELSE
     StringF(tempstr,'\s.library',xprLib.item(loggedOnUser.xferProtocol))
@@ -16812,7 +16822,9 @@ PROC zmodemReceive(flname:PTR TO CHAR,uLFType)
     IF(uLFType=FALSE)
       IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
         StringF(temp,'\b\nZmodem: Ready to Receive\b\n')
-      ELSEIF(checkSecurity(ACS_XPR_RECEIVE))
+      ELSEIF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'FTP',ALL))
+        StringF(temp,'\b\nFTP: Ready to Receive\b\n')
+      ELSEIF(checkSecurity(ACS_XPR_RECEIVE)=FALSE)
         aePuts('\b\nYou are not allowed to upload using external xpr protocols')
         RETURN RESULT_FAILURE
       ELSE
@@ -28082,7 +28094,7 @@ PROC main() HANDLE
   DEF transptr:PTR TO mln
 
   StrCopy(expressVer,'v5.1.1-alpha',ALL)
-  StrCopy(expressDate,'19-Aug-2019',ALL)
+  StrCopy(expressDate,'23-Aug-2019',ALL)
 
   InitSemaphore(bgData)
 

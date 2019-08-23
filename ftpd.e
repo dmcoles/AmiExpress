@@ -29,6 +29,7 @@ OBJECT ftpData
   workingPath:PTR TO CHAR
   uploadMode:LONG
   port:LONG
+  dataPort:LONG
   restPos:LONG
   sockId:LONG
   aePuts:LONG
@@ -356,13 +357,13 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
   
   ftpData.rest:=0  
 
-  r,data_s:=openSocket(sb,ftpData.port+1,1,ftpData)
+  r,data_s:=openSocket(sb,ftpData.dataPort,1,ftpData)
   IF r=FALSE 
     writeLineEx(sb,ftp_c, '425 Can''t open data connection\b\n')
     RETURN -1,-1
   ENDIF
   
-  StringF(temp,'227 Entering Passive Mode (\d,\d,\d,\d,\d,\d)\b\n',Shr(addr[] AND $FF000000,24)AND $FF,Shr(addr[] AND $FF0000,16) AND $FF,Shr(addr[] AND $FF00,8) AND $FF,addr[] AND $FF,Shr(ftpData.port+1,8) AND $FF,ftpData.port+1 AND $FF)
+  StringF(temp,'227 Entering Passive Mode (\d,\d,\d,\d,\d,\d)\b\n',Shr(addr[] AND $FF000000,24)AND $FF,Shr(addr[] AND $FF0000,16) AND $FF,Shr(addr[] AND $FF00,8) AND $FF,addr[] AND $FF,Shr(ftpData.dataPort,8) AND $FF,ftpData.dataPort AND $FF)
   ->WriteF(temp)
   writeLineEx(sb,ftp_c, temp)
   ftpData.restPos:=0
@@ -375,8 +376,8 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
     RETURN -1,-1
   ELSE
     ftpData.scount:=ftpData.scount+1
-    StringF(temp,'Data connection at port \d accepted\b\n', ftpData.port+1)
-    aePuts(ftpData,temp)
+    /*StringF(temp,'Data connection at port \d accepted\b\n', ftpData.dataPort)
+    aePuts(ftpData,temp)*/
     RETURN data_s,data_c
   ENDIF      
 ENDPROC
@@ -575,7 +576,7 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
     ftpData.scount:=ftpData.scount-1
     r:=closeSocket(sb,data_s)
   ENDIF
-  aePuts(ftpData,'Data connection closed\b\n')
+  /*aePuts(ftpData,'Data connection closed\b\n')*/
 ENDPROC
 
 PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
@@ -650,14 +651,13 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
     ftpData.scount:=ftpData.scount-1
     r:=closeSocket(sb,data_s)
   ENDIF
-  aePuts(ftpData,'Data connection closed\b\n')
+  /*aePuts(ftpData,'Data connection closed\b\n')*/
 ENDPROC
 
 
 PROC cmdList(sb,ftp_c,data_s,data_c,ftpData:PTR TO ftpData)
   DEF r
   DEF temp[255]:STRING
-  ->WriteF('list\b\n')
 
   IF (data_c>=0)  
     myDir(sb,data_c,ftpData.workingPath)
@@ -673,7 +673,7 @@ PROC cmdList(sb,ftp_c,data_s,data_c,ftpData:PTR TO ftpData)
     ftpData.scount:=ftpData.scount-1
     r:=closeSocket(sb,data_s)
   ENDIF
-  aePuts(ftpData,'Data connection closed\b\n')
+  /*aePuts(ftpData,'Data connection closed\b\n')*/
 ENDPROC
 
 PROC ftpThread()
@@ -698,7 +698,6 @@ PROC ftpThread()
   writeLineEx(sb,ftp_c, '220 Hi, I''m your Amiga FTP server.\b\n')
     
   WHILE((readLine(sb,ftp_c, request, MAX_LINE-1) > 0) AND (StrCmp(request, 'QUIT', 4)=FALSE))
-    ->WriteF('Request: \s\b\n', request)
     
     IF(StrCmp(request, 'USER ', 5))
       cmdUser(sb,ftp_c,request+5)
@@ -762,6 +761,7 @@ PROC ftpThread()
 
   ftpData.tcount:=ftpData.tcount-1
   aePuts(ftpData,'FTP connection closed\b\n')
+  Exit(0)
 ENDPROC
 
 PROC saveA4(taskID,ftpData,node)
@@ -828,7 +828,7 @@ PROC createThread(node,sockid,ftpData:PTR TO ftpData)
  END tags
 ENDPROC
 
-EXPORT PROC doftp(node,ftphost,ftpport,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, xprInfo, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, uploadMode)
+EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, xprInfo, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, uploadMode)
   DEF r,ftp_s,ftp_c,s,sb,myargs:PTR TO LONG,rdargs
   DEF temp[255]:STRING
   DEF ftpData:PTR TO ftpData
@@ -850,6 +850,7 @@ EXPORT PROC doftp(node,ftphost,ftpport,ftppath,aePutsPtr, readCharPtr, sCheckInp
   ftpData.workingPath:=String(255)
   ftpData.hostName:=String(255)
   ftpData.xprInfo:=xprInfo
+  ftpData.dataPort:=ftpdataport
 
 
   StrCopy(ftpData.hostName,ftphost)
