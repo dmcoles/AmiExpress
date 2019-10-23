@@ -1,4 +1,4 @@
--> Replacement Express Project
+-> Ami Express 5 
 ->
 ->
 OPT LARGE,REG=5,OSVERSION=37
@@ -41,6 +41,12 @@ ENUM CACHE_RESET_NEVER, CACHE_RESET_LOGON
 ENUM TRANS_NONE,TRANS_HOST_TO_DEFINED,TRANS_DEFINED_TO_HOST
 
 ENUM FORCE_MAILSCAN_NOFORCE, FORCE_MAILSCAN_ALL, FORCE_MAILSCAN_SKIP
+
+CONST LISTENQ=100
+CONST FIONBIO=$8004667e
+CONST EINTR=4
+CONST EWOULDBLOCK=35
+CONST ENOBUFS=55
 
 CONST DEFAULT_DISK_OBJECT_CACHE_SIZE=100
 
@@ -115,8 +121,6 @@ CONST BIO_CTRL_INFO=3
 CONST AMISSLMASTER_MIN_VERSION=4
 CONST AMISSL_CURRENT_VERSION=6
 
-->CONST TAG_DONE=0
-
 CONST SSL_VERIFY_PEER=1
 CONST SSL_VERIFY_FAIL_IF_NO_PEER_CERT=2
 
@@ -133,7 +137,7 @@ CONST OPENSSL_INIT_LOAD_CRYPTO_STRINGS=2
 DEF amiSSL_SocketBase = $80000001
 DEF amiSSL_ErrNoPtr = $8000000B
 
-DEF errno
+DEF sslerrno
 DEF ctx: LONG ->PTR TO SSL_CTX
 DEF bio_err: LONG ->PTR TO BIO
 
@@ -366,8 +370,7 @@ OBJECT zModem
   lastTime[40]:ARRAY OF CHAR
   pad[2]:ARRAY OF CHAR
   lastUpdate: LONG
-  inProgress: LONG
-  downloading: CHAR
+  currentOperation: LONG
   freeDFlag: LONG
   current: LONG
   total: LONG
@@ -691,7 +694,6 @@ DEF fwdFlag
 DEF fwdDir
 DEF msgNum
 DEF fwdToMsg
-->DEF stat
 DEF currentSeekPos
 DEF fileattach=TRUE, newmailsearch = FALSE
 DEF attachedFile[255]:STRING
@@ -829,6 +831,12 @@ DEF cacheHits=0
 DEF serialLocked=FALSE
 DEF ownDevSignal=0
 
+DEF netTrans=0
+
+DEF arg1[255]:STRING
+DEF arg2[255]:STRING
+DEF arg3[255]:STRING
+
 DEF holdAccessLevel=201
 
 DEF max_desclines=15
@@ -845,6 +853,12 @@ DEF includeDeact=FALSE
 DEF bgChecking=FALSE
 
 DEF ftptime=0
+
+DEF telnetSocket=-1
+DEF offHookFlag=FALSE
+
+DEF lastIAC=FALSE
+DEF lastIAC2=FALSE
 
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
@@ -1318,7 +1332,7 @@ ENDPROC
 PROC initssl(createctx) HANDLE
   DEF tags
 
-  socketbase:=OpenLibrary('bsdsocket.library', 4)
+  IF socketbase=NIL THEN socketbase:=OpenLibrary('bsdsocket.library', 4)
   IF (socketbase=NIL)
     WriteF('Couldn''t open bsdsocket.library v4!\n')
     Raise(ERR_SSL)
@@ -1341,7 +1355,7 @@ PROC initssl(createctx) HANDLE
     Raise(ERR_SSL)
   ENDIF
 
-  tags:=NEW [amiSSL_ErrNoPtr,{errno},amiSSL_SocketBase,socketbase,0]
+  tags:=NEW [amiSSL_ErrNoPtr,{sslerrno},amiSSL_SocketBase,socketbase,0]
   IF (InitAmiSSLA(tags) <> 0)
     END tags
     WriteF('Couldn''t initialize AmiSSL!\n');
@@ -1394,7 +1408,7 @@ PROC cleanupssl()
   CloseLibrary(amisslmasterbase);
   amisslmasterbase:=NIL;
 
-  CloseLibrary(socketbase);
+  IF socketbase<>NIL THEN CloseLibrary(socketbase)
   socketbase:=NIL;
 ENDPROC
 
@@ -1411,7 +1425,6 @@ PROC connectToServer(host:PTR TO CHAR, port)
 
   /* Create a socket and connect to the server */
   IF ((sock:=Socket(AF_INET, SOCK_STREAM, 0)) >= 0)
-    ->memset(&addr, 0, sizeof(addr));
 
     hostEnt:=GetHostByName(host)
     hostaddr:=hostEnt.h_addr_list[]
@@ -1449,6 +1462,26 @@ PROC checkOnlineStatus()
 ENDPROC RESULT_SUCCESS
 
 PROC modemOffHook()
+  DEF ni:PTR TO nodeInfo
+  offHookFlag:=TRUE
+  IF (telnetSocket>=0)
+    CloseSocket(telnetSocket)
+    CloseLibrary(socketbase)
+    socketbase:=NIL
+    waitSocketLib(TRUE)
+    telnetSocket:=-1
+    IF sopt.toggles[TOGGLES_MULTICOM]
+      ObtainSemaphore(masterNode)
+      ni:=(masterNode.myNode[node])
+      ni.telnetSocket:=-1
+      ReleaseSemaphore(masterNode)
+    ENDIF   
+    ioFlags[IOFLAG_SER_IN]:=0
+    ioFlags[IOFLAG_SER_OUT]:=0
+    ioFlags[IOFLAG_SCR_OUT]:=-1
+    ioFlags[IOFLAG_KBD_IN]:=-1
+  ENDIF
+  
   IF(StrLen(cmds.serDev)>0)
     IF serShared=FALSE
       serShared:=TRUE
@@ -1557,6 +1590,7 @@ PROC checkFileConfScan(conf)
 ENDPROC res
 
 PROC closeSerial()
+  
   IF serialReadIO<>NIL
     IF CheckIO(serialReadIO)=FALSE THEN AbortIO(serialReadIO)
     CloseDevice(serialReadIO)
@@ -1740,10 +1774,24 @@ PROC intDoReset(s: PTR TO CHAR)
     ENDIF
   ENDFOR
   serPutChar("\b")
-  /*LineInput("",GSTR3,50,10)*/
 ENDPROC
 
 PROC dropDTR()
+  DEF ni:PTR TO nodeInfo
+  IF telnetSocket>=0
+    CloseSocket(telnetSocket)
+    CloseLibrary(socketbase)
+    socketbase:=NIL
+    waitSocketLib(TRUE)
+    telnetSocket:=-1
+    IF sopt.toggles[TOGGLES_MULTICOM]
+      ObtainSemaphore(masterNode)
+      ni:=(masterNode.myNode[node])
+      ni.telnetSocket:=-1
+      ReleaseSemaphore(masterNode)
+    ENDIF
+  ENDIF
+  
   IF(serialReadIO<>NIL)
     IF(CheckIO(serialReadIO))=FALSE
       AbortIO(serialReadIO)
@@ -1758,6 +1806,7 @@ PROC dropDTR()
 
     Delay(60)
   ENDIF
+  offHookFlag:=FALSE
 ENDPROC
 
 
@@ -1771,6 +1820,7 @@ ENDPROC
 
 PROC resetSystem(yes)
   DEF tempStr[255]:STRING
+  DEF ni:PTR TO nodeInfo
 
   ioFlags[IOFLAG_KBD_IN]:=-1
   ioFlags[IOFLAG_SER_IN]:=0
@@ -1778,8 +1828,23 @@ PROC resetSystem(yes)
 
   ioFlags[IOFLAG_SCR_OUT]:=0
   ioFlags[IOFLAG_SER_OUT]:=-1
-  IF(StrLen(cmds.serDev)<>0)
+  
+  IF (telnetSocket>=0)
+    CloseSocket(telnetSocket)
+    CloseLibrary(socketbase)
+    socketbase:=NIL
+    waitSocketLib(TRUE)
+    telnetSocket:=-1
+    IF sopt.toggles[TOGGLES_MULTICOM]
+      ObtainSemaphore(masterNode)
+      ni:=(masterNode.myNode[node])
+      ni.telnetSocket:=-1
+      ReleaseSemaphore(masterNode)
+    ENDIF
 
+  ENDIF
+  
+  IF(StrLen(cmds.serDev)<>0)
     purgeLine()
     dropDTR()
     Delay(25)
@@ -1806,13 +1871,10 @@ PROC resetSystem(yes)
     ENDIF
     purgeLine()
 
-    /*IF checkToolTypeExists(TOOLTYPE_NODE,node,'TELNETD')
-      serPuts('AT*C1\b')
-    ENDIF*/
-
     ioFlags[IOFLAG_SER_OUT]:=0
 
   ENDIF
+  offHookFlag:=FALSE
 ENDPROC
 
 PROC checkDoorMsg(mode)
@@ -1824,8 +1886,8 @@ PROC checkDoorMsg(mode)
   DEF subState: loggedOnState
   DEF debugstr[255]:STRING
   DEF tempstring[255]:STRING
+  DEF ni:PTR TO nodeInfo
 
-  ->debugLog(LOG_DEBUG,'doormsg')
   IF(inac) THEN RETURN
 
   IF (resmp=FALSE) THEN RETURN
@@ -2045,21 +2107,17 @@ PROC checkDoorMsg(mode)
         ENDIF
       CASE DT_BYTESUPLOAD
         IF (servermsg.data)
-          ->formatUnsignedLong(loggedOnUser.bytesUpload,tempstring)
           formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstring)
           strCpy(servermsg.string,tempstring,80)
         ELSE
-          ->loggedOnUser.bytesUpload:=Val(servermsg.string)
           bcdVal(servermsg.string,loggedOnUserMisc.uploadBytesBCD)
           loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
         ENDIF
       CASE DT_BYTEDOWNLOAD
         IF (servermsg.data)
-          ->formatUnsignedLong(loggedOnUser.bytesDownload,tempstring)
           formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstring)
           strCpy(servermsg.string,tempstring,80)
         ELSE
-          ->loggedOnUser.bytesDownload:=Val(servermsg.string)
           bcdVal(servermsg.string,loggedOnUserMisc.downloadBytesBCD)
           loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
         ENDIF
@@ -2215,8 +2273,6 @@ PROC checkDoorMsg(mode)
               aePuts(olmBuf.item(i))
             ENDFOR
             olmBuf.clear()
-            ->readChar(INPUT_TIMEOUT)
-            ->displayMenuPrompt()
           ELSE
             FOR i:=0 TO olmBuf.count()-1
               olmQueue.add(olmBuf.item(i))
@@ -2237,6 +2293,28 @@ PROC checkDoorMsg(mode)
         cancelTransferOffHook:=TRUE
       CASE CLEAR_OLM_QUEUE
         processOlmMessageQueue(FALSE)
+      CASE INCOMING_TELNET
+        IF (telnetSocket=-1) AND (offHookFlag=FALSE)
+          telnetSocket:=ObtainSocket(servermsg.data,PF_INET,SOCK_STREAM,IPPROTO_TCP)
+
+          IF checkCarrier()=FALSE 
+            CloseSocket(telnetSocket)
+            CloseLibrary(socketbase)
+            socketbase:=NIL
+            waitSocketLib(TRUE)
+            telnetSocket:=-1
+          ENDIF
+
+          IF sopt.toggles[TOGGLES_MULTICOM]
+            ObtainSemaphore(masterNode)
+            ni:=(masterNode.myNode[node])
+            ni.telnetSocket:=telnetSocket
+            ReleaseSemaphore(masterNode)
+          ENDIF
+        ELSE
+          i:=ObtainSocket(servermsg.data,PF_INET,SOCK_STREAM,IPPROTO_TCP)
+          CloseSocket(i)
+        ENDIF
     ENDSELECT
     IF servermsg<>NIL
       type:=servermsg.msg.ln.type
@@ -2670,7 +2748,6 @@ PROC asl(s: PTR TO CHAR) HANDLE
 
   tags:=NEW [ASL_HAIL,'/X FileRequest',
                       ASLFR_SCREEN,screen,
-                      ->ASL_WINDOW,window,
                       ASL_PATTERN,'#?',
                       ASL_FUNCFLAGS, FILF_MULTISELECT OR FILF_PATGAD,
                       ASL_DIR,cmds.bbsLoc,
@@ -2743,47 +2820,129 @@ PROC cacheSerialData(serialData,dataLen)
 ENDPROC
 
 PROC flushSerialCache()
-  IF (serialWriteIO<>NIL) AND (serialCache<>NIL) AND (serialCacheCurrentSize>0)
-    serialWriteIO.iostd.command:=CMD_WRITE
-    serialWriteIO.iostd.data:=serialCache
-    serialWriteIO.iostd.length:=serialCacheCurrentSize
-    DoIO(serialWriteIO)
-    serialCacheCurrentSize:=0
-    serialCacheLastFlush1,serialCacheLastFlush2:=getSystemTime2()
+  IF (serialWriteIO<>NIL) OR (telnetSocket>=0)
+    IF (serialCache<>NIL) AND (serialCacheCurrentSize>0)
+      IF telnetSocket>=0
+        telnetSend(serialCache,serialCacheCurrentSize)
+      ELSE
+        serialWriteIO.iostd.command:=CMD_WRITE
+        serialWriteIO.iostd.data:=serialCache
+        serialWriteIO.iostd.length:=serialCacheCurrentSize
+        DoIO(serialWriteIO)
+      ENDIF
+      serialCacheCurrentSize:=0
+      serialCacheLastFlush1,serialCacheLastFlush2:=getSystemTime2()
+    ENDIF
   ENDIF
+ENDPROC
+
+PROC telnetSend(string:PTR TO CHAR, putlen)
+  DEF i,c,e,maxBlkSize,tot,offs,n,telsendDelay
+  DEF buf2
+  DEF debugstr[255]:STRING
+
+  c:=0
+  FOR i:=0 TO putlen-1
+    IF string[i]=255 THEN c++
+  ENDFOR
+  buf2:=New(putlen+c)
+  c:=0
+  FOR i:=0 TO putlen-1
+    IF string[i]=255
+      buf2[c]:=255
+      c++
+      buf2[c]:=255
+    ELSE
+      buf2[c]:=string[i]
+    ENDIF
+    c++
+  ENDFOR
+            
+  maxBlkSize:=readToolTypeInt(TOOLTYPE_BBSCONFIG,'','MAX_TELNET_BLOCKSIZE')
+  telsendDelay:=readToolTypeInt(TOOLTYPE_BBSCONFIG,'','TELNET_RESEND_DELAY')
+  IF maxBlkSize=-1 THEN maxBlkSize:=c
+  tot:=c
+  offs:=0
+  IF c>maxBlkSize THEN c:=maxBlkSize
+  WHILE tot>0
+    IF c>tot THEN c:=tot
+    
+    i:=Send(telnetSocket,buf2+offs,c,0)
+    IF (i<>c)
+      e:=Errno()
+      IF (i=-1) AND ((e=EWOULDBLOCK) OR (e=ENOBUFS))
+        n:=0
+        REPEAT
+          IF (n<>0) AND (telsendDelay>0) THEN Delay(telsendDelay)
+          i:=Send(telnetSocket,buf2+offs,c,0)
+          e:=Errno()
+          n++
+          IF i<>c
+            StringF(debugstr,'telnet send warning sent=\d, errno=\d',i,e)
+            debugLog(LOG_ERROR,debugstr)
+          ENDIF
+        UNTIL (i<>-1) OR ((e<>EWOULDBLOCK) AND (e<>ENOBUFS))
+        IF (i<>c)
+          StringF(debugstr,'telnet send failure2 sent=\d, errno=\d',i,e)
+          debugLog(LOG_ERROR,debugstr)
+        ENDIF
+      ELSE
+        StringF(debugstr,'partial telnet send failure sent=\d, errno=\d',i,e)
+        debugLog(LOG_ERROR,debugstr)
+      ENDIF
+    ENDIF
+    tot:=tot-c
+    offs:=offs+c
+  ENDWHILE
+  Dispose(buf2)
 ENDPROC
 
 PROC serPuts(string: PTR TO CHAR, putlen=-1,binary=FALSE, force=FALSE)
   DEF error,actlen,serFlushTime
   DEF tempTime1,tempTime2
-  IF (serialWriteIO<>NIL) AND ((transfering=FALSE) OR (force))
+  IF (serialWriteIO<>NIL) OR (telnetSocket>=0)
+    IF (transfering=FALSE) OR (force)
 
-    serFlushTime:=0
-    IF serialCacheEnabled
-      tempTime1,tempTime2:=getSystemTime2()
+      serFlushTime:=0
+      IF serialCacheEnabled
+        tempTime1,tempTime2:=getSystemTime2()
 
-      ->calculate ticks (50ths of a second) since last cache flush
-      serFlushTime:=Mul(tempTime1-serialCacheLastFlush1,50)+tempTime2-serialCacheLastFlush2
-    ENDIF
+        ->calculate ticks (50ths of a second) since last cache flush
+        serFlushTime:=Mul(tempTime1-serialCacheLastFlush1,50)+tempTime2-serialCacheLastFlush2
+      ENDIF
 
-    IF binary OR (serialCacheEnabled=FALSE) OR (serFlushTime>10) OR (serialCache=NIL)
-      flushSerialCache()
-      serialWriteIO.iostd.command:=CMD_WRITE
-      serialWriteIO.iostd.data:=string
-      serialWriteIO.iostd.length:=putlen  -> use -1 for print until terminating NIL
-      error:=DoIO(serialWriteIO)
-      ->IF error THEN debugLog(LOG_ERROR,'serial write error: \d',error)
-    ELSE
-      actlen:=StrLen(string)
-      IF (putlen=-1) OR (actlen<putlen) THEN putlen:=actlen
-      IF ((serialCacheCurrentSize+putlen)>serialCacheSize) THEN flushSerialCache()
-      IF (putlen>=serialCacheSize)
-        serialWriteIO.iostd.command:=CMD_WRITE
-        serialWriteIO.iostd.data:=string
-        serialWriteIO.iostd.length:=putlen  -> use -1 for print until terminating NIL
-        error:=DoIO(serialWriteIO)
+      IF binary OR (serialCacheEnabled=FALSE) OR (serFlushTime>10) OR (serialCache=NIL)
+        flushSerialCache()
+        IF telnetSocket>=0
+          IF binary AND (putlen=-1)
+            debugLog(LOG_ERROR,'unsized binary write')
+          ENDIF
+          
+          IF putlen=-1 THEN putlen:=StrLen(string)
+          telnetSend(string,putlen)
+        ELSE
+          serialWriteIO.iostd.command:=CMD_WRITE
+          serialWriteIO.iostd.data:=string
+          serialWriteIO.iostd.length:=putlen  -> use -1 for print until terminating NIL
+          error:=DoIO(serialWriteIO)
+        ENDIF
+        ->IF error THEN debugLog(LOG_ERROR,'serial write error: \d',error)
       ELSE
-        cacheSerialData(string,putlen)
+        actlen:=StrLen(string)
+        IF (putlen=-1) OR (actlen<putlen) THEN putlen:=actlen
+        IF ((serialCacheCurrentSize+putlen)>serialCacheSize) THEN flushSerialCache()
+        IF (putlen>=serialCacheSize)
+          IF telnetSocket>=0
+            telnetSend(string,putlen)
+          ELSE
+            serialWriteIO.iostd.command:=CMD_WRITE
+            serialWriteIO.iostd.data:=string
+            serialWriteIO.iostd.length:=putlen  -> use -1 for print until terminating NIL
+            error:=DoIO(serialWriteIO)
+          ENDIF
+        ELSE
+          cacheSerialData(string,putlen)
+        ENDIF
       ENDIF
     ENDIF
   ENDIF
@@ -2796,7 +2955,6 @@ PROC conPutChar(c)
   conPuts(str)
 ENDPROC
 
-->>> PROC conPuts(string)
 -> Output a NIL-terminated string of characters to a console.
 PROC conPuts(string, putlen=-1, force=FALSE)
   DEF actlen
@@ -2845,9 +3003,6 @@ PROC purgeLineStart()
     serialReadIO.iostd.command:=CMD_CLEAR
     DoIO(serialReadIO);
     queueRead(serialReadIO,{serbuff})
-
-/*  serialReadIO.iostd.command:=CMD_READ
-    SendIO(serialReadIO)*/
   ENDIF
 ENDPROC
 
@@ -2858,8 +3013,6 @@ PROC purgeLine()
     serialReadIO.iostd.command:=CMD_CLEAR
     DoIO(serialReadIO)
     queueRead(serialReadIO,{serbuff})
-/*  serialReadIO.iostd.command:=CMD_READ
-    SendIO(serialReadIO)*/
   ENDIF
 ENDPROC
 
@@ -2870,7 +3023,16 @@ PROC checkCarrier()
 
   IF serShared THEN RETURN 0
 
-  IF(serialReadIO<>NIL)
+  IF telnetSocket>=0
+    stat2:=Recv(telnetSocket,temp,1,MSG_PEEK)
+    IF stat2<>1
+      stat:=0
+      stat2:=Errno()
+      IF (stat2 <> EINTR) AND (stat2<>EWOULDBLOCK) THEN stat:=1
+    ELSE
+      stat:=0
+    ENDIF
+  ELSEIF(serialReadIO<>NIL)
     serialWriteIO.iostd.command:=SDCMD_QUERY
     stat2:=DoIO(serialWriteIO)
     stat:=serialWriteIO.status AND CIAF_COMCD
@@ -2899,7 +3061,7 @@ ENDPROC
 PROC checkInput()
   checkIconifyMsg()
   checkDoorMsg(0)
-ENDPROC ((checkCon() OR checkSer()))
+ENDPROC ((checkCon() OR checkSer() OR checkTelnetData()))
 
 PROC checkScreenClear()
   IF((loggedOnUserKeys.userFlags AND USER_SCRNCLR))
@@ -2909,14 +3071,12 @@ PROC checkScreenClear()
 ENDPROC FALSE
 
 PROC sCheckInput()
-  DEF result1=0,result2=0
+  DEF result1=0,result2=0,result3=0
 
   IF(consoleReadIO) AND (ioFlags[IOFLAG_KBD_IN]) THEN result1:=CheckIO(consoleReadIO)
   IF(serialReadIO) AND (ioFlags[IOFLAG_SER_IN]) THEN result2:=CheckIO(serialReadIO)
-ENDPROC result1 OR result2
-
-->PROC dateDiff(date1: PTR TO datestamp, date2: PTR TO datestamp)
-->ENDPROC (date1.days*60)+date1.minute-(date2.days*60)-date2.minute
+  IF(telnetSocket>=0) AND (ioFlags[IOFLAG_SER_IN]) THEN result3:=checkTelnetData()
+ENDPROC result1 OR result2 OR result3
 
 PROC getConfLocation(confNum,outConfLocationString=NIL)
   IF outConfLocationString<>NIL THEN StrCopy(outConfLocationString,confDirs.item(confNum-1))
@@ -2960,7 +3120,6 @@ PROC yesNo(flag)
   DEF ch
 
   IF(flag)
-    -> AEPutStr((ch?"(y/N)?)
     IF(flag=2)
       aePuts('[32m([33my[32m/[33mN[32m)[32m?[0m ')
     ELSE
@@ -3029,7 +3188,6 @@ PROC lineInput(promptText,defaultOutput,maxLen,timeout,outputString,addToHistory
 
   result:=RESULT_TIMEOUT
 
-  ->IF defaultOutput<>outputString THEN
   StrCopy(outputString,defaultOutput,ALL)
   aePuts(outputString)
   curpos:=StrLen(outputString)
@@ -3201,21 +3359,56 @@ ENDPROC result
 
 PROC readMayGetChar(msgport, whereto)
   DEF temp, readreq:PTR TO iostd
-  IF NIL=(readreq:=GetMsg(msgport)) THEN RETURN -1
-  temp:=whereto[]  -> Get the character...
-  queueRead(readreq, whereto)  -> ...then re-use the request block
+  temp:=-1
+  
+  IF telnetSocket>=0
+    IF Recv(telnetSocket,whereto,1,0)=1
+      temp:=whereto[]
+      IF (lastIAC=0) AND (temp=255)
+        lastIAC:=1
+        temp:=-1
+      ELSEIF lastIAC=3
+        IF temp=240
+          lastIAC:=0
+        ENDIF
+        temp:=-1
+      ELSEIF lastIAC=1
+        IF temp=255
+          lastIAC:=0
+        ELSEIF (temp=250)
+          lastIAC:=3
+          temp:=-1
+        ELSEIF (temp>250) AND (temp<255)
+          lastIAC:=2
+          temp:=-1
+        ELSE 
+          lastIAC:=0
+          temp:=-1
+        ENDIF
+      ELSEIF lastIAC=2
+        lastIAC:=0
+        temp:=-1
+      ELSE
+        lastIAC:=0
+      ENDIF
+        
+    ENDIF
+  ELSE  
+    IF NIL=(readreq:=GetMsg(msgport)) THEN RETURN -1
+    temp:=whereto[]  -> Get the character...
+    queueRead(readreq, whereto)  -> ...then re-use the request block
+  ENDIF
 ENDPROC temp
 
-->>> PROC queueRead(readreq:PTR TO iostd, whereto,size=1)
 -> Queue up a read request to console, passing it pointer to a buffer into
 -> which it can read the character
 PROC queueRead(readreq:PTR TO iostd, whereto,bsize=1)
+  IF readreq=NIL THEN RETURN
   readreq.command:=CMD_READ
   readreq.data:=whereto
   readreq.length:=bsize
   SendIO(readreq)
 ENDPROC
-->>>
 
 PROC calcPasswordHash(pwd: PTR TO CHAR)
   DEF hash
@@ -3344,7 +3537,7 @@ PROC loadTranslator(translator:PTR TO translator,fileName)
   translator.translationText:=New(fsize+4)     ->allocate some memory, two extra bytes for ending colon and space and some in case there is no newline
   workMem:=New(fsize+2)     ->allocate some memory (two extra bytes in case there is no newline at the end of the file)
   fh:=Open(fileName,MODE_OLDFILE)
-  IF fh>0
+  IF fh<>0
 
     FOR i:=0 TO 26
       counts[i]:=0
@@ -3517,7 +3710,7 @@ PROC loadHistory()
   DEF msg
 
   StringF(fname,'\shistory\d',historyFolder,loggedOnUser.slotNumber)
-  IF(fh:=Open(fname,MODE_OLDFILE))>0
+  IF(fh:=Open(fname,MODE_OLDFILE))<>0
     ReadStr(fh,tempstr)
     historyNum:=Val(tempstr)
     ReadStr(fh,tempstr)
@@ -3542,7 +3735,7 @@ PROC saveHistory()
   ENDIF
 
   StringF(fname,'\shistory\d',historyFolder,loggedOnUser.slotNumber)
-  IF(fh:=Open(fname,MODE_NEWFILE))>0
+  IF(fh:=Open(fname,MODE_NEWFILE))<>0
     StringF(tempstr,'\d',historyNum)
     fileWriteLn(fh,tempstr)
     StringF(tempstr,'\d',historyCycle)
@@ -3611,7 +3804,7 @@ PROC loadFlagged()
     StringF(fname,'\sPartdownload/dump\d',cmds.bbsLoc,loggedOnUser.slotNumber)
   ENDIF
 
-  IF (fh:=Open(fname,MODE_OLDFILE))>0
+  IF (fh:=Open(fname,MODE_OLDFILE))<>0
     ReadStr(fh,data)
 
     addFlagItems(flagFilesList,-1,data)
@@ -3625,7 +3818,7 @@ PROC loadFlagged()
     StringF(fname,'\sPartdownload/flagged\d',cmds.bbsLoc,loggedOnUser.slotNumber)
   ENDIF
 
-  IF (fh:=Open(fname,MODE_OLDFILE))>0
+  IF (fh:=Open(fname,MODE_OLDFILE))<>0
     WHILE(ReadStr(fh,data)<>-1) OR (StrLen(data)>0)
       conf:=Val(data,{len})
       addFlagItem(flagFilesList,conf,data+len+1)
@@ -3661,7 +3854,7 @@ PROC saveFlagged()
   ENDIF
 
   IF(flagFilesList.count())
-    IF(fh:=Open(fname,MODE_NEWFILE))>0
+    IF(fh:=Open(fname,MODE_NEWFILE))<>0
       FOR i:=0 TO flagFilesList.count()-1
         item:=flagFilesList.item(i)
         StringF(fname,'\d \s\n',item.confNum,item.fileName)
@@ -3700,7 +3893,7 @@ ENDPROC
 PROC readIntFromFile(filename: PTR TO CHAR)
   DEF fh
   DEF v[100]:STRING
-  IF((fh:=Open(filename,MODE_OLDFILE)))>0
+  IF((fh:=Open(filename,MODE_OLDFILE)))<>0
     ReadStr(fh,v)
     Close(fh)
     RETURN Val(v)
@@ -3710,7 +3903,7 @@ ENDPROC -1
 PROC readFloatFromFile(filename: PTR TO CHAR)
   DEF fh
   DEF v[100]:STRING
-  IF((fh:=Open(filename,MODE_OLDFILE)))>0
+  IF((fh:=Open(filename,MODE_OLDFILE)))<>0
     ReadStr(fh,v)
     Close(fh)
     RETURN RealVal(v)
@@ -3720,7 +3913,7 @@ ENDPROC 0.0
 PROC writeIntToFile(filename: PTR TO CHAR, v: LONG)
   DEF fh
   DEF vStr[100]:STRING
-  IF((fh:=Open(filename,MODE_NEWFILE)))>0
+  IF((fh:=Open(filename,MODE_NEWFILE)))<>0
     StringF(vStr,'\d',v)
     fileWriteLn(fh,vStr)
     Close(fh)
@@ -3731,7 +3924,7 @@ ENDPROC RESULT_FAILURE
 PROC writeFloatToFile(filename: PTR TO CHAR, v: LONG)
   DEF fh
   DEF vStr[100]:STRING
-  IF((fh:=Open(filename,MODE_NEWFILE)))>0
+  IF((fh:=Open(filename,MODE_NEWFILE)))<>0
     RealF(vStr,v,8)
     fileWriteLn(fh,vStr)
     Close(fh)
@@ -3781,7 +3974,6 @@ PROC checkUserOnLine(user: PTR TO user, check)
   DEF status
 
   IF(check)
-    ->IF(tuser=(struct User *)AllocMem(sizeof(struct User),MEMF_ANY|MEMF_CLEAR))    {
     loop:=0
     error:=1
     REPEAT
@@ -3807,7 +3999,7 @@ PROC checkUserOnLine(user: PTR TO user, check)
       IF(lock:=Lock(tempStr,ACCESS_READ))
         UnLock(lock)
         StringF(tempStr,'\snode\d.user',cmds.bbsLoc,loop)
-        IF(fh:=Open(tempStr,MODE_OLDFILE))>0
+        IF(fh:=Open(tempStr,MODE_OLDFILE))<>0
           IF(stat:=Read(fh,tuser,SIZEOF user))
             IF(stringCompare(tuser.name,loggedOnUser.name)=RESULT_SUCCESS)
               error:=0
@@ -3820,8 +4012,6 @@ PROC checkUserOnLine(user: PTR TO user, check)
     ENDIF
     loop++
     UNTIL (lock=NIL) OR (loop=MAX_NODES)
-  ->  FreeMem(tuser,sizeof(struct User))
-  ->} else    AEPutStr("Can't allocate memory for user test\b\n")
   ELSE
     error:=1
   ENDIF
@@ -3831,14 +4021,14 @@ PROC checkUserOnLine(user: PTR TO user, check)
     /* Write the current user info to Node%d.user */
 
     StringF(tempStr,'\snode\d.user',cmds.bbsLoc,node)
-    IF(fh:=Open(tempStr,MODE_NEWFILE))>0
+    IF(fh:=Open(tempStr,MODE_NEWFILE))<>0
       IF(stat:=Write(fh,loggedOnUser,SIZEOF user)) THEN error:=1
     ENDIF
     Close(fh)
     /* Write current userkeys information */
     ->//(RTS)
     StringF(tempStr,'\snode\d.userkeys',cmds.bbsLoc,node) /* file name */
-    IF(fh:=Open(tempStr,MODE_NEWFILE))>0
+    IF(fh:=Open(tempStr,MODE_NEWFILE))<>0
       IF(stat:=Write(fh,loggedOnUserKeys,SIZEOF userKeys)) THEN error:=1
     ENDIF
     Close(fh)
@@ -4135,7 +4325,7 @@ PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
         fileBuf:=New(getFileSize(fn2)+1)     ->allow an extra char in case file does not end in LF
 
         fh:=Open(fn2,MODE_OLDFILE)
-        IF fh>0
+        IF fh<>0
           off:=0
           lineCount:=0
           WHILE(ReadStr(fh,fn2)<>-1) OR (StrLen(fn2)>0)
@@ -4211,7 +4401,6 @@ PROC clearDiskObjectCache()
       IF cacheObj.diskObject<>NIL
         do:=cacheObj.diskObject
         FreeDiskObject(do)
-        ->END do
       ENDIF
       END cacheObj
     ENDIF
@@ -4239,7 +4428,6 @@ PROC startProcess(exestring, stacksize, priority, async, doorTrap)
     StringF(processOutFile,'\sNode\d/StartProcess',cmds.bbsLoc,node)
 
     doorTrapFH:=Open(processOutFile,MODE_NEWFILE)
-    IF doorTrapFH<0 THEN doorTrapFH:=0
   ENDIF
 
   filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,doorTrapFH,SYS_ASYNCH,async,NP_STACKSIZE,stacksize,NP_PRIORITY,priority,0]
@@ -4483,7 +4671,7 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
           CASE JH_SIGBIT
             msg.data:=doorExtSig
           CASE JH_FetchKey
-            IF checkCon() OR checkSer()
+            IF checkCon() OR checkSer() OR checkTelnetData()
               msg.command:=readChar(doorTimeout)
               IF (msg.command<0)  THEN msg.data:=-1 ELSE msg.data:=1
             ELSE
@@ -4635,21 +4823,17 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
             ENDIF
           CASE DT_BYTESUPLOAD
             IF (msg.data)
-              ->formatUnsignedLong(loggedOnUser.bytesUpload,tempstring)
               formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstring)
               strCpy(msg.string,tempstring,200)
             ELSE
-              ->loggedOnUser.bytesUpload:=Val(msg.string)
               bcdVal(msg.string,loggedOnUserMisc.uploadBytesBCD)
               loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
             ENDIF
           CASE DT_BYTEDOWNLOAD
             IF (msg.data)
-              ->formatUnsignedLong(loggedOnUser.bytesDownload,tempstring)
               formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstring)
               strCpy(msg.string,tempstring,200)
             ELSE
-              ->loggedOnUser.bytesDownload:=Val(msg.string)
               bcdVal(msg.string,loggedOnUserMisc.downloadBytesBCD)
               loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
             ENDIF
@@ -4834,7 +5018,7 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
               getExpressMajorVer(tempstring)
               strCpy(msg.string,tempstring,200)
           CASE GETKEY
-            IF(checkSer() OR checkCon()) THEN msg.string[0]:="1" ELSE msg.string[0]:="0"
+            IF(checkSer() OR checkCon() OR checkTelnetData()) THEN msg.string[0]:="1" ELSE msg.string[0]:="0"
             msg.string[1]:=0
           CASE RAWARROW
             IF(rawArrow) THEN rawArrow:=FALSE ELSE rawArrow:=TRUE
@@ -5097,22 +5281,18 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
           CASE DT_CBYTESUPLOAD
           /*DUPE of DT_BYTESUPLOAD - logged on user will always be current conf stats when using confacc. */
             IF (msg.data)
-              ->formatUnsignedLong(loggedOnUser.bytesUpload,tempstring)
               formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstring)
               strCpy(msg.string,tempstring,200)
             ELSE
-              ->loggedOnUser.bytesUpload:=Val(msg.string)
               bcdVal(msg.string,loggedOnUserMisc.uploadBytesBCD)
               loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
             ENDIF            
           CASE DT_CBYTESDOWNLOAD
           /*DUPE of DT_BYTESUPLOAD - logged on user will always be current conf stats when using confacc. */
             IF (msg.data)
-              ->formatUnsignedLong(loggedOnUser.bytesDownload,tempstring)
               formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstring)
               strCpy(msg.string,tempstring,200)
             ELSE
-              ->loggedOnUser.bytesDownload:=Val(msg.string)
               bcdVal(msg.string,loggedOnUserMisc.downloadBytesBCD)
               loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
             ENDIF
@@ -5171,7 +5351,6 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
         msgcmd:=doormsg.command
         SELECT msgcmd
           CASE PG_SHUTDOWN
-            ->strCpy(string,'Exiting',80)
             ReplyMsg(doormsg)
             aePuts('\b\n')
             rawArrow:=FALSE
@@ -5197,9 +5376,9 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
           CASE PG_PM
             aePuts(doormsg.string)
             IF(lineInput('','',doormsg.data,doorTimeout,tempstring)<0)
-               doormsg->carrier=TRUE
+               doormsg.carrier:=TRUE
             ELSE
-               doormsg->carrier=FALSE
+               doormsg.carrier:=FALSE
             ENDIF
             strCpy(doormsg.string,tempstring,80)
           CASE PG_SC
@@ -5262,8 +5441,7 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
               strCpy(doormsg.string,loggedOnUser.name,80)
               doormsg.string[21]:=0
             ELSEIF(doormsg.data=2)
-              strCpy(doormsg.string,'',80)   ->loggedOnUser.pass
-              ->doormsg.string[13]:=0
+              strCpy(doormsg.string,'',80)
             ELSEIF(doormsg.data=3)
               strCpy(doormsg.string,loggedOnUser.location,80)
               doormsg.string[39]:=0
@@ -5592,7 +5770,7 @@ PROC loadConfDB(account,confNum,addr,force=FALSE)
   getConfDbFileName(confNum,confLoc)
 
   bi:=Open(confLoc,MODE_OLDFILE)
-  IF(bi<=0)
+  IF(bi=0)
     callersLog('\tError can''t open >:')
     callersLog(confLoc)
     RETURN
@@ -5628,7 +5806,7 @@ PROC saveConfDB(account,confNum,addr,force=FALSE)
   getConfDbFileName(confNum,confLoc)
 
   bi:=Open(confLoc,MODE_READWRITE)
-  IF(bi<=0)
+  IF(bi=0)
     callersLog('\tError can''t open >:')
     callersLog(confLoc)
     RETURN
@@ -5658,16 +5836,12 @@ PROC loadMsgPointers(conf)
 
   IF (checkSecurity(ACS_CONFERENCE_ACCOUNTING))
     IF (readToolTypeInt(TOOLTYPE_CONF,conf,'CONFDB_SHARED')<=0)
-      ->loggedOnUser.bytesDownload:=cb.bytesDownload
-      ->loggedOnUser.bytesUpload:=cb.bytesUpload
       FOR i:=0 TO 7
         loggedOnUserMisc.downloadBytesBCD[i]:=cb.downloadBytesBCD[i]
         loggedOnUserMisc.uploadBytesBCD[i]:=cb.uploadBytesBCD[i]
       ENDFOR
       loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
       loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
-      ->User.Daily_Bytes_Limit= it->CB.Daily_Bytes_Limit
-      ->User.Daily_Bytes_Dld=   it->CB.Daily_Bytes_Dld
       loggedOnUser.uploads:=cb.upload
       loggedOnUser.downloads:=cb.downloads
       loggedOnUser.secBoard:=cb.ratioType
@@ -5703,8 +5877,6 @@ PROC saveMsgPointers(conf)
         cb.downloadBytesBCD[i]:=loggedOnUserMisc.downloadBytesBCD[i]
         cb.uploadBytesBCD[i]:=loggedOnUserMisc.uploadBytesBCD[i]
       ENDFOR
-      ->User.Daily_Bytes_Limit= it->CB.Daily_Bytes_Limit
-      ->User.Daily_Bytes_Dld=   it->CB.Daily_Bytes_Dld
       cb.upload:=loggedOnUser.uploads
       cb.downloads:=loggedOnUser.downloads
       cb.ratioType:=loggedOnUser.secBoard
@@ -6101,12 +6273,10 @@ PROC processMciCmd(mcidata,len,pos)
       aePuts2(tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'UB',ALL))
       pos:=pos+2+t
-      ->formatUnsignedLong(loggedOnUser.bytesUpload,tempstr)
       formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstr)
       aePuts2(tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'DB',ALL))
       pos:=pos+2+t
-      ->formatUnsignedLong(loggedOnUser.bytesDownload,tempstr)
       formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstr)
       aePuts2(tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'FU',ALL))
@@ -6496,12 +6666,10 @@ PROC processMciCmd2(mcidata,len,pos,outdata)
       StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'UB',ALL))
       pos:=pos+2+t
-      ->formatUnsignedLong(loggedOnUser.bytesUpload,tempstr)
       formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstr)
       StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'DB',ALL))
       pos:=pos+2+t
-      ->formatUnsignedLong(loggedOnUser.bytesDownload,tempstr)
       formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstr)
       StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'FU',ALL))
@@ -6615,12 +6783,7 @@ PROC startASend()
       ioFlags[IOFLAG_SER_IN]:=0
       ioFlags[IOFLAG_SER_OUT]:=0
   ENDIF
-
-  /*ConPutStr("\nSend File, path/filename: ");
-  stat=LineInput("",str,99,KEYBOARD_TIMEOUT);
-  if(stat<0||str[0]=='\0')
-    return;
-  */
+  
   asl(str)
   IF(logonType>=LOGON_TYPE_REMOTE)
       ioFlags[IOFLAG_SER_IN]:=-1
@@ -6652,7 +6815,7 @@ redo:
 
     IF((stat<0) OR (StrLen(str)=0))   THEN RETURN
     captureFP:=Open(str,MODE_NEWFILE)
-    IF(captureFP<=0)
+    IF(captureFP=0)
       conPuts('ERROR: can''t open ')
       conPuts(str)
       conPuts(' for writing!  Try another!\b\n')
@@ -6662,212 +6825,6 @@ redo:
     ENDIF
   ENDIF
 ENDPROC
-
-/*
-PROC tranChat()
-  DEF whichCon,whichSer
-
-  DEF tempstr1[255]:STRING
-  DEF tempstr2[255]:STRING
-  DEF trans1: PTR TO translator
-  DEF trans2: PTR TO translator
-  DEF str[255]:STRING
-
-  DEF canTransUserToHost=FALSE
-  DEF canTransHostToUser=FALSE
-  DEF chatfile[255]:STRING
-  DEF c,serLineLen=0,conLineLen=0,lastLine=0
-  DEF newConChars=FALSE,newSerChars=FALSE
-
-  pagedFlag:=0
-
-  StringF(tempstr1,'\s\s',hostLanguage,userLanguage)
-
-  trans1:=getTranslator(tempstr1)
-  IF trans1<>NIL
-    canTransHostToUser:=TRUE
-  ENDIF
-
-  StringF(tempstr1,'\s\s',userLanguage,hostLanguage)
-
-  trans2:=getTranslator(tempstr1)
-  IF trans2<>NIL
-    canTransUserToHost:=TRUE
-  ENDIF
-
-  aePuts('\b\n')
-
-  runSysCommand('CHATIN','')
-
-  StrCopy(chatfile,'')
-  IF (loggedOnUser.screenType<screenTypeExt.count())
-    StringF(chatfile,'\sNode\d/StartChat.\s',cmds.bbsLoc,node,screenTypeExt.item(loggedOnUser.screenType))
-    IF fileExists(chatfile)=FALSE THEN StrCopy(chatfile,'')
-  ENDIF
-  IF StrLen(chatfile)=0
-    StringF(chatfile,'\sNode\d/StartChat.txt',cmds.bbsLoc,node)
-  ENDIF
-
-  IF((displayFile(chatfile,TRUE,TRUE)))=FALSE
-      aePuts('\b\n\b\nThis is ')
-      aePuts(cmds.sysopName)
-      aePuts(', How can I help you??\b\n\b\n')
-    ENDIF
-
-  StrCopy(translatorLanguage,userLanguage)
-
-  StringF(str,'[32mTranslation \s to \s: \s[0m\b\n',hostLanguage,userLanguage,IF(canTransHostToUser) THEN '[33mACTIVE' ELSE '[31mNOT AVAILABLE')
-  aePuts(str)
-  StringF(str,'[32mTranslation \s to \s: \s[0m\b\n',userLanguage,hostLanguage,IF(canTransUserToHost) THEN '[33mACTIVE' ELSE '[31mNOT AVAILABLE')
-  aePuts(str)
-  aePuts('\b\n')
-
-  IF(ansiColour)
-     StringF(str,'[\dm',cmds.acLvl[LVL_CHAT_COLOR_SYSOP])
-     aePuts(str)
-  ENDIF
-
-  chatConFlag:=1
-  chatSerFlag:=0
-
-  StrCopy(tempstr1,'')
-  StrCopy(tempstr2,'')
-  WHILE chatFlag
-  tcloop:
-    whichCon:=chatConFlag
-    whichSer:=chatSerFlag
-    c:=readChar(INPUT_TIMEOUT)
-    IF(c<0)
-      chatFlag:=0
-      RETURN c
-    ENDIF
-    updateTimeUsed()
-    IF (loggedOnUser.chatRemain<=0)
-      chatFlag:=0
-    ENDIF
-    EXIT chatFlag=0
-
-    IF((chatConFlag=1) AND (whichSer=1))
-      StringF(str,'[\dm',cmds.acLvl[LVL_CHAT_COLOR_SYSOP])
-      aePuts(str)
-    ENDIF
-    IF((chatSerFlag=1) AND (whichCon=1))
-      StringF(str,'[\dm',cmds.acLvl[LVL_CHAT_COLOR_USER])
-      aePuts(str)
-    ENDIF
-
-    IF((c=CHAR_BACKSPACE))
-      StringF(str,'\c \c',CHAR_BACKSPACE,CHAR_BACKSPACE)
-      IF(chatConFlag)
-        IF conLineLen>0
-          conPuts(str)
-          conLineLen--
-          SetStr(tempstr1,StrLen(tempstr1)-1)
-        ENDIF
-      ENDIF
-      IF(chatSerFlag)
-        IF serLineLen>0
-          serPuts(str)
-          serLineLen--
-          SetStr(tempstr2,StrLen(tempstr2)-1)
-        ENDIF
-      ENDIF
-      JUMP tcloop
-    ELSEIF((c=3) AND (checkSecurity(ACS_BREAK_CHAT)))
-      chatFlag:=0
-    ELSEIF (c=13)   -> removed OR (c=10)
-      IF chatConFlag
-        IF StrLen(tempstr1)>0
-          translatorMode:=TRANS_HOST_TO_DEFINED
-          translateText(tempstr1)
-          IF newSerChars OR (serLineLen>0) THEN serPuts('\b\n')
-          IF serLineLen>0 THEN serPuts('\b\n')
-          serPuts(tempstr1)
-          conLineLen:=0
-          serLineLen:=0
-          StrCopy(tempstr1,'')
-          newConChars:=FALSE
-          newSerChars:=FALSE
-          aePuts('\b\n\b\n')
-          lastLine:=1
-        ENDIF
-      ELSEIF chatSerFlag
-        IF StrLen(tempstr2)>0
-          translatorMode:=TRANS_DEFINED_TO_HOST
-          translateText(tempstr2)
-          IF newConChars OR (conLineLen>0) THEN conPuts('\b\n')
-          IF conLineLen>0 THEN conPuts('\b\n')
-          conPuts(tempstr2)
-          conLineLen:=0
-          serLineLen:=0
-          StrCopy(tempstr2,'')
-          newConChars:=FALSE
-          newSerChars:=FALSE
-          aePuts('\b\n\b\n')
-          lastLine:=2
-        ENDIF
-      ENDIF
-      JUMP tcloop
-    ENDIF
-
-    IF chatConFlag
-      IF conLineLen>75
-        conPuts('\b\n')
-        conLineLen:=0
-        newConChars:=TRUE
-      ENDIF
-      StrAdd(tempstr1,'#')
-      tempstr1[StrLen(tempstr1)-1]:=c
-      conPutChar(c)
-      conLineLen++
-    ENDIF
-    IF chatSerFlag
-      IF serLineLen>75
-        serPuts('\b\n')
-        serLineLen:=0
-        newSerChars:=TRUE
-      ENDIF
-      StrAdd(tempstr2,'#')
-      tempstr2[StrLen(tempstr2)-1]:=c
-      serPutChar(c)
-      serLineLen++
-    ENDIF
-  ENDWHILE
-
-  IF StrLen(tempstr1)>0
-    translatorMode:=TRANS_HOST_TO_DEFINED
-    translateText(tempstr1)
-    serPuts('\b\n\b\n')
-    serPuts(tempstr1)
-    serPuts('\b\n\b\n')
-  ENDIF
-
-  IF StrLen(tempstr2)>0
-    translatorMode:=TRANS_DEFINED_TO_HOST
-    translateText(tempstr2)
-    conPuts('\b\n\b\n')
-    conPuts(tempstr2)
-    conPuts('\b\n\b\n')
-  ENDIF
-  translatorMode:=TRANS_NONE
-
-  statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
-  IF(ansiColour)    THEN aePuts('[0m')
-
-  StrCopy(chatfile,'')
-  IF (loggedOnUser.screenType<screenTypeExt.count())
-    StringF(chatfile,'\sNode\d/EndChat.\s',cmds.bbsLoc,node,screenTypeExt.item(loggedOnUser.screenType))
-    IF fileExists(chatfile)=FALSE THEN StrCopy(chatfile,'')
-  ENDIF
-  IF StrLen(chatfile)=0
-    StringF(chatfile,'\sNode\d/EndChat.txt',cmds.bbsLoc,node)
-  ENDIF
-
-  IF((displayFile(chatfile,TRUE,TRUE)))=FALSE
-      aePuts('\b\n\b\nEnding Chat.')
-  ENDIF
-  runSysCommand('CHATOUT','')
-ENDPROC*/
 
 PROC tranChat()
   DEF whichCon,whichSer
@@ -7398,8 +7355,11 @@ ENDPROC
 PROC checkShutDown()
   IF(shutDownFlag=1)
     ReplyMsg(sdReplyRexx)
-    reqState:=REQ_STATE_SHUTDOWN
-    StrCopy(shutDownMsg,'!')
+    IF netTrans=0
+      reqState:=REQ_STATE_SHUTDOWN
+      StrCopy(shutDownMsg,'!')
+    ENDIF
+    netTrans:=0
   ENDIF
   IF(shutDownFlag=2)
     ReplyMsg(sdReplyRexx)
@@ -7673,7 +7633,7 @@ PROC displayFile(filename, allowMCI=TRUE, resetNonStop=TRUE)
   IF (resetNonStop) AND (state<>STATE_LOGGING_OFF) THEN nonStopDisplayFlag:=FALSE
   res:=FALSE
 
-  IF (fh:=Open(filename,OLDFILE))>0
+  IF (fh:=Open(filename,OLDFILE))<>0
     res:=TRUE
     WHILE ((read:=Fgets(fh,linedata,999))<>NIL)
       IF ripFile
@@ -7748,17 +7708,17 @@ PROC processRexxMessage()
     StringF(debugstr,'rexx message: \s',rexxstring)
     debugLog(LOG_DEBUG,debugstr)
 
-    IF( strCmpi(rexxstring,'syscmd',6) )
+    IF( strCmpi(rexxstring,'syscmd ',7) )
       IF shutDownFlag<>1
+        sdReplyRexx:=rexxmsg
+        StrCopy(arg3,rexxstring+7)
         shutDownFlag:=1
-        rexxstring:=rexxstring+6
+        netTrans:=1
       ELSE
         ReplyMsg(rexxmsg)
         RETURN
       ENDIF
-    ENDIF
-
-    IF( strCmpi(rexxstring,'shutdown',8) )
+    ELSEIF( strCmpi(rexxstring,'shutdown',8) )
       IF(shutDownFlag<>1)
         sdReplyRexx:=rexxmsg
         shutDownFlag:=1
@@ -7771,9 +7731,7 @@ PROC processRexxMessage()
         timeLimit:=130
       ENDIF
       RETURN
-    ENDIF
-
-    IF(strCmpi(rexxstring,'chat',4))
+    ELSEIF(strCmpi(rexxstring,'chat',4))
       sdReplyRexx:=rexxmsg
       ->rexxChatFlag:=1
       ->StrCopy(rexxChatMsg,rexxstring+4)
@@ -7823,7 +7781,6 @@ PROC processRexxMessage()
     ELSE
       rxReplyMsg(rexxmsg,0,'')
     ENDIF
-
 
     rexxmsg,rexxstring:=rxGetMsg(rexxmp)
   ENDWHILE
@@ -7966,7 +7923,6 @@ PROC toggleStatusDisplay()
       SizeWindow(window,0,38)
     ENDIF
     IF (loggedOnUser<>NIL) AND (StrLen(loggedOnUser.name)>0) THEN statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
-    ->//SetWindowTitles(MYwindow,titlebar,titlebar)
   ELSE
 
     IF(bitPlanes<2)
@@ -8005,7 +7961,6 @@ PROC toggleStatusDisplay()
     ENDIF
     END tags
   ENDIF
-  ->//SetWindowTitles(MYwindow,titlebar,titlebar)
 ENDPROC
 
 PROC doFax()
@@ -8077,6 +8032,17 @@ PROC checkIncomingCall()
   DEF stat,n,isConnected=FALSE
   DEF filetags
 
+  ioFlags[IOFLAG_SER_IN]:=-1
+  ioFlags[IOFLAG_SER_OUT]:=0
+
+  StrCopy(hostName,'')
+  StrCopy(hostIP,'')
+
+  IF telnetSocket>=0
+    StrCopy(connectString,'CONNECT 19200')
+    JUMP go3
+  ENDIF
+
   IF(sopt.trapDoor OR instantLogon)
     instantLogon:=FALSE
     JUMP go
@@ -8088,11 +8054,6 @@ PROC checkIncomingCall()
   StringF(string,'ringcount: \d',rCount)
   debugLog(LOG_DEBUG,string)
 
-  ioFlags[IOFLAG_SER_IN]:=-1
-  ioFlags[IOFLAG_SER_OUT]:=0
-
-  StrCopy(hostName,'')
-  StrCopy(hostIP,'')
 
   WHILE(rCount)
     stat:=lineInput('','',80,5,string)
@@ -8146,11 +8107,12 @@ go2:
     strCpy(string,trapConnect,ALL)
   ENDIF
   StrCopy(connectString,string)
+
   IF(sopt.trapDoor)
     ->//CutConnect(string)
     IF(input=RESULT_TIMEOUT) THEN JUMP timedout
   ENDIF
-
+go3:
   stripReturn(string)
   readToolType(TOOLTYPE_CONNECT,node,string,connectString)
 
@@ -8218,17 +8180,20 @@ reserveRedo:
 ENDPROC
 
 PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
-  DEF consolesig=0,windowsig=0,obuf[255]:STRING
+  DEF consolesig=0,windowsig=0,telnetsig=0, obuf[255]:STRING
   DEF ch=0,lch,wasControl=0,signals
   DEF doorsig=0,rexxsig=0,serialsig=0,timersig=0,timedout=0
   DEF temp[255]:STRING
   DEF statePtr: PTR TO awaitState
+  DEF n
 
   IF (transfering)
     RETURN TRUE,RESULT_TIMEOUT
   ENDIF
 
   flushSerialCache()
+
+  telnetsig:=AllocSignal(-1)
 
   chatSerFlag:=0
   chatConFlag:=0
@@ -8252,6 +8217,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
   signals:=0
   IF checkSer() THEN signals:=signals OR serialsig
   IF checkCon() THEN signals:=signals OR consolesig
+  IF checkTelnetData() THEN signals:=signals OR telnetsig
 
   IF signals=0
     IF timeout<>0
@@ -8260,12 +8226,27 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       setTimer(timeout)
       IF timerport<>NIL THEN timersig:=Shl(1, timerport.sigbit)
     ENDIF
-
-    signals:=Wait(SIGBREAKF_CTRL_C OR consolesig OR windowsig OR cxsigflag OR doorsig OR rexxsig OR serialsig OR timersig OR extsig)
+  
+    IF telnetSocket>=0
+      REPEAT
+        IF checkTelnetData()
+          signals:=signals OR telnetsig
+        ELSE
+          signals:=SetSignal(0,0) AND (SIGBREAKF_CTRL_C OR consolesig OR windowsig OR cxsigflag OR doorsig OR rexxsig OR serialsig OR timersig OR extsig)
+          IF signals THEN Wait(signals)
+        ENDIF
+        IF checkCarrier()=FALSE THEN signals:=serialsig
+        IF signals=0 THEN Delay(5)
+      UNTIL signals
+    ELSE
+      signals:=Wait(SIGBREAKF_CTRL_C OR consolesig OR windowsig OR cxsigflag OR doorsig OR rexxsig OR serialsig OR timersig OR extsig)
+    ENDIF
     timedout:=(timersig<>0) AND ((signals AND timersig)<>0)
     IF timedout THEN waitTime()
     closeTimer()
   ENDIF
+
+  FreeSignal(telnetsig)
 
   IF (extsig<>0) AND ((signals AND extsig)<>0) THEN RETURN TRUE,RESULT_SIGNALLED
 
@@ -8294,7 +8275,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     ENDIF
   ENDIF
 
-  IF (ch=0) AND allowSer AND signals AND serialsig
+  IF (ch=0) AND allowSer AND signals AND (serialsig OR telnetsig)
     IF rawMode
       lch:=readMayGetChar(serialReadMP,{serbuff})
       IF lch<>-1 THEN ch:=lch
@@ -8736,7 +8717,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
   ENDIF
   servercmd:=-1
 
-  checkShutDown()
+  IF netTrans=0 THEN checkShutDown()
 
   IF(logonType>=LOGON_TYPE_REMOTE)
     IF(checkCarrier()=FALSE) THEN ch:=RESULT_NO_CARRIER
@@ -8824,7 +8805,7 @@ PROC loadAccount(slot,userPtr:PTR TO user, userKeysPtr:PTR TO userKeys, userMisc
 
   result:=RESULT_SUCCESS
   l:=SIZEOF user
-  IF (fh:=Open(userDataFile,OLDFILE))>0
+  IF (fh:=Open(userDataFile,OLDFILE))<>0
     Seek(fh,(slot-1)*l,OFFSET_BEGINNING)
     IF Read(fh,userPtr,l)<>l THEN result:=RESULT_FAILURE
     Close(fh)
@@ -8834,7 +8815,7 @@ PROC loadAccount(slot,userPtr:PTR TO user, userKeysPtr:PTR TO userKeys, userMisc
 
   IF (userKeysPtr<>NIL)
     l:=SIZEOF userKeys
-    IF (fh:=Open(userKeysFile,OLDFILE))>0
+    IF (fh:=Open(userKeysFile,OLDFILE))<>0
       Seek(fh,(slot-1)*l,OFFSET_BEGINNING)
       IF Read(fh,userKeysPtr,l)<>l THEN result:=RESULT_FAILURE
       Close(fh)
@@ -8845,7 +8826,7 @@ PROC loadAccount(slot,userPtr:PTR TO user, userKeysPtr:PTR TO userKeys, userMisc
 
   IF (userMiscPtr<>NIL)
     l:=SIZEOF userMisc
-    IF (fh:=Open(userMiscFile,OLDFILE))>0
+    IF (fh:=Open(userMiscFile,OLDFILE))<>0
       Seek(fh,(slot-1)*l,OFFSET_BEGINNING)
       IF Read(fh,userMiscPtr,l)<>l THEN result:=RESULT_FAILURE
       Close(fh)
@@ -8887,7 +8868,7 @@ PROC saveAccount(hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO 
   l:=SIZEOF user
 
   fh:=Open(userDataFile,MODE_READWRITE)
-  IF(fh<=0) THEN RETURN RESULT_FAILURE
+  IF(fh=0) THEN RETURN RESULT_FAILURE
 
   Seek(fh,slot*l,OFFSET_BEGINNING)
 
@@ -8900,7 +8881,7 @@ PROC saveAccount(hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO 
 
   l:=SIZEOF userKeys
   fh:=Open(userKeysFile,MODE_READWRITE)
-  IF(fh<=0) THEN RETURN RESULT_FAILURE
+  IF(fh=0) THEN RETURN RESULT_FAILURE
 
   Seek(fh,slot*l,OFFSET_BEGINNING)
 
@@ -8916,7 +8897,7 @@ PROC saveAccount(hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO 
   IF (hoozer3<>NIL)
     l:=SIZEOF userMisc
     fh:=Open(userMiscFile,MODE_READWRITE)
-    IF(fh<=0) THEN RETURN RESULT_FAILURE
+    IF(fh=0) THEN RETURN RESULT_FAILURE
 
     Seek(fh,slot*l,OFFSET_BEGINNING)
 
@@ -9088,7 +9069,7 @@ PROC processLoggingOff()
     relogon:=FALSE
   ENDIF
 
-  IF sopt.trapDoor
+  IF sopt.trapDoor OR (netTrans=2)
     StrCopy(shutDownMsg,'!')
     reqState:=REQ_STATE_SHUTDOWN
   ENDIF
@@ -9423,8 +9404,6 @@ PROC addMsgPointers()
   FOR i:=1 TO cmds.numConf
     cb:=confBases.item(i-1)
     IF (readToolTypeInt(TOOLTYPE_CONF,i,'CONFDB_SHARED')>0) AND (checkConfAccess(i))
-      ->loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+cb.bytesDownload
-      ->loggedOnUser.bytesUpload:=loggedOnUser.bytesUpload+cb.bytesUpload
       addBCD2(loggedOnUserMisc.downloadBytesBCD,cb.downloadBytesBCD)
       addBCD2(loggedOnUserMisc.uploadBytesBCD,cb.uploadBytesBCD)
       loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
@@ -9453,9 +9432,9 @@ PROC getMailStatFile(confNum)
   StringF(string,'\sMsgBase/\s',getConfLocation(confNum),'MailStats')
 
   fd:=Open(string,OLDFILE)
-  IF(fd<=0)
+  IF(fd=0)
     fd:=Open(string,MODE_READWRITE)
-    IF(fd<=0)
+    IF(fd=0)
       myError(ERR_MSGBASE)
       mailStat.lowestKey:=0
       mailStat.lowestNotDel:=0
@@ -9555,8 +9534,6 @@ PROC commentToSYSOP()
   aePuts(str)
   checkToForward(str,mailHeader.toName,0)
   aePuts('[36mSubject[33m: [32m([33mBlank[32m)[0m=[33mabort[32m?[0m ')
-  ->strCpy(mailHeader.toNet,Sopt->BBSConfig,ALL)
-  ->>strCpy(mailHeader.fromNet,Sopt->BBSConfig,ALL)
   stat:=lineInput('','',30,INPUT_TIMEOUT,str)
   IF(stat<0) THEN RETURN stat
 
@@ -9687,12 +9664,10 @@ PROC displayMessage(gfh)
     nonStopDisplayFlag:=TRUE
     mcioff:=TRUE
     displayFile(tempStr,TRUE,FALSE)
-    ->stat:=MenuSend(tempStr)
     IF(stat=RESULT_FAILURE) THEN nonStopMail:=FALSE
   ELSE
     mcioff:=TRUE
     displayFile(tempStr,TRUE)
-    ->MenuSend24(tempStr,5)
   ENDIF
   mcioff:=FALSE
   stat:=checkAttachedFile(mailHeader.msgNumb,1)
@@ -9716,7 +9691,7 @@ PROC errorLog(stringout: PTR TO CHAR)
 
   gfp1:=Open(fname,MODE_READWRITE)
 
-  IF(gfp1>0)
+  IF(gfp1<>0)
     Seek(gfp1,0,OFFSET_END)
     StringF(xgstr2,'\s ',xgstr1)
     Write(gfp1,xgstr2,StrLen(xgstr2))
@@ -9739,7 +9714,7 @@ PROC fileListReverse(filename: PTR TO CHAR) HANDLE
     bufptr2:=buf+memsize+1
     bufend:=FALSE
 
-    IF(fh:=Open(filename,MODE_OLDFILE))>0
+    IF(fh:=Open(filename,MODE_OLDFILE))<>0
 
       Seek(fh,0,OFFSET_END)
       currentPos:=Seek(fh,0,OFFSET_CURRENT)
@@ -9813,7 +9788,7 @@ PROC displayCallersLog(filename: PTR TO CHAR,tf)
   IF(tf) THEN nonStopDisplayFlag:=TRUE
 
   IF(buf:=AllocMem(memsize+4,MEMF_ANY))<>0
-    IF(fh:=Open(filename,MODE_OLDFILE))>0
+    IF(fh:=Open(filename,MODE_OLDFILE))<>0
       Seek(fh,0,OFFSET_END)
       currentPos:=Seek(fh,0,OFFSET_CURRENT)
       REPEAT
@@ -9893,8 +9868,13 @@ ENDPROC
 
 PROC debugLog(logType,logline:PTR TO CHAR)
   DEF buff[255]:STRING
+  DEF currTime
 
-  IF consoleDebugLevel>=logType THEN WriteF('\s\n',logline)
+  IF consoleDebugLevel>=logType
+    currTime:=getSystemTime()
+
+    WriteF('\d \s\n',currTime,logline)
+  ENDIF
 
   IF debugLogLevel>=logType
     StringF(buff,'\tD-(Node \d)\s',node,logline)
@@ -9920,6 +9900,7 @@ PROC remoteShell() HANDLE
   DEF n,ch
   DEF bufptr:PTR TO CHAR
   DEF temp[255]:STRING
+  DEF tags
 
   StringF(fifoName,'bbsshell\d',node)
 
@@ -9970,7 +9951,9 @@ PROC remoteShell() HANDLE
 
 
   StringF(temp,'newshell fifo:\s/rwkecs',fifoName)
-  SystemTagList(temp,[SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,1])
+  tags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,1,0]
+  SystemTagList(temp,tags)
+  END tags
 
   pmask:=Shl(1,ioSink.sigbit)
 
@@ -10104,7 +10087,7 @@ PROC doorLog(type, str:PTR TO CHAR)
   StringF(logname,'\sNode\d/DoorLog',cmds.bbsLoc,node)
 
   gfp1:=Open(logname,MODE_READWRITE)
-  IF gfp1>0
+  IF gfp1<>0
     Seek(gfp1,0,OFFSET_END)
 
     IF loggedOnUser<>NIL THEN StrCopy(name,loggedOnUser.name) ELSE StrCopy(name,'')
@@ -10130,7 +10113,7 @@ PROC startLog(stringout:PTR TO CHAR)
   StringF(logname,'\sNode\d/StartUpLog',cmds.bbsLoc,node)
 
   gfp1:=Open(logname,MODE_READWRITE)
-  IF gfp1>0
+  IF gfp1<>0
     Seek(gfp1,0,OFFSET_END)
     fileWriteLn(gfp1,stringout)
     Close(gfp1)
@@ -10143,7 +10126,7 @@ PROC creditLog(logline: PTR TO CHAR)
 
   StringF(fn,'\sCreditLog',cmds.bbsLoc)
   fh:=Open(fn,MODE_OLDFILE)
-  IF(fh<=0)
+  IF(fh=0)
     fh:=Open(fn,MODE_NEWFILE)
   ELSE
     Close(fh)
@@ -10184,7 +10167,7 @@ PROC callersLog(stringout: PTR TO CHAR,linefeed=TRUE)
   StringF(buff,'\sNode\d/CallersLog',cmds.bbsLoc,node)
 
   gfp1:=Open(buff,MODE_OLDFILE)
-  IF(gfp1<=0)
+  IF(gfp1=0)
     gfp1:=Open(buff,MODE_NEWFILE)
   ELSE
     Close(gfp1)
@@ -10210,7 +10193,7 @@ PROC udLog(stringout: PTR TO CHAR)
 
   StringF(lstr,'\sNode\d/UDLog',cmds.bbsLoc,node)
   gfp1:=Open(lstr,MODE_OLDFILE)
-  IF(gfp1<=0)
+  IF(gfp1=0)
     gfp1:=Open(lstr,MODE_NEWFILE)
   ELSE
     Close(gfp1)
@@ -10509,8 +10492,6 @@ PROC replyToMSG(gfh)
   StringF(str,'     [36mTo[33m: [32m([33mEnter[32m)[0m=[32m''[33mALL[32m''[32m?[0m \s\b\n',mailHeader.toName)
   aePuts(str)
   checkToForward(str,mailHeader.toName,1)
-  ->strCpy(mailHeader.toNet,mailHeader.fromNet)
-  ->strCpy(MailHeader.FromNet,Sopt->BBSConfig)
   aePuts('[36mSubject[33m: [32m([33mBlank[32m)[0m=[33mabort[32m?[0m ')
   stat:=lineInput('',mailHeader.subject,30,INPUT_TIMEOUT,str)
   IF(stat<0) THEN RETURN stat
@@ -10581,7 +10562,7 @@ PROC saveMsg(s)
   DEF f,i=0
 
   IF(lines)
-    IF (f:=Open(s,MODE_NEWFILE))>0
+    IF (f:=Open(s,MODE_NEWFILE))<>0
       WHILE lines
         fileWriteLn(f,msgBuf.item(i))
         lines--
@@ -10601,14 +10582,13 @@ PROC loadMsg(s)
   lines:=0
   msgBuf.clear()
   StrCopy(loadStr,s,ALL)
-  IF(f:=Open(loadStr,MODE_OLDFILE))>0
+  IF(f:=Open(loadStr,MODE_OLDFILE))<>0
 
     WHILE(ReadStr(f,loadStr)<>-1)
       removeCR(loadStr)
       msgBuf.add(loadStr)
       lines++
     ENDWHILE
-    ->IF StrLen(msgBuf.item(lines))>0 THEN lines++
 
     Close(f)
 
@@ -11042,11 +11022,6 @@ brk:
 
   UNTIL (bkFlag<>0) ->OR (lines>=ListMax(msgBuf))  max limit removed
 
-  /*IF(lines<ListMax(msgBuf))
-    lines--
-  ELSE
-    lines:=ListMax(msgBuf)
-  ENDIF*/
   lines--
   msgBuf.setSize(lines)
 
@@ -11091,9 +11066,6 @@ cont2:
           stat:=0
           JUMP brk3
         ENDIF
-        /*
-        if(Lines==89)   Lines+=1
-        */
         StringF(str,'\b\n[36mLine number to delete [32m[[33m1[32m..[33m\d[32m][0m? ',lines)
         aePuts(str)
         stat:=lineInput('','',5,INPUT_TIMEOUT,str)
@@ -11177,32 +11149,6 @@ loopHere:
       stat:=lineInput('\b\n    ',temp,maxLineLen,INPUT_TIMEOUT,temp)
       IF (stat<0) THEN RETURN stat
       msgBuf.setItem(x-1,temp)
-
-      /*StringF(space,'\b\n\d[2]> \s\b\n',x,msgBuf.item(x-1))
-      aePuts(space)
-      aePuts('\b\n    Old string;New string')
-      aePuts('\b\n   (------------------------------------------------------------)')
-      aePuts('\b\n   :')
-
-      stat:=lineInput('','',60,INPUT_TIMEOUT,str)
-      IF(stat<0) THEN RETURN RESULT_TIMEOUT
-      IF(StrLen(str)=0) THEN JUMP cont2
-
-      stat:=processLine(str,msgBuf.item(x-1),temp)
-      IF(stat=0)
-        aePuts('\b\nString not found!\b\n')
-        JUMP cont2
-      ELSE
-        aePuts('\b\n    NewLine:\b\n    --------\b\n   >')
-        aePuts(temp)
-        aePuts('\b\n\b\nCorrect ')
-
-        stat:=yesNo(1)
-        IF (stat<0) THEN RETURN stat
-        IF (stat=0) THEN JUMP cont2
-
-        msgBuf.setItem(x-1,temp)
-      ENDIF*/
       JUMP cont2
     ENDIF
 
@@ -11303,7 +11249,7 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
       StringF(string,'Message Number \d...',mh.msgNumb)
       aePuts(string)
       StringF(tempStr,'\s\d',msgBaseLocation,mh.msgNumb)
-      IF((f:=Open(tempStr,MODE_NEWFILE)))<=0
+      IF((f:=Open(tempStr,MODE_NEWFILE)))=0
         aePuts('Failed!\b\n\b\n')
         rzmsg:=NIL
         RETURN RESULT_FAILURE
@@ -11551,11 +11497,6 @@ skipBegin:
           ENDFOR
 
           lines:=i3
-          /*IF (i3<((ListMax(msgBuf)-3)))
-            lines:=i3
-          ELSE
-            lines:=(ListMax(msgBuf)-3)
-          ENDIF*/
           formatLongDateTime(mailHeader.msgDate,tempStr)
           StringF(str,' -----[ \s ]--[ \s ]----------------------------------------------------------------------',mailHeader.fromName,tempStr)
           SetStr(str,70)
@@ -11991,7 +11932,7 @@ PROC findUserFromNumber(start,hoozer:PTR TO userKeys)
   DEF fh
   DEF tempstr[255]:STRING
   fh:=Open(userKeysFile,MODE_OLDFILE)
-  IF(fh<=0) THEN RETURN 0
+  IF(fh=0) THEN RETURN 0
   Seek(fh,(start-1)*SIZEOF userKeys,OFFSET_BEGINNING)
   IF(Read(fh,hoozer,SIZEOF userKeys)>0)
     Close(fh)
@@ -12007,11 +11948,11 @@ PROC deactivateOldUsers(days)
 
   deactivateLimit:=getSystemTime()-Mul(days,86400)
 
-  IF(fh:=Open(userDataFile,MODE_READWRITE))>0
+  IF(fh:=Open(userDataFile,MODE_READWRITE))<>0
     l:=SIZEOF user
     l2:=SIZEOF userKeys
 
-    IF(fh2:=Open(userKeysFile,MODE_READWRITE))>0
+    IF(fh2:=Open(userKeysFile,MODE_READWRITE))<>0
       i:=0
       WHILE(Read(fh,tempUser,l)=l)
         IF tempUser.timeLastOn<deactivateLimit
@@ -12045,11 +11986,11 @@ PROC findUserFromName(start,nameType,name, hoozer: PTR TO user, hoozer2: PTR TO 
   UpperStr(tempStr)
 
   fh:=Open(userKeysFile,MODE_OLDFILE)
-  IF(fh<=0) THEN RETURN 0
+  IF(fh=0) THEN RETURN 0
   Seek(fh,start*SIZEOF userKeys,OFFSET_BEGINNING)
 
   fh2:=Open(userMiscFile,MODE_OLDFILE)
-  IF(fh2<=0) THEN RETURN 0
+  IF(fh2=0) THEN RETURN 0
   Seek(fh2,start*SIZEOF userMisc,OFFSET_BEGINNING)
 
   slot:=0
@@ -12260,10 +12201,6 @@ PROC searchNewMail(gfh, cn)
     RETURN RESULT_SUCCESS
   ENDIF
 
-  /*IF(currentConf<>0)
-    aePuts('\b\nNew Mail Scan.....')
-  ENDIF*/
-
   REPEAT
     IF(msgNum>=mailStat.highMsgNum)
       JUMP getOUT
@@ -12283,7 +12220,7 @@ PROC searchNewMail(gfh, cn)
           IF(nonStopDisplayFlag=FALSE) THEN lineCount:=lineCount+4
           mailFlag:=1
         ENDIF
-        IF (mailHeader="P") OR (mailHeader="p") THEN StrCopy(mailStatus,'Public ') ELSE StrCopy(mailStatus,'Private')
+        IF (mailHeader.status="P") OR (mailHeader.status="p") THEN StrCopy(mailStatus,'Public ') ELSE StrCopy(mailStatus,'Private')
         StringF(tempStr,'\s  \l\s[29]  \l\s[21]  [0m\z\r\d[6]\b\n',mailStatus,mailHeader.fromName,mailHeader.subject,mailHeader.msgNumb)
         aePuts(tempStr)
 
@@ -12381,7 +12318,7 @@ PROC saveStatOnly()
 
   StringF(string,'\s\s',msgBaseLocation,'MailStats')
   fd:=Open(string,MODE_READWRITE)
-  IF(fd<=0)
+  IF(fd=0)
     myError(ERR_MSGBASE)
     RETURN RESULT_FAILURE
   ENDIF
@@ -12921,9 +12858,9 @@ PROC callMsgFuncs(msgfunc, conf)
   StringF(filename,'\s\s',msgBaseLocation,'HeaderFile')
 
   gfh:=Open(filename,MODE_READWRITE)
-  IF(gfh<=0)
+  IF(gfh=0)
     gfh:=Open(filename,MODE_NEWFILE)
-    IF(gfh<=0)
+    IF(gfh=0)
       myError(ERR_MSGBASE)
       fileattach:=FALSE
       RETURN RESULT_FAILURE
@@ -13001,11 +12938,6 @@ PROC addFlagToList(s:PTR TO CHAR, confNum = -1)
     UpperStr(fileName)
     stat:=isInFlaggedList(fileName,confNum)
     IF(stat=FALSE)
-      /*IF flagFilesList.count()=flagFilesList.maxSize()
-        aePuts('Too many flags\b\n')
-        RETURN 1
-      ENDIF*/
-
       addFlagItem(flagFilesList,confNum,fileName)
       Dispose(fileName)
       RETURN 2
@@ -13039,7 +12971,7 @@ PROC flagFrom(s: PTR TO CHAR)
   DEF tempStr2[255]:STRING
   flag:=1
   StringF(tempStr,'\sdir\d',currentConfDir,maxDirs)
-  IF(fp:=Open(tempStr,MODE_OLDFILE))>0
+  IF(fp:=Open(tempStr,MODE_OLDFILE))<>0
     WHILE(((ReadStr(fp,tempStr)<>-1) OR (StrLen(tempStr)>0)) AND (stat<>1))
       IF(StrLen(tempStr)>0) AND (tempStr[0]<>" ")
         i:=0
@@ -13267,7 +13199,7 @@ jumpIn:
         IF(findAssign(final)) THEN JUMP outst
       ENDIF
       ft:=Open(final,MODE_OLDFILE)
-      IF(ft>0)
+      IF(ft<>0)
         Close(ft)
         doflag:=1
       ELSE
@@ -13335,13 +13267,6 @@ gotit:
                RETURN 11
               ENDIF
 
-              /*IF (cfn.count()>=cfn.maxSize())
-                aePuts(' Too many entries!!  The remainder was left off.\b\n')
-                numFiles--
-                FreeDosObject(DOS_FIB,fBlock)
-                UnLock(fLock)
-                RETURN 11
-              ENDIF*/
               IF((dp:=isInList(cfn,final,checkConfNum)))=FALSE
                 numFiles++
                 flagFile:=NEW flagFile
@@ -13672,7 +13597,6 @@ PROC regServer()
   StrCopy(mybbsLoc,masterMsg.user)
 
   decodeCmds(masterMsg.myCmds)
-  ->cmds:=masterMsg.myCmds
   sopt:=masterMsg.sopt
   masterMsg.command:=JH_UPDATE
 ENDPROC RESULT_SUCCESS
@@ -14059,7 +13983,6 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
   /* if user hit chat & window is no color, add * infront of user name */
   IF((bitPlanes=1) AND (pagedFlag)) THEN StringF(string,'*\l\s[14]',hoozer.name) ELSE StringF(string,'\l\s[15]',hoozer.name)
   statMessage(1,1,string)
-  ->statChatFlag()
   updateTitle(hoozer)
 
   StringF(string,'\l\s[15]',hoozer3.realName)
@@ -14086,7 +14009,6 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
   statMessage(1,2,string)
 
 
-  ->statChatFlag()
   StringF(string,'\l\d[2]',hoozer.secLibrary)
   statMessage(36,2,string)
 
@@ -14105,7 +14027,6 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
     StrAdd(bcdStr,'K')
   ENDIF
 
-  ->StringF(string,'\l\d[12]',hoozer.bytesDownload)
   StringF(string,'\l\s[12]',bcdStr)
   statMessage(51,2,string)
 
@@ -14115,7 +14036,6 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
     StrAdd(bcdStr,'K')
   ENDIF
 
-  ->StringF(string,'\l\d[12]',hoozer.bytesUpload)
   StringF(string,'\l\s[12]',bcdStr)
   statMessage(64,2,string)
 
@@ -14185,6 +14105,27 @@ PROC pGoodbye()
   aePuts('\b\n')
 ENDPROC RESULT_GOODBYE
 
+/*PROC hexdump(buf,size)
+  DEF i,j
+  FOR i:=0 TO size-1
+    WriteF('\h[2] ',buf[i])
+    IF Mod(i,16)=15 
+      j:=i-15
+      IF j<0 THEN j:=0
+      REPEAT
+        IF (buf[j]<32) OR (buf[j]>127)
+          WriteF('.')
+        ELSE
+          WriteF('\c',buf[j])
+        ENDIF
+        j++
+      UNTIL j>i
+      WriteF('\b\n')
+    ENDIF
+  ENDFOR
+  WriteF('\b\n')
+ENDPROC*/
+
 PROC xprfopenAsm()
   MOVEM.L D1-D7/A0-A6,-(A7)
   xprfopen();
@@ -14200,13 +14141,6 @@ PROC xprfopen()
   MOVE.L A0,fn
   MOVE.L A1,am
 
-  /*MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4*/
   loadA4()
 
   IF strCmpi(am,'r',ALL)
@@ -14225,7 +14159,7 @@ PROC xprfopen()
     filemode:=MODE_READWRITE
   ENDIF
 
-  IF (filemode=MODE_OLDFILE) AND (zModemInfo.inProgress=ZMODEM_UPLOAD)
+  IF (filemode=MODE_OLDFILE) AND (zModemInfo.currentOperation=ZMODEM_UPLOAD)
     ->check for dupes when the xpr lib asks us to open file in read mode and we are uploading
 
     dup:=FALSE
@@ -14246,7 +14180,7 @@ PROC xprfopen()
     ENDIF
   ENDIF
 
-  IF (zModemInfo.inProgress=ZMODEM_UPLOAD)
+  IF (zModemInfo.currentOperation=ZMODEM_UPLOAD)
     FOR i:=skipdFiles.count()-1 TO 0 STEP -1
       ->if its a dupe file then we dont want to try and resume so return an error
       IF strCmpi(skipdFiles.item(i),FilePart(fn),ALL)
@@ -14258,7 +14192,7 @@ PROC xprfopen()
     ENDFOR
   ENDIF
 
-  IF (filemode<>MODE_OLDFILE) AND (zModemInfo.inProgress=ZMODEM_UPLOAD) THEN zModemInfo.current:=zModemInfo.current+1
+  IF (filemode<>MODE_OLDFILE) AND (zModemInfo.currentOperation=ZMODEM_UPLOAD) THEN zModemInfo.current:=zModemInfo.current+1
 
   zModemInfo.resumePos:=0
   res:=Open(fn,filemode)
@@ -14287,21 +14221,13 @@ PROC xprfclose()
   ->                      A0
   MOVE.L A0,fp
 
-  /*MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4*/
   loadA4()
-
 
   StringF(tempstr,'xprfclose \d',fp)
   debugLog(LOG_DEBUG,tempstr)
   IF fp<>-1
     Close(fp)
-    IF (zModemInfo.downloading=FALSE) AND (zModemInfo.filesize>0) AND (zModemInfo.transPos=zModemInfo.filesize) AND bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
+    IF (zModemInfo.currentOperation=ZMODEM_UPLOAD) AND (zModemInfo.filesize>0) AND (zModemInfo.transPos=zModemInfo.filesize) AND bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
       StringF(tempstr,'bgCheckPort\d',node)
       IF (bgport:=FindPort(tempstr))
         msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
@@ -14330,15 +14256,6 @@ PROC xprchkabort()
   DEF winmsg:PTR TO intuimessage,res,task: PTR TO tc
   DEF tempstr[255]:STRING
 
-  /*
-  MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4
-  */
   loadA4()
 
   res:=0
@@ -14374,15 +14291,6 @@ PROC xprfread()
   MOVE.L D1,bcount
   MOVE.L A1,fp
 
-  /*
-  MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4
-  */
   loadA4()
 
   ->StringF(tempstr,'xprfread: \d bytes',bsize*bcount)
@@ -14413,14 +14321,6 @@ PROC xprfwrite()
   MOVE.L D1,bcount
   MOVE.L A1,fp
 
-  /*
-  MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4*/
   loadA4()
 
   ->StringF(tempstr,'xprfwrite: \d bytes',Mul(bsize,bcount))
@@ -14441,7 +14341,7 @@ ENDPROC D0
 PROC xprsread()
   DEF buf,bsize,timeout,serialsig,i,signals,task: PTR TO tc,res,timersig,ch
   DEF tempstr[255]:STRING
-  DEF waiting,status
+  DEF waiting,status,sigs,obuf,buf2,c,c2
   ->        long count = (*xpr_sread)(char *buffer, long size, long timeout)
   ->        D0                        A0            D0         D1
 
@@ -14449,25 +14349,100 @@ PROC xprsread()
   MOVE.L D0,bsize
   MOVE.L D1,timeout
 
-  /*
-  MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4*/
   loadA4()
 
-  ->StringF(tempstr,'xprsread: \d bytes \d timeout',bsize,timeout)
-  ->debugLog(LOG_DEBUG,tempstr)
+  StringF(tempstr,'xprsread: \d bytes \d timeout',bsize,timeout)
+  debugLog(LOG_DEBUG,tempstr)
 
   /* Valid size parameter? */
+
+  IF telnetSocket>=0
+    IF bsize=0 THEN RETURN 0
+    waiting:=bsize
+
+    timersig:=0
+    IF timeout<>0
+      IF timerport<>NIL THEN timersig:=Shl(1, timerport.sigbit)
+      setTimer(timeout)
+    ENDIF
+    buf2:=New(bsize)
+    obuf:=buf2
+    c2:=0
+    REPEAT
+      
+      status:=Recv(telnetSocket,buf2,waiting,0)     
+      IF status>0 
+        StringF(tempstr,'xprsread recv complete: \d bytes',status)
+        debugLog(LOG_DEBUG,tempstr)
+        c:=0
+        REPEAT
+          IF lastIAC2
+            StringF(tempstr,'code: \d',buf2[c])
+            debugLog(LOG_DEBUG,tempstr)
+            ->expecting an IAC parameter byte - just skip it
+            lastIAC2:=FALSE
+          ELSEIF (buf2[c]=255) OR (lastIAC)
+            IF (lastIAC=FALSE) THEN c++
+            lastIAC:=FALSE
+            IF c>=status
+              lastIAC:=TRUE
+            ELSE
+              IF buf2[c]=255
+                buf[c2]:=255
+                c2++
+              ELSEIF (buf2[c]>=250) AND (buf2[c]<255)
+                StringF(tempstr,'known iac code: \d',buf2[c])
+                debugLog(LOG_DEBUG,tempstr)
+                c++
+                IF (c>=status)
+                  lastIAC2:=TRUE
+                ELSE
+                  StringF(tempstr,'code: \d',buf2[c])
+                  debugLog(LOG_DEBUG,tempstr)
+                ENDIF
+              ELSE
+                StringF(tempstr,'unknown iac code: \d',buf2[c])
+                debugLog(LOG_DEBUG,tempstr)
+              ENDIF
+            ENDIF
+          ELSE
+            buf[c2]:=buf2[c]
+            c2++
+          ENDIF
+          c++
+        UNTIL c>=status
+     
+        waiting:=bsize-c2
+      ENDIF
+      IF timeout<>0
+        sigs:=SetSignal(0,0) AND timersig
+        IF sigs THEN Wait(sigs)
+        IF (status<=0) AND ((sigs AND timersig)=0) THEN Delay(1)
+      ENDIF
+    UNTIL (waiting=0) OR (timeout=0) OR (sigs AND timersig)
+    
+    i:=c2
+    IF timeout<>0
+      IF (sigs AND timersig)
+        waitTime()
+      ELSE
+        stopTime()
+      ENDIF
+    ENDIF
+    IF(checkCarrier())=FALSE
+      i:=-1
+    ENDIF
+    
+    Dispose(buf2)
+    StringF(tempstr,'xprsread complete: \d bytes',i)
+    debugLog(LOG_DEBUG,tempstr)
+    ->hexdump(buf,i)
+    RETURN i
+  ENDIF
 
   IF(bsize > 0)
 
     waiting,status:=getSerialInfo()
-
     /* Return error if carrier is lost. */
 
     IF(checkCarrier())=FALSE
@@ -14494,8 +14469,6 @@ PROC xprsread()
           ENDIF
         ENDIF
 
-        ->BytesIn += Waiting
-
         i:=waiting
         JUMP sreaddone
       ENDIF
@@ -14511,8 +14484,6 @@ PROC xprsread()
             bsize:=serialReadIO.iostd.actual
           ENDIF
         ENDIF
-
-        ->BytesIn += Size
 
         i:=bsize
         JUMP sreaddone
@@ -14573,8 +14544,6 @@ PROC xprsread()
           ENDIF
         ENDIF
 
-        ->BytesIn += Size
-
         i:=bsize
         JUMP sreaddone
       ENDIF
@@ -14595,7 +14564,6 @@ PROC xprsread()
         */
 
         IF(serialReadIO.iostd.actual > 0)
-          ->BytesIn += ReadRequest->IOSer.io_Actual
           i:=serialReadIO.iostd.actual
           JUMP sreaddone
         ELSE
@@ -14626,7 +14594,6 @@ PROC xprsread()
               ENDIF
             ENDIF
 
-            ->BytesIn += Size
           ELSE
             /* Ok, so there is no data in the buffer. */
             /* Check if the carrier signal is still */
@@ -14648,8 +14615,9 @@ PROC xprsread()
   ENDIF
 
 sreaddone:
-  ->StringF(tempstr,'xprsread complete: \d bytes',i)
-  ->debugLog(LOG_DEBUG,tempstr)
+  StringF(tempstr,'xprsread complete: \d bytes',i)
+  debugLog(LOG_DEBUG,tempstr)
+  ->hexdump(buf,i)
 ENDPROC i
 
 PROC xprswriteAsm()
@@ -14659,26 +14627,20 @@ PROC xprswriteAsm()
 ENDPROC D0
 
 PROC xprswrite()
-  DEF buf,bsize,task:PTR TO tc,res
+  DEF buf,bsize,task:PTR TO tc,res,i
   DEF tempstr[255]:STRING
+  DEF c,buf2
   ->        long status = (*xpr_swrite)(char *buffer, long size)
   ->        D0                          A0            D0
 
   MOVE.L A0,buf
   MOVE.L D0,bsize
 
-  /*
-  MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4*/
   loadA4()
 
-  ->StringF(tempstr,'xprswrite: \d bytes',bsize)
-  ->debugLog(LOG_DEBUG,tempstr)
+  StringF(tempstr,'xprswrite: \d bytes',bsize)
+  debugLog(LOG_DEBUG,tempstr)
+  ->hexdump(buf,bsize)
 
   serPuts(buf,bsize,TRUE,TRUE)
 
@@ -14701,14 +14663,6 @@ PROC xprfseek()
   MOVE.L D0,offset
   MOVE.L D1,origin
 
-  /*
-  MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4*/
   loadA4()
 
   StringF(tempstr,'xprfseek: \d offset',offset)
@@ -14727,14 +14681,6 @@ ENDPROC D0
 PROC xprsflush()
   DEF task:PTR TO tc,res
 
-  /*
-  MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4*/
   loadA4()
 
   debugLog(LOG_DEBUG,'xprsflush')
@@ -14755,14 +14701,6 @@ PROC xprupdate()
 
   MOVE.L A0,xpru
 
-  /*
-  MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4*/
   loadA4()
 
   IF(xpru.xpru_updatemask AND XPRU_ERRORMSG)<>0
@@ -14776,7 +14714,7 @@ PROC xprupdate()
     IF xpru.xpru_filename<>NIL
       IF StrCmp(zModemInfo.fileName,xpru.xpru_filename,ALL)=FALSE
         strCpy(zModemInfo.fileName,xpru.xpru_filename,ALL)
-        IF zModemInfo.inProgress=ZMODEM_UPLOAD
+        IF zModemInfo.currentOperation=ZMODEM_UPLOAD
           sendMasterUpload(FilePart(zModemInfo.fileName))
         ENDIF
       ENDIF
@@ -14796,7 +14734,7 @@ PROC xprupdate()
     IF xpru.xpru_filesize<>-1
       IF zModemInfo.filesize<>xpru.xpru_filesize
         zModemInfo.filesize:=xpru.xpru_filesize
-        IF zModemInfo.downloading
+        IF zModemInfo.currentOperation=ZMODEM_DOWNLOAD
           StringF(outmsg,'\t\sDownloading \s \d bytes',IF zModemInfo.freeDFlag THEN 'Free ' ELSE '',zModemInfo.fileName,xpru.xpru_filesize)
         ELSE
           StringF(outmsg,'\tUploading \s[12] \d bytes',FilePart(zModemInfo.fileName),xpru.xpru_filesize)
@@ -14874,14 +14812,6 @@ PROC xprsetserial()
 
   MOVE.L D0,newstatus
 
-  /*
-  MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4*/
   loadA4()
 
   StringF(tempstr,'xprsetserial \d',newstatus)
@@ -14905,14 +14835,6 @@ PROC xprfinfo()
   MOVE.L A0,fn
   MOVE.L D0,fitype
 
-  /*
-  MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4*/
   loadA4()
 
   StringF(tempstr,'xprsfinfo - fitype \d \s',fitype,fn)
@@ -14921,19 +14843,21 @@ PROC xprfinfo()
   IF fitype=1
     ->file size
 
-    FOR i:=skipdFiles.count()-1 TO 0 STEP -1
-      ->if its a dupe file then we dont want to try and resume so return 2gb filesize
+    IF (zModemInfo.currentOperation=ZMODEM_UPLOAD)
+      FOR i:=skipdFiles.count()-1 TO 0 STEP -1
+        ->if its a dupe file then we dont want to try and resume so return 2gb filesize
 
-      StringF(tempstr,'xprsfinfo - dupecheck \s \s - res \d',skipdFiles.item(i),FilePart(fn),strCmpi(skipdFiles.item(i),FilePart(fn),ALL))
-      debugLog(LOG_DEBUG,tempstr)
-
-      IF strCmpi(skipdFiles.item(i),FilePart(fn),ALL)
-        StringF(tempstr,'xprsfinfo - dupe - \s',fn)
+        StringF(tempstr,'xprsfinfo - dupecheck \s \s - res \d',skipdFiles.item(i),FilePart(fn),strCmpi(skipdFiles.item(i),FilePart(fn),ALL))
         debugLog(LOG_DEBUG,tempstr)
-        res:=$7fffffff
-        JUMP dupe
-      ENDIF
-    ENDFOR
+
+        IF strCmpi(skipdFiles.item(i),FilePart(fn),ALL)
+          StringF(tempstr,'xprsfinfo - dupe - \s',fn)
+          debugLog(LOG_DEBUG,tempstr)
+          res:=$7fffffff
+          RETURN res
+        ENDIF
+      ENDFOR
+    ENDIF
 
     fp:=Open(fn,MODE_OLDFILE)
     Seek(fp,0,OFFSET_END)
@@ -14958,14 +14882,6 @@ PROC xprunlink()
 
   MOVE.L A0,fn
 
-  /*
-  MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4*/
   loadA4()
 
   StringF(tempstr,'xprunlink \s',fn)
@@ -14999,14 +14915,6 @@ PROC xprffirst()
   MOVE.L A0,buffer
   MOVE.L A1,xprObj
 
-  /*
-  MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4*/
   loadA4()
 
   fileItem:=xprObj.fileList.item(xprObj.currentFile)
@@ -15031,14 +14939,6 @@ PROC xprfnext()
   MOVE.L A0,buffer
   MOVE.L A1,xprObj
 
-  /*
-  MOVE.L 4,A6
-  SUB.L A1,A1
-  JSR -294(A6)  ->LVO FindTask
-  MOVE.L D0,task
-
-  res:=task.userdata
-  MOVE.L res,A4*/
   loadA4()
 
 ENDPROC xprfnext2(buffer,xprObj)
@@ -15104,7 +15004,7 @@ PROC doSerialRead(data,length)
 ENDPROC DoIO(serialReadIO)
 
 PROC stopSerialRead()
-  IF readQueued
+  IF readQueued AND (serialReadIO<>NIL)
     IF(CheckIO(serialReadIO))=FALSE THEN AbortIO(serialReadIO)
     WaitIO(serialReadIO)
     readQueued:=FALSE
@@ -15149,6 +15049,7 @@ ENDPROC isFatal
 
 PROC getSerialInfo()
   DEF waiting,status
+  
   IF(serialWriteIO)
     serialWriteIO.iostd.command:=SDCMD_QUERY
     DoIO(serialWriteIO)
@@ -15177,10 +15078,6 @@ PROC stopTime()
     timerQueued:=FALSE
   ENDIF
 ENDPROC
-
-/*PROC checkTimer()
-  IF timermsg=NIL THEN RETURN FALSE
-ENDPROC CheckIO(timermsg)*/
 
 PROC openTimer()
   DEF error
@@ -15220,7 +15117,7 @@ PROC updateZDisplay()
 
   /* transfer window not open */
 
-  IF zModemInfo.downloading
+  IF zModemInfo.currentOperation=ZMODEM_DOWNLOAD
     StringF(tempstr,'[Node \d] Send Window (\d/\d)',node,zModemInfo.current,zModemInfo.total)
     strCpy(zModemInfo.titleBar,tempstr,ALL)
   ELSE
@@ -15321,7 +15218,8 @@ PROC downloadFile(str: PTR TO CHAR)
     parseList(str,tempstringlist)
     FOR i:=0 TO tempstringlist.count()-1
       flagItem:=NEW flagItem
-      flagItem.fileName:=tempstringlist.item(i)
+      flagItem.fileName:=String(255)
+      StrCopy(flagItem.fileName,tempstringlist.item(i))
       flagItem.confNum:=currentConf
       templist.setItem(i,flagItem)
     ENDFOR
@@ -15425,7 +15323,6 @@ PROC updateDownloadStats(xprObj:PTR TO xprData, fileItem:PTR TO flagFileItem)
         IF creditAccountTrackDownloads(loggedOnUser)
           cb:=confBases.item(fileItem.confNum)
 
-          ->cb.bytesDownload:=cb.bytesDownload+tempsize
           addBCD(cb.downloadBytesBCD,tempsize)
           cb.bytesDownload:=convertFromBCD(cb.downloadBytesBCD)
           cb.downloads:=cb.downloads+1
@@ -15438,7 +15335,6 @@ PROC updateDownloadStats(xprObj:PTR TO xprData, fileItem:PTR TO flagFileItem)
       IF(freeDownloads=FALSE)
         IF creditAccountTrackDownloads(loggedOnUser)
 
-          ->loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+tempsize
           addBCD(loggedOnUserMisc.downloadBytesBCD,tempsize)
           loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
           loggedOnUser.downloads:=loggedOnUser.downloads+1
@@ -15591,16 +15487,12 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   IF scropen
     openZmodemStat()
   ENDIF
-  zModemInfo.inProgress:=ZMODEM_DOWNLOAD
+  zModemInfo.currentOperation:=ZMODEM_DOWNLOAD
 
   oldshared:=serShared
   serShared:=FALSE
 
   xprio:=NEW xprio
-
-  /*MOVE.L A4,result
-  task:=FindTask(NIL)
-  task.userdata:=result*/
 
   xprio.xpr_extension:=4
   xprio.xpr_fopen:={xprfopenAsm}
@@ -15638,7 +15530,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   IF XprotocolSetup(xprio)=0
     CloseLibrary(xprotocolbase)
     END xprio
-    zModemInfo.inProgress:=ZMODEM_NONE
+    zModemInfo.currentOperation:=ZMODEM_NONE
     closezModemStats()
     RETURN 0
   ENDIF
@@ -15646,7 +15538,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   IF openTimer()
     debugLog(LOG_ERROR,'Can''t re-open Timer Device!')
     CloseLibrary(xprotocolbase)
-    zModemInfo.inProgress:=ZMODEM_NONE
+    zModemInfo.currentOperation:=ZMODEM_NONE
     closezModemStats()
     END xprio
     RETURN 0
@@ -15661,13 +15553,13 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   time1:=getSystemTime()
   transfering:=TRUE
   cancelTransferOffHook:=FALSE
+  lastIAC:=FALSE
 
   x:=NEW x
   x.currentFile:=0
   x.fileList:=fileList
   x.updateDownloadStats:=updateDownloadStats
   xprio.xpr_filename:=x
-  zModemInfo.downloading:=TRUE
   result:=XprotocolSend(xprio)
   time2:=getSystemTime()
 
@@ -15684,75 +15576,6 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   ENDIF
   END x
 
-  /*REPEAT
-    fileItem:=fileList.item(i)
-    xprio.xpr_filename:=fileItem.fileName
-    sendMasterDownload(fileItem.fileName)
-
-    zModemInfo.freeDFlag:=checkFree(fileItem.fileName)
-    zModemInfo.downloading:=TRUE
-
-    result:=XprotocolSend(xprio)
-
-    IF(result=FALSE)
-      IF((zModemInfo.transPos>0) AND (zModemInfo.transPos=zModemInfo.filesize))
-        callersLog('\tIncomplete 100% Transfer, accumulating Maximum Bytes Downloaded')
-        udLog('\tIncomplete 100% Transfer, accumulating Maximum Bytes Downloaded')
-        result:=TRUE
-      ENDIF
-    ENDIF
-
-    IF zModemInfo.transPos<>zModemInfo.filesize THEN result:=FALSE
-
-    IF result
-      onlineNFiles++
-      removeFlagFromList(FilePart(fileItem.fileName),fileItem.confNum)
-      IF(zModemInfo.freeDFlag=FALSE) THEN donf++
-
-      tempsize:=zModemInfo.filesize
-      tBT:=tBT+tempsize
-      dTBT:=dTBT+tempsize
-
-      IF updateDownloadStats
-        IF sopt.toggles[TOGGLES_CREDITBYKB]
-          tempsize:=Shr(tempsize,10)
-        ENDIF
-
-        IF(checkSecurity(ACS_CONFERENCE_ACCOUNTING))
-          saveMsgPointers(currentConf)
-
-          IF(freeDownloads=FALSE)
-            IF creditAccountTrackDownloads(loggedOnUser)
-              cb:=confBases.item(fileItem.confNum)
-
-              ->cb.bytesDownload:=cb.bytesDownload+tempsize
-              addBCD(cb.downloadBytesBCD,tempsize)
-              cb.bytesDownload:=convertFromBCD(cb.downloadBytesBCD)
-              cb.downloads:=cb.downloads+1
-            ENDIF
-          ENDIF
-          cb.dailyBytesDld:=cb.dailyBytesDld+tempsize
-          IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
-          loadMsgPointers(currentConf)
-        ELSE
-          IF(freeDownloads=FALSE)
-            IF creditAccountTrackDownloads(loggedOnUser)
-
-              ->loggedOnUser.bytesDownload:=loggedOnUser.bytesDownload+tempsize
-              addBCD(loggedOnUserMisc.downloadBytesBCD,tempsize)
-              loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
-              loggedOnUser.downloads:=loggedOnUser.downloads+1
-            ENDIF
-          ENDIF
-          loggedOnUser.dailyBytesDld:=loggedOnUser.dailyBytesDld+tempsize
-          IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
-        ENDIF
-      ENDIF
-    ENDIF
-
-    time2:=getSystemTime()
-    i++
-  UNTIL (result=0) OR (i=fileList.count())*/
   tTTM:=time2-time1;
   XprotocolCleanup(xprio)
   transfering:=FALSE
@@ -15763,7 +15586,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   closeTimer()
 
   CloseLibrary(xprotocolbase)
-  zModemInfo.inProgress:=ZMODEM_NONE
+  zModemInfo.currentOperation:=ZMODEM_NONE
   closezModemStats()
   serShared:=oldshared
 
@@ -16031,7 +15854,6 @@ PROC xprReceive(file) HANDLE
   ELSE
     StringF(tempstr,'\s.library',xprLib.item(loggedOnUser.xferProtocol))
   ENDIF
-  ->StrCopy(tempstr,xprLib.item(loggedOnUser.xferProtocol))
 
   IF (xprotocolbase:=OpenLibrary(tempstr,0))=NIL
     aePuts('\b\nUnable to open the xpr library\b\n')
@@ -16052,11 +15874,7 @@ PROC xprReceive(file) HANDLE
   IF scropen
     openZmodemStat()
   ENDIF
-  zModemInfo.inProgress:=ZMODEM_UPLOAD
-
-  /*MOVE.L A4,result
-  task:=FindTask(NIL)
-  task.userdata:=result*/
+  zModemInfo.currentOperation:=ZMODEM_UPLOAD
 
   xprio.xpr_extension:=4
   xprio.xpr_fopen:={xprfopenAsm}
@@ -16113,8 +15931,8 @@ PROC xprReceive(file) HANDLE
 
   i:=0
   time1:=getSystemTime()
-  zModemInfo.downloading:=FALSE
   transfering:=TRUE
+  lastIAC:=FALSE
 
   cancelTransferOffHook:=FALSE
 
@@ -16179,7 +15997,7 @@ PROC xprReceive(file) HANDLE
   closeTimer()
 
   CloseLibrary(xprotocolbase)
-  zModemInfo.inProgress:=ZMODEM_NONE
+  zModemInfo.currentOperation:=ZMODEM_NONE
   closezModemStats()
 
   serShared:=oldshared
@@ -16188,7 +16006,7 @@ PROC xprReceive(file) HANDLE
   queueRead(serialReadIO,{serbuff})
 EXCEPT
   CloseLibrary(xprotocolbase)
-  zModemInfo.inProgress:=ZMODEM_NONE
+  zModemInfo.currentOperation:=ZMODEM_NONE
   closezModemStats()
   IF xprio THEN END xprio
   RETURN RESULT_FAILURE
@@ -16231,7 +16049,6 @@ PROC rFreeSpace(path: PTR TO CHAR)
     IF(fLock:=Lock(path,ACCESS_READ))
       IF(stat:=Info(fLock,i_data))
         stat:=Mul(Shr((i_data.numblocks-i_data.numblocksused),10),i_data.bytesperblock)     ->changed to get kbytes free instead of bytes
-        ->stat:=(Mul(i_data.numblocks,i_data.bytesperblock))-(Mul(i_data.numblocksused,i_data.bytesperblock))
       ELSE
         StringF(tempstr,'\b\nCan not get info from \s for free space\b\n',path)
         aePuts(tempstr)
@@ -16247,63 +16064,8 @@ PROC rFreeSpace(path: PTR TO CHAR)
   ENDIF
 ENDPROC stat
 
-/*
-static void ListProtocols(void)
-{
- AEPutStr("\b\n                              [Z] AMI-Zmodem Batch");
-//AEPutStr("\b\n                              [X] XPR-Zmodem Batch\b\n");
-}
-*/
-
 PROC setProtocol(str: PTR TO CHAR)
--> int status;
-
- /* added this till we add protocols (RTS) */
  loggedOnUser.protocol:="Z"
- RETURN
-
-/*
-#ifdef RTS_NOPROTOCOLS
-if(str[0]=='\0')
-    {
-    ListProtocols();
-    }
-for(;;)
-    {
-    if(str[0]=='\0')
-        {
-          sprintf(str,"\b\nProtocol: (Enter)= %c? ",User.Protocol);
-        AEPutStr(str);
-        str[0]='\0';
-        status=LineInput("",str,1,KEYBOARD_TIMEOUT);
-        if(status<0) { return; }
-        }
-    if(strlen(str)!=0)
-        {
-        strupr(str);
-        switch(str[0])
-            {
-            case 'Z':
-//          case 'X':
-                AEPutStr("\b\n");
-                User.Protocol=(UBYTE)str[0];
-                return;
-                break;
-            default:
-                str[0]='\0';
-                AEPutStr("\b\nInvalid protocol select another\b\n");
-                ListProtocols();
-                break;
-            }
-        }
-    else
-        {
-        return;
-        }
-    }
-#endif
-
-*/
 ENDPROC
 
 PROC stripReturn(str: PTR TO CHAR)
@@ -16325,7 +16087,7 @@ PROC scanHoldDesc()
 
   StringF(purgeScanNM,'\d',loggedOnUser.slotNumber)
   StringF(string,'\sLCFILES/\s.lc',currentConfDir,purgeScanNM)
-  IF(fi:=Open(string,MODE_OLDFILE))>0
+  IF(fi:=Open(string,MODE_OLDFILE))<>0
     lcFileXfr:=TRUE
     aePuts('Preparing Lost Carrier File(s) for File Description(s)\b\n\b\n')
     WHILE((ReadStr(fi,string)<>-1) OR (StrLen(string)>0))
@@ -16502,7 +16264,6 @@ updesccont:
     count++
     StringF(str,'\b\nFileName \d: ',count)
     aePuts(str)
-    ->status:=lineInput('','',12,INPUT_TIMEOUT,str);
     status:=lineInput('','',100,INPUT_TIMEOUT,str)
     IF(status<0) THEN RETURN status
     IF(((str[0]="A") OR (str[0]="a")) AND (StrLen(str)=1))
@@ -16549,7 +16310,7 @@ updesccont:
     StringF(str4,'\s\s',nodeWorkDir,str)             /* 11w add */
 
     udf:=Open(str4,MODE_OLDFILE)
-    IF(udf>0)
+    IF(udf<>0)
       aePuts('You can''t Upload a duplicate.\b\n')
       count--
       Close(udf)
@@ -16578,7 +16339,7 @@ updesccont:
       JUMP updesccont
     ENDIF
     udf:=Open(str4,MODE_NEWFILE)
-    IF(udf<=0)
+    IF(udf=0)
       myError(7)
       ->//aePuts('Tell sysop the system can''t open a file in the work dirs\b\n\b\n')
       RETURN RESULT_FAILURE
@@ -16738,7 +16499,7 @@ PROC batchasl(where: PTR TO CHAR) HANDLE
   aslbase:=OpenLibrary('asl.library',37)
   IF aslbase=NIL THEN Raise(ERR_LIB)
   tags:=NEW [ASL_HAIL,'/X Local Upload FileRequest',
-     ASL_WINDOW, window,      ->breaks it for some reason
+     ASL_WINDOW, window,      
      ASL_PATTERN,'#?',
      ASL_FUNCFLAGS, FILF_MULTISELECT OR FILF_PATGAD,
      ASL_DIR,aslDir,
@@ -16836,40 +16597,6 @@ PROC zmodemReceive(flname:PTR TO CHAR,uLFType)
 
     xprReceive(flname)
     RETURN 1
-
-    /* still to do
-    StringF(temp,'[Node \d] Receive Window',node)
-    strCpy(zModemInfo.titleBar,temp,ALL)
-    zModemInfo.transPos:=0; zModemInfo.filesize:=0; zModemInfo.errorCount:=0; zModemInfo.errorPos:=0; zModemInfo.lastTime:=0
-    zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
-    strCpy(zModemInfo.zStat,'',ALL)
-    strCpy(zModemInfo.fileName,'',ALL)
-    strCpy(zModemInfo.apxTime,'',ALL)
-    openZDisplay()
-    zWindow:=1;
-    Delay(50)
-    AbortIO(serialReadIO)
-    WaitIO(serialReadIO)
-
-    p:=StrLen(flname)+flname
-    WHILE((p>=flname) AND (p[0]<>":") AND (p[0]<>"/"))
-      p[0]=0
-      p--
-    ENDWHILE
-
-    ->  if(!CheckIO(TimerMsg)) AbortIO(TimerMsg);
-    ->      WaitIO(TimerMsg);
-    ->c:=proto(serialReadIO, serialWriteIO, TimerMsg, &diskbuff[0], DSKBUFF,onlineBaud, flname, 0, 0)
-
-    queueRead(serialReadIO,{serbuff})
-    closeZDisplay()     /* close the transfer widow */
-    zWindow:=0
-    Delay(70)
-    IF(uLFType) THEN aePuts('\b\n\b\n')
-
-    aePuts(xprTitle.item(loggedOnUser.xferProtocol))
-    IF(c) THEN aePuts(' upload successful\b\n') ELSE aePuts(' upload unsuccessful\b\n')
-    RETURN c*/
   ELSE
     IF(lcFileXfr=FALSE)
       IF(batchasl(flname)) THEN receivePlayPen()
@@ -17245,7 +16972,7 @@ PROC checkOurList(fname: PTR TO CHAR, str: PTR TO CHAR)
   DEF buff[255]:STRING
   DEF dest[255]:STRING
 
-  IF((fp:=Open(fname,MODE_OLDFILE)))<=0     /* can't find our file */
+  IF((fp:=Open(fname,MODE_OLDFILE)))=0     /* can't find our file */
     RETURN RESULT_SUCCESS
   ENDIF
 
@@ -17415,7 +17142,7 @@ PROC checkFileExternal(temp: PTR TO CHAR, checkFile: PTR TO CHAR)
   StrAdd(options,' ')
   StrAdd(options,checkFile)
   StringF(fileName,'\sOutPut_Of_Test',nodeWorkDir)
-  IF((fi:=Open(fileName,MODE_NEWFILE)))>0
+  IF((fi:=Open(fileName,MODE_NEWFILE)))<>0
     filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,fi,NP_STACKSIZE,stack,NP_PRIORITY,pri,NIL]:LONG
     SystemTagList(options,filetags)
     END filetags
@@ -17425,7 +17152,7 @@ PROC checkFileExternal(temp: PTR TO CHAR, checkFile: PTR TO CHAR)
 
     IF(readToolType(TOOLTYPE_FCHECK,temp,'SCRIPT',s))
       StrAdd(s,' ')
-      IF(fi:=Open('NIL:',MODE_NEWFILE))>0
+      IF(fi:=Open('NIL:',MODE_NEWFILE))<>0
         filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,fi,NP_STACKSIZE,stack,NP_PRIORITY,pri,NIL]:LONG
         StringF(options,'\s \s \s \d',s,checkFile,FilePart(checkFile),node)
         SystemTagList(options,filetags)
@@ -17462,7 +17189,6 @@ ENDPROC 1,stat
 PROC testFile(str: PTR TO CHAR, path: PTR TO CHAR)
   DEF x,x2,stat,r
   DEF temp[100]:STRING,temp2[100]:STRING
-  ->DEF temp3[100]:STRNG
   DEF temp4[100]:STRING
   DEF options[200]:STRING
 
@@ -17500,43 +17226,6 @@ PROC testFile(str: PTR TO CHAR, path: PTR TO CHAR)
     ENDIF
     x++
   UNTIL x>=StrLen(temp) /* end do */
-  RETURN RESULT_NOT_ALLOWED
-
-  /*
-
-  StrCopy(temp,str)
-  x:=0
-
-  ->StringF(temp3,'\scommands/syscmd/",cmds.bbsLoc)
-  REPEAT
-    IF(temp[x]=".")
-      x2:=0;
-
-      IF(StrLen(temp2)=3)
-        StrCopy(options,path)
-        stat:=RESULT_NOT_ALLOWED
-        aeGoodFile:=RESULT_NOT_ALLOWED
-        StringF(temp4,'FILECHECK \s',temp)
-        IF(processSysCommand(temp4))=FALSE
-          aePuts('Testing ...')
-          aePuts(FilePart(str))
-          aePuts('\b\n')
-          StrAdd(options,temp)
-          r,stat:=checkFileExternal(temp2,options)
-        ELSE
-          stat:=aeGoodFile
-          IF(stat:=RESULT_NOT_TESTED)
-            stat:=RESULT_NOT_ALLOWED
-            StrAdd(options,temp)
-            r,stat:=checkFileExternal(temp2,options)
-          ENDIF
-        ENDIF
-        RETURN stat
-      ENDIF             -> end if strlen
-    ENDIF                 -> end if temp
-    x++
-  UNTIL x>=StrLen(temp) -> end do
-  */
 ENDPROC RESULT_NOT_ALLOWED
 
 PROC displaySysopULStats()
@@ -17551,7 +17240,7 @@ PROC displaySysopULStats()
     num:=0
     num2:=0
     StringF(str,'\sSysopStats/NumULs_\d',cmds.bbsLoc,i)
-    IF((fp:=Open(str,MODE_OLDFILE)))>0
+    IF((fp:=Open(str,MODE_OLDFILE)))<>0
       ReadStr(fp,str2)
       Close(fp)
       IF(loggedOnUser.slotNumber=1)
@@ -17562,7 +17251,7 @@ PROC displaySysopULStats()
     ENDIF
 
     StrAdd(str,'HOLD')
-    IF((fp:=Open(str,MODE_OLDFILE)))>0
+    IF((fp:=Open(str,MODE_OLDFILE)))<>0
       ReadStr(fp,str2)
       Close(fp)
       IF(loggedOnUser.slotNumber=1)
@@ -17587,14 +17276,14 @@ PROC sysopULStats(holdflag)
   IF(holdflag) THEN StrAdd(str,'HOLD')
 
   num:=0
-  IF((ff:=Open(str,MODE_OLDFILE)))>0
+  IF((ff:=Open(str,MODE_OLDFILE)))<>0
     ReadStr(ff,str2)
     num:=Val(str2)
     Close(ff)
   ENDIF
   num++
   ff:=Open(str,MODE_NEWFILE)
-  IF(ff<=0) THEN RETURN
+  IF(ff=0) THEN RETURN
   StringF(str,'\d\n',num)
   fileWrite(ff,str)
   Close(ff)
@@ -18108,14 +17797,7 @@ cinpAgain:
       StringF(fmtstr,'\s\s',nodeWorkDir,str)   /* 11w */
 
       uaf:=Open(fmtstr,MODE_OLDFILE)
-      IF(uaf<=0)
-
-
-        ->#ifdef JOE_AECODE
-        ->             aePuts('\b\nPlease enter a description, you have eight lines for your description.')
-        ->             aePuts('\b\nPress return alone to end.  Begin description with (/) to make upload 'Private'.\b\n')
-        ->             aePuts('                                [--------------------------------------------]\b\n')
-        ->#else
+      IF(uaf=0)
 
         StringF(buff,'\b\nEnter a description, you only have \d lines.',max_desclines)
         aePuts(buff)
@@ -18127,7 +17809,6 @@ cinpAgain:
         ENDIF
 
         aePuts('                                [--------------------------------------------]\b\n')
-        ->#endif
         StringF(fmtstr,'\l\s[13] \s  \s :',str,fsstr,odate)
         aePuts(fmtstr)
 
@@ -18274,7 +17955,6 @@ move_It:     /* gets here if lostcarrier, and file is complete but not when file
       IF((hold=NIL) AND (lcfile=NIL) AND (rzmsg=NIL))
         IF creditAccountTrackUploads(loggedOnUser)
           IF sopt.toggles[TOGGLES_CREDITBYKB] THEN fsize:=Shr(fsize,10)
-          ->loggedOnUser.bytesUpload:=loggedOnUser.bytesUpload+fsize
           addBCD(loggedOnUserMisc.uploadBytesBCD,fsize)
           loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
        ENDIF
@@ -18420,7 +18100,7 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
 
           fh:=Open(tempstr,MODE_OLDFILE)
           x2:=0
-          IF fh>0
+          IF fh<>0
             ReadStr(fh,fcomment)
             WHILE(ReadStr(fh,tempstr)<>-1) OR (StrLen(tempstr)>0)
               scomment.setItem(x2,tempstr)
@@ -18502,7 +18182,6 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
           IF((hold=NIL))
             IF creditAccountTrackUploads(loggedOnUser)
               IF sopt.toggles[TOGGLES_CREDITBYKB] THEN fsize:=Shr(fsize,10)
-              ->loggedOnUser.bytesUpload:=loggedOnUser.bytesUpload+fsize
               addBCD(loggedOnUserMisc.uploadBytesBCD,fsize)
               loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
            ENDIF
@@ -18568,7 +18247,7 @@ PROC handleLCFiles(fname:PTR TO CHAR, fcomment:PTR TO CHAR)
 
   IF fileExists(fileName)
     fh:=Open(fileName,MODE_NEWFILE)
-    IF(fh>0)
+    IF(fh<>0)
       ReadStr(fh,lcString)
       StrCopy(fcomment,lcString)
       Close(fh)
@@ -18577,7 +18256,7 @@ PROC handleLCFiles(fname:PTR TO CHAR, fcomment:PTR TO CHAR)
   ENDIF
 
   fh:=Open(fileName,MODE_NEWFILE)
-  IF(fh>0)
+  IF(fh<>0)
     StrCopy(lcString,'LOST CARRIER ')
     StrAdd(lcString,loggedOnUser.name)
 
@@ -18624,7 +18303,6 @@ PROC calcConfBad(confNum)
   cb:=confBases.item(confNum)
 
   IF(cb.ratioType<2)
-    ->bad:=(cb.ratio*cb.bytesUpload)-cb.bytesDownload
     convertToBCD(0,badBCD)
     FOR i:=1 TO cb.ratio
       addBCD2(badBCD,cb.uploadBytesBCD)
@@ -18657,13 +18335,9 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params) HANDLE
   DEF finalList:PTR TO stdlist
   DEF tmpItem: flagFileItem
   DEF tfsizes=NIL:PTR TO stdlist
-  ->DEF tfsize
   DEF freeDFlags=NIL:PTR TO stdlist
   DEF freeDFlag
   DEF cb:PTR TO confBase
-
-  -> DEF tempStr[255]:STRING
-  ->extern BYTE FreeDownloads,BeenUDd
 
   proto:=0
   nad:=0
@@ -18681,7 +18355,6 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params) HANDLE
     aePuts('\b\n')
   ENDIF
 
-  ->tfsize:=0
   dtfsize:=0
 
   displayULStats(loggedOnUser,loggedOnUserMisc)              /* Show User stats.. Num Dnloads, uploads */
@@ -18698,7 +18371,6 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params) HANDLE
     ENDIF
     IF(loggedOnUser.secBoard<2)
 
-      ->bad:=(loggedOnUser.secLibrary*loggedOnUser.bytesUpload)-loggedOnUser.bytesDownload
       convertToBCD(0,badBCD)
       FOR i:=1 TO loggedOnUser.secLibrary
         addBCD2(badBCD,loggedOnUserMisc.uploadBytesBCD)
@@ -18733,21 +18405,6 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params) HANDLE
   ELSE
     aePuts('Download to Upload Ratio : Disabled.\b\n')
   ENDIF
-  /*
-  // We can replace this with User.Protocol = 'Z'
-
-  mystat=CommandSplit()
-
-  if(mystat>1&&(strlen(Command[1])==1)) {
-    PROTO=2
-    strcpy(str,Command[1])
-    SetProtocol(str)
-    } else  {
-     str[0]=0
-     SetProtocol(str)
-    }
-  */
-
 
   aePuts('Space between filenames.  ')
   IF checkSecurity(ACS_FILE_EXPANSION)=FALSE THEN aePuts('No ')
@@ -18894,7 +18551,6 @@ arestart:
         tempsize:=tempsize+tfsizes.item(i)
         freeDFlag:=freeDFlag+freeDFlags.item(i)
       ENDFOR
-      /*tfsize:=tempsize*/
       IF sopt.toggles[TOGGLES_CREDITBYKB] THEN tempsize:=Shr(tempsize,10)
 
       IF bad<bytesADL THEN tbad:=bad ELSE tbad:=bytesADL
@@ -18997,11 +18653,6 @@ astart2:
   secs:=tsec-(min*60)
   StringF(tempStr,'   \d files, \dk bytes, \d mins \d secs\b\n',numFiles,Div(dtfsize,1024),min,secs)
   aePuts(tempStr)
-
-  /*IF(tbad<tfsize)
-    aePuts('Exceeded bytes limit.\b\n\b\n')
-    RETURN RESULT_SUCCESS
-  ENDIF*/
 
   IF(min>(Div(timeLimit,60)))
     aePuts('  Insufficent time for transfer.\b\n\b\n')
@@ -19216,7 +18867,7 @@ skipMe:
     ENDIF
 
     f:=Open(fn,MODE_OLDFILE)
-    IF(f<=0)
+    IF(f=0)
       StrCopy(path,fn)
       JUMP skipToIt
     ENDIF
@@ -19242,7 +18893,7 @@ skipMe:
     StrAdd(final,fn)
 skipit:
     ft:=Open(final,MODE_OLDFILE)
-    IF(ft>0)
+    IF(ft<>0)
       /**************** ADDED SECURITY FOR VS ******************
           CODE REVISION BY JOSEPH HODGE
       *********************************************************/
@@ -19318,8 +18969,6 @@ PROC showVoteTopics()
         ENDIF
         aePuts(tempstr)
       ENDFOR
-
-      -> '[34m[[0m\r\z\d[2][34m]       [35m'
     ENDIF
   ENDFOR
   doPause()
@@ -19338,7 +18987,7 @@ PROC createVoteTopic()
 
   StringF(votefile,'\sVote/VoteLock',currentConfDir)
   IF fileExists(votefile)=FALSE
-    IF((fh:=Open(votefile,MODE_NEWFILE)))<=0 THEN RETURN RESULT_FAILURE
+    IF((fh:=Open(votefile,MODE_NEWFILE)))=0 THEN RETURN RESULT_FAILURE
     fileWriteLn(fh,'DO NOT DELETE!')
     Close(fh)
   ENDIF
@@ -19675,7 +19324,7 @@ PROC topicVote(topicNum)
   DEF cb:PTR TO confBase
 
   StringF(userfile,'\sVote/uservote\d',currentConfDir,node)
-  IF((fh:=Open(userfile,MODE_NEWFILE)))<=0
+  IF((fh:=Open(userfile,MODE_NEWFILE)))=0
     StringF(tempstr,'\b\nTell \s an error occured creating the uservote file\b\n',cmds.sysopName)
     aePuts(tempstr)
     RETURN
@@ -19762,7 +19411,7 @@ PROC topicVote(topicNum)
   UNTIL (lock<>NIL) OR (i=10)
 
   IF(lock)
-    IF((fh:=Open(userfile,MODE_OLDFILE)))>0
+    IF((fh:=Open(userfile,MODE_OLDFILE)))<>0
       WHILE(ReadStr(fh,votefile)<>-1) OR (StrLen(votefile)>0)
         cnt2:=!readFloatFromFile(votefile)+1.0
         writeFloatToFile(votefile,cnt2)
@@ -19837,7 +19486,7 @@ ENDPROC
 PROC findLastAccount()
   DEF fh,size
 
-  IF((fh:=Open(userDataFile,MODE_OLDFILE)))<=0 THEN RETURN RESULT_FAILURE
+  IF((fh:=Open(userDataFile,MODE_OLDFILE)))=0 THEN RETURN RESULT_FAILURE
 
   Seek(fh,0,OFFSET_END)
   size:=Seek(fh,0,OFFSET_CURRENT)
@@ -19986,7 +19635,7 @@ PROC checkLockAccounts(f6)
   StringF(tempstr,'\sLockAccounts',cmds.bbsLoc)
   IF fileExists(tempstr)
     fh:=Open(tempstr,MODE_OLDFILE)
-    IF fh>0
+    IF fh<>0
       WHILE((ReadStr(fh,tempstr)<>-1) OR (StrLen(tempstr)>0)) AND (res=FALSE)
         IF strCmpi(tempstr,loggedOnUser.name,ALL) THEN res:=TRUE
       ENDWHILE
@@ -20267,14 +19916,12 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
         CASE "O" /* Bytes Uploaded */
           aePuts('[9;21H')
 
-          ->hoozer.bytesUpload:=longNumberInput(hoozer.bytesUpload)
           bcdNumberInput(hoozer3.uploadBytesBCD)
           hoozer.bytesUpload:=convertFromBCD(hoozer3.uploadBytesBCD)
 
           flag:=0
         CASE "P" /* Bytes Downloaded */
           aePuts('[10;21H')
-          ->hoozer.bytesDownload:=longNumberInput(hoozer.bytesDownload)
           bcdNumberInput(hoozer3.downloadBytesBCD)
           hoozer.bytesDownload:=convertFromBCD(hoozer3.downloadBytesBCD)
           flag:=0
@@ -20447,7 +20094,7 @@ PROC listNewAccounts(f6)
   sendCLS()
   aePuts('Searching...')
   maximum:=findLastAccount()
-  IF(fh:=Open(userKeysFile,MODE_OLDFILE))>0
+  IF(fh:=Open(userKeysFile,MODE_OLDFILE))<>0
     FOR x:=1 TO maximum
       stat:=Read(fh,tempUserKeys,SIZEOF userKeys)
       ->//      printf("Name %-31s New User = %d\b\n",GHoozer2.UserName,GHoozer2.New_User)
@@ -20540,7 +20187,7 @@ PROC listCreditAccounts(f6)
   onlineEdit:=1
   foflag:=0
   maximum:=findLastAccount()
-  IF(fh:=Open(userDataFile,MODE_OLDFILE))>0
+  IF(fh:=Open(userDataFile,MODE_OLDFILE))<>0
     FOR x:=1 TO maximum
       stat:=Read(fh,tempUser,SIZEOF user)
       ->//      printf("Name %-31s New User = %d\b\n",GHoozer2.UserName,GHoozer2.New_User)
@@ -20746,8 +20393,6 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
       IF (isTempConf(hoozer,i-1))
         hoozer.uploads:=hoozer.uploads+cb.upload
         hoozer.downloads:=hoozer.downloads+cb.downloads
-        ->hoozer.bytesUpload:=hoozer.bytesUpload+cb.bytesUpload
-        ->hoozer.bytesDownload:=hoozer.bytesDownload+cb.bytesDownload
         hoozer.messagesPosted:=hoozer.messagesPosted+cb.messagesPosted
         addBCD2(hoozer3.downloadBytesBCD,cb.downloadBytesBCD)
         addBCD2(hoozer3.uploadBytesBCD,cb.uploadBytesBCD)
@@ -20805,7 +20450,6 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
     StringF(tempstr,'[9;2H[33mM>[32mDownloads .....[36m:[0m \d[10]\b\n',cb.downloads)
     aePuts(tempstr)
 
-    ->formatUnsignedLong(cb.bytesUpload,tempstr2)
     formatBCD(cb.uploadBytesBCD,tempstr2)
     IF sopt.toggles[TOGGLES_CREDITBYKB]
       StringF(tempstr,'[10;2H[33mO>[32mKBytes Uled ...[36m:[0m \s[10]\b\n',tempstr2)
@@ -20814,7 +20458,6 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
     ENDIF
     aePuts(tempstr)
 
-    ->formatUnsignedLong(cb.bytesDownload,tempstr2)
     formatBCD(cb.downloadBytesBCD,tempstr2)
     IF sopt.toggles[TOGGLES_CREDITBYKB]
       StringF(tempstr,'[11;2H[33mP>[32mKBytes Dled ...[36m:[0m \s[10]\b\n',tempstr2)
@@ -20834,7 +20477,6 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
     StringF(tempstr,'[9;40H[32mDownloads .....[36m:[0m \d[10]\b\n',hoozer.downloads)
     aePuts(tempstr)
 
-    ->formatUnsignedLong(hoozer.bytesUpload,tempstr2)
     formatBCD(hoozer3.uploadBytesBCD,tempstr2)
     IF sopt.toggles[TOGGLES_CREDITBYKB]
       StringF(tempstr,'[10;40H[32mKBytes Uled ...[36m:[0m \s[10]\b\n',tempstr2)
@@ -20843,7 +20485,6 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
     ENDIF
     aePuts(tempstr)
 
-    ->formatUnsignedLong(hoozer.bytesDownload,tempstr2)
     formatBCD(hoozer3.downloadBytesBCD,tempstr2)
     IF sopt.toggles[TOGGLES_CREDITBYKB]
       StringF(tempstr,'[11;40H[32mKBytes Dled ...[36m:[0m \s[10]\b\n',tempstr2)
@@ -20907,9 +20548,6 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
           hoozer.downloads:=hoozer.downloads-oldval+cb.downloads
         CASE "O"
           aePuts('[10;21H')
-          ->oldval:=cb.bytesUpload
-          ->cb.bytesUpload:=numberInput(cb.bytesUpload)
-          ->hoozer.bytesUpload:=hoozer.bytesUpload-oldval+cb.bytesUpload
 
           FOR i:=0 TO 7
             oldBCD[i]:=cb.uploadBytesBCD[i]
@@ -20921,9 +20559,6 @@ PROC conferenceAccounting(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKey
           hoozer.bytesUpload:=convertFromBCD(hoozer3.uploadBytesBCD)
         CASE "P"
           aePuts('[11;21H')
-          ->oldval:=cb.bytesDownload
-          ->cb.bytesDownload:=numberInput(cb.bytesDownload)
-          ->hoozer.bytesDownload:=hoozer.bytesDownload-oldval+cb.bytesDownload
           FOR i:=0 TO 7
             oldBCD[i]:=cb.downloadBytesBCD[i]
           ENDFOR
@@ -20994,7 +20629,7 @@ PROC deleteConfAccess(slot)
     getConfDbFileName(i,temp)
 
     bi:=Open(temp,MODE_OLDFILE)
-    IF(bi>0)
+    IF(bi<>0)
       Seek(bi,(slot-1)*SIZEOF confBase,OFFSET_BEGINNING)
       Read(bi,t,SIZEOF confBase)
       t.confRead:=0
@@ -21113,7 +20748,7 @@ PROC updateAllUsers(confnum,updateType, newVal)
 
   fh:=Open(confDbFile,MODE_READWRITE)
 
-  IF fh>0
+  IF fh<>0
     REPEAT
       stat:=Read(fh,cb,SIZEOF confBase)
       IF stat=SIZEOF confBase
@@ -21176,14 +20811,14 @@ PROC dumpUserStats(confnum)
   StringF(confStatFile,'\sConf\d.Stats',cmds.bbsLoc,confnum)
 
   fhs:=Open(confStatFile,MODE_NEWFILE)
-  IF fhs>0
+  IF fhs<>0
     getConfDbFileName(confnum,confDbFile)
 
     cb:=NEW cb
 
     fh:=Open(confDbFile,MODE_READWRITE)
 
-    IF fh>0
+    IF fh<>0
       n:=1
       StringF(tempstr,'Conference Name: \s',getConfName(confnum))
       fileWriteLn(fhs,tempstr)
@@ -21246,8 +20881,8 @@ PROC resizeConfDB(confnum,newSize)
 
   Rename(confDbFile,oldConfDbFile)
 
-  IF (fh1:=Open(confDbFile,MODE_NEWFILE))>0
-    IF (fh2:=Open(oldConfDbFile,MODE_OLDFILE))>0
+  IF (fh1:=Open(confDbFile,MODE_NEWFILE))<>0
+    IF (fh2:=Open(oldConfDbFile,MODE_OLDFILE))<>0
       WHILE newSize>0
         IF (Read(fh2,cb,SIZEOF confBase)=SIZEOF confBase)
           Write(fh1,cb,SIZEOF confBase)
@@ -21532,7 +21167,6 @@ PROC displayAccount(who:LONG, hoozer:PTR TO user, hoozer2: PTR TO userKeys, hooz
   StringF(tempStr,'[7;63H[33m%[32mToday[36m: [0m\l\d[6]',hoozer2.timesOnToday AND $FFFF)
   aePuts(tempStr)
 
-  ->formatUnsignedLong(hoozer.bytesUpload,tempStr2)
   formatBCD(hoozer3.uploadBytesBCD,tempStr2)
 
   IF sopt.toggles[TOGGLES_CREDITBYKB]
@@ -21546,7 +21180,6 @@ PROC displayAccount(who:LONG, hoozer:PTR TO user, hoozer2: PTR TO userKeys, hooz
   StringF(tempStr,'[9;39H[32mLast Called ...[36m:[0m \s',tempStr2)
   aePuts(tempStr)
 
-  ->formatUnsignedLong(hoozer.bytesDownload,tempStr2)
   formatBCD(hoozer3.downloadBytesBCD,tempStr2)
   IF sopt.toggles[TOGGLES_CREDITBYKB]
     StringF(tempStr,'[10;1H[33mP> [32mKBytes Dled ...[36m:[0m \l\s[14]',tempStr2)
@@ -21716,7 +21349,6 @@ PROC displayAccountInfo(who:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, h
   StringF(tempStr,'[7;63H[33m%[32mToday[36m: [0m\l\d[6]',hoozer2.timesOnToday AND $FFFF)
   aePuts(tempStr)
 
-  ->formatUnsignedLong(hoozer.bytesUpload,tempStr2)
   formatBCD(hoozer3.uploadBytesBCD,tempStr2)
   StringF(tempStr,'[9;21H\l\s[14]',tempStr2)
   aePuts(tempStr)
@@ -21725,7 +21357,6 @@ PROC displayAccountInfo(who:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, h
   StringF(tempStr,'[9;56H\s',tempStr2)
   aePuts(tempStr)
 
-  ->formatUnsignedLong(hoozer.bytesDownload,tempStr2)
   formatBCD(hoozer3.downloadBytesBCD,tempStr2)
   StringF(tempStr,'[10;21H\l\s[14]',tempStr2)
   aePuts(tempStr)
@@ -22030,14 +21661,14 @@ PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO 
   DEF fh,fh2,fh3,v
   DEF stat,stat2,stat3,match
 
-  IF((fh:=Open(userDataFile,MODE_OLDFILE)))<=0 THEN RETURN RESULT_FAILURE
+  IF((fh:=Open(userDataFile,MODE_OLDFILE)))=0 THEN RETURN RESULT_FAILURE
 
-  IF((fh2:=Open(userMiscFile,MODE_OLDFILE)))<=0
+  IF((fh2:=Open(userMiscFile,MODE_OLDFILE)))=0
     Close(fh)
     RETURN RESULT_FAILURE
   ENDIF
 
-  IF((fh3:=Open(userKeysFile,MODE_OLDFILE)))<=0
+  IF((fh3:=Open(userKeysFile,MODE_OLDFILE)))=0
     Close(fh)
     Close(fh2)
     RETURN RESULT_FAILURE
@@ -22308,14 +21939,14 @@ PROC applyBulkPresetChanges(preset:LONG,allConf:LONG,areaName:PTR TO CHAR,secLev
   DEF stat,stat2,stat3,match
   DEF tempStr[255]:STRING
 
-  IF((fh:=Open(userDataFile,MODE_OLDFILE)))<=0 THEN RETURN RESULT_FAILURE
+  IF((fh:=Open(userDataFile,MODE_OLDFILE)))=0 THEN RETURN RESULT_FAILURE
 
-  IF((fh2:=Open(userMiscFile,MODE_OLDFILE)))<=0
+  IF((fh2:=Open(userMiscFile,MODE_OLDFILE)))=0
     Close(fh)
     RETURN RESULT_FAILURE
   ENDIF
 
-  IF((fh3:=Open(userKeysFile,MODE_OLDFILE)))<=0
+  IF((fh3:=Open(userKeysFile,MODE_OLDFILE)))=0
     Close(fh)
     Close(fh2)
     RETURN RESULT_FAILURE
@@ -22401,9 +22032,9 @@ PROC calcAffected(areaName:PTR TO CHAR, secLevel:PTR TO CHAR)
   DEF fh,fh2,tot=0,all=0,v
   DEF stat,stat2, match
 
-  IF((fh:=Open(userDataFile,MODE_OLDFILE)))<=0 THEN RETURN RESULT_FAILURE
+  IF((fh:=Open(userDataFile,MODE_OLDFILE)))=0 THEN RETURN RESULT_FAILURE
 
-  IF((fh2:=Open(userKeysFile,MODE_OLDFILE)))<=0
+  IF((fh2:=Open(userKeysFile,MODE_OLDFILE)))=0
     Close(fh)
     RETURN RESULT_FAILURE
   ENDIF
@@ -22538,15 +22169,6 @@ PROC who(opt)
   DEF s:PTR TO singlePort
   DEF singles[MAXNODES]:ARRAY OF LONG
   DEF status,i,olmBlocked
-
-  /*  aePuts('[32m.---+----------------------+---------------------------+----------------------.[0m\b\n')
-  aePuts('[32m|[33mNd#[32m|[36m Name/Handle          [32m| [36mLocation         ')
-  aePuts('[32m         |[36m Action               [32m|[0m\b\n')
-  aePuts('[32m)---+----------------------+---------------------------+----------------------([0m\b\n')
-  aePuts('[32m|---+----------------------+---------------------------+----------------------|[0m\b\n')
-  aePuts('[34m|---+---------------------+---------------------+---------------------+----|[0m\b\n')
-
-  */
 
   aePuts('\b\n')
   aePuts('\b\n')
@@ -22772,7 +22394,7 @@ PROC internalCommand2(params)
     loop:=0
     REPEAT
       StringF(temp,'\sNode\d/Callerslog',cmds.bbsLoc,loop)
-      IF(fh:=Open(temp,MODE_OLDFILE))>0
+      IF(fh:=Open(temp,MODE_OLDFILE))<>0
         Close(fh)
         StringF(temp,'\d - Callerslog for Node \d\b\n',loop,loop)
         aePuts(temp)
@@ -22790,7 +22412,7 @@ PROC internalCommand2(params)
     n:=Val(temp)
 
     StringF(temp,'\sNode\d/Callerslog',cmds.bbsLoc,n)
-    IF(fh:=Open(temp,MODE_OLDFILE))>0
+    IF(fh:=Open(temp,MODE_OLDFILE))<>0
       Close(fh)
       StringF(temp,'\d - Callerslog for Node \d\b\n',n,n)
       aePuts(temp)
@@ -22881,7 +22503,7 @@ PROC internalCommandB(params)
 
   StrCopy(str,confScreenDir)
   StrAdd(str,'Bulletins/BullHelp.txt')
-  IF((fh:=Open(str,MODE_OLDFILE)))<=0
+  IF((fh:=Open(str,MODE_OLDFILE)))=0
     myError(ERR_NO_BULLS)
     RETURN RESULT_SUCCESS
   ENDIF
@@ -23193,13 +22815,6 @@ fmSkip1:
         StrAdd(str,ray)
         StringF(ray,'Scanning directory \d\b\n',fLLoop)
         aePuts(ray)
-        /*  sprintf(tempfile,"T:tdir.%d",Cmds->AcLvl[LVL_NODE_NUMBER]);
-          -> now copy to T: and use the T:
-          ->if((FileCopy(str,tempfile))) {
-          ->     strcpy(str,tempfile);
-          ->     fcopy = TRUE;
-          ->}
-        */
       ELSE
         StrAdd(str,'DIR')
         StringF(ray,'\d',fLLoop)      /* add dir Number */
@@ -23816,7 +23431,7 @@ ENDPROC RESULT_SUCCESS
 
 PROC internalCommandVER()
   DEF tempStr[255]:STRING
-  StringF(tempStr,'\b\nAmiExpress \s Copyright Copyright ©2018 Darren Coles\b\n',expressVer)
+  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ©2018 Darren Coles\b\n',expressVer,expressDate)
   aePuts(tempStr)
   aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   StringF(tempStr,'Registered to \s.\b\n',regKey)
@@ -24227,7 +23842,6 @@ PROC internalCommandZ(params)
     RETURN RESULT_FAILURE
   ENDIF
 
-  ->dupy:=0
   parseParams(params)
 
   IF(parsedParams.count()>0)
@@ -24272,13 +23886,6 @@ zSkip1:
           StrAdd(str,ray)
           StringF(ray,'Scanning directory \d\b\n',fLLoop)
           aePuts(ray)
-          /*  sprintf(tempfile,"T:tdir.%d",Cmds->AcLvl[LVL_NODE_NUMBER]);
-            -> now copy to T: and use the T:
-            ->if((FileCopy(str,tempfile))) {
-            ->     strcpy(str,tempfile);
-            ->     fcopy = TRUE;
-            ->}
-          */
         ELSE
           StrAdd(str,'DIR')
           StringF(ray,'\d',fLLoop)      /* add dir Number */
@@ -24306,8 +23913,6 @@ zSkip1:
   aePuts('\b\n')
   IF(fcopy) THEN DeleteFile(tempfile)  ->(RTS)
 ENDPROC RESULT_SUCCESS
-
-->#define ln(x,y) current=myzip+(y*100)+x;
 
 PROC internalCommandZOOM()
   DEF zoomOption
@@ -24486,7 +24091,7 @@ PROC asciiZoomConf(confNum,confNameType)
 
     StringF(tempstr,'\sMsgBase/HeaderFile',getConfLocation(confNum))
 
-    IF (fi:=Open(tempstr,MODE_OLDFILE))<=0
+    IF (fi:=Open(tempstr,MODE_OLDFILE))=0
       aePuts('Message Base does not exist\b\n')
       RETURN 0
     ENDIF
@@ -24494,7 +24099,7 @@ PROC asciiZoomConf(confNum,confNameType)
     StringF(zoomName,'\sNode\d/PlayPen/MESSAGES.DAT',cmds.bbsLoc,node)
     fo:=Open(zoomName,MODE_READWRITE)
     Seek(fo,0,OFFSET_END)
-    IF(fo<=0)
+    IF(fo=0)
       Close(fi)
       RETURN 0
     ENDIF
@@ -24559,7 +24164,7 @@ PROC asciiZoomConf(confNum,confNameType)
             StringF(tempstr2,'Conf   : [\d] \s\n\n',relConf(confNum),getConfName(confNum))
             fileWrite(fo,tempstr2)
             StringF(tempstr2,'\sMsgbase/\d',getConfLocation(confNum),mailHeader.msgNumb)
-            IF(fi1:=Open(tempstr2,MODE_OLDFILE))>0
+            IF(fi1:=Open(tempstr2,MODE_OLDFILE))<>0
               WHILE(Fgets(fi1,tempstr,80)<>NIL)
                 fileWrite(fo,tempstr)
               ENDWHILE
@@ -24683,7 +24288,7 @@ PROC qwkZoomConf(confNum,recNum,confNameType)
 
     StringF(tempstr,'\sMsgBase/HeaderFile',getConfLocation(confNum))
 
-    IF (fi:=Open(tempstr,MODE_OLDFILE))<=0
+    IF (fi:=Open(tempstr,MODE_OLDFILE))=0
       aePuts('Message Base does not exist\b\n')
       RETURN 0,recNum
     ENDIF
@@ -24691,7 +24296,7 @@ PROC qwkZoomConf(confNum,recNum,confNameType)
     StringF(zoomName,'\sNode\d/PlayPen/MESSAGES.DAT',cmds.bbsLoc,node)
     fo:=Open(zoomName,MODE_READWRITE)
     Seek(fo,0,OFFSET_END)
-    IF(fo<=0)
+    IF(fo=0)
       Close(fi)
       RETURN 0,recNum
     ENDIF
@@ -24699,7 +24304,7 @@ PROC qwkZoomConf(confNum,recNum,confNameType)
     StringF(zoomName,'\sNode\d/PlayPen/MESSAGES.NDX',cmds.bbsLoc,node)
     fo2:=Open(zoomName,MODE_READWRITE)
     Seek(fo2,0,OFFSET_END)
-    IF(fo2<=0)
+    IF(fo2=0)
       Close(fo)
       Close(fi)
       RETURN 0,recNum
@@ -24830,7 +24435,7 @@ PROC qwkZoom()
   ->CREATE CONTROL.DAT
   StringF(zoomName,'\sNode\d/PlayPen/CONTROL.DAT',cmds.bbsLoc,node)
   fo:=Open(zoomName,MODE_NEWFILE)
-  IF(fo<=0)
+  IF(fo=0)
     RETURN 0
   ENDIF
   fileWriteLn(fo,cmds.bbsName)
@@ -24880,7 +24485,7 @@ PROC qwkZoom()
 
   StringF(zoomName,'\sNode\d/PlayPen/MESSAGES.DAT',cmds.bbsLoc,node)
   fo:=Open(zoomName,MODE_NEWFILE)
-  IF(fo<=0)
+  IF(fo=0)
     DeleteFile(zoomName)
     RETURN 0
   ENDIF
@@ -25010,8 +24615,8 @@ PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,match
 
   foundit:=FALSE
 
-  IF (fh1:=Open(dirname,MODE_NEWFILE))>0
-    IF (fh2:=Open(oldDirName,MODE_OLDFILE))>0
+  IF (fh1:=Open(dirname,MODE_NEWFILE))<>0
+    IF (fh2:=Open(oldDirName,MODE_OLDFILE))<>0
       found:=0
       currpos:=Seek(fh2,0,OFFSET_CURRENT)
       WHILE(Fgets(fh2,dirline,255)<>NIL)
@@ -25148,7 +24753,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
     stat:=maxConfDir
     WHILE (destDir=-1) AND (stat>0)
       StringF(path,'\sDIR\d',getConfLocation(destConf),stat)
-      IF (fh1:=Open(path,MODE_OLDFILE))>0
+      IF (fh1:=Open(path,MODE_OLDFILE))<>0
         Fgets(fh1,dirline,255)
         dirline[13]:=" "
         parseParams(dirline)
@@ -25210,10 +24815,10 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
     RETURN RESULT_FAILURE
   ENDIF
 
-  IF (fh1:=Open(dirname,MODE_NEWFILE))>0
-    IF (fh2:=Open(oldDirName,MODE_OLDFILE))>0
-      IF (fh3:=Open(destDirStr,MODE_NEWFILE))>0
-        IF (fh4:=Open(oldDestDirName,MODE_OLDFILE))>0
+  IF (fh1:=Open(dirname,MODE_NEWFILE))<>0
+    IF (fh2:=Open(oldDirName,MODE_OLDFILE))<>0
+      IF (fh3:=Open(destDirStr,MODE_NEWFILE))<>0
+        IF (fh4:=Open(oldDestDirName,MODE_OLDFILE))<>0
           found:=0
           currpos:=Seek(fh2,0,OFFSET_CURRENT)
           WHILE(Fgets(fh2,dirline,255)<>NIL)
@@ -25447,7 +25052,7 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,searchList: PTR TO stringli
 
 
   fi:=Open(fname,MODE_OLDFILE)
-  IF(fi<=0)
+  IF(fi=0)
     RETURN RESULT_NOT_FOUND,0,0
   ENDIF
 
@@ -25550,7 +25155,7 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
   UpperStr(search_string);
 
   fi:=Open(fname,MODE_OLDFILE)
-  IF(fi<=0)
+  IF(fi=0)
     FreeMem(myzip,25600)
     RETURN RESULT_SUCCESS
   ENDIF
@@ -25728,7 +25333,7 @@ PROC displayIt(fname: PTR TO CHAR)
   DEF fp,res
 
   fp:=Open(fname,MODE_OLDFILE)
-  IF(fp<=0)
+  IF(fp=0)
     myError(4) ->(RTS) FileListError();
     RETURN RESULT_SUCCESS
   ENDIF
@@ -25955,7 +25560,7 @@ PROC myNewFiles(params)
       RETURN stat
     ENDIF
     fp1:=Open(str,MODE_OLDFILE)
-    IF(fp1<=0)
+    IF(fp1=0)
       aePuts('No Files are available.\b\n\b\n')
       IF(fcopy) THEN DeleteFile(tempfile)
       RETURN RESULT_SUCCESS
@@ -26441,7 +26046,6 @@ PROC processLoggedOnUser()
       loggedOnUser.chatRemain:=loggedOnUser.chatLimit
       loggedOnUser.dailyBytesDld:=0
       loggedOnUser.timeTotal:=loggedOnUser.timeLimit
-      ->loggedOnUser.timeLastOn:=currTime
     ELSE
       loggedOnUserKeys.timesOnToday:=loggedOnUserKeys.timesOnToday+1
       StringF(string,'timeused debug: \s logon same day,  currday \d, lastday \d, timeused \d',loggedOnUser.name,currDay,lastDay,loggedOnUser.timeUsed)
@@ -26567,9 +26171,18 @@ PROC processSysopLogon()
       END loggedOnUser
       END loggedOnUserKeys
       END loggedOnUserMisc
+      loggedOnUser:=NIL
+      loggedOnUserKeys:=NIL
+      loggedOnUserMisc:=NIL
       reqState:=REQ_STATE_LOGOFF
       RETURN
     ENDIF
+  ENDIF
+
+  IF (netTrans<>0)
+    strCpy(loggedOnUser.name,'NetMail Transfer',31)
+    strCpy(loggedOnUser.location,'In Progress...',30)
+    StrCopy(connectString,'SYSOP_LOCAL')
   ENDIF
 
   masterLoadPointers(loggedOnUser)
@@ -26600,6 +26213,20 @@ PROC processSysopLogon()
     IF (InStr(tempstr,'R',0)>=0) THEN ripMode:=TRUE
   ELSE
     runSysCommand('ANSI','')
+  ENDIF
+
+  IF (netTrans<>0)
+    runSysCommand(arg3,'')
+    logoffLog('N')
+    END loggedOnUser
+    END loggedOnUserKeys
+    END loggedOnUserMisc
+    loggedOnUser:=NIL
+    loggedOnUserKeys:=NIL
+    loggedOnUserMisc:=NIL
+    reqState:=REQ_STATE_LOGOFF
+    checkShutDown()
+    RETURN
   ENDIF
 
   stateData:=0
@@ -26698,7 +26325,7 @@ PROC checkPassword()
         conPuts('\b\nSystem dropping to UUCP...')
         callersLog('\tReceiving UUCP feed')
         purgeLineEnd()
-        IF(lfh:=Open('NIL:',MODE_OLDFILE))>0
+        IF(lfh:=Open('NIL:',MODE_OLDFILE))<>0
           StringF(tempStr,'\sUtils/uucico -D \s -U \d -Getty -xx',cmds.bbsLoc,cmds.serDev,cmds.serDevUnit)
           Execute(tempStr,IF debug THEN 0 ELSE lfh,IF debug THEN 0 ELSE lfh)
           Close(lfh)
@@ -26857,8 +26484,6 @@ PROC processLogon()
   aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
   aePuts(tempStr)
-  ->strcpy(GSTR2,GetTheTime(Time_system))
-  ->strcpy(GSTR3,GetTheDate(Time_system))
   formatLongDateTime(getSystemTime(),dateStr)
   StringF(tempStr,'\b\nConnection occured at \s.\b\n',dateStr)
 
@@ -27140,7 +26765,7 @@ PROC processAwait()
     statPrintUser(NIL,NIL,NIL)
     IF dStatBar THEN clearStatusPane()
 
-    IF (sopt.trapDoor=FALSE)
+    IF (sopt.trapDoor=FALSE) AND (netTrans=0)
       IF (KickVersion(40)) AND (bitPlanes>2)
         aePuts('[37m[ s')
       ENDIF
@@ -27172,7 +26797,7 @@ PROC processAwait()
     ioFlags[IOFLAG_SER_IN]:=0
   ENDIF
 
-  IF (sopt.trapDoor=FALSE)
+  IF (sopt.trapDoor=FALSE) AND (netTrans=0)
     wasControl,ch:=processInputMessage(1,Shl(1,ownDevSignal),FALSE,FALSE)
     IF (ch=RESULT_SIGNALLED)
       suspendBBS(TRUE)
@@ -27182,13 +26807,18 @@ PROC processAwait()
     IF dStatBar THEN clearStatusPane()
   ENDIF
 
-  IF (checkSer()) OR (sopt.trapDoor) OR (instantLogon)
-    IF checkIncomingCall()=RESULT_CONNECT
-      debugLog(LOG_DEBUG,'REMOTE LOGON')
-      ioFlags[IOFLAG_SCR_OUT]:=-1
+  IF (netTrans<>0)
+    logonType:=LOGON_TYPE_SYSOP
+    reqState:=REQ_STATE_SYSOPLOGON
+  ELSE
+    IF (checkSer()) OR (sopt.trapDoor) OR (instantLogon) OR (checkTelnetConnection())
+      IF checkIncomingCall()=RESULT_CONNECT
+        debugLog(LOG_DEBUG,'REMOTE LOGON')
+        ioFlags[IOFLAG_SCR_OUT]:=-1
 
-      logonType:=LOGON_TYPE_REMOTE
-      reqState:=REQ_STATE_LOGON
+        logonType:=LOGON_TYPE_REMOTE
+        reqState:=REQ_STATE_LOGON
+      ENDIF
     ENDIF
   ENDIF
 
@@ -27266,7 +26896,6 @@ PROC newUserAccount(userName: PTR TO CHAR)
   stat:=doNewUser()
   IF stat<>RESULT_SUCCESS THEN RETURN RESULT_SLEEP_LOGOFF
 
-  ->InitUser(&User,&User_keys);
   IF (loggedOnUser.dailyBytesLimit<>0)
     bytesADL:=loggedOnUser.dailyBytesLimit
   ELSE
@@ -27495,7 +27124,7 @@ qAgain:
 
   StringF(string,'\sNode\d/TempAns',cmds.bbsLoc,node)
 
-  IF((fp1:=Open(string,MODE_READWRITE))<=0) THEN RETURN RESULT_GOODBYE
+  IF((fp1:=Open(string,MODE_READWRITE))=0) THEN RETURN RESULT_GOODBYE
   Seek(fp1,0,OFFSET_END)
 
   formatLongDateTime(getSystemTime(),datestr)
@@ -27508,9 +27137,9 @@ qAgain:
   IF (runSysCommand('SCRIPT','')=FALSE)
 
     fp2:=Open(filename,MODE_OLDFILE)
-    IF(fp2<=0) THEN RETURN RESULT_SUCCESS
+    IF(fp2=0) THEN RETURN RESULT_SUCCESS
 
-    IF((fp1:=Open(string,MODE_READWRITE)))<=0 THEN RETURN RESULT_GOODBYE
+    IF((fp1:=Open(string,MODE_READWRITE)))=0 THEN RETURN RESULT_GOODBYE
     Seek(fp1,0,OFFSET_END)
 
     -> read & verify Questionaire
@@ -27554,14 +27183,14 @@ qAgain:
 qbreak:
   aePuts('Yes..\b\n\b\n')
 
-  IF(fp1:=Open(afilename,MODE_READWRITE))<=0
+  IF(fp1:=Open(afilename,MODE_READWRITE))=0
     fp1:=Open(afilename,MODE_NEWFILE)
   ELSE
     Seek(fp1,0,OFFSET_END)
   ENDIF
 
   StringF(string,'\sNode\d/TempAns',cmds.bbsLoc,node)
-  IF((fp2:=Open(string,MODE_OLDFILE)))>0
+  IF((fp2:=Open(string,MODE_OLDFILE)))<>0
     WHILE(TRUE)
       EXIT ((ReadStr(fp2,c))=-1) AND (StrLen(c)=0)
       fileWriteLn(fp1,c)
@@ -27669,7 +27298,7 @@ PROC findFreeSlot()
   DEF tempStr[255]:STRING
 
   fh:=Open(userDataFile,MODE_OLDFILE)
-  IF(fh<=0) THEN RETURN 1
+  IF(fh=0) THEN RETURN 1
 
   IF (sopt.toggles[TOGGLES_REUSEINACTIVE])=FALSE
     Seek(fh,0,OFFSET_END)
@@ -27737,7 +27366,7 @@ PROC openZmodemStat()
   DEF tags,tags2,vi
   DEF tempstr[255]:STRING
 
-  IF zModemInfo.downloading
+  IF zModemInfo.currentOperation=ZMODEM_DOWNLOAD
     StringF(tempstr,'[Node \d] Send Window (??/??)',node)
     strCpy(zModemInfo.titleBar,tempstr,ALL)
   ELSE
@@ -27949,7 +27578,7 @@ PROC openExpressScreen()
   IF pubLock THEN UnlockPubScreen(NIL,pubLock)
   IF window=NIL THEN RETURN ERR_WINDOW
 
-  IF zModemInfo.inProgress<>ZMODEM_NONE
+  IF zModemInfo.currentOperation<>ZMODEM_NONE
     openZmodemStat()
   ENDIF
 
@@ -28062,9 +27691,9 @@ PROC closeExpressScreen()
   scropen:=FALSE
 ENDPROC
 
-PROC waitSocketLib()
+PROC waitSocketLib(leaveOpen=FALSE)
   DEF n=0,id=0
-  socketbase:=OpenLibrary('bsdsocket.library', 2)
+  IF socketbase=NIL THEN socketbase:=OpenLibrary('bsdsocket.library', 2) ELSE leaveOpen:=TRUE
   WHILE (socketbase=NIL) AND (n<60)
     Delay(50)
     n++
@@ -28078,10 +27707,62 @@ PROC waitSocketLib()
       n++
       id:=GetHostId()
     ENDWHILE
+    IF leaveOpen THEN RETURN
     CloseLibrary(socketbase)
   ENDIF
   socketbase:=NIL
 ENDPROC
+
+PROC checkTelnetConnection()
+ENDPROC (telnetSocket>=0) AND (offHookFlag=FALSE)
+
+PROC checkTelnetData()
+  DEF count
+  DEF buf[1]:STRING
+  
+  IF telnetSocket=-1 THEN RETURN FALSE
+  
+  count:=Recv(telnetSocket,buf,1,MSG_PEEK)
+ENDPROC count>0
+
+PROC openListenSocket(port)
+  DEF server_s
+  DEF servaddr=0:PTR TO sockaddr_in
+  DEF tempStr[255]:STRING
+
+	IF((server_s:=Socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    StringF(tempStr,'/X Telnet: Error creating listening socket. (\d)\b\n',Errno())
+		aePuts(tempStr)
+		RETURN -1
+	ENDIF
+ 
+  servaddr:=NEW servaddr
+  servaddr.sin_len:=SIZEOF sockaddr_in
+  servaddr.sin_family:=AF_INET
+  servaddr.sin_port:=port
+  servaddr.sin_addr:=INADDR_ANY
+
+	IF(Bind(server_s, servaddr, SIZEOF sockaddr_in) < 0)
+		StringF(tempStr,'/X Telnet: Error calling bind() for port \d, error=\d\b\n',port,Errno());
+    aePuts(tempStr)
+    CloseSocket(server_s)
+    END servaddr
+		RETURN -1
+	ENDIF
+
+	IF(Listen(server_s, LISTENQ) < 0)
+		StringF(tempStr,'/X Telnet: Error calling listen() for port \d, error=\d\b\n',port,Errno());
+    aePuts(tempStr)
+    CloseSocket(server_s)
+    END servaddr
+    RETURN -1
+	ENDIF
+
+  IoctlSocket(server_s,FIONBIO,[1])
+
+  END servaddr
+ENDPROC server_s
+
 
 PROC main() HANDLE
   DEF temppath[255]:STRING
@@ -28092,14 +27773,49 @@ PROC main() HANDLE
   DEF p : PTR TO CHAR
   DEF tempfh
   DEF transptr:PTR TO mln
+  DEF oldWinPtr
+  DEF proc: PTR TO process
 
-  StrCopy(expressVer,'v5.1.1-alpha',ALL)
-  StrCopy(expressDate,'23-Aug-2019',ALL)
+  StrCopy(expressVer,'v5.2.0-alpha',ALL)
+  StrCopy(expressDate,'23-Oct-2019',ALL)
 
   InitSemaphore(bgData)
+  
+  ->set windowptr to -1 to prevent any AmigaDOS insert volume dialogs
+  proc:=FindTask(0)
+  oldWinPtr:=proc.windowptr
+  proc.windowptr:=-1
 
-  IF StrLen(arg)>0
-    node:=Val(arg)
+  ->extract arg1, arg2 and arg3 from arg using space as delimiter
+  StrCopy(tempstr,arg)
+  IF (i:=InStr(tempstr,' '))<>-1
+    StrCopy(arg1,tempstr,i)
+    StrCopy(tempstr,tempstr+i+1)
+    IF (i:=InStr(tempstr,' '))<>-1
+      StrCopy(arg2,tempstr,i)
+      StrCopy(tempstr,tempstr+i+1)
+      IF (i:=InStr(tempstr,' '))<>-1
+        StrCopy(arg3,tempstr,i)
+      ELSE
+        StrCopy(arg3,tempstr)
+      ENDIF
+    ELSE
+      StrCopy(arg2,tempstr)
+    ENDIF
+  ELSE
+    StrCopy(arg1,tempstr)
+  ENDIF
+
+  IF StrLen(arg3)>0
+    IF strCmpi(arg3,'STICKY',ALL)
+      netTrans:=3
+    ELSE
+      netTrans:=2
+    ENDIF
+  ENDIF
+
+  IF StrLen(arg1)>0
+    node:=Val(arg1)
   ELSE
     debug:=TRUE
   ENDIF
@@ -28128,6 +27844,7 @@ PROC main() HANDLE
 
   IF (diskfontbase:=OpenLibrary('diskfont.library', 37))=NIL THEN Raise(ERR_NO_DISKFONT)
 
+  socketbase:=OpenLibrary('bsdsocket.library', 4)
 
   recFileNames:=NEW recFileNames.stringlist()
 
@@ -28169,6 +27886,12 @@ PROC main() HANDLE
 
   IF createServerRP()=RESULT_FAILURE THEN Raise(ERR_SERVERRP)
 
+  IF netTrans=3
+    ->STICKY PARAMETER resets clears trapdoor
+    sopt.trapDoor:=0
+    netTrans:=0
+  ENDIF
+
   saveA4()
 
   createResControl()
@@ -28205,6 +27928,10 @@ PROC main() HANDLE
   ENDIF
 
   ringCount:=readToolTypeInt(TOOLTYPE_NODE,node,'RINGCOUNT')
+
+  IF checkToolTypeExists(TOOLTYPE_NODE,node,'TELNET')
+    waitSocketLib(TRUE)
+  ENDIF
 
   IF checkToolTypeExists(TOOLTYPE_NODE,node,'TELNETD')
     ringCount:=2;
@@ -28280,7 +28007,7 @@ PROC main() HANDLE
   IF(openSerial(cmds.openingBaud,8,1)<>0) THEN Raise(ERR_NOSERIAL)
 
   IF(sopt.trapDoor)
-    IF (i:=InStr(arg,' '))<>-1
+    IF StrLen(arg2)>0
       StringF(trapConnect,'CONNECT \s',arg+i+1)
     ELSE
       StrCopy(trapConnect,'CONNECT 19200')
@@ -28533,16 +28260,18 @@ PROC main() HANDLE
     StrCopy(regKey,'NONE')
   ENDIF
 
-  ->readToolType(TOOLTYPE_NODE,node,'SCREENS',temppath)
   StrCopy(nodeScreenDir,sopt.nodeScreens,ALL)
 
   StringF(nodeWorkDir,'\sNode\d/Work/',cmds.bbsLoc,node)
 
-  Forbid()
-  SetTaskPri(FindTask(0),cmds.taskPri)
-  Permit()
-
-  -> E-Note: E automatically opens the Intuition library
+  IF (proc.task.ln.pri<>cmds.taskPri)
+    WriteF('setting task priority from \d to \d\n',proc.task.ln.pri,cmds.taskPri)
+    Forbid()
+    SetTaskPri(FindTask(0),cmds.taskPri)
+    Permit()
+  ELSE
+    WriteF('not changing task priority already set to \d\n',proc.task.ln.pri)
+  ENDIF
 
   IF (debug) OR (sopt.iconify=FALSE) THEN openExpressScreen()
 
@@ -28580,6 +28309,10 @@ PROC main() HANDLE
   ENDIF
 
  EXCEPT DO
+  IF proc<>NIL
+    proc.windowptr:=oldWinPtr
+  ENDIF
+  
   IF sopt<>NIL
     setEnvStat(ENV_SHUTDOWN)
 
@@ -28652,7 +28385,7 @@ PROC main() HANDLE
   IF broker_mp
     -> Empty the port of CxMsgs
     WHILE msg:=GetMsg(broker_mp) DO ReplyMsg(msg)
-    DeleteMsgPort(broker_mp) -> E-Note: C version incorrectly uses DeletePort()
+    DeleteMsgPort(broker_mp)
   ENDIF
   IF cxbase THEN CloseLibrary(cxbase)
 
@@ -28672,7 +28405,6 @@ PROC main() HANDLE
   IF (doorExtSig<>NIL) THEN FreeSignal(doorExtSig)
   doorExtSig:=NIL
 
-  -> E-Note: we can print a minimal error message
   SELECT exception
   CASE ERR_SSL
     debugLog(LOG_ERROR,'Error: failed during ssl setup (open AmiSSL library or create ssl context')

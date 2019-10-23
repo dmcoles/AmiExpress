@@ -31,6 +31,12 @@
        'asl',
        'libraries/asl',
        'wb',
+
+        'socket',
+        'net/netdb',
+        'net/in',
+        'net/socket',
+
        'icon'
 
   MODULE '*axcommon',
@@ -67,6 +73,12 @@ aAeicon_config:	dc.b 'aeicon.config',0
 */
        
 ENUM ERR_NONE,ERR_ALREADY_RUNNING,ERR_STARTUP, ERR_VALIDATE,ERR_NO_DISKFONT
+
+CONST LISTENQ=100
+CONST EINTR=4
+CONST MAX_LINE=255
+CONST FIONBIO=$8004667e
+CONST EWOULDBLOCK=35
 
 CONST TAG_END=0    
 
@@ -314,6 +326,7 @@ DEF myappport=NIL:PTR TO mp
 DEF doMultiCom
 
 DEF quietNode[MAX_NODES]:ARRAY OF INT
+DEF telnetNode[MAX_NODES]:ARRAY OF INT
 DEF bbsStack
 
 DEF nodes[MAX_NODES]:ARRAY OF INT
@@ -433,6 +446,8 @@ DEF do_appiconj=0
 DEF maddItemi=0
 
 DEF startupCompleteScript[255]:STRING
+
+DEF telnetPort=-1
 
 PROC init() OF itemsList  ->constructor
   self.lastUsers[0]:=String(36)
@@ -561,6 +576,64 @@ PROC freeGads()
   visInfo:=NIL
   eGList:=NIL
 ENDPROC
+
+PROC waitSocketLib()
+  DEF n=0,id=0
+  IF socketbase=NIL THEN socketbase:=OpenLibrary('bsdsocket.library', 2)
+  WHILE (socketbase=NIL) AND (n<60)
+    Delay(50)
+    n++
+    socketbase:=OpenLibrary('bsdsocket.library', 2)
+  ENDWHILE
+  IF socketbase
+    n:=0
+    id:=GetHostId()
+    WHILE(id=0) AND (n<60)
+      Delay(50)
+      n++
+      id:=GetHostId()
+    ENDWHILE
+  ENDIF
+ENDPROC
+
+PROC openListenSocket(port)
+  DEF server_s
+  DEF servaddr=0:PTR TO sockaddr_in
+  DEF tempStr[255]:STRING
+
+	IF((server_s:=Socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
+    ->StringF(tempStr,'/X Telnet: Error creating listening socket. (\d)\b\n',Errno())
+		->aePuts(tempStr)
+		RETURN -1
+	ENDIF
+ 
+  servaddr:=NEW servaddr
+  servaddr.sin_len:=SIZEOF sockaddr_in
+  servaddr.sin_family:=AF_INET
+  servaddr.sin_port:=port
+  servaddr.sin_addr:=INADDR_ANY
+
+	IF(Bind(server_s, servaddr, SIZEOF sockaddr_in) < 0)
+		->StringF(tempStr,'/X Telnet: Error calling bind() for port \d, error=\d\b\n',port,Errno());
+    ->aePuts(tempStr)
+    CloseSocket(server_s)
+    END servaddr
+		RETURN -1
+	ENDIF
+
+	IF(Listen(server_s, LISTENQ) < 0)
+		->StringF(tempStr,'/X Telnet: Error calling listen() for port \d, error=\d\b\n',port,Errno());
+    ->aePuts(tempStr)
+    CloseSocket(server_s)
+    END servaddr
+    RETURN -1
+	ENDIF
+
+  IoctlSocket(server_s,FIONBIO,[1])
+
+  END servaddr
+ENDPROC server_s
+
 
 ->*******************************************************************
 -> OpenMaster - This function opens a port for the nodes to interact
@@ -844,7 +917,7 @@ ENDPROC c
 ->// CallNode - This function opens a port to a nodes AEServer and tries
 ->// to send a msg to the node and waits on a reply
 ->//*********************************************************************
-PROC callNode(node,code)
+PROC callNode(node,code,data=1)
   DEF response[100]:STRING
    
   StringF(response,'AmiExpress_Node.\d',node)
@@ -861,7 +934,7 @@ PROC callNode(node,code)
     ENDIF
   ENDIF
   IF(register(node))
-    sendMessage(code)
+    sendMessage(code,data)
   ENDIF
 ENDPROC
 
@@ -869,7 +942,7 @@ PROC putToPort(message)
   PutMsg(nport,message)
 ENDPROC 1
 
-PROC sendMessage(nl)
+PROC sendMessage(nl,data=1)
   DEF jhmsg: PTR TO jhMessage
 
   jhmsg:=AllocMem(SIZEOF jhMessage,MEMF_PUBLIC OR MEMF_CLEAR)
@@ -878,10 +951,11 @@ PROC sendMessage(nl)
   jhmsg.msg.replyport:=0
  
   jhmsg.command:=nl
-  jhmsg.data:=1  ->READIT
+  jhmsg.data:=data  ->READIT
      
 	putToPort(jhmsg)
 ENDPROC
+
 
 PROC register(node)
   StringF(masterPort,'AEServer.\d',node)
@@ -2089,7 +2163,7 @@ PROC initSemaSemiNodes(s:PTR TO multiPort)
     
     s.myNode[i].t:=NIL
     s.myNode[i].taskSignal:=NIL
-    s.myNode[i].startTime:=NIL
+    s.myNode[i].telnetSocket:=-1
     s.myNode[i].private:=FALSE
     s.myNode[i].channel:=0
     s.myNode[i].chatColor:=i+1
@@ -2438,7 +2512,8 @@ PROC getIconNodeInfo(i)
        StringF(temp,'\sNode\d/',cmd.bbsLoc,i)
        strcpy(sopt.nodeScreens,temp)
     ENDIF
-
+    
+    IF(s:=FindToolType(oldtooltypes,'TELNET')) THEN telnetNode[i]:=1
     freeToolTypes(dobj,cfg)
   ENDIF
 ENDPROC
@@ -2697,6 +2772,7 @@ PROC readStartUp(s:PTR TO CHAR)
   IF(t:=FindToolType(oldtooltypes,'ICONIFY.TOPEDGE')) THEN zim[1]:=Val(t)
   IF(t:=FindToolType(oldtooltypes,'SHORT_DONOTMOVE')) THEN shortUp:=1
   IF(t:=FindToolType(oldtooltypes,'PRIORITY')) THEN SetTaskPri(FindTask(0),Val(t))
+  IF(t:=FindToolType(oldtooltypes,'TELNETPORT')) THEN telnetPort:=Val(t)
     
   j:=1
   StringF(image,'BACKUP.\d',j++)
@@ -3143,6 +3219,30 @@ PROC loadState()
         IF StrLen(tempStr)>0 THEN regLastDownloads(tempStr,tempStr2,i)
       ENDFOR
     ENDFOR
+    ReadStr(fh,tempStr)
+    IF StrCmp(tempStr,'##')
+      END lastUsers
+      END lastUploads
+      END lastDownloads
+      lastUsers:=NEW lastUsers.init()
+      lastUploads:=NEW lastUploads.init()
+      lastDownloads:=NEW lastDownloads.init()
+      
+      FOR j:=0 TO 4
+        ReadStr(fh,tempStr)
+        ReadStr(fh,tempStr2)
+        IF StrLen(tempStr)>0 THEN lastUsers.add(tempStr,tempStr2)
+
+        ReadStr(fh,tempStr)
+        ReadStr(fh,tempStr2)
+        IF StrLen(tempStr)>0 THEN lastUploads.add(tempStr,tempStr2)
+
+        ReadStr(fh,tempStr)
+        ReadStr(fh,tempStr2)
+        IF StrLen(tempStr)>0 THEN lastDownloads.add(tempStr,tempStr2)
+      ENDFOR
+    ENDIF
+
     Close(fh)
   ENDIF
 ENDPROC
@@ -3177,9 +3277,36 @@ PROC saveState()
         Write(fh,tempStr,StrLen(tempStr))
       ENDFOR
     ENDFOR
+
+    StringF(tempStr,'##\n')
+    Write(fh,tempStr,StrLen(tempStr))
+    
+    FOR j:=0 TO 4
+      StringF(tempStr,'\s\n',lastUsers.getItem(j))
+      Write(fh,tempStr,StrLen(tempStr))
+      StringF(tempStr,'\s\n',lastUsers.getItemDate(j))
+      Write(fh,tempStr,StrLen(tempStr))
+      
+      StringF(tempStr,'\s\n',lastUploads.getItem(j))
+      Write(fh,tempStr,StrLen(tempStr))
+      StringF(tempStr,'\s\n',lastUploads.getItemDate(j))
+      Write(fh,tempStr,StrLen(tempStr))
+
+      StringF(tempStr,'\s\n',lastDownloads.getItem(j))
+      Write(fh,tempStr,StrLen(tempStr))
+      StringF(tempStr,'\s\n',lastDownloads.getItemDate(j))
+      Write(fh,tempStr,StrLen(tempStr))
+    ENDFOR
     Close(fh)
   ENDIF
 ENDPROC
+
+PROC telnetSend(socket,msg,len=-1)
+  DEF r
+  IF len=-1 THEN len:=StrLen(msg)
+  r:=Send(socket,msg,len,0)
+  IF r<>len THEN RETURN FALSE
+ENDPROC TRUE
 
 PROC main() HANDLE
 
@@ -3203,12 +3330,16 @@ PROC main() HANDLE
   DEF windowSig,myappsig
   DEF i,j,class
   DEF newlock=NIL
+  DEF telnetServerSocket=-1
+  DEF telnetSocket=-1
+  DEF telnetSocket2=-1
+  DEF f
 
   DEF sopt:PTR TO startOption
  
   KickVersion(37)  -> E-Note: requires V37
 
-  StringF(myVerStr,'v5.1.0')
+  StringF(myVerStr,'v5.2.0')
 
   FOR i:=0 TO MAX_NODES-1
     ndUser[i]:=NIL
@@ -3301,6 +3432,7 @@ PROC main() HANDLE
     sopts[i]:=NIL
     nodes[i]:=0
     quietNode[i]:=0
+    telnetNode[i]:=0
   ENDFOR
  
   IF (diskfontbase:=OpenLibrary('diskfont.library', 37))=NIL THEN Raise(ERR_NO_DISKFONT)
@@ -3314,7 +3446,7 @@ PROC main() HANDLE
   clearUsers()
   initCycles()
 
-  doMultiCom:=0
+  ->doMultiCom:=0
 
   StrCopy(fontName,'topaz.font')
 
@@ -3354,6 +3486,11 @@ PROC main() HANDLE
   IF fontHandle=NIL THEN fontHandle:=OpenDiskFont(defaultfontattr)
 
   IF(validate()=FALSE) THEN Raise(ERR_VALIDATE)
+
+  waitSocketLib()
+  IF telnetPort<>-1
+    telnetServerSocket:=openListenSocket(telnetPort)
+  ENDIF
 
   theight++
   edgeX:=WLEF
@@ -3498,7 +3635,88 @@ PROC main() HANDLE
         checkStartingScript()
 
         WHILE (notDone)
-          signals:=Wait(masterSig OR windowSig OR myappsig OR cxsigflag)
+          IF (telnetServerSocket=-1)
+            signals:=Wait(masterSig OR windowSig OR myappsig OR cxsigflag)
+          ELSE
+            REPEAT
+              Delay(1)
+              signals:=SetSignal(0,0) AND (masterSig OR windowSig OR myappsig OR cxsigflag)
+              IF telnetServerSocket>=0
+                telnetSocket:=Accept(telnetServerSocket,NIL,NIL)
+                IF telnetSocket>=0
+
+                  Delay(30)
+                  f:=FALSE
+                  StringF(tempstr,'\c\c\c',255,253,31)    ->DO NAWS
+                  IF telnetSend(telnetSocket,tempstr,3)=FALSE THEN f:=TRUE
+                  StringF(tempstr,'\c\c\c',255,251,5)    ->WILL STATUS
+                  IF telnetSend(telnetSocket,tempstr,3)=FALSE THEN f:=TRUE
+                  StringF(tempstr,'\c\c\c',255,253,32)    ->DO TERMSPEED
+                  IF telnetSend(telnetSocket,tempstr,3)=FALSE THEN f:=TRUE
+                  StringF(tempstr,'\c\c\c',255,253,34)    ->DO LINEMODE
+                  IF telnetSend(telnetSocket,tempstr,3)=FALSE THEN f:=TRUE
+                  StringF(tempstr,'\c\c\c',255,253,0)    ->DO BINARY
+                  IF telnetSend(telnetSocket,tempstr,3)=FALSE THEN f:=TRUE
+                  StringF(tempstr,'\c\c\c',255,251,3)    ->WILL SGA
+                  IF telnetSend(telnetSocket,tempstr,3)=FALSE THEN f:=TRUE
+                  StringF(tempstr,'\c\c\c',255,251,1)    ->WILL ECHO
+                  IF telnetSend(telnetSocket,tempstr,3)=FALSE THEN f:=TRUE
+
+                  IF telnetSend(telnetSocket,'\b\n/X Native Telnet:  Searching for free node...\b\n')=FALSE THEN f:=TRUE
+       
+	              IF f=FALSE
+				    i:=0
+					f:=Recv(telnetSocket,tempstr,1,MSG_PEEK)
+					IF f<>1
+					  f:=Errno()
+					  IF (f<>EINTR) AND (f<>EWOULDBLOCK) THEN i:=-1
+					ELSE
+					  IF tempstr[0]<>$ff THEN i:=-1
+					ENDIF
+			      ELSE
+				    i:=-1
+				  ENDIF
+
+	              IF i<>-1
+                    REPEAT
+                      IF(users[i].actionVal=ENV_AWAITCONNECT) AND (telnetNode[i]=1)
+                        IF(doMultiCom)
+                          ObtainSemaphore(semiNodes)
+                          telnetSocket2:=semiNodes.myNode[i].telnetSocket
+                          ReleaseSemaphore(semiNodes)
+                        ELSE
+                          telnetSocket2:=-1
+                        ENDIF
+
+                        IF telnetSocket2=-1
+                          StringF(tempstr,'/X Native Telnet:  Successful connection to node \d\b\n\b\n',i)
+                          telnetSend(telnetSocket,tempstr)
+                          telnetSocket2:=ReleaseSocket(telnetSocket,UNIQUE_ID)
+                          callNode(i,INCOMING_TELNET,telnetSocket2)
+                          telnetSocket:=-1
+                          i:=-1
+                        ELSE
+                          i++
+                        ENDIF
+                      ELSE
+                        i++
+                      ENDIF
+                    UNTIL (i=MAX_NODES) OR (i=-1)
+				  ENDIF
+                  
+                  IF i<>-1
+                    telnetSend(telnetSocket,'/X Native Telnet:  No nodes available to handle your connection \b\n\b\n')                   
+                  ENDIF
+                  
+                  IF telnetSocket<>-1
+                    CloseSocket(telnetSocket)
+                    telnetSocket:=-1
+                  ENDIF
+                ENDIF
+              ENDIF
+            UNTIL signals
+            Wait(signals)
+          ENDIF
           
           IF(signals AND cxsigflag) THEN processCommodityMessages()
           
@@ -3627,6 +3845,7 @@ EXCEPT DO
     END ndUploads[i]
   ENDFOR
 
+  IF (telnetServerSocket>=0) THEN CloseSocket(telnetServerSocket)
   
   IF broker THEN DeleteCxObj(broker)
   IF broker_mp
@@ -3635,6 +3854,7 @@ EXCEPT DO
     DeleteMsgPort(broker_mp) -> E-Note: C version incorrectly uses DeletePort()
   ENDIF
 
+  IF socketbase THEN CloseLibrary(socketbase)
   IF cxbase THEN CloseLibrary(cxbase)
   IF iconbase THEN CloseLibrary(iconbase)
   IF gadtoolsbase THEN CloseLibrary(gadtoolsbase)

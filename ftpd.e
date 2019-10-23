@@ -7,6 +7,7 @@ OPT LARGE,MODULE
 
 CONST LISTENQ=100
 CONST EINTR=4
+CONST EWOULDBLOCK=35
 CONST MAX_LINE=255
 CONST FIONBIO=$8004667e
 
@@ -517,6 +518,17 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   IF ftpData.uploadMode=FALSE
     StringF(temp,'550 \s: Not expecting any uploads\b\n',filename)
     writeLineEx(sb,ftp_c,temp)
+
+    IF (data_c>=0)
+      ftpData.scount:=ftpData.scount-1
+      r:=closeSocket(sb,data_c)
+    ENDIF
+    
+    IF (data_s>=0)
+      ftpData.scount:=ftpData.scount-1
+      r:=closeSocket(sb,data_s)
+    ENDIF
+
     RETURN
   ENDIF
 
@@ -590,6 +602,15 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   IF ftpData.uploadMode
     StringF(temp,'550 \s: No such file or directory\b\n',filename)
     writeLineEx(sb,ftp_c,temp)
+    IF (data_c>=0)
+      ftpData.scount:=ftpData.scount-1
+      r:=closeSocket(sb,data_c)
+    ENDIF
+    
+    IF (data_s>=0)
+      ftpData.scount:=ftpData.scount-1
+      r:=closeSocket(sb,data_s)
+    ENDIF
     RETURN
   ENDIF
 
