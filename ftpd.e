@@ -7,6 +7,7 @@ OPT LARGE,MODULE
 
 CONST LISTENQ=100
 CONST EINTR=4
+CONST EWOULDBLOCK=35
 CONST MAX_LINE=255
 CONST FIONBIO=$8004667e
 
@@ -48,86 +49,107 @@ PROC errno(sb)
 ENDPROC D0
 
 PROC ioctlSocket(sb,s,v,tags)
+  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
   MOVE.L s,D0
   MOVE.L v,D1
   MOVE.L tags,A0
   JSR -$72(A6)
+  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
 PROC recv(sb,s,buf,len,flags)
+  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
   MOVE.L s,D0
   MOVE.L buf,A0
   MOVE.L len,D1
   MOVE.L flags,D2
   JSR -$4E(A6)    ->recv
+  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
 PROC send(sb,s,msg,len,flags)
+  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
   MOVE.L s,D0
   MOVE.L msg,A0
   MOVE.L len,D1
   MOVE.L flags,D2
   JSR -$42(A6)    ->send
+  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
 PROC accept(sb,s,addr,addrlen)
+  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
   MOVE.L s,D0
   MOVE.L addr,A0
   MOVE.L addrlen,A1
   JSR -$30(A6)   ->Accept(s,addr,addrlen)
+  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
 PROC releaseCopyOfSocket(sb,fd,id)
+  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
   MOVE.L fd,D0
   MOVE.L id,D1
   JSR -$9C(A6)   ->ReleaseCopyOfSocket(fd,id)
+  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
 PROC closeSocket(sb,s)
+  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
   MOVE.L s,D0
   JSR -$78(A6)   ->CloseSocket(s)
+  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
 PROC socket(sb,domain, type, protocol)
+  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
   MOVE.L domain,D0
   MOVE.L type,D1
   MOVE.L protocol,D2
   
   JSR -$1E(A6)   ->Socket(domain,type,protocol)
+  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
 PROC bind(sb,s, name, namelen)
+  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
   MOVE.L s,D0
   MOVE.L name,A0
   MOVE.L namelen,D1
   
   JSR -$24(A6)   ->Bind(domain,type,protocol)
+  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
 PROC listen(sb,s, backlog)
+  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
   MOVE.L s,D0
   MOVE.L backlog,D1
   
   JSR -$2A(A6)   ->Listen(s,backlog)
+  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
 PROC getHostByName(sb,name)
+  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
   MOVE.L name,A0
   
   JSR -$D2(A6)   ->GetHostByName(name)
+  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
 PROC obtainSocket(sb,id,domain, type, protocol)
+  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
   MOVE.L id,D0
   MOVE.L domain,D1
@@ -135,17 +157,34 @@ PROC obtainSocket(sb,id,domain, type, protocol)
   MOVE.L protocol,D3
   
   JSR -$90(A6)   ->ObtainSocket(id,domain,type,protocol)
+  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
-PROC setSockOpt(sb,s,level,optname,optval,optlen )
+PROC getSockOpt(sb,s,level,optname,optval,optlen )
+  MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
   MOVE.L s,D0
   MOVE.L level,D1
   MOVE.L optname,D2
-  LEA optval,A0
+  MOVE.L optval,A0
+  MOVE.L optlen,A1
+
+  JSR -$60(A6)   ->getSockOpt(s,level,optname,optval,optlen)
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
+
+
+PROC setSockOpt(sb,s,level,optname,optval,optlen )
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  MOVE.L sb,A6
+  MOVE.L s,D0
+  MOVE.L level,D1
+  MOVE.L optname,D2
+  MOVE.L optval,A0
   MOVE.L optlen,D3
 
   JSR -$5A(A6)   ->setSockOpt(s,level,optname,optval,optlen)
+  MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
 PROC fileStart(ftpData:PTR TO ftpData,fn,pos)
@@ -211,6 +250,7 @@ PROC openSocket(sb,port, reuseable,ftpData:PTR TO ftpData)
   DEF server_s
   DEF servaddr=0:PTR TO sockaddr_in
   DEF tempStr[255]:STRING
+  DEF optval:PTR TO LONG,optlen:PTR TO LONG
 
   servaddr:=NEW servaddr
 
@@ -221,13 +261,35 @@ PROC openSocket(sb,port, reuseable,ftpData:PTR TO ftpData)
 		RETURN FALSE,-1
 	ENDIF
 
-
-  /*IF reuseable
-    IF setSockOpt(sb,server_s, SOL_SOCKET, SO_REUSEADDR, 1, SIZEOF LONG)<>0
+  IF reuseable
+    IF setSockOpt(sb,server_s, SOL_SOCKET, SO_REUSEADDR, [1]:LONG, 4)<>0
       StringF(tempStr,'/XFTP: error setting socket options SO_REUSEADDR, error=\d\b\n',errno(sb))
       aePuts(ftpData,tempStr)
     ENDIF
-  ENDIF*/
+
+    optval:=NEW [0,0]:LONG
+    optlen:=NEW [8]:LONG
+    IF getSockOpt(sb,server_s, SOL_SOCKET, SO_LINGER, optval,optlen)<>0
+      StringF(tempStr,'/XFTP: error getting socket options SO_LINGER, error=\d\b\n',errno(sb))
+      aePuts(ftpData,tempStr)
+    ENDIF
+    IF optlen[0]=4
+      optval[0]:=$10000
+    ELSEIF optlen[0]=8
+      optval[0]:=1
+      optval[1]:=0
+    ELSE
+      aePuts(ftpData,'/XFTP: error setting socket options SO_LINGER, bad size\b\n')
+    ENDIF
+
+    IF setSockOpt(sb,server_s, SOL_SOCKET, SO_LINGER, optval,optlen[0])<>0
+      StringF(tempStr,'/XFTP: error setting socket options SO_LINGER, error=\d\b\n',errno(sb))
+      aePuts(ftpData,tempStr)
+    ENDIF
+    END optval
+    END optlen
+
+  ENDIF
   
   servaddr.sin_len:=SIZEOF sockaddr_in
   servaddr.sin_family:=AF_INET
@@ -490,7 +552,7 @@ PROC cmdSize(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   len:=FileLength(fn)
   
   IF len<>-1
-    StringF(temp,'213 \s\b\n',len)
+    StringF(temp,'213 \d\b\n',len)
     writeLineEx(sb,ftp_c,temp)
   ELSE
     StringF(temp,'550 \s: No such file or directory\b\n',filename)
@@ -517,6 +579,17 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   IF ftpData.uploadMode=FALSE
     StringF(temp,'550 \s: Not expecting any uploads\b\n',filename)
     writeLineEx(sb,ftp_c,temp)
+
+    IF (data_c>=0)
+      ftpData.scount:=ftpData.scount-1
+      r:=closeSocket(sb,data_c)
+    ENDIF
+    
+    IF (data_s>=0)
+      ftpData.scount:=ftpData.scount-1
+      r:=closeSocket(sb,data_s)
+    ENDIF
+
     RETURN
   ENDIF
 
@@ -590,6 +663,15 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   IF ftpData.uploadMode
     StringF(temp,'550 \s: No such file or directory\b\n',filename)
     writeLineEx(sb,ftp_c,temp)
+    IF (data_c>=0)
+      ftpData.scount:=ftpData.scount-1
+      r:=closeSocket(sb,data_c)
+    ENDIF
+    
+    IF (data_s>=0)
+      ftpData.scount:=ftpData.scount-1
+      r:=closeSocket(sb,data_s)
+    ENDIF
     RETURN
   ENDIF
 
@@ -600,7 +682,7 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
     writeLineEx(sb,ftp_c, '150 Opening BINARY connection\b\n')
     
     fh:=Open(fn,MODE_OLDFILE)
-    IF fh<=0
+    IF fh=0
       StringF(temp,'/XFTP: open error \s \d\b\n',fn,IoErr())
       aePuts(ftpData,temp)
       StringF(temp,'550 \s: No such file or directory\b\n',filename)
@@ -760,7 +842,7 @@ PROC ftpThread()
   CloseLibrary(sb)
 
   ftpData.tcount:=ftpData.tcount-1
-  aePuts(ftpData,'FTP connection closed\b\n')
+  ->aePuts(ftpData,'FTP connection closed\b\n')
   Exit(0)
 ENDPROC
 
@@ -896,13 +978,13 @@ EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPt
       ftpData.scount:=ftpData.scount-1
       r:=closeSocket(sb,ftp_s)
     ENDIF
-    CloseLibrary(sb)
     IF flg THEN aePuts(ftpData,'\b\n')
     IF rchar=3
       aePuts(ftpData,'CTRL-C detected, FTP transfer aborted\b\n')
     ELSE
       aePuts(ftpData,'FTP transfers complete, all ftp connections closed\b\n')
     ENDIF
+    CloseLibrary(sb)
 	ENDIF
   DisposeLink(ftpData.hostName)
   DisposeLink(ftpData.workingPath)
