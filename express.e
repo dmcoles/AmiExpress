@@ -3357,11 +3357,11 @@ redoinput:
   flushSerialCache()
 ENDPROC result
 
-PROC readMayGetChar(msgport, whereto)
+PROC readMayGetChar(msgport, checkTelnet, whereto)
   DEF temp, readreq:PTR TO iostd
   temp:=-1
   
-  IF telnetSocket>=0
+  IF checkTelnet AND (telnetSocket>=0)
     IF Recv(telnetSocket,whereto,1,0)=1
       temp:=whereto[]
       IF (lastIAC=0) AND (temp=255)
@@ -8186,6 +8186,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
   DEF temp[255]:STRING
   DEF statePtr: PTR TO awaitState
   DEF n
+  DEF fds:PTR TO LONG
 
   IF (transfering)
     RETURN TRUE,RESULT_TIMEOUT
@@ -8229,14 +8230,15 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
   
     IF telnetSocket>=0
       REPEAT
+        fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
+        fds[telnetSocket/32]:=fds[telnetSocket/32] OR (Shl(1,telnetSocket AND 31))
+        signals:=SIGBREAKF_CTRL_C OR consolesig OR windowsig OR cxsigflag OR doorsig OR rexxsig OR serialsig OR timersig OR extsig
+        WaitSelect(telnetSocket+1,fds,NIL,NIL,NIL,{signals})
+        END fds     
         IF checkTelnetData()
           signals:=signals OR telnetsig
-        ELSE
-          signals:=SetSignal(0,0) AND (SIGBREAKF_CTRL_C OR consolesig OR windowsig OR cxsigflag OR doorsig OR rexxsig OR serialsig OR timersig OR extsig)
-          IF signals THEN Wait(signals)
         ENDIF
-        IF checkCarrier()=FALSE THEN signals:=serialsig
-        IF signals=0 THEN Delay(5)
+        IF checkCarrier()=FALSE THEN signals:=timersig
       UNTIL signals
     ELSE
       signals:=Wait(SIGBREAKF_CTRL_C OR consolesig OR windowsig OR cxsigflag OR doorsig OR rexxsig OR serialsig OR timersig OR extsig)
@@ -8277,9 +8279,9 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
 
   IF (ch=0) AND allowSer AND signals AND (serialsig OR telnetsig)
     IF rawMode
-      lch:=readMayGetChar(serialReadMP,{serbuff})
+      lch:=readMayGetChar(serialReadMP,TRUE,{serbuff})
       IF lch<>-1 THEN ch:=lch
-    ELSEIF -1<>(lch:=readMayGetChar(serialReadMP,{serbuff}))
+    ELSEIF -1<>(lch:=readMayGetChar(serialReadMP,TRUE,{serbuff}))
       IF (ioFlags[IOFLAG_SER_IN])
         ch:=lch
         wasControl:=FALSE
@@ -8287,9 +8289,9 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
         ->debugLog(LOG_DEBUG,obuf)
         chatSerFlag:=1
         IF ch=$1b
-          ch:=readMayGetChar(serialReadMP,{serbuff})
+          ch:=readMayGetChar(serialReadMP,TRUE,{serbuff})
           IF ch="["
-            ch:=readMayGetChar(serialReadMP,{serbuff})
+            ch:=readMayGetChar(serialReadMP,TRUE,{serbuff})
 
             IF (ch>="A") AND (ch<="D")
              wasControl:=1
@@ -8317,9 +8319,9 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     -> If a console signal was received, get the character
 
     IF rawMode
-      lch:=readMayGetChar(consoleReadMP, {ibuf})
+      lch:=readMayGetChar(consoleReadMP, FALSE,{ibuf})
       IF lch<>-1 THEN ch:=lch
-    ELSEIF -1<>(lch:=readMayGetChar(consoleReadMP, {ibuf}))
+    ELSEIF -1<>(lch:=readMayGetChar(consoleReadMP, FALSE, {ibuf}))
       IF (ioFlags[IOFLAG_KBD_IN])
         ch:=lch
         chatConFlag:=1
@@ -8332,15 +8334,15 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
         debugLog(LOG_DEBUG,obuf)
 
         IF ch=$9B
-          ch:=readMayGetChar(consoleReadMP, {ibuf})
+          ch:=readMayGetChar(consoleReadMP, FALSE, {ibuf})
             StringF(obuf, 'Received control: hex $\z\h[2] \d', ch,ch)
             debugLog(LOG_DEBUG,obuf)
-            lch:=readMayGetChar(consoleReadMP, {ibuf})
+            lch:=readMayGetChar(consoleReadMP, FALSE, {ibuf})
             StringF(obuf, 'Received control: hex $\z\h[2] \d', lch,lch)
             debugLog(LOG_DEBUG,obuf)
           IF (ch="1") AND (lch<>$7E)
             ch:=lch
-            lch:=readMayGetChar(consoleReadMP, {ibuf})
+            lch:=readMayGetChar(consoleReadMP, FALSE, {ibuf})
             StringF(obuf, 'Received control: hex $\z\h[2] \d', lch,lch)
             debugLog(LOG_DEBUG,obuf)
             IF lch=$7e
@@ -14372,6 +14374,7 @@ PROC xprsread()
   DEF buf,bsize,timeout,serialsig,i,signals,task: PTR TO tc,res,timersig,ch
   DEF tempstr[255]:STRING
   DEF waiting,status,sigs,obuf,buf2,c,c2
+  DEF fds:PTR TO LONG
   ->        long count = (*xpr_sread)(char *buffer, long size, long timeout)
   ->        D0                        A0            D0         D1
 
@@ -14400,54 +14403,56 @@ PROC xprsread()
     c2:=0
     REPEAT
       
-      status:=Recv(telnetSocket,buf2,waiting,0)     
-      IF status>0 
-        StringF(tempstr,'xprsread recv complete: \d bytes',status)
-        debugLog(LOG_DEBUG,tempstr)
-        c:=0
-        REPEAT
-          IF lastIAC2
-            StringF(tempstr,'code: \d',buf2[c])
-            debugLog(LOG_DEBUG,tempstr)
-            ->expecting an IAC parameter byte - just skip it
-            lastIAC2:=FALSE
-          ELSEIF (buf2[c]=255) OR (lastIAC)
-            IF (lastIAC=FALSE) THEN c++
-            lastIAC:=FALSE
-            IF c>=status
-              lastIAC:=TRUE
-            ELSE
-              IF buf2[c]=255
-                buf[c2]:=255
-                c2++
-              ELSEIF (buf2[c]>=250) AND (buf2[c]<255)
-                StringF(tempstr,'known iac code: \d',buf2[c])
-                debugLog(LOG_DEBUG,tempstr)
-                c++
-                IF (c>=status)
-                  lastIAC2:=TRUE
+      fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
+      fds[telnetSocket/32]:=fds[telnetSocket/32] OR (Shl(1,telnetSocket AND 31))
+      sigs:=timersig
+      status:=WaitSelect(telnetSocket+1,fds,NIL,NIL,NIL,{sigs})
+      END fds
+      IF status>0
+        status:=Recv(telnetSocket,buf2,waiting,0)     
+        IF status>0 
+          StringF(tempstr,'xprsread recv complete: \d bytes',status)
+          debugLog(LOG_DEBUG,tempstr)
+          c:=0
+          REPEAT
+            IF lastIAC2
+              StringF(tempstr,'code: \d',buf2[c])
+              debugLog(LOG_DEBUG,tempstr)
+              ->expecting an IAC parameter byte - just skip it
+              lastIAC2:=FALSE
+            ELSEIF (buf2[c]=255) OR (lastIAC)
+              IF (lastIAC=FALSE) THEN c++
+              lastIAC:=FALSE
+              IF c>=status
+                lastIAC:=TRUE
+              ELSE
+                IF buf2[c]=255
+                  buf[c2]:=255
+                  c2++
+                ELSEIF (buf2[c]>=250) AND (buf2[c]<255)
+                  StringF(tempstr,'known iac code: \d',buf2[c])
+                  debugLog(LOG_DEBUG,tempstr)
+                  c++
+                  IF (c>=status)
+                    lastIAC2:=TRUE
+                  ELSE
+                    StringF(tempstr,'code: \d',buf2[c])
+                    debugLog(LOG_DEBUG,tempstr)
+                  ENDIF
                 ELSE
-                  StringF(tempstr,'code: \d',buf2[c])
+                  StringF(tempstr,'unknown iac code: \d',buf2[c])
                   debugLog(LOG_DEBUG,tempstr)
                 ENDIF
-              ELSE
-                StringF(tempstr,'unknown iac code: \d',buf2[c])
-                debugLog(LOG_DEBUG,tempstr)
               ENDIF
+            ELSE
+              buf[c2]:=buf2[c]
+              c2++
             ENDIF
-          ELSE
-            buf[c2]:=buf2[c]
-            c2++
-          ENDIF
-          c++
-        UNTIL c>=status
-     
-        waiting:=bsize-c2
-      ENDIF
-      IF timeout<>0
-        sigs:=SetSignal(0,0) AND timersig
-        IF sigs THEN Wait(sigs)
-        IF (status<=0) AND ((sigs AND timersig)=0) THEN Delay(1)
+            c++
+          UNTIL c>=status
+       
+          waiting:=bsize-c2
+        ENDIF
       ENDIF
     UNTIL (waiting=0) OR (timeout=0) OR (sigs AND timersig)
     
@@ -27808,8 +27813,8 @@ PROC main() HANDLE
   DEF oldWinPtr
   DEF proc: PTR TO process
 
-  StrCopy(expressVer,'v5.2.0-alpha',ALL)
-  StrCopy(expressDate,'25-Oct-2019',ALL)
+  StrCopy(expressVer,'v5.2.0-beta1',ALL)
+  StrCopy(expressDate,'28-Oct-2019',ALL)
 
   InitSemaphore(bgData)
   

@@ -3336,6 +3336,7 @@ PROC main() HANDLE
   DEF telnetSocket=-1
   DEF telnetSocket2=-1
   DEF f
+  DEF fds:PTR TO LONG
 
   DEF sopt:PTR TO startOption
  
@@ -3489,8 +3490,8 @@ PROC main() HANDLE
 
   IF(validate()=FALSE) THEN Raise(ERR_VALIDATE)
 
-  waitSocketLib()
   IF telnetPort<>-1
+    waitSocketLib()
     telnetServerSocket:=openListenSocket(telnetPort)
   ENDIF
 
@@ -3641,8 +3642,11 @@ PROC main() HANDLE
             signals:=Wait(masterSig OR windowSig OR myappsig OR cxsigflag)
           ELSE
             REPEAT
-              Delay(1)
-              signals:=SetSignal(0,0) AND (masterSig OR windowSig OR myappsig OR cxsigflag)
+              fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
+              fds[telnetServerSocket/32]:=fds[telnetServerSocket/32] OR (Shl(1,telnetServerSocket AND 31))
+              signals:=masterSig OR windowSig OR myappsig OR cxsigflag
+              WaitSelect(telnetServerSocket+1,fds,NIL,NIL,NIL,{signals})
+              END fds
               IF telnetServerSocket>=0
                 telnetSocket:=Accept(telnetServerSocket,NIL,NIL)
                 IF telnetSocket>=0
@@ -3666,20 +3670,20 @@ PROC main() HANDLE
 
                   IF telnetSend(telnetSocket,'\b\n/X Native Telnet:  Searching for free node...\b\n')=FALSE THEN f:=TRUE
        
-                IF f=FALSE
-            i:=0
-          f:=Recv(telnetSocket,tempstr,1,MSG_PEEK)
-          IF f<>1
-            f:=Errno()
-            IF (f<>EINTR) AND (f<>EWOULDBLOCK) THEN i:=-1
-          ELSE
-            IF tempstr[0]<>$ff THEN i:=-1
-          ENDIF
-            ELSE
-            i:=-1
-          ENDIF
+                  IF f=FALSE
+                    i:=0
+                    f:=Recv(telnetSocket,tempstr,1,MSG_PEEK)
+                    IF f<>1
+                      f:=Errno()
+                      IF (f<>EINTR) AND (f<>EWOULDBLOCK) THEN i:=-1
+                    ELSE
+                      IF tempstr[0]<>$ff THEN i:=-1
+                    ENDIF
+                  ELSE
+                    i:=-1
+                  ENDIF
 
-                IF i<>-1
+                  IF i<>-1
                     REPEAT
                       IF(users[i].actionVal=ENV_AWAITCONNECT) AND (telnetNode[i]=1)
                         IF(doMultiCom)
@@ -3704,12 +3708,12 @@ PROC main() HANDLE
                         i++
                       ENDIF
                     UNTIL (i=MAX_NODES) OR (i=-1)
-          ENDIF
-                  
+                  ENDIF
+                    
                   IF i<>-1
                     telnetSend(telnetSocket,'/X Native Telnet:  No nodes available to handle your connection \b\n\b\n')                   
                   ENDIF
-                  
+                    
                   IF telnetSocket<>-1
                     CloseSocket(telnetSocket)
                     telnetSocket:=-1
@@ -3717,7 +3721,6 @@ PROC main() HANDLE
                 ENDIF
               ENDIF
             UNTIL signals
-            Wait(signals)
           ENDIF
           
           IF(signals AND cxsigflag) THEN processCommodityMessages()

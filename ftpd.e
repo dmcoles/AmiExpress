@@ -241,9 +241,10 @@ ENDPROC chk()
 PROC readChar(ftpData:PTR TO ftpData)
   DEF rdChar,r
   rdChar:=ftpData.readChar
-  MOVE.L #1,-(A7)
+  CLR.L -(A7)
+  CLR.L -(A7)
   r:=rdChar()
-  ADDQ.L #4,A7
+  ADDQ.L #8,A7
 ENDPROC r
 
 PROC openSocket(sb,port, reuseable,ftpData:PTR TO ftpData)
@@ -609,15 +610,15 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
         fileStart(ftpData,filename,0)
       ENDIF
       
-      buff:=New(10240)
+      
+      buff:=New(32768)
       REPEAT
-        l:=recv(sb,data_c, buff,10240,0)
+        l:=recv(sb,data_c, buff,32768,0)
         Fwrite(fh,buff,1,l)
         IF ftpData.fileProgress<>NIL
           pos:=Seek(fh,0,OFFSET_CURRENT)
           fileProgress(ftpData,filename,pos)
         ENDIF
-
       UNTIL l=0
       Dispose(buff)
       Close(fh)
