@@ -20,7 +20,9 @@ MODULE	'socket',
         'dos/datetime',
         'dos/dos',
        'exec/tasks',
-       'exec/alerts'
+       'exec/alerts',
+       'asyncio',
+       'libraries/asyncio'
  
 OBJECT ftpData
   rest:LONG
@@ -211,7 +213,7 @@ PROC fileEnd(ftpData:PTR TO ftpData,fn)
   ADDQ.L #8,A7
 ENDPROC
 
-PROC fileProgress(ftpData:PTR TO ftpData,fn,pos)
+PROC fileProgress(ftpData:PTR TO ftpData,fn,pos,cps)
   DEF fp
   DEF xprInfo
   fp:=ftpData.fileProgress
@@ -220,6 +222,7 @@ PROC fileProgress(ftpData:PTR TO ftpData,fn,pos)
   MOVE.L xprInfo,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L pos,-(A7)
+  MOVE.L cps,-(A7)
   fp()
   ADD.L #12,A7
 ENDPROC
@@ -246,6 +249,14 @@ PROC readChar(ftpData:PTR TO ftpData)
   r:=rdChar()
   ADDQ.L #8,A7
 ENDPROC r
+
+PROC fastSystemTime()
+  DEF currDate: datestamp
+  DEF startds:PTR TO datestamp
+
+  startds:=DateStamp(currDate)
+
+ENDPROC Mul(startds.minute,3000)+startds.tick
 
 PROC openSocket(sb,port, reuseable,ftpData:PTR TO ftpData)
   DEF server_s
@@ -575,7 +586,9 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF buff
   DEF fn[500]:STRING
   DEF r,l
-  DEF fh,pos
+  DEF fh,pos,t,t2
+  DEF cps,lastpos
+  DEF asynclib
 
   IF ftpData.uploadMode=FALSE
     StringF(temp,'550 \s: Not expecting any uploads\b\n',filename)
@@ -594,14 +607,25 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
     RETURN
   ENDIF
 
+  asynclib:=OpenLibrary('asyncio.library',0)
+  asynciobase:=asynclib
+
   IF (data_c>=0)
     IF filename[0]="\\" THEN filename++
     StringF(fn,'\s\s',ftpData.workingPath,filename)
     
     writeLineEx(sb,ftp_c, '150 Opening BINARY connection\b\n')
     
-    fh:=Open(fn,MODE_READWRITE)
-    Seek(fh,ftpData.restPos,OFFSET_BEGINNING)
+    IF asynclib<>NIL
+      fh:=OpenAsync(fn,MODE_APPEND,32768)
+    ELSE
+      fh:=Open(fn,MODE_READWRITE)
+    ENDIF
+    IF asynclib<>NIL
+      SeekAsync(fh,ftpData.restPos,MODE_START)
+    ELSE
+      Seek(fh,ftpData.restPos,OFFSET_BEGINNING)
+    ENDIF
     IF fh<=0
       StringF(temp,'550 \s: No such file or directory\b\n',filename)
       writeLineEx(sb,ftp_c,temp)
@@ -610,18 +634,50 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
         fileStart(ftpData,filename,0)
       ENDIF
       
-      
       buff:=New(32768)
+      t:=0
+      lastpos:=0
+      cps:=0
       REPEAT
         l:=recv(sb,data_c, buff,32768,0)
-        Fwrite(fh,buff,1,l)
+        IF asynclib<>NIL
+          WriteAsync(fh,buff,l)
+        ELSE
+          Fwrite(fh,buff,1,l)
+        ENDIF
         IF ftpData.fileProgress<>NIL
-          pos:=Seek(fh,0,OFFSET_CURRENT)
-          fileProgress(ftpData,filename,pos)
+          t2:=fastSystemTime()
+          ->only call update maximum every 1 second
+          IF (Abs(t2-t))>=50
+            IF asynclib<>NIL
+              pos:=SeekAsync(fh,0,MODE_CURRENT)
+            ELSE
+              pos:=Seek(fh,0,OFFSET_CURRENT)
+            ENDIF
+            IF (t<t2) THEN cps:=Div(Mul((pos-lastpos),50),(t2-t))
+            lastpos:=pos
+            fileProgress(ftpData,filename,pos,cps)
+            t:=t2
+          ENDIF
         ENDIF
       UNTIL l=0
       Dispose(buff)
-      Close(fh)
+
+      IF ftpData.fileProgress<>NIL
+        t2:=fastSystemTime()
+        IF asynclib<>NIL
+          pos:=SeekAsync(fh,0,MODE_CURRENT)
+        ELSE
+          pos:=Seek(fh,0,OFFSET_CURRENT)
+        ENDIF
+        IF (t<t2) THEN cps:=Div(Mul((pos-lastpos),50),(t2-t))
+        fileProgress(ftpData,filename,pos,cps)
+      ENDIF
+      IF asynclib<>NIL
+        CloseAsync(fh)
+      ELSE
+        Close(fh)
+      ENDIF
 
       IF ftpData.fileEnd<>NIL
         fileEnd(ftpData,filename)
@@ -651,16 +707,22 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
     r:=closeSocket(sb,data_s)
   ENDIF
   /*aePuts(ftpData,'Data connection closed\b\n')*/
+  IF asynclib<>NIL THEN CloseLibrary(asynclib)
 ENDPROC
 
 PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF temp[255]:STRING
   DEF fail=FALSE
   DEF buff
+  DEF asynclib
   DEF fn[500]:STRING
-  DEF r,l,pos
+  DEF r,l,pos,cps,lastpos
   DEF fh
+  DEF t,t2
 
+  asynclib:=OpenLibrary('asyncio.library',0)
+  asynciobase:=asynclib
+  
   IF ftpData.uploadMode
     StringF(temp,'550 \s: No such file or directory\b\n',filename)
     writeLineEx(sb,ftp_c,temp)
@@ -680,9 +742,15 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
     IF filename[0]="\\" THEN filename++
     StringF(fn,'\s\s',ftpData.workingPath,filename)
     
-    writeLineEx(sb,ftp_c, '150 Opening BINARY connection\b\n')
     
-    fh:=Open(fn,MODE_OLDFILE)
+    IF asynclib<>NIL
+      writeLineEx(sb,ftp_c, '150 Opening BINARY connection with ASYNC\b\n')
+      fh:=OpenAsync(fn,MODE_READ,32768)
+    ELSE
+      writeLineEx(sb,ftp_c, '150 Opening BINARY connection with no ASYNC\b\n')
+
+      fh:=Open(fn,MODE_OLDFILE)
+    ENDIF
     IF fh=0
       StringF(temp,'/XFTP: open error \s \d\b\n',fn,IoErr())
       aePuts(ftpData,temp)
@@ -691,23 +759,67 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
       writeLineEx(sb,ftp_c,temp)
     ELSE
       IF ftpData.fileStart<>NIL
-        Seek(fh,0,OFFSET_END)
-        pos:=Seek(fh,0,OFFSET_CURRENT)
-        Seek(fh,0,OFFSET_BEGINNING)
+        
+        IF asynclib<>NIL
+          SeekAsync(fh,0,MODE_END)
+          pos:=SeekAsync(fh,0,MODE_CURRENT)
+        ELSE
+          Seek(fh,0,OFFSET_END)
+          pos:=Seek(fh,0,OFFSET_CURRENT)
+        ENDIF
         fileStart(ftpData,filename,pos)
       ENDIF
-      Seek(fh,ftpData.restPos,OFFSET_BEGINNING)
-      buff:=New(10240)
+      IF asynclib<>NIL
+        SeekAsync(fh,ftpData.restPos,MODE_START)
+      ELSE
+        Seek(fh,ftpData.restPos,OFFSET_BEGINNING)
+      ENDIF
+      buff:=New(32768)
+      t:=fastSystemTime()
+      lastpos:=0
+      cps:=0
       REPEAT
-        l:=Fread(fh,buff,1,10240)
-        IF l>0 THEN send(sb,data_c, buff, l, 0)
-        IF ftpData.fileProgress<>NIL
-          pos:=Seek(fh,0,OFFSET_CURRENT)
-          fileProgress(ftpData,filename,pos)
+        IF asynclib<>NIL
+          l:=ReadAsync(fh,buff,32768)
+        ELSE
+          l:=Fread(fh,buff,1,32768)
+        ENDIF
+        IF l>0 
+          r:=send(sb,data_c, buff, l, 0)
+          IF (r>0) AND (ftpData.fileProgress<>NIL)
+            t2:=fastSystemTime()
+            ->only call update maximum every 1 second
+            IF (Abs(t2-t))>=50
+              IF asynclib<>NIL
+                pos:=SeekAsync(fh,0,MODE_CURRENT)
+              ELSE
+                pos:=Seek(fh,0,OFFSET_CURRENT)
+              ENDIF
+              IF (t<t2) THEN cps:=Div(Mul((pos-lastpos),50),(t2-t))
+              lastpos:=pos
+              fileProgress(ftpData,filename,pos,cps)
+              t:=t2
+            ENDIF
+          ENDIF
         ENDIF
       UNTIL l=0
       Dispose(buff)
-      Close(fh)
+
+      IF ftpData.fileProgress<>NIL
+        t2:=fastSystemTime()
+        IF asynclib<>NIL
+          pos:=SeekAsync(fh,0,MODE_CURRENT)
+        ELSE
+          pos:=Seek(fh,0,OFFSET_CURRENT)
+        ENDIF
+        IF (t<t2) THEN cps:=Div(Mul((pos-lastpos),50),(t2-t))
+        fileProgress(ftpData,filename,pos,cps)
+      ENDIF
+      IF asynclib<>NIL
+        CloseAsync(fh)
+      ELSE
+        Close(fh)
+      ENDIF
       fail:=FALSE
       IF ftpData.fileEnd<>NIL
         fileEnd(ftpData,filename)
@@ -733,6 +845,9 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   IF (data_s>=0)
     ftpData.scount:=ftpData.scount-1
     r:=closeSocket(sb,data_s)
+  ENDIF
+  IF asynclib<>NIL 
+    CloseLibrary(asynclib)
   ENDIF
   /*aePuts(ftpData,'Data connection closed\b\n')*/
 ENDPROC

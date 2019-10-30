@@ -255,7 +255,9 @@ MODULE 'intuition/screens',
        'amissl',
        'amisslmaster',
        'fifo',
-       'owndevunit'
+       'owndevunit',
+       'asyncio',
+       'libraries/asyncio'
 
   MODULE '*axcommon',
          '*miscfuncs',
@@ -4417,10 +4419,8 @@ PROC startProcess(exestring, stacksize, priority, async, doorTrap)
   DEF processOutFile[255]:STRING
 
   IF (cmds.taskPri<=priority)
-    Forbid()
     task:=FindTask(0)
     SetTaskPri(task,priority+1)
-    Permit()
   ENDIF
 
 
@@ -4435,9 +4435,7 @@ PROC startProcess(exestring, stacksize, priority, async, doorTrap)
   END filetags
 
   IF (cmds.taskPri<=priority)
-    Forbid()
     SetTaskPri(task,cmds.taskPri)
-    Permit()
   ENDIF
 
   IF doorTrap
@@ -8031,6 +8029,8 @@ PROC checkIncomingCall()
   DEF tempstr2[255]:STRING
   DEF stat,n,isConnected=FALSE
   DEF filetags
+  DEF peeraddr: sockaddr_in
+  DEF hostent: PTR TO hostent
 
   ioFlags[IOFLAG_SER_IN]:=-1
   ioFlags[IOFLAG_SER_OUT]:=0
@@ -8040,6 +8040,11 @@ PROC checkIncomingCall()
 
   IF telnetSocket>=0
     StrCopy(connectString,'CONNECT 19200')
+    n:=SIZEOF sockaddr_in
+    GetPeerName(telnetSocket,peeraddr,{n})
+    hostent:=GetHostByAddr(telnetSocket,peeraddr.sin_addr,AF_INET)
+    StrCopy(hostName,hostent.h_name,255)
+    StringF(hostIP,'\d.\d.\d.\d',Shr(peeraddr.sin_addr AND $ff000000,24),Shr(peeraddr.sin_addr AND $ff0000,16),Shr(peeraddr.sin_addr AND $ff00,8),peeraddr.sin_addr AND $ff)
     JUMP go3
   ENDIF
 
@@ -8238,8 +8243,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
         IF checkTelnetData()
           signals:=signals OR telnetsig
         ENDIF
-        IF checkCarrier()=FALSE THEN signals:=timersig
-      UNTIL signals
+      UNTIL signals OR (checkCarrier()=FALSE)
     ELSE
       signals:=Wait(SIGBREAKF_CTRL_C OR consolesig OR windowsig OR cxsigflag OR doorsig OR rexxsig OR serialsig OR timersig OR extsig)
     ENDIF
@@ -13724,6 +13728,14 @@ PROC setEnvMsg(s: PTR TO CHAR)
   ENDIF
   strCpy(masterMsg.action,temp,ALL)
 
+  IF loggedOnUser<>NIL
+    StringF(temp,'\r\d[7]',onlineBaud)
+    strCpy(masterMsg.baud,temp,ALL)
+  ELSE
+    StringF(temp,'\r\d[7]',cmds.openingBaud)
+    strCpy(masterMsg.baud,temp,ALL)
+  ENDIF
+
   IF((port:=FindPort('AE.Master')))
     PutMsg(port,masterMsg)
     WaitPort(serverRP)
@@ -13799,28 +13811,37 @@ ENDPROC
 PROC sendMaster()
   DEF temp[10]:STRING
   DEF port:PTR TO mp
+  DEF masterMsg2:acpMessage
+  DEF masterReplyPort:PTR TO mp
 
-  IF (serverRP=NIL)  THEN RETURN
+  masterReplyPort:=createPort(0,0)
+
+  masterMsg2.node:=node
+  masterMsg2.msg.ln.type:=NT_MESSAGE
+  masterMsg2.msg.length:=SIZEOF acpMessage
+  masterMsg2.msg.replyport:=masterReplyPort
+  masterMsg2.command:=JH_UPDATE
 
   IF loggedOnUser<>NIL
-    strCpy(masterMsg.user,loggedOnUser.name,ALL)
-    strCpy(masterMsg.location,loggedOnUser.location,ALL)
+    strCpy(masterMsg2.user,loggedOnUser.name,ALL)
+    strCpy(masterMsg2.location,loggedOnUser.location,ALL)
     StringF(temp,'\r\d[7]',onlineBaud)
-    strCpy(masterMsg.baud,temp,ALL)
+    strCpy(masterMsg2.baud,temp,ALL)
   ELSE
-    strCpy(masterMsg.user,'',ALL)
-    strCpy(masterMsg.location,'',ALL)
+    strCpy(masterMsg2.user,'',ALL)
+    strCpy(masterMsg2.location,'',ALL)
     StringF(temp,'\r\d[7]',cmds.openingBaud)
-    strCpy(masterMsg.baud,temp,ALL)
+    strCpy(masterMsg2.baud,temp,ALL)
   ENDIF
 
   StringF(temp,'\d',currentStat)
-  strCpy(masterMsg.action,temp,ALL)
+  strCpy(masterMsg2.action,temp,ALL)
   IF((port:=FindPort('AE.Master')))
-    PutMsg(port,masterMsg)
-    WaitPort(serverRP)
-    GetMsg(serverRP)
+    PutMsg(port,masterMsg2)
+    WaitPort(masterReplyPort)
+    GetMsg(masterReplyPort)
   ENDIF
+  deletePort(masterReplyPort)
 ENDPROC
 
 
@@ -14227,11 +14248,27 @@ PROC xprfopen()
   IF (filemode<>MODE_OLDFILE) AND (zModemInfo.currentOperation=ZMODEM_UPLOAD) THEN zModemInfo.current:=zModemInfo.current+1
 
   zModemInfo.resumePos:=0
-  res:=Open(fn,filemode)
+  
+  IF asynciobase<>NIL
+    IF filemode=MODE_OLDFILE 
+      res:=OpenAsync(fn,MODE_READ,65536)
+    ELSEIF filemode=MODE_NEWFILE
+      res:=OpenAsync(fn,MODE_WRITE,65536)
+    ELSEIF filemode=MODE_READWRITE
+      res:=OpenAsync(fn,MODE_APPEND,65536)
+    ENDIF
+  ELSE
+    res:=Open(fn,filemode)
+  ENDIF
 
-  IF  strCmpi(am,'a',ALL) OR strCmpi(am,'a+',ALL)
-    Seek(res,0,OFFSET_END)
-    zModemInfo.resumePos:=Seek(res,0,OFFSET_END)
+  IF strCmpi(am,'a',ALL) OR strCmpi(am,'a+',ALL)
+    IF asynciobase<>NIL
+      SeekAsync(res,0,MODE_END)
+      zModemInfo.resumePos:=SeekAsync(res,0,MODE_END)
+    ELSE
+      Seek(res,0,OFFSET_END)
+      zModemInfo.resumePos:=Seek(res,0,OFFSET_END)
+    ENDIF
   ENDIF
   StringF(tempstr,'xprfopen: \s - mode - \s, res - \d',fn, am, res)
   debugLog(LOG_DEBUG,tempstr)
@@ -14258,7 +14295,11 @@ PROC xprfclose()
   StringF(tempstr,'xprfclose \d',fp)
   debugLog(LOG_DEBUG,tempstr)
   IF fp<>-1
-    Close(fp)
+    IF asynciobase<>NIL
+      CloseAsync(fp)
+    ELSE
+      Close(fp)
+    ENDIF
     IF (zModemInfo.currentOperation=ZMODEM_UPLOAD) AND (zModemInfo.filesize>0) AND (zModemInfo.transPos=zModemInfo.filesize) AND bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
       StringF(tempstr,'bgCheckPort\d',node)
       IF (bgport:=FindPort(tempstr))
@@ -14328,7 +14369,11 @@ PROC xprfread()
   ->StringF(tempstr,'xprfread: \d bytes',bsize*bcount)
   ->debugLog(LOG_DEBUG,tempstr)
 
-  res:=Read(fp,buf,Mul(bsize,bcount))
+  IF asynciobase<>NIL
+    res:=ReadAsync(fp,buf,Mul(bsize,bcount))
+  ELSE
+    res:=Read(fp,buf,Mul(bsize,bcount))
+  ENDIF
 
   ->calculate number of items read
   res:=Div(res,bsize)
@@ -14358,7 +14403,11 @@ PROC xprfwrite()
   ->StringF(tempstr,'xprfwrite: \d bytes',Mul(bsize,bcount))
   ->debugLog(LOG_DEBUG,tempstr)
 
-  res:=Write(fp,buf,Mul(bsize,bcount))
+  IF asynciobase<>NIL
+    res:=WriteAsync(fp,buf,Mul(bsize,bcount))
+  ELSE
+    res:=Write(fp,buf,Mul(bsize,bcount))
+  ENDIF
 
   ->calculate number of items written
   res:=Div(res,bsize)
@@ -14402,13 +14451,14 @@ PROC xprsread()
     obuf:=buf2
     c2:=0
     REPEAT
-      
+      IF timeout<>0
       fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
       fds[telnetSocket/32]:=fds[telnetSocket/32] OR (Shl(1,telnetSocket AND 31))
       sigs:=timersig
       status:=WaitSelect(telnetSocket+1,fds,NIL,NIL,NIL,{sigs})
       END fds
-      IF status>0
+      ENDIF
+      IF (timeout=0) OR (status>0)
         status:=Recv(telnetSocket,buf2,waiting,0)     
         IF status>0 
           StringF(tempstr,'xprsread recv complete: \d bytes',status)
@@ -14703,8 +14753,24 @@ PROC xprfseek()
   StringF(tempstr,'xprfseek: \d offset',offset)
   debugLog(LOG_DEBUG,tempstr)
 
-  Seek(fp,offset,origin)
-  IF zModemInfo.resumePos=0 THEN zModemInfo.resumePos:=Seek(fp,0,OFFSET_CURRENT)
+  IF asynciobase<>NIL
+    IF origin=OFFSET_BEGINNING
+      SeekAsync(fp,offset,MODE_START)
+    ELSEIF origin=OFFSET_CURRENT
+      SeekAsync(fp,offset,MODE_CURRENT)
+    ELSEIF origin=OFFSET_END
+      SeekAsync(fp,offset,MODE_END)
+    ENDIF
+  ELSE
+    Seek(fp,offset,origin)
+  ENDIF
+  IF zModemInfo.resumePos=0
+    IF asynciobase<>NIL
+      zModemInfo.resumePos:=SeekAsync(fp,0,MODE_CURRENT)
+    ELSE
+      zModemInfo.resumePos:=Seek(fp,0,OFFSET_CURRENT)
+    ENDIF
+  ENDIF
 ENDPROC FALSE
 
 PROC xprsflushAsm()
@@ -15287,6 +15353,7 @@ ENDPROC
 
 PROC ftpUploadFileEnd(xprInfo:PTR TO xprData, fileName:PTR TO CHAR)
   tTTM:=tTTM+getSystemTime()-ftptime
+  setEnvStat(ENV_UPLOADING)
 ENDPROC
 
 PROC ftpDownloadFileStart(xprInfo:PTR TO xprData, fileName:PTR TO CHAR,filelen)
@@ -15330,10 +15397,12 @@ PROC ftpDownloadFileEnd(xprInfo:PTR TO xprData, fileName:PTR TO CHAR)
   IF (zModemInfo.transPos<>0) AND (zModemInfo.resumePos<>zModemInfo.filesize) AND (zModemInfo.transPos=zModemInfo.filesize)
     updateDownloadStats(xprInfo,fileItem)
   ENDIF
+  setEnvStat(ENV_DOWNLOADING)
 ENDPROC
 
-PROC ftpTransferFileProgress(xprInfo:PTR TO xprData, fileName:PTR TO CHAR,pos)
+PROC ftpTransferFileProgress(xprInfo:PTR TO xprData, fileName:PTR TO CHAR,pos,cps)
   zModemInfo.transPos:=pos
+  zModemInfo.cps:=cps
   updateZDisplay()
 ENDPROC
 
@@ -15485,7 +15554,12 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
     ftpDataPort:=readToolTypeInt(TOOLTYPE_NODE,node,'FTPDATAPORT')
     IF ftpPort=-1 THEN ftpPort:=10000+(node*2)
     IF ftpDataPort=-1 THEN ftpDataPort:=10001+(node*2)
-    RETURN ftpDownload(fileList,updateDownloadStats,ftpPort,ftpDataPort)
+    IF scropen
+      openZmodemStat()
+    ENDIF
+    result:=ftpDownload(fileList,updateDownloadStats,ftpPort,ftpDataPort)
+    closezModemStats()
+    RETURN result
   ENDIF
 
   IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
@@ -15560,6 +15634,8 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   ELSE
     readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'OPTIONS',tempstr)
   ENDIF
+  
+  asynciobase:=OpenLibrary('asyncio.library',0)
 
   StringF(debugstr,'xpr setup options = \s',tempstr)
   debugLog(LOG_DEBUG,debugstr)
@@ -15623,6 +15699,10 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats)
   closeTimer()
 
   CloseLibrary(xprotocolbase)
+
+  IF asynciobase<>NIL THEN CloseLibrary(asynciobase)
+  asynciobase:=NIL
+
   zModemInfo.currentOperation:=ZMODEM_NONE
   closezModemStats()
   serShared:=oldshared
@@ -15879,7 +15959,9 @@ PROC xprReceive(file) HANDLE
     IF ftpPort=-1 THEN ftpPort:=10000+(node*2)
     IF ftpDataPort=-1 THEN ftpDataPort:=10001+(node*2)
     
+    IF scropen THEN openZmodemStat()
     ftpUpload(tempstr,ftpPort,ftpDataPort)
+    closezModemStats()
     checkOffhookFlag()
     receivePlayPen()
     IF (tBT>0) AND (tTTM>0)
@@ -15935,6 +16017,8 @@ PROC xprReceive(file) HANDLE
   xprio.xpr_unlink:={xprunlinkAsm}
   xprio.xpr_squery:=0
   xprio.xpr_getptr:=0
+
+  asynciobase:=OpenLibrary('asyncio.library',0)
 
   StrCopy(tempstr,'')
   IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
@@ -16033,6 +16117,9 @@ PROC xprReceive(file) HANDLE
 
   closeTimer()
 
+  IF asynciobase<>NIL THEN CloseLibrary(asynciobase)
+  asynciobase:=NIL
+
   CloseLibrary(xprotocolbase)
   zModemInfo.currentOperation:=ZMODEM_NONE
   closezModemStats()
@@ -16102,7 +16189,7 @@ PROC rFreeSpace(path: PTR TO CHAR)
 ENDPROC stat
 
 PROC setProtocol(str: PTR TO CHAR)
- loggedOnUser.protocol:="Z"
+  loggedOnUser.protocol:="Z"
 ENDPROC
 
 PROC stripReturn(str: PTR TO CHAR)
@@ -17543,17 +17630,14 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
     ELSE
       setProtocol('')
     ENDIF
-    protocol:=loggedOnUser.protocol
-    SELECT protocol
-      CASE "Z"
-        IF(StrLen(sopt.ramPen)>0)                     /* are we uploading to a diff device */
-          StringF(buff,'\s UPLOADING to \s..\b\n',xprTitle.item(loggedOnUser.xferProtocol),sopt.ramPen)
-        ELSE                        /* otherwise normal upload to playpen dir */
-          StringF(buff,'\s UPLOADING....\b\n',xprTitle.item(loggedOnUser.xferProtocol))
-        ENDIF
 
-        aePuts(buff)                              /* show it to the user */
-    ENDSELECT
+    IF(StrLen(sopt.ramPen)>0)                     /* are we uploading to a diff device */
+      StringF(buff,'\s UPLOADING to \s..\b\n',xprTitle.item(loggedOnUser.xferProtocol),sopt.ramPen)
+    ELSE                        /* otherwise normal upload to playpen dir */
+      StringF(buff,'\s UPLOADING....\b\n',xprTitle.item(loggedOnUser.xferProtocol))
+    ENDIF
+
+    aePuts(buff)                              /* show it to the user */
 
     formatSpaceValue(tFS,tempstr)
     formatSpaceValue(fSUploading,tempstr2)
@@ -17596,11 +17680,7 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
     beenUDd:=1
   ENDIF
 
-  protocol:=loggedOnUser.protocol
-  SELECT protocol
-    CASE "Z"
-      zmodemReceive(path,uLFType)     /* path of upload */
-  ENDSELECT
+  zmodemReceive(path,uLFType)     /* path of upload */
 
   aePuts('\b\n\b\nFile Uploading Complete...\b\n')
 
@@ -18677,13 +18757,16 @@ astart:
 
   IF(numFiles=0) THEN RETURN RESULT_NO_CARRIER
 
-  IF loggedOnUser.protocol="Z"
-     aePuts('\b\nZmodem ')
-  ELSEIF loggedOnUser.protocol="C"
-     aePuts('\b\nXmodem/CRC ')
+  IF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'INTERNAL',ALL))
+    aePuts('\b\nZmodem ')
+  ELSEIF(strCmpi(xprLib.item(loggedOnUser.xferProtocol),'FTP',ALL))
+    aePuts('\b\nFTP ')
+  ELSE
+    StringF(tempStr,'\b\n\s',xprTitle.item(loggedOnUser.xferProtocol))
+    aePuts(tempStr)
   ENDIF
-
-  aePuts(' Batch Download Estimate:\b\n')
+  StringF(tempStr,' Batch Download Estimate at \d bps:\b\n',onlineBaud)
+  aePuts(tempStr)
 astart2:
   tsec:=Div(dtfsize,Div(onlineBaud,10))
   min:=tsec/60
@@ -27814,7 +27897,7 @@ PROC main() HANDLE
   DEF proc: PTR TO process
 
   StrCopy(expressVer,'v5.2.0-beta1',ALL)
-  StrCopy(expressDate,'28-Oct-2019',ALL)
+  StrCopy(expressDate,'29-Oct-2019',ALL)
 
   InitSemaphore(bgData)
   
@@ -28302,12 +28385,7 @@ PROC main() HANDLE
   StringF(nodeWorkDir,'\sNode\d/Work/',cmds.bbsLoc,node)
 
   IF (proc.task.ln.pri<>cmds.taskPri)
-    WriteF('setting task priority from \d to \d\n',proc.task.ln.pri,cmds.taskPri)
-    Forbid()
     SetTaskPri(FindTask(0),cmds.taskPri)
-    Permit()
-  ELSE
-    WriteF('not changing task priority already set to \d\n',proc.task.ln.pri)
   ENDIF
 
   IF (debug) OR (sopt.iconify=FALSE) THEN openExpressScreen()
