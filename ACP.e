@@ -31,7 +31,6 @@
        'asl',
        'libraries/asl',
        'wb',
-
         'socket',
         'net/netdb',
         'net/in',
@@ -41,7 +40,9 @@
 
   MODULE '*axcommon',
          '*jsonParser',
-         '*miscfuncs'
+         '*miscfuncs',
+         '*stringlist'
+
 
 /*
 'Setup'
@@ -295,6 +296,12 @@ OBJECT screenPref
   ->WORD Zoom[5];
 ENDOBJECT
 
+OBJECT connectionItem
+  ipAddr: LONG
+  connectionTime: LONG
+  blocked: CHAR
+  blockExpiry: LONG
+ENDOBJECT
   
 DEF ngAry[ALL_GADS]:ARRAY OF LONG
 
@@ -342,6 +349,10 @@ DEF activeNodeCount=0
 DEF colourSpecs
 DEF amigaSpecs
 DEF colours
+
+DEF dosCheckTime=60
+DEF dosCheckTrigger=5
+DEF dosBanTime=60
 
 DEF masterPort[100]:STRING
 
@@ -529,8 +540,14 @@ PROC getSystemDate(outDateStr:PTR TO CHAR)
   IF DateToStr(dt)
     StringF(outDateStr,'\s[6] \s[5]',datestr,timestr)
   ENDIF
-  
 ENDPROC
+
+->returns system time as a long
+PROC getSystemTime()
+  DEF currDate: datestamp
+  DEF startds:PTR TO datestamp
+  startds:=DateStamp(currDate)
+ENDPROC Mul(Mul(startds.days,1440),60)+(startds.minute*60)+(startds.tick/50)
 
 PROC trimStr(src:PTR TO CHAR, dest:PTR TO CHAR)
   DEF i
@@ -2775,6 +2792,9 @@ PROC readStartUp(s:PTR TO CHAR)
   IF(t:=FindToolType(oldtooltypes,'SHORT_DONOTMOVE')) THEN shortUp:=1
   IF(t:=FindToolType(oldtooltypes,'PRIORITY')) THEN SetTaskPri(FindTask(0),Val(t))
   IF(t:=FindToolType(oldtooltypes,'TELNETPORT')) THEN telnetPort:=Val(t)
+  IF(t:=FindToolType(oldtooltypes,'DOSCHECKTIME')) THEN dosCheckTime:=Val(t)
+  IF(t:=FindToolType(oldtooltypes,'DOSCHECKTRIGGER')) THEN dosCheckTrigger:=Val(t)
+  IF(t:=FindToolType(oldtooltypes,'DOSBANTIME')) THEN dosBanTime:=Val(t)
     
   j:=1
   StringF(image,'BACKUP.\d',j++)
@@ -3303,6 +3323,55 @@ PROC saveState()
   ENDIF
 ENDPROC
 
+PROC loadConnectionList(connList:PTR TO stdlist)
+  DEF connFile[255]:STRING
+  DEF tempStr[255]:STRING
+  DEF connItem:PTR TO connectionItem
+  DEF fh
+  StringF(connFile,'\sacpConnections.dat',bbsPath)
+  fh:=Open(connFile,MODE_OLDFILE)
+  IF fh>0
+    WHILE (ReadStr(fh,tempStr)<>-1) OR (EstrLen(tempStr)>0)
+      connItem:=NEW connItem
+      connItem.ipAddr:=Val(tempStr)
+      ReadStr(fh,tempStr)
+      connItem.connectionTime:=Val(tempStr)
+      ReadStr(fh,tempStr)
+      connItem.blocked:=Val(tempStr)
+      ReadStr(fh,tempStr)
+      connItem.blockExpiry:=Val(tempStr)
+      connList.add(connItem)
+    ENDWHILE
+
+    Close(fh)
+  ENDIF
+ENDPROC
+
+PROC saveConnectionList(connList:PTR TO stdlist)
+  DEF connFile[255]:STRING
+  DEF tempStr[255]:STRING
+  DEF connItem:PTR TO connectionItem
+  DEF i,fh
+  StringF(connFile,'\sacpConnections.dat',bbsPath)
+  fh:=Open(connFile,MODE_NEWFILE)
+  IF fh>0
+    FOR i:=0 TO connList.count()-1
+      connItem:=connList.item(i)
+     
+      StringF(tempStr,'$\h\n',connItem.ipAddr)
+      Write(fh,tempStr,StrLen(tempStr))
+      StringF(tempStr,'\d\n',connItem.connectionTime)
+      Write(fh,tempStr,StrLen(tempStr))
+      StringF(tempStr,'\d\n',connItem.blocked)
+      Write(fh,tempStr,StrLen(tempStr))
+      StringF(tempStr,'\d\n',connItem.blockExpiry)
+      Write(fh,tempStr,StrLen(tempStr))
+    ENDFOR
+    Close(fh)
+  ENDIF
+ENDPROC
+
+
 PROC telnetSend(socket,msg,len=-1)
   DEF r
   IF len=-1 THEN len:=StrLen(msg)
@@ -3337,6 +3406,11 @@ PROC main() HANDLE
   DEF telnetSocket2=-1
   DEF f
   DEF fds:PTR TO LONG
+  DEF peeraddr: sockaddr_in
+  DEF n,t
+  DEF connectionList: PTR TO stdlist
+  DEF connItem: PTR TO connectionItem
+  DEF saveConn=FALSE
 
   DEF sopt:PTR TO startOption
  
@@ -3350,6 +3424,7 @@ PROC main() HANDLE
     ndDownloads[i]:=NIL
   ENDFOR
 
+  connectionList:=NEW connectionList
 
   dim:=[1,1,1,1]:INT  /*** Dimensions of ZIP window default ***/
   zim:=[10,100]:INT
@@ -3455,6 +3530,8 @@ PROC main() HANDLE
 
   readStartUp(iconStartName)
   IF acpError THEN Raise(ERR_STARTUP)
+
+  loadConnectionList(connectionList)
 
   IF commodityEnabled  
     cxbase:=OpenLibrary('commodities.library', 37)
@@ -3651,73 +3728,149 @@ PROC main() HANDLE
                 telnetSocket:=Accept(telnetServerSocket,NIL,NIL)
                 IF telnetSocket>=0
 
-                  Delay(30)
-                  f:=FALSE
-                  StringF(tempstr,'\c\c\c',255,253,31)    ->DO NAWS
-                  IF telnetSend(telnetSocket,tempstr,3)=FALSE THEN f:=TRUE
-                  StringF(tempstr,'\c\c\c',255,251,5)    ->WILL STATUS
-                  IF telnetSend(telnetSocket,tempstr,3)=FALSE THEN f:=TRUE
-                  StringF(tempstr,'\c\c\c',255,253,32)    ->DO TERMSPEED
-                  IF telnetSend(telnetSocket,tempstr,3)=FALSE THEN f:=TRUE
-                  StringF(tempstr,'\c\c\c',255,253,34)    ->DO LINEMODE
-                  IF telnetSend(telnetSocket,tempstr,3)=FALSE THEN f:=TRUE
-                  StringF(tempstr,'\c\c\c',255,253,0)    ->DO BINARY
-                  IF telnetSend(telnetSocket,tempstr,3)=FALSE THEN f:=TRUE
-                  StringF(tempstr,'\c\c\c',255,251,3)    ->WILL SGA
-                  IF telnetSend(telnetSocket,tempstr,3)=FALSE THEN f:=TRUE
-                  StringF(tempstr,'\c\c\c',255,251,1)    ->WILL ECHO
-                  IF telnetSend(telnetSocket,tempstr,3)=FALSE THEN f:=TRUE
+                  saveConn:=FALSE
+                  n:=SIZEOF sockaddr_in
+                  GetPeerName(telnetSocket,peeraddr,{n})
 
-                  IF telnetSend(telnetSocket,'\b\n/X Native Telnet:  Searching for free node...\b\n')=FALSE THEN f:=TRUE
-       
-                  IF f=FALSE
-                    i:=0
-                    f:=Recv(telnetSocket,tempstr,1,MSG_PEEK)
-                    IF f<>1
-                      f:=Errno()
-                      IF (f<>EINTR) AND (f<>EWOULDBLOCK) THEN i:=-1
-                    ELSE
-                      IF tempstr[0]<>$ff THEN i:=-1
+                  IF (dosCheckTime>0) AND (dosCheckTrigger>0)
+                    t:=getSystemTime()
+                    FOR i:=connectionList.count()-1 TO 0 STEP -1
+                      connItem:=connectionList.item(i)
+                      IF (connItem.blocked=FALSE)
+                        IF ((connItem.connectionTime>t) OR (connItem.connectionTime<(t-dosCheckTime)))
+                          END connItem
+                          connectionList.remove(i)
+                          saveConn:=TRUE
+                        ENDIF
+                      ELSE
+                        IF (connItem.blockExpiry<>0) AND (connItem.blockExpiry<t)
+                          END connItem
+                          connectionList.remove(i)
+                          saveConn:=TRUE
+                        ENDIF
+                      ENDIF
+                    ENDFOR
+                      
+                    n:=0
+                    FOR i:=0 TO connectionList.count()-1
+                      connItem:=connectionList.item(i)
+                      IF (connItem.ipAddr=peeraddr.sin_addr)
+                        IF connItem.blocked
+                          IF (connItem.blockExpiry=0)
+                            telnetSend(telnetSocket,'\b\n/X Native Telnet:  Your ip address is permanently blocked\b\n')
+                          ELSE
+                            num:=Div(connItem.blockExpiry-t,60)
+                            StringF(tempstr,'\b\n/X Native Telnet:  Your ip address has been blocked for another \d minutes\b\n',num)
+                            telnetSend(telnetSocket,tempstr)
+                          ENDIF
+                          CloseSocket(telnetSocket)
+                          telnetSocket:=-1
+                        ELSE
+                          n++
+                        ENDIF
+                      ENDIF
+                    ENDFOR
+                    
+                    IF (telnetSocket<>-1) AND (n>=dosCheckTrigger)
+                      FOR i:=connectionList.count()-1 TO 0 STEP -1
+                        connItem:=connectionList.item(i)
+                        END connItem
+                        connectionList.remove(i)
+                        saveConn:=TRUE
+                      ENDFOR
+                      connItem:=NEW connItem
+                      connItem.ipAddr:=peeraddr.sin_addr
+                      connItem.connectionTime:=t
+                      connItem.blocked:=TRUE
+                      IF dosBanTime<0
+                        connItem.blockExpiry:=0     ->permanent ban
+                      ELSE
+                        connItem.blockExpiry:=t+Mul(dosBanTime,60)  -> apply denial of service ban period
+                      ENDIF
+                      connectionList.add(connItem)
+                      saveConn:=TRUE
+                      IF dosBanTime<0
+                        telnetSend(telnetSocket,'\b\n/X Native Telnet:  Your ip address has been blocked permanently\b\n')
+                      ELSE
+                        StringF(tempstr,'\b\n/X Native Telnet:  Your ip address has been blocked for \d minutes\b\n',dosBanTime)
+                        telnetSend(telnetSocket,tempstr)
+                      ENDIF
+                      CloseSocket(telnetSocket)
+                      telnetSocket:=-1
                     ENDIF
-                  ELSE
-                    i:=-1
+
+                    IF (telnetSocket<>-1)
+                      connItem:=NEW connItem
+                      connItem.ipAddr:=peeraddr.sin_addr
+                      connItem.connectionTime:=t
+                      connItem.blocked:=FALSE
+                      connItem.blockExpiry:=0
+                      connectionList.add(connItem)
+                      saveConn:=TRUE
+                    ENDIF
                   ENDIF
 
-                  IF i<>-1
-                    REPEAT
-                      IF(users[i].actionVal=ENV_AWAITCONNECT) AND (telnetNode[i]=1)
-                        IF(doMultiCom)
-                          ObtainSemaphore(semiNodes)
-                          telnetSocket2:=semiNodes.myNode[i].telnetSocket
-                          ReleaseSemaphore(semiNodes)
-                        ELSE
-                          telnetSocket2:=-1
-                        ENDIF
+                  IF (telnetSocket<>-1)
+                    f:=FALSE
 
-                        IF telnetSocket2=-1
-                          StringF(tempstr,'/X Native Telnet:  Successful connection to node \d\b\n\b\n',i)
-                          telnetSend(telnetSocket,tempstr)
-                          telnetSocket2:=ReleaseSocket(telnetSocket,UNIQUE_ID)
-                          callNode(i,INCOMING_TELNET,telnetSocket2)
-                          telnetSocket:=-1
-                          i:=-1
+                    ->WILL=251, WONT=252, DO=253, DONT=254
+
+                    IF telnetSend(telnetSocket,'\b\n/X Native Telnet:  Searching for free node...\b\n')=FALSE THEN f:=TRUE
+        
+                    IF f=FALSE
+                      i:=0
+                      REPEAT
+                        IF(users[i].actionVal=ENV_AWAITCONNECT) AND (telnetNode[i]=1)
+                          IF(doMultiCom)
+                            ObtainSemaphore(semiNodes)
+                            telnetSocket2:=semiNodes.myNode[i].telnetSocket
+                            ReleaseSemaphore(semiNodes)
+                          ELSE
+                            telnetSocket2:=-1
+                          ENDIF
+
+                          IF telnetSocket2=-1
+                            StringF(tempstr,'/X Native Telnet:  Successful connection to node \d\b\n\b\n',i)
+                            telnetSend(telnetSocket,tempstr)
+
+                            StringF(tempstr,'\c\c\c',255,253,0)    ->DO BINARY
+                            telnetSend(telnetSocket,tempstr,3)
+                            StringF(tempstr,'\c\c\c',255,254,31)    ->DONT NAWS
+                            telnetSend(telnetSocket,tempstr,3)
+                            StringF(tempstr,'\c\c\c',255,252,5)     ->WONT STATUS
+                            telnetSend(telnetSocket,tempstr,3)
+                            StringF(tempstr,'\c\c\c',255,254,32)    ->DONT TERMSPEED
+                            telnetSend(telnetSocket,tempstr,3)
+                            StringF(tempstr,'\c\c\c',255,254,34)    ->DONT LINEMODE
+                            telnetSend(telnetSocket,tempstr,3)
+                            StringF(tempstr,'\c\c\c',255,251,3)    ->WILL SGA
+                            telnetSend(telnetSocket,tempstr,3)
+                            StringF(tempstr,'\c\c\c',255,251,1)    ->WILL ECHO
+                            telnetSend(telnetSocket,tempstr,3)
+
+
+                            telnetSocket2:=ReleaseSocket(telnetSocket,UNIQUE_ID)
+                            callNode(i,INCOMING_TELNET,telnetSocket2)
+                            telnetSocket:=-1
+                            i:=-1
+                          ELSE
+                            i++
+                          ENDIF
                         ELSE
                           i++
                         ENDIF
-                      ELSE
-                        i++
+                      UNTIL (i=MAX_NODES) OR (i=-1)
+                      IF i<>-1
+                        telnetSend(telnetSocket,'/X Native Telnet:  No nodes available to handle your connection \b\n\b\n')                   
                       ENDIF
-                    UNTIL (i=MAX_NODES) OR (i=-1)
+                    ENDIF
+                      
+                    IF telnetSocket<>-1
+                      CloseSocket(telnetSocket)
+                      telnetSocket:=-1
+                    ENDIF
                   ENDIF
-                    
-                  IF i<>-1
-                    telnetSend(telnetSocket,'/X Native Telnet:  No nodes available to handle your connection \b\n\b\n')                   
-                  ENDIF
-                    
-                  IF telnetSocket<>-1
-                    CloseSocket(telnetSocket)
-                    telnetSocket:=-1
-                  ENDIF
+                  IF saveConn THEN saveConnectionList(connectionList)
                 ENDIF
               ENDIF
             UNTIL signals
@@ -3824,6 +3977,7 @@ EXCEPT DO
   
   shutDownMaster()
   saveState()
+  saveConnectionList(connectionList)
   IF oldDirLock THEN CurrentDir(oldDirLock)
   IF newlock<>NIL THEN UnLock(newlock)
 
@@ -3849,6 +4003,12 @@ EXCEPT DO
     END ndDownloads[i]
     END ndUploads[i]
   ENDFOR
+
+  FOR i:=0 TO connectionList.count()-1
+    connItem:=connectionList.item(i)
+    END connItem
+  ENDFOR
+  END connectionList
 
   IF (telnetServerSocket>=0) THEN CloseSocket(telnetServerSocket)
   
