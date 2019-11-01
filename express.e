@@ -9599,6 +9599,63 @@ PROC stringCompare(nam: PTR TO CHAR,pat: PTR TO CHAR)
   ENDFOR
 ENDPROC RESULT_FAILURE
 
+PROC listMSGs(gfh)
+  DEF tempStr[255]:STRING
+  DEF stat,start,r
+  DEF oldMsgNum
+  DEF mailFlag=0
+  DEF mailStatus[10]:STRING
+  
+  nonStopDisplayFlag:=FALSE
+  oldMsgNum:=msgNum
+
+  StringF(tempStr,'[32mStarting message [33m[[0m\d[33m][0m: ',mailStat.lowestNotDel)
+  aePuts(tempStr)
+  stat:=lineInput('','',10,INPUT_TIMEOUT,tempStr)
+  IF StrLen(tempStr)=0
+    msgNum:=mailStat.lowestNotDel
+    r:=1
+  ELSE
+    msgNum,r:=Val(tempStr)
+  ENDIF
+  IF r=0
+    msgNum:=oldMsgNum
+    RETURN RESULT_FAILURE
+  ENDIF
+
+  REPEAT
+    IF(msgNum>=mailStat.highMsgNum)
+      JUMP listOUT
+    ENDIF
+    stat:=loadMessageHeader(gfh)
+    IF(mailHeader.status="D") THEN JUMP listNextMSG
+
+    IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS))) AND (mailHeader.recv=0)
+      IF(mailFlag=0)
+        aePuts('\b\n\b\n')
+        aePuts('[32mMsg    Type     From                           Subject              \b\n')
+        aePuts('[33m------ -------  -----------------------------  ---------------------\b\n')
+        aePuts('[0m')
+        IF(nonStopDisplayFlag=FALSE) THEN lineCount:=lineCount+4
+        mailFlag:=1
+      ENDIF
+      IF (mailHeader.status="P") OR (mailHeader.status="p") THEN StrCopy(mailStatus,'Public ') ELSE StrCopy(mailStatus,'Private')
+      StringF(tempStr,'\z\r\d[6] \s  \l\s[29]  \l\s[21]  [0m\b\n',mailHeader.msgNumb,mailStatus,mailHeader.fromName,mailHeader.subject)
+      aePuts(tempStr)
+
+      IF checkForPause()=RESULT_FAILURE
+        msgNum:=oldMsgNum
+        RETURN RESULT_SUCCESS
+      ENDIF
+
+    ENDIF
+listNextMSG:
+    msgNum++
+  UNTIL msgNum>mailStat.highMsgNum
+listOUT:
+  msgNum:=oldMsgNum
+ENDPROC
+
 PROC displayMessage(gfh)
   DEF timeVar
   DEF str[255]:STRING
@@ -11566,7 +11623,7 @@ contloop:
       IF(nonStopMail=FALSE)
         aePuts('\b\n[32mMsg. Options: [33mA[36m')
         IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts(',[33mD')
-        aePuts('[36m,[33mF[36m,[33mR[36m,[33mQ')
+        aePuts('[36m,[33mF[36m,[33mR[36m,[33mL[36m,[33mQ')
         StringF(string,'[36m,[33m?[36m,[33m??[36m,[32m<[33mCR[32m> [32m([0m \d[32m )[0m >: ',msgNum)
         aePuts(string)
       ENDIF
@@ -11575,6 +11632,7 @@ contloop:
       IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
       aePuts('\b\n[33mF[32m>[36morward[0m')
       aePuts('\b\n[33mR[32m>[36meply[0m')
+      aePuts('\b\n[33mL[32m>[36mist[0m')
       aePuts('\b\n[33mQ[32m>[36muit[0m')
       StringF(string,'\b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m \d[32m )[0m >: ',msgNum)
       aePuts(string)
@@ -11584,6 +11642,7 @@ contloop:
       IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
       aePuts('\b\n[33mF[32m>[36morward[0m')
       aePuts('\b\n[33mR[32m>[36meply[0m')
+      aePuts('\b\n[33mL[32m>[36mist all messages[0m')
       aePuts('\b\n[33mNS[32m>[36m Non-stop mode[0m')
       IF checkSecurity(ACS_TRANSLATION)
         IF (StrCmp(userLanguage,hostLanguage)=FALSE) THEN aePuts('\b\n[33mT[32m>[36mranslate[0m')
@@ -11740,6 +11799,11 @@ contloop:
         aePuts('Not your message.\b\n')
         JUMP contloop
       ENDIF
+    ENDIF
+
+    IF(((str[0]="l") OR (str[0]="L")))
+      stat:=listMSGs(gfh)
+      JUMP contloop
     ENDIF
 
     IF((str[0]="Q") OR (str[0]="q"))
@@ -12446,7 +12510,7 @@ PROC readMSG(gfh)
       IF(nonStopMail=FALSE)
         aePuts('\b\n[32mMsg. Options: [33mA[36m')
         IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts(',[33mD')
-        aePuts('[36m,[33mF[36m,[33mR[36m,[33mQ')
+        aePuts('[36m,[33mF[36m,[33mR[36m,[33mL[36m,[33mQ')
         StringF(string,'[36m,[33m?[36m,[33m??[36m,[32m<[33mCR[32m> [32m([0m \s[32m )[0m>: ',str)
         aePuts(string)
       ENDIF
@@ -12455,6 +12519,7 @@ PROC readMSG(gfh)
       IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
       aePuts('\b\n[33mF[32m>[36morward[0m')
       aePuts('\b\n[33mR[32m>[36meply[0m')
+      aePuts('\b\n[33mL[32m>[36mist[0m')
       aePuts('\b\n[33mQ[32m>[36muit[0m')
       StringF(string,'\b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m \s[32m )[0m? ',str)
       aePuts(string)
@@ -12464,6 +12529,7 @@ PROC readMSG(gfh)
       IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
       aePuts('\b\n[33mF[32m>[36morward[0m')
       aePuts('\b\n[33mR[32m>[36meply[0m')
+      aePuts('\b\n[33mL[32m>[36mist all messages[0m')
       aePuts('\b\n[33mNS[32m>[36m Non-stop mode[0m')
       IF checkSecurity(ACS_TRANSLATION)
         IF (StrCmp(userLanguage,hostLanguage)=FALSE) THEN aePuts('\b\n[33mT[32m>[36mranslate[0m')
@@ -12578,6 +12644,11 @@ PROC readMSG(gfh)
             ENDIF
           CASE "f"
             stat:=forwardMSG(gfh)
+            IF(stat<0) THEN RETURN stat
+            noDirF:=1
+            JUMP nextMenu
+          CASE "l"
+            stat:=listMSGs(gfh)
             IF(stat<0) THEN RETURN stat
             noDirF:=1
             JUMP nextMenu
