@@ -3424,7 +3424,7 @@ PROC main() HANDLE
     ndDownloads[i]:=NIL
   ENDFOR
 
-  connectionList:=NEW connectionList
+  connectionList:=NEW connectionList.stdlist(100)
 
   dim:=[1,1,1,1]:INT  /*** Dimensions of ZIP window default ***/
   zim:=[10,100]:INT
