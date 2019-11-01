@@ -9630,7 +9630,7 @@ PROC listMSGs(gfh)
     stat:=loadMessageHeader(gfh)
     IF(mailHeader.status="D") THEN JUMP listNextMSG
 
-    IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS))) AND (mailHeader.recv=0)
+    IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS)))
       IF(mailFlag=0)
         aePuts('\b\n\b\n')
         aePuts('[32mMsg    Type     From                           Subject              \b\n')
@@ -27968,7 +27968,7 @@ PROC main() HANDLE
   DEF proc: PTR TO process
 
   StrCopy(expressVer,'v5.2.0-beta1',ALL)
-  StrCopy(expressDate,'29-Oct-2019',ALL)
+  StrCopy(expressDate,'01-Nov-2019',ALL)
 
   InitSemaphore(bgData)
   
