@@ -2879,18 +2879,7 @@ PROC telnetSend(string:PTR TO CHAR, putlen)
           i:=Send(telnetSocket,buf2+offs,c,0)
           e:=Errno()
           n++
-          IF i<>c
-            StringF(debugstr,'telnet send warning sent=\d, errno=\d',i,e)
-            debugLog(LOG_ERROR,debugstr)
-          ENDIF
         UNTIL (i<>-1) OR ((e<>EWOULDBLOCK) AND (e<>ENOBUFS))
-        IF (i<>c)
-          StringF(debugstr,'telnet send failure2 sent=\d, errno=\d',i,e)
-          debugLog(LOG_ERROR,debugstr)
-        ENDIF
-      ELSE
-        StringF(debugstr,'partial telnet send failure sent=\d, errno=\d',i,e)
-        debugLog(LOG_ERROR,debugstr)
       ENDIF
     ENDIF
     tot:=tot-c
@@ -3026,6 +3015,7 @@ PROC checkCarrier()
   IF serShared THEN RETURN 0
 
   IF telnetSocket>=0
+    IoctlSocket(telnetSocket,FIONBIO,[1])
     stat2:=Recv(telnetSocket,temp,1,MSG_PEEK)
     IF stat2<>1
       stat:=0
@@ -3034,6 +3024,7 @@ PROC checkCarrier()
     ELSE
       stat:=0
     ENDIF
+    IoctlSocket(telnetSocket,FIONBIO,[0])
   ELSEIF(serialReadIO<>NIL)
     serialWriteIO.iostd.command:=SDCMD_QUERY
     stat2:=DoIO(serialWriteIO)
@@ -8185,7 +8176,7 @@ reserveRedo:
 ENDPROC
 
 PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
-  DEF consolesig=0,windowsig=0,telnetsig=0, obuf[255]:STRING
+  DEF consolesig=0,windowsig=0,telnetsig=0,telnetSigBit, obuf[255]:STRING
   DEF ch=0,lch,wasControl=0,signals
   DEF doorsig=0,rexxsig=0,serialsig=0,timersig=0,timedout=0
   DEF temp[255]:STRING
@@ -8199,7 +8190,8 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
 
   flushSerialCache()
 
-  telnetsig:=AllocSignal(-1)
+  telnetSigBit:=AllocSignal(-1)
+  telnetsig:=Shl(1,telnetSigBit)
 
   chatSerFlag:=0
   chatConFlag:=0
@@ -8252,7 +8244,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     closeTimer()
   ENDIF
 
-  FreeSignal(telnetsig)
+  FreeSignal(telnetSigBit)
 
   IF (extsig<>0) AND ((signals AND extsig)<>0) THEN RETURN TRUE,RESULT_SIGNALLED
 
@@ -8281,7 +8273,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     ENDIF
   ENDIF
 
-  IF (ch=0) AND allowSer AND signals AND (serialsig OR telnetsig)
+  IF (ch=0) AND allowSer AND (signals AND (serialsig OR telnetsig))
     IF rawMode
       lch:=readMayGetChar(serialReadMP,TRUE,{serbuff})
       IF lch<>-1 THEN ch:=lch
@@ -8381,6 +8373,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     IF servercmd=SV_UNICONIFY
       IF scropen THEN expressToFront() ELSE openExpressScreen()
       statePtr.redrawScreen:=TRUE
+      servercmd:=-1
     ENDIF
 
     ->F1
@@ -12647,11 +12640,6 @@ PROC readMSG(gfh)
             IF(stat<0) THEN RETURN stat
             noDirF:=1
             JUMP nextMenu
-          CASE "l"
-            stat:=listMSGs(gfh)
-            IF(stat<0) THEN RETURN stat
-            noDirF:=1
-            JUMP nextMenu
           CASE "r"
             stat:=replyToMSG(gfh)
             IF(stat<0) THEN RETURN stat
@@ -12697,6 +12685,12 @@ PROC readMSG(gfh)
       ENDIF
     ENDIF
 
+    IF((str[0]="L") OR (str[0]="l"))
+      stat:=listMSGs(gfh)
+      IF(stat<0) THEN RETURN stat
+      JUMP nextMenu
+    ENDIF
+    
     IF((str[0]="Q") OR (str[0]="q"))
       RETURN RESULT_SUCCESS
     ENDIF
@@ -13210,6 +13204,7 @@ PROC checkForFileSize(checkFilename:PTR TO CHAR, checkConfNum, tfsizeList:PTR TO
   DEF flagFile:PTR TO flagFileItem
   DEF fLock
   DEF drivenum
+  DEF ramDir[255]:STRING
 
   IF checkConfNum=-1 THEN checkConfNum:=currentConf
 
@@ -13256,7 +13251,7 @@ PROC checkForFileSize(checkFilename:PTR TO CHAR, checkConfNum, tfsizeList:PTR TO
 c1:
     IF(z=0)
 
-      IF readToolType(TOOLTYPE_CONF,IF checkConfNum=-1 THEN currentConf ELSE checkConfNum,tempstr,path)
+      IF readToolType(TOOLTYPE_CONF,checkConfNum,tempstr,path)
         pstat:=1 /* shouldnt this be 251 ?*/
       ELSE
         pstat:=0
@@ -13275,9 +13270,25 @@ jumpIn:
         StrCopy(final,checkFilename)
         IF(findAssign(final)) THEN JUMP outst
       ENDIF
-      ft:=Open(final,MODE_OLDFILE)
-      IF(ft<>0)
+      StringF(ramDir,'RAM:DirCaches/Conf\dDir\d',checkConfNum,drivenum-1)
+      IF fileExists(ramDir)
+        ft:=Open(ramDir,MODE_OLDFILE)
+        IF ft>0
+          fLock:=NIL
+          WHILE(Fgets(ft,ramDir,255)<>NIL) AND (fLock=0)
+            IF ramDir[StrLen(ramDir)-1]=10 THEN SetStr(ramDir,StrLen(ramDir)-1)
+            UpperStr(ramDir)
+            IF StrCmp(ramDir,tempstr2) THEN fLock:=Lock(final,ACCESS_READ)
+          ENDWHILE
         Close(ft)
+        ELSE
+          fLock:=Lock(final,ACCESS_READ)
+        ENDIF
+      ELSE
+        fLock:=Lock(final,ACCESS_READ)
+      ENDIF
+      
+      IF(fLock<>0)
         doflag:=1
       ELSE
         IF(sysopdl) THEN JUMP outst
@@ -13287,6 +13298,7 @@ jumpIn:
     ENDIF
 
     IF(doflag)
+      IF fLock=NIL
       IF((fLock:=Lock(final,ACCESS_READ))=0)
         FreeDosObject(DOS_FIB,fBlock)
         StringF(str,'Error, Path \s missing, adjust paths file..',path)
@@ -13294,6 +13306,7 @@ jumpIn:
         aePuts('\b\n\b\n')
         callersLog(str)
         RETURN RESULT_FAILURE
+      ENDIF
       ENDIF
 
       IF((Examine(fLock,fBlock))=NIL)
@@ -21104,11 +21117,17 @@ ENDPROC
 PROC conferenceMaintenance()
   DEF conf,flag=0,ch,size,n,f,m
   DEF tempstr[255]:STRING
+  DEF confLoc[255]:STRING
+  DEF path[255]:STRING
+  DEF path2[255]:STRING
+  DEF dirCacheEnabled
+  DEF lock,fh
+  DEF num,num2,match
 
   conf:=1
   m:=findLastAccount()
   loadMsgPointers(conf)
-  getConfLocation(conf,tempstr)
+  getConfLocation(conf,confLoc)
   getMailStatFile(conf)
   getConfDbFileName(conf,tempstr)
   size:=Div(getFileSize(tempstr),SIZEOF confBase)
@@ -21127,26 +21146,38 @@ PROC conferenceMaintenance()
     aePuts('[12;2H[33m5.>[32m Dump all user stats to Conf.Stats[0m')
     aePuts('[13;2H[33m6.>[32m Set Default New Mail Scan[0m')
     aePuts('[14;2H[33m7.>[32m Set Default New File Scan[0m')
-    aePuts('[8;40H[33m8.>[32m Set Default Zoom Flag[0m')
-    aePuts('[9;40H[33m9.>[32m Reset Messages Posted[0m')
-    aePuts('[10;40H[33mA.>[32m Reset Voting Booth[0m')
-    StringF(tempstr,'[11;40H[33mB.>[32m Next   Msg # [0m\z\r\d[8]',mailStat.highMsgNum)
+    aePuts('[15;2H[33m8.>[32m Set Default Zoom Flag[0m')
+    
+    
+    aePuts('[8;40H[33m9.>[32m Reset Messages Posted[0m')
+    aePuts('[9;40H[33mA.>[32m Reset Voting Booth[0m')
+    StringF(tempstr,'[10;40H[33mB.>[32m Next   Msg # [0m\z\r\d[8]',mailStat.highMsgNum)
     aePuts(tempstr)
-    StringF(tempstr,'[12;40H[33mC.>[32m Lowest Msg # [0m\z\r\d[8]',mailStat.lowestKey)
+    StringF(tempstr,'[11;40H[33mC.>[32m Lowest Msg # [0m\z\r\d[8]',mailStat.lowestKey)
     aePuts(tempstr)
-    StringF(tempstr,'[13;40H[33mD.>[32m Capacity [0m\d[4] [32mUsers',size)
+    StringF(tempstr,'[12;40H[33mD.>[32m Capacity [0m\d[4] [32mUsers',size)
     aePuts(tempstr)
     f:=Mul(Mod(Mul(m,100),size),1000)
     n:=Div(Mul(m,100),size)
     IF (n<90)
-      StringF(tempstr,'[14;44H[33m\r\d[2].\z\r\d[3]% In use',n,f)
+      StringF(tempstr,'[13;44H[33m\r\d[2].\z\r\d[3]% In use',n,f)
     ELSE
-      StringF(tempstr,'[14;44H[31m\r\d[2].\z\r\d[3]% In use',n,f)
+      StringF(tempstr,'[13;44H[31m\r\d[2].\z\r\d[3]% In use',n,f)
     ENDIF
     aePuts(tempstr)
-    aePuts('[16;2H[33m<TAB>[36m to exit [33m-/+[36m=[0mPrev/Next Conference [0m')
+    
+    StringF(tempstr,'\sDirCaches/enabled',confLoc)
+    IF (dirCacheEnabled:=fileExists(tempstr))
+      aePuts('[14;40H[33mE.>[32m Ram Dir Cache(s) [0mEnabled ')
+      aePuts('[15;40H[33mF.>[32m Refresh Dir Cache(s)')
+    ELSE
+      aePuts('[14;40H[33mE.>[32m Ram Dir Cache(s) [0mDisabled')
+      aePuts('[15;40H[33m                        ')
+    ENDIF
 
-    aePuts('[17;2H')
+    aePuts('[17;2H[33m<TAB>[36m to exit [33m-/+[36m=[0mPrev/Next Conference [0m')
+
+    aePuts('[18;2H')
     aePuts('[ p')
 
     ch:=readChar(INPUT_TIMEOUT)
@@ -21158,54 +21189,54 @@ PROC conferenceMaintenance()
       CASE "1"
         aePuts('[0mRatio > ')
         n:=numberInputNoDefault()
-        aePuts('[17;2H [0mWorking....')
+        aePuts('[18;2H [0mWorking....')
         IF n>=0 THEN updateAllUsers(conf,UPDATE_RATIO,n)
       CASE "2"
         aePuts('[0mRatio Type > ')
         n:=numberInputNoDefault()
-        aePuts('[17;2H [0mWorking....')
+        aePuts('[18;2H [0mWorking....')
         IF n>=0 THEN updateAllUsers(conf,UPDATE_RATIO_TYPE,n)
       CASE "3"
-        aePuts('[17;2H [0mWorking....')
+        aePuts('[18;2H [0mWorking....')
         updateAllUsers(conf,UPDATE_MAILSCAN_PTRS,-1)
       CASE "4"
-        aePuts('[17;2H [0mWorking....')
+        aePuts('[18;2H [0mWorking....')
         updateAllUsers(conf,UPDATE_LAST_MESSAGE,-1)
       CASE "5"
-        aePuts('[17;2H [0mWorking....')
+        aePuts('[18;2H [0mWorking....')
         dumpUserStats(conf)
       CASE "6"
-        aePuts('[17;2H [0mDefault ON ')
+        aePuts('[18;2H [0mDefault ON ')
         n:=yesNo(1)
-        aePuts('[17;2H [0mWorking....')
+        aePuts('[18;2H [0mWorking....')
         IF n
           updateAllUsers(conf,UPDATE_NEW_MAIL_SCAN,TRUE)
         ELSE
           updateAllUsers(conf,UPDATE_NEW_MAIL_SCAN,FALSE)
         ENDIF
       CASE "7"
-        aePuts('[17;2H [0mDefault ON ')
+        aePuts('[18;2H [0mDefault ON ')
         n:=yesNo(1)
-        aePuts('[17;2H [0mWorking....')
+        aePuts('[18;2H [0mWorking....')
         IF n
           updateAllUsers(conf,UPDATE_NEW_FILE_SCAN,TRUE)
         ELSE
           updateAllUsers(conf,UPDATE_NEW_FILE_SCAN,FALSE)
         ENDIF
       CASE "8"
-        aePuts('[17;2H [0mDefault ON ')
+        aePuts('[18;2H [0mDefault ON ')
         n:=yesNo(1)
-        aePuts('[17;2H [0mWorking....')
+        aePuts('[18;2H [0mWorking....')
         IF n
           updateAllUsers(conf,UPDATE_DEFAULT_ZOOM_FLAG,TRUE)
         ELSE
           updateAllUsers(conf,UPDATE_DEFAULT_ZOOM_FLAG,FALSE)
         ENDIF
       CASE "9"
-        aePuts('[17;2H [0mWorking....')
+        aePuts('[18;2H [0mWorking....')
         updateAllUsers(conf,UPDATE_MESSAGES_POSTED,0)
       CASE "A"
-        aePuts('[17;2H [0mWorking....')
+        aePuts('[18;2H [0mWorking....')
         updateAllUsers(conf,UPDATE_RESET_VOTING,-1)
       CASE "B"
         aePuts('[0mNext Message > ')
@@ -21225,10 +21256,53 @@ PROC conferenceMaintenance()
         aePuts('[0mSize in records > ')
         n:=numberInputNoDefault()
         IF n>0
-          aePuts('[17;2H[0mResizing, Please Standby')
+          aePuts('[18;2H[0mResizing, Please Standby')
           resizeConfDB(conf,n)
           getConfDbFileName(conf,tempstr)
           size:=Div(getFileSize(tempstr),SIZEOF confBase)
+        ENDIF
+      CASE "E"
+        IF dirCacheEnabled
+          StringF(tempstr,'\sDirCaches/enabled',confLoc)
+          DeleteFile(tempstr)
+          StringF(tempstr,'DELETE RAM:DirCaches/Conf\dDir#?',conf)
+          Execute(tempstr,0,0)
+        ELSE
+          StringF(tempstr,'\sDirCaches',confLoc)
+          IF(lock:=CreateDir(tempstr))
+            UnLock(lock)
+          ENDIF
+          StringF(tempstr,'ram:DirCaches',confLoc)
+          IF(lock:=CreateDir(tempstr))
+            UnLock(lock)
+          ENDIF
+          StringF(tempstr,'\sDirCaches/enabled',confLoc)
+          fh:=Open(tempstr,MODE_NEWFILE)
+          IF fh THEN Close(fh)
+        ENDIF
+      CASE "F"
+        IF dirCacheEnabled
+          aePuts('[18;2H[0mCreating, Please Standby')
+          num:=1
+          StringF(path,'DLPATH.\d',num++)
+          WHILE(readToolType(TOOLTYPE_CONF,conf,path,path))
+          
+            num2:=1
+            match:=FALSE
+            StringF(path2,'ULPATH.\d',num2++)
+            WHILE (match=FALSE) AND (readToolType(TOOLTYPE_CONF,conf,path2,path2))
+              IF strCmpi(path,path2,ALL) THEN match:=TRUE
+              StringF(path2,'ULPATH.\d',num2++)
+            ENDWHILE
+          
+            IF match=FALSE
+              StringF(tempstr,'LIST FILES LFORMAT %N "\s" >"\sDirCaches/Conf\dDir\d"',path,confLoc,conf,num-1)
+              Execute(tempstr,0,0)
+              StringF(tempstr,'COPY "\sDirCaches/Conf\dDir\d" ram:DirCaches/',confLoc,conf,num-1)
+              Execute(tempstr,0,0)
+            ENDIF
+            StringF(path,'DLPATH.\d',num++)
+          ENDWHILE
         ENDIF
       CASE "\t"
         flag:=1
@@ -21237,16 +21311,18 @@ PROC conferenceMaintenance()
         IF conf<1 THEN conf:=cmds.numConf
         loadMsgPointers(conf)
         getMailStatFile(conf)
+        getConfLocation(conf,confLoc)
         getConfDbFileName(conf,tempstr)
         size:=Div(getFileSize(tempstr),SIZEOF confBase)
       CASE "+"
         conf:=conf+1
         IF conf>cmds.numConf THEN conf:=1
         getMailStatFile(conf)
+        getConfLocation(conf,confLoc)
         getConfDbFileName(conf,tempstr)
         size:=Div(getFileSize(tempstr),SIZEOF confBase)
     ENDSELECT
-    aePuts('[17;2H                                     ')
+    aePuts('[18;2H                                     ')
 
   UNTIL flag
 
@@ -27913,7 +27989,9 @@ PROC checkTelnetData()
   
   IF telnetSocket=-1 THEN RETURN FALSE
   
+  IoctlSocket(telnetSocket,FIONBIO,[1])
   count:=Recv(telnetSocket,buf,1,MSG_PEEK)
+  IoctlSocket(telnetSocket,FIONBIO,[0])
 ENDPROC count>0
 
 PROC openListenSocket(port)
@@ -27967,8 +28045,8 @@ PROC main() HANDLE
   DEF oldWinPtr
   DEF proc: PTR TO process
 
-  StrCopy(expressVer,'v5.2.0-beta1',ALL)
-  StrCopy(expressDate,'01-Nov-2019',ALL)
+  StrCopy(expressVer,'v5.2.0-beta2',ALL)
+  StrCopy(expressDate,'05-Nov-2019',ALL)
 
   InitSemaphore(bgData)
   

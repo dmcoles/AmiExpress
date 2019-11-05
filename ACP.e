@@ -2719,12 +2719,13 @@ ENDPROC
 
 PROC readStartUp(s:PTR TO CHAR)
   DEF image[200]:STRING
+  DEF tempstr[255]:STRING
   DEF dobj:PTR TO diskobject
   DEF cmd:PTR TO packedCommands
   DEF sopt:PTR TO startOption
   DEF oldtooltypes,cfg
   DEF t:  PTR TO CHAR
-  DEF i
+  DEF i,n
   DEF nodeCount
   DEF buttonnum=0
   DEF buttontitle=0
@@ -2939,6 +2940,27 @@ PROC readStartUp(s:PTR TO CHAR)
   ENDIF
 
   freeToolTypes(dobj,cfg)
+
+  StringF(tempstr,'\sCONFCONFIG',cmd.bbsLoc)
+  dobj,cfg:=getToolTypes(tempstr)
+  IF(dobj)
+    oldtooltypes:=dobj.tooltypes
+    IF(t:=FindToolType(oldtooltypes,'NCONFS'))
+      n:=Val(t)
+      FOR i:=0 TO n-1
+        StringF(tempstr,'LOCATION.\d',i+1)
+        IF(t:=FindToolType(oldtooltypes,tempstr))
+          StringF(tempstr,'\sDirCaches/enabled',t)
+          IF FileLength(tempstr)>=0
+            StringF(tempstr,'COPY "\sDirCaches/Conf#?Dir#?" ALL RAM:DirCaches',t)
+            Execute(tempstr,0,0)
+          ENDIF
+        ENDIF
+      ENDFOR
+    ENDIF
+  ENDIF
+  freeToolTypes(dobj,cfg)
+
   IF(doMultiCom)
     FOR i:=0 TO nodeCount-1
       sopt:=sopts[i]

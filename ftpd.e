@@ -92,6 +92,15 @@ PROC accept(sb,s,addr,addrlen)
   MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
+PROC releaseSocket(sb,fd,id)
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  MOVE.L sb,A6
+  MOVE.L fd,D0
+  MOVE.L id,D1
+  JSR -$96(A6)   ->ReleaseSocket(fd,id)
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
+
 PROC releaseCopyOfSocket(sb,fd,id)
   MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
@@ -1086,8 +1095,8 @@ EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPt
           StringF(temp,'FTP connection at port \d accepted\b\n', ftpData.port)
           aePuts(ftpData,temp)
 
-          s:=releaseCopyOfSocket(sb,ftp_c,UNIQUE_ID)
-          r:=closeSocket(sb,ftp_c)
+          s:=releaseSocket(sb,ftp_c,UNIQUE_ID)
+          ->r:=closeSocket(sb,ftp_c)
           createThread(node,s,ftpData)
         ENDIF
       ENDWHILE
