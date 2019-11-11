@@ -3015,7 +3015,6 @@ PROC checkCarrier()
   IF serShared THEN RETURN 0
 
   IF telnetSocket>=0
-    IoctlSocket(telnetSocket,FIONBIO,[1])
     stat2:=Recv(telnetSocket,temp,1,MSG_PEEK)
     IF stat2<>1
       stat:=0
@@ -3024,7 +3023,6 @@ PROC checkCarrier()
     ELSE
       stat:=0
     ENDIF
-    IoctlSocket(telnetSocket,FIONBIO,[0])
   ELSEIF(serialReadIO<>NIL)
     serialWriteIO.iostd.command:=SDCMD_QUERY
     stat2:=DoIO(serialWriteIO)
@@ -8281,8 +8279,8 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       IF (ioFlags[IOFLAG_SER_IN])
         ch:=lch
         wasControl:=FALSE
-        ->StringF(obuf, 'Serial Received: hex $\z\h[2] = \c', ch, ch)
-        ->debugLog(LOG_DEBUG,obuf)
+        StringF(obuf, 'Serial Received: hex $\z\h[2] = \c', ch, ch)
+        debugLog(LOG_DEBUG,obuf)
         chatSerFlag:=1
         IF ch=$1b
           ch:=readMayGetChar(serialReadMP,TRUE,{serbuff})
@@ -15563,7 +15561,7 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort,ftpDataPo
   DEF i
   DEF dirLock
   DEF tempstr[255]:STRING
-  DEF ramDir[255]:STRING
+  DEF tempDir[255]:STRING
   DEF linkStr[255]:STRING
   DEF item:PTR TO flagFileItem
   DEF x: PTR TO xprData
@@ -15572,18 +15570,26 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort,ftpDataPo
   IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPHOST',tempstr)=FALSE
     StrCopy(tempstr,'localhost')
   ENDIF
+
+  IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPTEMP',tempstr)=FALSE
+    StringF(tempDir,'RAM:ftp\d',node)
+  ELSE
+    StringF(tempDir,'\sftp\d',tempstr,node)
+  ENDIF
   
   aePuts('\b\nCreating FTP file area\b\n')
-  StringF(ramDir,'RAM:ftp\d',node)
-  dirLock:=CreateDir(ramDir)
-  StrAdd(ramDir,'/')
+  dirLock:=CreateDir(tempDir)
+  StrAdd(tempDir,'/')
   IF dirLock<>NIL THEN UnLock(dirLock)
   ->create links in ram
   IF fileList<>NIL
     FOR i:=0 TO fileList.count()-1
       item:=fileList.item(i)
-      StringF(linkStr,'RAM:ftp\d/\s',node,FilePart(item.fileName))
-      MakeLink(linkStr,item.fileName,1)
+      StringF(linkStr,'\s\s',tempDir,FilePart(item.fileName))
+      IF MakeLink(linkStr,item.fileName,1)=0
+        StringF(tempstr,'Makelink failed \s \s error: \d\b\n',linkStr,item.fileName,IoErr())
+        aePuts(tempstr)
+      ENDIF
     ENDFOR
   ENDIF
   
@@ -15595,11 +15601,11 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort,ftpDataPo
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
-  doftp(node,tempstr,ftpPort,ftpDataPort,ramDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},FALSE)
+  doftp(node,tempstr,ftpPort,ftpDataPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},FALSE)
   serialCacheEnabled:=oldSerCache
  
   ->clean up ram links
-  StringF(linkStr,'DELETE RAM:ftp\d ALL',node)
+  StringF(linkStr,'DELETE \s ALL',tempDir)
   Execute(linkStr,NIL,NIL)
   END x 
 ENDPROC
@@ -17668,7 +17674,6 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
   DEF buff[255]:STRING
   DEF tempstr[255]:STRING,tempstr2[255]:STRING,tempstr3[255]:STRING
   DEF uaf,f
-  DEF protocol
   DEF foundDupe=0
   DEF mstat      /* check for carrier. trying to stop upload guru from parcial upload */
   DEF filetags
@@ -17729,22 +17734,19 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
     aePuts(string)
     aePuts('Filename lengths above 12 are not allowed.\b\n\b\n')
 
-    SELECT protocol
-      CASE "Z"
-        zresume:=resumeStuff(tFS)
-        IF(zresume<0) THEN RETURN zresume
-        IF((zresume=0) AND strCmpi(cmd,'RG',ALL))
-          aePuts('\b\nThere are no more files to resume on.\b\n\b\n')
-          RETURN RESULT_SUCCESS
-        ENDIF
-        IF(zresume=0)
-          gstat:=uploadDesc()
-          IF(gstat<0)
-            cleanItUp()
-            RETURN gstat
-          ENDIF
-        ENDIF
-    ENDSELECT
+    zresume:=resumeStuff(tFS)
+    IF(zresume<0) THEN RETURN zresume
+    IF((zresume=0) AND strCmpi(cmd,'RG',ALL))
+      aePuts('\b\nThere are no more files to resume on.\b\n\b\n')
+      RETURN RESULT_SUCCESS
+    ENDIF
+    IF(zresume=0)
+      gstat:=uploadDesc()
+      IF(gstat<0)
+        cleanItUp()
+        RETURN gstat
+      ENDIF
+    ENDIF
   ENDIF
 
 
@@ -27989,49 +27991,8 @@ PROC checkTelnetData()
   
   IF telnetSocket=-1 THEN RETURN FALSE
   
-  IoctlSocket(telnetSocket,FIONBIO,[1])
   count:=Recv(telnetSocket,buf,1,MSG_PEEK)
-  IoctlSocket(telnetSocket,FIONBIO,[0])
 ENDPROC count>0
-
-PROC openListenSocket(port)
-  DEF server_s
-  DEF servaddr=0:PTR TO sockaddr_in
-  DEF tempStr[255]:STRING
-
-	IF((server_s:=Socket(AF_INET, SOCK_STREAM, 0)) < 0)
-    StringF(tempStr,'/X Telnet: Error creating listening socket. (\d)\b\n',Errno())
-		aePuts(tempStr)
-		RETURN -1
-	ENDIF
- 
-  servaddr:=NEW servaddr
-  servaddr.sin_len:=SIZEOF sockaddr_in
-  servaddr.sin_family:=AF_INET
-  servaddr.sin_port:=port
-  servaddr.sin_addr:=INADDR_ANY
-
-	IF(Bind(server_s, servaddr, SIZEOF sockaddr_in) < 0)
-		StringF(tempStr,'/X Telnet: Error calling bind() for port \d, error=\d\b\n',port,Errno());
-    aePuts(tempStr)
-    CloseSocket(server_s)
-    END servaddr
-		RETURN -1
-	ENDIF
-
-	IF(Listen(server_s, LISTENQ) < 0)
-		StringF(tempStr,'/X Telnet: Error calling listen() for port \d, error=\d\b\n',port,Errno());
-    aePuts(tempStr)
-    CloseSocket(server_s)
-    END servaddr
-    RETURN -1
-	ENDIF
-
-  IoctlSocket(server_s,FIONBIO,[1])
-
-  END servaddr
-ENDPROC server_s
-
 
 PROC main() HANDLE
   DEF temppath[255]:STRING
@@ -28045,8 +28006,8 @@ PROC main() HANDLE
   DEF oldWinPtr
   DEF proc: PTR TO process
 
-  StrCopy(expressVer,'v5.2.0-beta2',ALL)
-  StrCopy(expressDate,'05-Nov-2019',ALL)
+  StrCopy(expressVer,'v5.2.0-beta3',ALL)
+  StrCopy(expressDate,'08-Nov-2019',ALL)
 
   InitSemaphore(bgData)
   

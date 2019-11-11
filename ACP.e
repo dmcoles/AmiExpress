@@ -2952,7 +2952,7 @@ PROC readStartUp(s:PTR TO CHAR)
         IF(t:=FindToolType(oldtooltypes,tempstr))
           StringF(tempstr,'\sDirCaches/enabled',t)
           IF FileLength(tempstr)>=0
-            StringF(tempstr,'COPY "\sDirCaches/Conf#?Dir#?" ALL RAM:DirCaches',t)
+            StringF(tempstr,'COPY "\sDirCaches/Conf#?Dir#?" ALL RAM:DirCaches >NIL:',t)
             Execute(tempstr,0,0)
           ENDIF
         ENDIF
@@ -3871,6 +3871,7 @@ PROC main() HANDLE
                             telnetSend(telnetSocket,tempstr,3)
 
 
+                            IoctlSocket(telnetSocket,FIONBIO,[1])
                             telnetSocket2:=ReleaseSocket(telnetSocket,UNIQUE_ID)
                             callNode(i,INCOMING_TELNET,telnetSocket2)
                             telnetSocket:=-1
