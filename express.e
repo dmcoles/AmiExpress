@@ -3,7 +3,7 @@
 ->
 OPT LARGE,REG=5,OSVERSION=37
 
-ENUM ERR_NONE, ERR_NOICON, ERR_NO_DISKFONT,ERR_SCREEN, ERR_WINDOW, ERR_MP, ERR_IO, ERR_DEV, ERR_PORT, ERR_ARG, ERR_BRKR, ERR_CXERR, ERR_LIB, ERR_PORT, ERR_ASL, ERR_KICK, ERR_LIB, ERR_SERVERRP, ERR_NOSERIAL, ERR_SSL, ERR_KICKVER, ERR_ALREADYRUNNING,ERR_COMPUTERTYPES,ERR_NOSERIALLOCK,ERR_NOOWNDEVUNIT, ERR_EXCEPT,ERR_SSL
+ENUM ERR_NONE, ERR_NOICON, ERR_NO_DISKFONT,ERR_SCREEN, ERR_WINDOW, ERR_MP, ERR_IO, ERR_DEV, ERR_PORT, ERR_ARG, ERR_BRKR, ERR_CXERR, ERR_LIB, ERR_PORT, ERR_ASL, ERR_KICK, ERR_LIB, ERR_SERVERRP, ERR_NOSERIAL, ERR_SSL, ERR_KICKVER, ERR_ALREADYRUNNING,ERR_COMPUTERTYPES,ERR_NOSERIALLOCK,ERR_NOOWNDEVUNIT, ERR_EXCEPT,ERR_SSL, ERR_FDSRANGE
 
 ENUM STATE_AWAIT, STATE_CONNECTING, STATE_SYSOPLOGON, STATE_LOGON, STATE_LOGGEDON, STATE_HANGUP, STATE_LOGGING_OFF, STATE_SHUTDOWN, STATE_CHECK,STATE_SUSPEND
 
@@ -44,6 +44,7 @@ ENUM FORCE_MAILSCAN_NOFORCE, FORCE_MAILSCAN_ALL, FORCE_MAILSCAN_SKIP
 
 CONST LISTENQ=100
 CONST FIONBIO=$8004667e
+CONST FIONREAD=$4004667
 CONST EINTR=4
 CONST EWOULDBLOCK=35
 CONST ENOBUFS=55
@@ -861,6 +862,12 @@ DEF offHookFlag=FALSE
 
 DEF lastIAC=FALSE
 DEF lastIAC2=FALSE
+
+DEF nodeStart=0
+
+DEF cntr=0
+
+DEF fds=NIL:PTR TO LONG
 
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
@@ -2220,6 +2227,7 @@ PROC checkDoorMsg(mode)
         servercmd:=SV_INSTANT
       CASE SV_CHATTOGGLE
         sysopAvail:=Not(sysopAvail)
+        updateTitle(NIL)
         statChatFlag()
       CASE SV_ACCOUNTS
         servercmd:=SV_ACCOUNTS
@@ -6004,7 +6012,7 @@ PROC joinConf(conf, confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFORCE)
       customMsgbaseCmd(4,0,0)
     ENDIF
 
-    displaySysopULStats()
+    IF (auto) THEN displaySysopULStats()
 
   ENDIF
 
@@ -8142,6 +8150,7 @@ go3:
   setEnvStat(ENV_AWAITCONNECT)
 
 timedout:
+
   dropDTR()
   Delay(25)
   IF(cmds.acLvl[LVL_VARYING_LINK_RATE]=1)
@@ -8180,7 +8189,6 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
   DEF temp[255]:STRING
   DEF statePtr: PTR TO awaitState
   DEF n
-  DEF fds:PTR TO LONG
 
   IF (transfering)
     RETURN TRUE,RESULT_TIMEOUT
@@ -8225,11 +8233,9 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
   
     IF telnetSocket>=0
       REPEAT
-        fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
-        fds[telnetSocket/32]:=fds[telnetSocket/32] OR (Shl(1,telnetSocket AND 31))
+        setSingleFDS(telnetSocket)
         signals:=SIGBREAKF_CTRL_C OR consolesig OR windowsig OR cxsigflag OR doorsig OR rexxsig OR serialsig OR timersig OR extsig
         WaitSelect(telnetSocket+1,fds,NIL,NIL,NIL,{signals})
-        END fds     
         IF checkTelnetData()
           signals:=signals OR telnetsig
         ENDIF
@@ -8284,6 +8290,8 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
         chatSerFlag:=1
         IF ch=$1b
           ch:=readMayGetChar(serialReadMP,TRUE,{serbuff})
+          StringF(obuf, 'Escape Serial Received: hex $\z\h[2] = \c', ch, ch)
+          debugLog(LOG_DEBUG,obuf)
           IF ch="["
             ch:=readMayGetChar(serialReadMP,TRUE,{serbuff})
 
@@ -8673,6 +8681,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     IF ((wasControl=1) AND (ch="6"))
       servercmd:=-1
       sysopAvail:=Not(sysopAvail)
+      updateTitle(NIL)
       statChatFlag()
     ENDIF
 
@@ -14504,8 +14513,7 @@ ENDPROC D0
 PROC xprsread()
   DEF buf,bsize,timeout,serialsig,i,signals,task: PTR TO tc,res,timersig,ch
   DEF tempstr[255]:STRING
-  DEF waiting,status,sigs,obuf,buf2,c,c2
-  DEF fds:PTR TO LONG
+  DEF waiting,status,sigs,obuf,buf2,c,c2,avail
   ->        long count = (*xpr_sread)(char *buffer, long size, long timeout)
   ->        D0                        A0            D0         D1
 
@@ -14534,57 +14542,61 @@ PROC xprsread()
     c2:=0
     REPEAT
       IF timeout<>0
-      fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
-      fds[telnetSocket/32]:=fds[telnetSocket/32] OR (Shl(1,telnetSocket AND 31))
+      setSingleFDS(telnetSocket)
       sigs:=timersig
       status:=WaitSelect(telnetSocket+1,fds,NIL,NIL,NIL,{sigs})
-      END fds
       ENDIF
       IF (timeout=0) OR (status>0)
-        status:=Recv(telnetSocket,buf2,waiting,0)     
-        IF status>0 
-          StringF(tempstr,'xprsread recv complete: \d bytes',status)
-          debugLog(LOG_DEBUG,tempstr)
-          c:=0
-          REPEAT
-            IF lastIAC2
-              StringF(tempstr,'code: \d',buf2[c])
+        REPEAT
+          status,avail:=checkTelnetData()
+          
+          IF avail>waiting THEN avail:=waiting
+          IF avail>0
+            status:=Recv(telnetSocket,buf2,avail,0)
+            IF status>0 
+              StringF(tempstr,'xprsread recv complete: \d bytes',status)
               debugLog(LOG_DEBUG,tempstr)
-              ->expecting an IAC parameter byte - just skip it
-              lastIAC2:=FALSE
-            ELSEIF (buf2[c]=255) OR (lastIAC)
-              IF (lastIAC=FALSE) THEN c++
-              lastIAC:=FALSE
-              IF c>=status
-                lastIAC:=TRUE
-              ELSE
-                IF buf2[c]=255
-                  buf[c2]:=255
-                  c2++
-                ELSEIF (buf2[c]>=250) AND (buf2[c]<255)
-                  StringF(tempstr,'known iac code: \d',buf2[c])
+              c:=0
+              REPEAT
+                IF lastIAC2
+                  StringF(tempstr,'code: \d',buf2[c])
                   debugLog(LOG_DEBUG,tempstr)
-                  c++
-                  IF (c>=status)
-                    lastIAC2:=TRUE
+                  ->expecting an IAC parameter byte - just skip it
+                  lastIAC2:=FALSE
+                ELSEIF (buf2[c]=255) OR (lastIAC)
+                  IF (lastIAC=FALSE) THEN c++
+                  lastIAC:=FALSE
+                  IF c>=status
+                    lastIAC:=TRUE
                   ELSE
-                    StringF(tempstr,'code: \d',buf2[c])
-                    debugLog(LOG_DEBUG,tempstr)
+                    IF buf2[c]=255
+                      buf[c2]:=255
+                      c2++
+                    ELSEIF (buf2[c]>=250) AND (buf2[c]<255)
+                      StringF(tempstr,'known iac code: \d',buf2[c])
+                      debugLog(LOG_DEBUG,tempstr)
+                      c++
+                      IF (c>=status)
+                        lastIAC2:=TRUE
+                      ELSE
+                        StringF(tempstr,'code: \d',buf2[c])
+                        debugLog(LOG_DEBUG,tempstr)
+                      ENDIF
+                    ELSE
+                      StringF(tempstr,'unknown iac code: \d',buf2[c])
+                      debugLog(LOG_DEBUG,tempstr)
+                    ENDIF
                   ENDIF
                 ELSE
-                  StringF(tempstr,'unknown iac code: \d',buf2[c])
-                  debugLog(LOG_DEBUG,tempstr)
+                  buf[c2]:=buf2[c]
+                  c2++
                 ENDIF
-              ENDIF
-            ELSE
-              buf[c2]:=buf2[c]
-              c2++
+                c++
+              UNTIL (c>=status)
+              waiting:=bsize-c2
             ENDIF
-            c++
-          UNTIL c>=status
-       
-          waiting:=bsize-c2
-        ENDIF
+          ENDIF
+        UNTIL (avail=0) OR (waiting=0)
       ENDIF
     UNTIL (waiting=0) OR (timeout=0) OR (sigs AND timersig)
     
@@ -16157,6 +16169,7 @@ PROC xprReceive(file) HANDLE
     tags:=NEW [NP_ENTRY,{backgroundFileCheckThread},NP_STACKSIZE,10000,0]:LONG
     Forbid()
     proc:=CreateNewProc(tags)
+    END tags
     saveA4thread(proc.task)
     Permit()
   ENDIF
@@ -23685,6 +23698,14 @@ PROC internalCommandUS()
   sysopUpload()
 ENDPROC RESULT_SUCCESS
 
+PROC internalCommandUP()
+  DEF tempStr[255]:STRING
+  DEF tempStr2[255]:STRING
+  formatLongDateTime(nodeStart,tempStr2)
+  StringF(tempStr,'\b\nNode \d was started at \s.\b\n',node,tempStr2)
+  aePuts(tempStr)
+ENDPROC RESULT_SUCCESS
+
 PROC internalCommandV(cmdcode,params)
   IF checkSecurity(ACS_VIEW_A_FILE)=FALSE THEN RETURN RESULT_NOT_ALLOWED
 
@@ -23700,7 +23721,7 @@ ENDPROC RESULT_SUCCESS
 
 PROC internalCommandVER()
   DEF tempStr[255]:STRING
-  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ©2018 Darren Coles\b\n',expressVer,expressDate)
+  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ©2018/2019 Darren Coles\b\n',expressVer,expressDate)
   aePuts(tempStr)
   aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   StringF(tempStr,'Registered to \s.\b\n',regKey)
@@ -26232,6 +26253,8 @@ PROC processInternalCommand(cmdcode,cmdparams,privcmd=FALSE)
     res:=internalCommandU(cmdcode,cmdparams)
   ELSEIF (StrCmp(cmdcode,'US'))
     res:=internalCommandUS()
+  ELSEIF (StrCmp(cmdcode,'UP'))
+    res:=internalCommandUP()
   ELSEIF (StrCmp(cmdcode,'RZ'))
     res:=internalCommandRZ(cmdcode,cmdparams)
   ELSEIF (StrCmp(cmdcode,'V'))
@@ -26286,6 +26309,7 @@ PROC processLoggedOnUser()
   DEF temp,stat
   DEF lastDay,currDay
   DEF currTime
+
   IF (stateData=0)
     StrCopy(securityFlags,'')
 
@@ -26706,7 +26730,7 @@ PROC processLogon()
   DEF tempStr[255]:STRING
   DEF tempStr2[255]:STRING
   DEF userName[28]:STRING
-  DEF dateStr[20]:STRING
+  DEF dateStr[30]:STRING
   DEF retryCount
   DEF userFound
   DEF newUser
@@ -26748,7 +26772,7 @@ PROC processLogon()
   ENDIF
   aePuts(tempStr)
 
-  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018 Darren Coles\b\n',expressVer)
+  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018/2019 Darren Coles\b\n',expressVer)
   aePuts(tempStr)
   aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
@@ -26879,6 +26903,9 @@ logonLoop:
 
     stat:=loadAccount(userNum,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
     IF(stat=RESULT_FAILURE)
+      END loggedOnUser
+      END loggedOnUserKeys
+      END loggedOnUserMisc
       aePuts('That account has problems\b\n')
       retryCount++
       JUMP logonLoop
@@ -27010,6 +27037,8 @@ PROC processAwait()
   DEF subState: PTR TO awaitState
 
   IF (stateData=0)
+    cntr:=0
+    
     ansiColour:=TRUE
     quickFlag:=FALSE
     lostCarrier:=FALSE
@@ -27025,6 +27054,13 @@ PROC processAwait()
   ELSE
     subState:=stateData
   ENDIF
+
+
+  cntr:=cntr+1
+  IF cntr>=60
+    cntr:=0
+  ENDIF
+
 
   IF (subState.subState=SUBSTATE_DISPLAY_AWAIT) OR subState.redrawScreen
     subState.redrawScreen:=FALSE
@@ -27045,7 +27081,7 @@ PROC processAwait()
 
       StringF(tempstr,'\b\n           [33m© 1992-1995 AmiExpress [37mby[35m Light Speed Technologies Inc.[0m\b\n')
       aePuts(tempstr)
-      StringF(tempstr,'\b\n                              [33m Version 5 ©2018[0m\b\n')
+      StringF(tempstr,'\b\n                           [33m Version 5 ©2018/2019[0m\b\n')
       aePuts(tempstr)
 
       StringF(tempstr,'\b\n                       [37m Programming by: [33m Darren Coles')
@@ -27991,8 +28027,20 @@ PROC checkTelnetData()
   
   IF telnetSocket=-1 THEN RETURN FALSE
   
-  count:=Recv(telnetSocket,buf,1,MSG_PEEK)
-ENDPROC count>0
+  IoctlSocket(telnetSocket,FIONREAD,{count})
+
+  ->count:=Recv(telnetSocket,buf,1,MSG_PEEK)
+ENDPROC count>0,count
+
+PROC setSingleFDS(socketVal)
+  DEF i,n
+  
+  n:=(socketVal/32)
+  IF (n<0) OR (n>=32) THEN Raise(ERR_FDSRANGE)
+  
+  FOR i:=0 TO 31 DO fds[i]:=0
+  fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
+ENDPROC
 
 PROC main() HANDLE
   DEF temppath[255]:STRING
@@ -28006,8 +28054,10 @@ PROC main() HANDLE
   DEF oldWinPtr
   DEF proc: PTR TO process
 
-  StrCopy(expressVer,'v5.2.0-beta3',ALL)
-  StrCopy(expressDate,'08-Nov-2019',ALL)
+  StrCopy(expressVer,'v5.2.0-beta4',ALL)
+  StrCopy(expressDate,'27-Nov-2019',ALL)
+
+  nodeStart:=getSystemTime()
 
   InitSemaphore(bgData)
   
@@ -28015,6 +28065,8 @@ PROC main() HANDLE
   proc:=FindTask(0)
   oldWinPtr:=proc.windowptr
   proc.windowptr:=-1
+
+  fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
 
   ->extract arg1, arg2 and arg3 from arg using space as delimiter
   StrCopy(tempstr,arg)
@@ -28534,10 +28586,14 @@ PROC main() HANDLE
   ENDIF
 
  EXCEPT DO
+  IF fds<>NIL
+    END fds
+  ENDIF
+  
   IF proc<>NIL
     proc.windowptr:=oldWinPtr
   ENDIF
-  
+
   IF sopt<>NIL
     setEnvStat(ENV_SHUTDOWN)
 
@@ -28654,6 +28710,8 @@ PROC main() HANDLE
   CASE ERR_NOOWNDEVUNIT
     StringF(tempstr,'Can''t open owndevunit.library',cmds.serDev)
     debugLog(LOG_ERROR,tempstr)
+  CASE ERR_FDSRANGE
+    debugLog(LOG_ERROR,'FDS Range error')
   ENDSELECT
 ENDPROC
 

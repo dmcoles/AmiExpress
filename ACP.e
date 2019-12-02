@@ -73,7 +73,7 @@ aAeicon_config: dc.b 'aeicon.config',0
 
 */
        
-ENUM ERR_NONE,ERR_ALREADY_RUNNING,ERR_STARTUP, ERR_VALIDATE,ERR_NO_DISKFONT
+ENUM ERR_NONE,ERR_ALREADY_RUNNING,ERR_STARTUP, ERR_VALIDATE,ERR_NO_DISKFONT,ERR_FDS_RANGE
 
 CONST LISTENQ=100
 CONST EINTR=4
@@ -459,6 +459,7 @@ DEF maddItemi=0
 DEF startupCompleteScript[255]:STRING
 
 DEF telnetPort=-1
+DEF fds=0:PTR TO LONG
 
 PROC init() OF itemsList  ->constructor
   self.lastUsers[0]:=String(36)
@@ -1823,6 +1824,7 @@ PROC showQuiet(i)
 
   Move(eWin.rport,GLEF_BAUD+5,rowTop)
   Text(eWin.rport,users[i].baud,7)
+  drawChatBlock(i)
 ENDPROC
 
 PROC regLastUser(name:PTR TO CHAR,dateStr:PTR TO CHAR,node)
@@ -2081,26 +2083,10 @@ PROC checkMasterSig(signals)
               ENDIF
           CASE JH_CHATON
               tChat[msg.node]:=1
-              SetAPen(eWin.rport,getNodeTextColour(msg.node))
-              Move(eWin.rport,64,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,64,topOffset+26+(msg.node*11)+6)
-              Move(eWin.rport,63,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,63,topOffset+26+(msg.node*11)+6)
-              Move(eWin.rport,62,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,62,topOffset+26+(msg.node*11)+6)
-              Move(eWin.rport,61,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,61,topOffset+26+(msg.node*11)+6) 
+              drawChatBlock(msg.node)
           CASE JH_CHATOFF
               tChat[msg.node]:=0
-              SetAPen(eWin.rport,getNodeTextColour(msg.node))
-              Move(eWin.rport,64,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,64,topOffset+26+(msg.node*11)+6)
-              Move(eWin.rport,63,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,63,topOffset+26+(msg.node*11)+6)
-              Move(eWin.rport,62,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,62,topOffset+26+(msg.node*11)+6)
-              Move(eWin.rport,61,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,61,topOffset+26+(msg.node*11)+6) 
+              drawChatBlock(msg.node)
           CASE JH_QUIETON
               quietNode[msg.node]:=1 
               showQuiet(msg.node)
@@ -2128,6 +2114,20 @@ PROC checkMasterSig(signals)
       ENDIF
     ENDWHILE
   ENDIF
+ENDPROC
+
+PROC drawChatBlock(node)
+  DEF colour
+  colour:=IF tChat[node] THEN getNodeTextColour(node) ELSE 0
+  SetAPen(eWin.rport,colour)
+  Move(eWin.rport,64,topOffset+26+(node*11))
+  Draw(eWin.rport,64,topOffset+26+(node*11)+6)
+  Move(eWin.rport,63,topOffset+26+(node*11))
+  Draw(eWin.rport,63,topOffset+26+(node*11)+6)
+  Move(eWin.rport,62,topOffset+26+(node*11))
+  Draw(eWin.rport,62,topOffset+26+(node*11)+6)
+  Move(eWin.rport,61,topOffset+26+(node*11))
+  Draw(eWin.rport,61,topOffset+26+(node*11)+6) 
 ENDPROC
 
 PROC cmdOpt(cmd:PTR TO packedCommands,maxNodes,x,y)
@@ -3102,6 +3102,7 @@ PROC selectAndRunConfig(outpath:PTR TO CHAR,initialFolder:PTR TO CHAR,initialFil
                         NIL])
 
   IF AslRequest(fr, NIL)=FALSE
+    FreeAslRequest(fr)
     myrequest('No file was selected.')
     RETURN
   ENDIF
@@ -3221,7 +3222,7 @@ ENDPROC
 
 PROC attemptShutdown()
   DEF i
-  
+ 
   IF(activeNodeCount=0)
     notDone:=0
   ELSE
@@ -3401,6 +3402,16 @@ PROC telnetSend(socket,msg,len=-1)
   IF r<>len THEN RETURN FALSE
 ENDPROC TRUE
 
+PROC setSingleFDS(socketVal)
+  DEF i,n
+  
+  n:=socketVal/32
+  IF (n<0) OR (n>=32) THEN Raise(ERR_FDS_RANGE)
+
+  FOR i:=0 TO 31 DO fds[i]:=0
+  fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
+ENDPROC
+
 PROC main() HANDLE
 
   DEF iconStartName[200]:STRING
@@ -3427,7 +3438,6 @@ PROC main() HANDLE
   DEF telnetSocket=-1
   DEF telnetSocket2=-1
   DEF f
-  DEF fds:PTR TO LONG
   DEF peeraddr: sockaddr_in
   DEF n,t
   DEF connectionList: PTR TO stdlist
@@ -3435,6 +3445,8 @@ PROC main() HANDLE
   DEF saveConn=FALSE
 
   DEF sopt:PTR TO startOption
+
+  fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
  
   KickVersion(37)  -> E-Note: requires V37
 
@@ -3517,7 +3529,7 @@ PROC main() HANDLE
       IF newlock<>NIL THEN oldDirLock:=CurrentDir(newlock)
     ENDIF
   ENDIF
-  
+ 
   FOR i:=0 TO 14
     setOriText[i]:=String(100)
   ENDFOR
@@ -3712,15 +3724,7 @@ PROC main() HANDLE
         IF(eWin AND startUp)
           FOR i:=0 TO MAX_NODES-1
             IF(StrLen(startNode[i])>0)
-              SetAPen(eWin.rport,getNodeTextColour(i))
-              Move(eWin.rport,64,topOffset+26+(i*11))
-              Draw(eWin.rport,64,topOffset+26+(i*11)+6)
-              Move(eWin.rport,63,topOffset+26+(i*11))
-              Draw(eWin.rport,63,topOffset+26+(i*11)+6)
-              Move(eWin.rport,62,topOffset+26+(i*11))
-              Draw(eWin.rport,62,topOffset+26+(i*11)+6)
-              Move(eWin.rport,61,topOffset+26+(i*11))
-              Draw(eWin.rport,61,topOffset+26+(i*11)+6) 
+              drawChatBlock(i)
               sopt:=sopts[i]
               IF sopt THEN sopt.acpWindow:=eWin
               IF(nodeIdle[i])=FALSE
@@ -3741,11 +3745,9 @@ PROC main() HANDLE
             signals:=Wait(masterSig OR windowSig OR myappsig OR cxsigflag)
           ELSE
             REPEAT
-              fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
-              fds[telnetServerSocket/32]:=fds[telnetServerSocket/32] OR (Shl(1,telnetServerSocket AND 31))
+              setSingleFDS(telnetServerSocket)
               signals:=masterSig OR windowSig OR myappsig OR cxsigflag
               WaitSelect(telnetServerSocket+1,fds,NIL,NIL,NIL,{signals})
-              END fds
               IF telnetServerSocket>=0
                 telnetSocket:=Accept(telnetServerSocket,NIL,NIL)
                 IF telnetSocket>=0
@@ -3846,6 +3848,9 @@ PROC main() HANDLE
                           IF(doMultiCom)
                             ObtainSemaphore(semiNodes)
                             telnetSocket2:=semiNodes.myNode[i].telnetSocket
+                            
+                            ->set to -2 to prevent the node from being used between here and when the incoming_telnet message arrives
+                            IF telnetSocket2=-1 THEN semiNodes.myNode[i].telnetSocket:=-2
                             ReleaseSemaphore(semiNodes)
                           ELSE
                             telnetSocket2:=-1
@@ -3923,15 +3928,7 @@ PROC main() HANDLE
                   ENDSELECT
                   FOR i:=0 TO MAX_NODES-1
                     IF(StrLen(startNode[i])>0)
-                      SetAPen(eWin.rport,getNodeTextColour(i))
-                      Move(eWin.rport,64,topOffset+26+(i*11))
-                      Draw(eWin.rport,64,topOffset+26+(i*11)+6)
-                      Move(eWin.rport,63,topOffset+26+(i*11))
-                      Draw(eWin.rport,63,topOffset+26+(i*11)+6)
-                      Move(eWin.rport,62,topOffset+26+(i*11))
-                      Draw(eWin.rport,62,topOffset+26+(i*11)+6)
-                      Move(eWin.rport,61,topOffset+26+(i*11))
-                      Draw(eWin.rport,61,topOffset+26+(i*11)+6) 
+                      drawChatBlock(i)
                     ENDIF
                   ENDFOR
                   showNodes()
@@ -3996,6 +3993,7 @@ PROC main() HANDLE
   ENDFOR
   
 EXCEPT DO
+  IF fds<>NIL THEN END fds
   IF appicon THEN do_appicon(myappport)
   
   shutDownMaster()
