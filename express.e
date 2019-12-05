@@ -858,7 +858,7 @@ DEF bgChecking=FALSE
 DEF ftptime=0
 
 DEF telnetSocket=-1
-DEF offHookFlag=FALSE
+DEF offHookFlag=TRUE
 
 DEF lastIAC=FALSE
 DEF lastIAC2=FALSE
@@ -1483,6 +1483,7 @@ PROC modemOffHook()
       ObtainSemaphore(masterNode)
       ni:=(masterNode.myNode[node])
       ni.telnetSocket:=-1
+      ni.offHook:=TRUE
       ReleaseSemaphore(masterNode)
     ENDIF   
     ioFlags[IOFLAG_SER_IN]:=0
@@ -1816,6 +1817,12 @@ PROC dropDTR()
     Delay(60)
   ENDIF
   offHookFlag:=FALSE
+  IF sopt.toggles[TOGGLES_MULTICOM]
+    ObtainSemaphore(masterNode)
+    ni:=(masterNode.myNode[node])
+    ni.offHook:=FALSE
+    ReleaseSemaphore(masterNode)
+  ENDIF
 ENDPROC
 
 
@@ -1884,6 +1891,12 @@ PROC resetSystem(yes)
 
   ENDIF
   offHookFlag:=FALSE
+  IF sopt.toggles[TOGGLES_MULTICOM]
+    ObtainSemaphore(masterNode)
+    ni:=(masterNode.myNode[node])
+    ni.offHook:=FALSE
+    ReleaseSemaphore(masterNode)
+  ENDIF
 ENDPROC
 
 PROC checkDoorMsg(mode)
@@ -2324,6 +2337,12 @@ PROC checkDoorMsg(mode)
         ELSE
           i:=ObtainSocket(servermsg.data,PF_INET,SOCK_STREAM,IPPROTO_TCP)
           CloseSocket(i)
+        ENDIF
+        IF sopt.toggles[TOGGLES_MULTICOM]
+          ObtainSemaphore(masterNode)
+          ni:=(masterNode.myNode[node])
+          IF ni.telnetSocket=-2 THEN ni.telnetSocket:=telnetSocket
+          ReleaseSemaphore(masterNode)
         ENDIF
     ENDSELECT
     IF servermsg<>NIL
@@ -5966,7 +5985,7 @@ PROC joinConf(conf, confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFORCE)
   ENDIF
 
   StrCopy(confScreenDir,currentConfDir)
-  readToolType(TOOLTYPE_CONF,currentConf,'SCREENS',confScreenDir)
+  readToolType(TOOLTYPE_CONF,conf,'SCREENS',confScreenDir)
 
   IF(confScan=FALSE)
     IF displayScreen(SCREEN_CONF_BULL)
@@ -28054,8 +28073,8 @@ PROC main() HANDLE
   DEF oldWinPtr
   DEF proc: PTR TO process
 
-  StrCopy(expressVer,'v5.2.0-beta4',ALL)
-  StrCopy(expressDate,'27-Nov-2019',ALL)
+  StrCopy(expressVer,'v5.2.0-beta5',ALL)
+  StrCopy(expressDate,'05-Dec-2019',ALL)
 
   nodeStart:=getSystemTime()
 

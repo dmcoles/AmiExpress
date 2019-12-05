@@ -2184,7 +2184,7 @@ PROC initSemaSemiNodes(s:PTR TO multiPort)
     s.myNode[i].taskSignal:=NIL
     s.myNode[i].telnetSocket:=-1
     s.myNode[i].private:=FALSE
-    s.myNode[i].channel:=0
+    s.myNode[i].offHook:=TRUE
     s.myNode[i].chatColor:=i+1
     StringF(singleName,'AEStat\d',i)
     singleNode:=FindSemaphore(singleName)
@@ -3847,10 +3847,12 @@ PROC main() HANDLE
                         IF(users[i].actionVal=ENV_AWAITCONNECT) AND (telnetNode[i]=1)
                           IF(doMultiCom)
                             ObtainSemaphore(semiNodes)
-                            telnetSocket2:=semiNodes.myNode[i].telnetSocket
-                            
-                            ->set to -2 to prevent the node from being used between here and when the incoming_telnet message arrives
-                            IF telnetSocket2=-1 THEN semiNodes.myNode[i].telnetSocket:=-2
+                            IF semiNodes.myNode[i].offHook=FALSE
+                              telnetSocket2:=semiNodes.myNode[i].telnetSocket
+                              
+                              ->set to -2 to prevent the node from being used between here and when the incoming_telnet message arrives
+                              IF telnetSocket2=-1 THEN semiNodes.myNode[i].telnetSocket:=-2
+                            ENDIF
                             ReleaseSemaphore(semiNodes)
                           ELSE
                             telnetSocket2:=-1
