@@ -595,7 +595,7 @@ EXPORT OBJECT nodeInfo
   handle[31]:ARRAY OF CHAR
   telnetSocket:LONG
   chatColor:LONG
-  channel:LONG
+  offHook:LONG
   private:LONG
   stats[MAX_NODES]:ARRAY OF semiNodestat ->- 64
   t: LONG

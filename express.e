@@ -2317,7 +2317,9 @@ PROC checkDoorMsg(mode)
       CASE CLEAR_OLM_QUEUE
         processOlmMessageQueue(FALSE)
       CASE INCOMING_TELNET
+        debugLog(LOG_DEBUG,'incoming telnet')
         IF (telnetSocket=-1) AND (offHookFlag=FALSE)
+          debugLog(LOG_DEBUG,'incoming telnet - process')
           telnetSocket:=ObtainSocket(servermsg.data,PF_INET,SOCK_STREAM,IPPROTO_TCP)
 
           IF checkCarrier()=FALSE 
@@ -2335,6 +2337,7 @@ PROC checkDoorMsg(mode)
             ReleaseSemaphore(masterNode)
           ENDIF
         ELSE
+          debugLog(LOG_DEBUG,'incoming telnet - donot process')
           i:=ObtainSocket(servermsg.data,PF_INET,SOCK_STREAM,IPPROTO_TCP)
           CloseSocket(i)
         ENDIF
@@ -2351,6 +2354,7 @@ PROC checkDoorMsg(mode)
       IF type=NT_FREEMSG THEN FreeMem(servermsg,servermsg.msg.length)
     ENDIF
   ENDWHILE
+  inac:=FALSE
 ENDPROC returnval
 
 PROC getPass2(prompt: PTR TO CHAR,password:PTR TO CHAR,pwdhash:LONG, max:LONG,outstr=NIL:PTR TO CHAR)
@@ -8269,18 +8273,8 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
 
   FreeSignal(telnetSigBit)
 
-  IF (extsig<>0) AND ((signals AND extsig)<>0) THEN RETURN TRUE,RESULT_SIGNALLED
-
-  IF (timedout)
-    RETURN TRUE,RESULT_TIMEOUT
-  ENDIF
-
   wasControl:=0
   ch:=0
-
-  IF state=STATE_LOGGING_OFF
-    RETURN wasControl,ch
-  ENDIF
 
   IF signals AND SIGBREAKF_CTRL_C
     debugLog(LOG_DEBUG,'CTRL-C detected')
@@ -8294,6 +8288,16 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     IF checkDoorMsg(1)
       ch:=serverin
     ENDIF
+  ENDIF
+
+  IF (extsig<>0) AND ((signals AND extsig)<>0) THEN RETURN TRUE,RESULT_SIGNALLED
+
+  IF (timedout)
+    RETURN TRUE,RESULT_TIMEOUT
+  ENDIF
+
+  IF state=STATE_LOGGING_OFF
+    RETURN FALSE,0
   ENDIF
 
   IF (ch=0) AND allowSer AND (signals AND (serialsig OR telnetsig))
@@ -27054,10 +27058,9 @@ PROC processAwait()
   DEF tempstr[255]:STRING
   DEF wasControl,ch
   DEF subState: PTR TO awaitState
+  DEF ni:PTR TO nodeInfo
 
   IF (stateData=0)
-    cntr:=0
-    
     ansiColour:=TRUE
     quickFlag:=FALSE
     lostCarrier:=FALSE
@@ -27072,12 +27075,6 @@ PROC processAwait()
     servercmd:=-1
   ELSE
     subState:=stateData
-  ENDIF
-
-
-  cntr:=cntr+1
-  IF cntr>=60
-    cntr:=0
   ENDIF
 
 
@@ -27135,6 +27132,23 @@ PROC processAwait()
     logonType:=LOGON_TYPE_SYSOP
     reqState:=REQ_STATE_SYSOPLOGON
   ELSE
+    IF sopt.toggles[TOGGLES_MULTICOM]
+      ObtainSemaphore(masterNode)
+      ni:=(masterNode.myNode[node])
+      IF ni.telnetSocket=-2
+        debugLog(LOG_DEBUG,'check incoming call - socket = -2')
+        cntr:=cntr+1
+        IF cntr=20
+          debugLog(LOG_DEBUG,'check incoming call - socket = -2, counter=20, reset socket to -1')
+          cntr:=0
+          ni.telnetSocket:=-1
+        ENDIF
+      ELSE
+        cntr:=0
+      ENDIF    
+      ReleaseSemaphore(masterNode)
+    ENDIF
+
     IF (checkSer()) OR (sopt.trapDoor) OR (instantLogon) OR (checkTelnetConnection())
       IF checkIncomingCall()=RESULT_CONNECT
         debugLog(LOG_DEBUG,'REMOTE LOGON')
@@ -28074,7 +28088,7 @@ PROC main() HANDLE
   DEF proc: PTR TO process
 
   StrCopy(expressVer,'v5.2.0-beta5',ALL)
-  StrCopy(expressDate,'05-Dec-2019',ALL)
+  StrCopy(expressDate,'10-Dec-2019',ALL)
 
   nodeStart:=getSystemTime()
 
