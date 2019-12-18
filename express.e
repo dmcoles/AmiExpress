@@ -9968,6 +9968,35 @@ PROC debugLog(logType,logline:PTR TO CHAR)
   ENDIF
 ENDPROC
 
+PROC runFifoHandler()
+  DEF m,p:PTR TO process,i
+  DEF c:PTR TO commandlineinterface
+  DEF s:PTR TO CHAR
+  DEF tempstr[255]:STRING
+  DEF found=FALSE
+  
+  ->check to see if fifo handler is running and run it if not
+  
+  m:=MaxCli()
+   
+  FOR i:=1 TO m
+    p:=FindCliProc(i)
+    c:=p.cli
+    IF c
+      c:=Shl(c,2)
+      s:=c.commandname
+      IF s
+        s:=Shl(s,2)
+        StrCopy(tempstr,s+1,s[0])
+        LowerStr(tempstr)
+        IF StrCmp(tempstr,'l:fifo-handler') THEN found:=TRUE
+      ENDIF
+    ENDIF
+    
+  ENDFOR
+  IF found=FALSE THEN Execute('Run >NIL: <NIL: l:fifo-handler',0,0)
+ENDPROC
+
 PROC remoteShell() HANDLE
   DEF rMsg:mn
   DEF wMsg:mn
@@ -9987,6 +10016,8 @@ PROC remoteShell() HANDLE
   DEF bufptr:PTR TO CHAR
   DEF temp[255]:STRING
   DEF tags
+
+  runFifoHandler()
 
   StringF(fifoName,'bbsshell\d',node)
 
@@ -28088,7 +28119,7 @@ PROC main() HANDLE
   DEF proc: PTR TO process
 
   StrCopy(expressVer,'v5.2.0-beta5',ALL)
-  StrCopy(expressDate,'10-Dec-2019',ALL)
+  StrCopy(expressDate,'18-Dec-2019',ALL)
 
   nodeStart:=getSystemTime()
 
