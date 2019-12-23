@@ -3603,7 +3603,11 @@ PROC main() HANDLE
 
   IF telnetPort<>-1
     waitSocketLib()
-    telnetServerSocket:=openListenSocket(telnetPort)
+    IF socketbase=NIL
+      myrequest('Timeout error waiting for internet connection')
+    ELSE
+      telnetServerSocket:=openListenSocket(telnetPort)
+    ENDIF
   ENDIF
 
   theight++
