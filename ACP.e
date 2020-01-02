@@ -31,11 +31,18 @@
        'asl',
        'libraries/asl',
        'wb',
+        'socket',
+        'net/netdb',
+        'net/in',
+        'net/socket',
+
        'icon'
 
   MODULE '*axcommon',
          '*jsonParser',
-         '*miscfuncs'
+         '*miscfuncs',
+         '*stringlist'
+
 
 /*
 'Setup'
@@ -45,28 +52,34 @@ Icon Setup Complete.
 Cannot Locate Icon Config.
 
 aErrorCreatingD:dc.b 'Error Creating Directory %s',$A,0
-aCreatingIconS:	dc.b 'Creating Icon %s',$A,0
-a3_3s:		dc.b '>%-3.3s',0
-aS_txt:		dc.b '%s.txt',0
+aCreatingIconS: dc.b 'Creating Icon %s',$A,0
+a3_3s:    dc.b '>%-3.3s',0
+aS_txt:   dc.b '%s.txt',0
 aErrorCreatingI:dc.b 'Error creating Icon %s',$A,0
 aErrorCreatin_0:dc.b 'Error Creating Directory %s',$A,0
 aCreatingIcon_0:dc.b 'Creating Icon %s',$A,0
-aDrw:		dc.b '>DRW',0
-aS_txt_0:	dc.b '%s.txt',0
+aDrw:   dc.b '>DRW',0
+aS_txt_0: dc.b '%s.txt',0
 aErrorCreatin_1:dc.b 'Error creating Icon %s',$A,0
-aDir:		dc.b '(DIR)',0
+aDir:   dc.b '(DIR)',0
 aAddingTooltype:dc.b 9,'Adding ToolType %s',$A,0
 aErrorOpeningCo:dc.b 'Error opening config file',$A,0
-aDef:		dc.b '>DEF',0
+aDef:   dc.b '>DEF',0
 aUsingDefaultIc:dc.b 'Using Default Icon',$A,0
 aSelectIconconf:dc.b 'Select IconConfig',0
-a?:		dc.b '#?',0
-aS_1:		dc.b 's:',0
-aAeicon_config:	dc.b 'aeicon.config',0
+a?:   dc.b '#?',0
+aS_1:   dc.b 's:',0
+aAeicon_config: dc.b 'aeicon.config',0
 
 */
        
-ENUM ERR_NONE,ERR_ALREADY_RUNNING,ERR_STARTUP, ERR_VALIDATE,ERR_NO_DISKFONT
+ENUM ERR_NONE,ERR_ALREADY_RUNNING,ERR_STARTUP, ERR_VALIDATE,ERR_NO_DISKFONT,ERR_FDS_RANGE
+
+CONST LISTENQ=100
+CONST EINTR=4
+CONST MAX_LINE=255
+CONST FIONBIO=$8004667e
+CONST EWOULDBLOCK=35
 
 CONST TAG_END=0    
 
@@ -283,6 +296,12 @@ OBJECT screenPref
   ->WORD Zoom[5];
 ENDOBJECT
 
+OBJECT connectionItem
+  ipAddr: LONG
+  connectionTime: LONG
+  blocked: CHAR
+  blockExpiry: LONG
+ENDOBJECT
   
 DEF ngAry[ALL_GADS]:ARRAY OF LONG
 
@@ -314,6 +333,7 @@ DEF myappport=NIL:PTR TO mp
 DEF doMultiCom
 
 DEF quietNode[MAX_NODES]:ARRAY OF INT
+DEF telnetNode[MAX_NODES]:ARRAY OF INT
 DEF bbsStack
 
 DEF nodes[MAX_NODES]:ARRAY OF INT
@@ -329,6 +349,10 @@ DEF activeNodeCount=0
 DEF colourSpecs
 DEF amigaSpecs
 DEF colours
+
+DEF dosCheckTime=60
+DEF dosCheckTrigger=5
+DEF dosBanTime=60
 
 DEF masterPort[100]:STRING
 
@@ -434,6 +458,9 @@ DEF maddItemi=0
 
 DEF startupCompleteScript[255]:STRING
 
+DEF telnetPort=-1
+DEF fds=0:PTR TO LONG
+
 PROC init() OF itemsList  ->constructor
   self.lastUsers[0]:=String(36)
   self.lastUsers[1]:=String(36)
@@ -449,7 +476,7 @@ PROC init() OF itemsList  ->constructor
   self.num:=0
 ENDPROC
 
-PROC end() OF itemsList				-> destructor
+PROC end() OF itemsList       -> destructor
   DisposeLink(self.lastUsers[0])
   DisposeLink(self.lastUsers[1])
   DisposeLink(self.lastUsers[2])
@@ -514,8 +541,14 @@ PROC getSystemDate(outDateStr:PTR TO CHAR)
   IF DateToStr(dt)
     StringF(outDateStr,'\s[6] \s[5]',datestr,timestr)
   ENDIF
-  
 ENDPROC
+
+->returns system time as a long
+PROC getSystemTime()
+  DEF currDate: datestamp
+  DEF startds:PTR TO datestamp
+  startds:=DateStamp(currDate)
+ENDPROC Mul(Mul(startds.days,1440),60)+(startds.minute*60)+(startds.tick/50)
 
 PROC trimStr(src:PTR TO CHAR, dest:PTR TO CHAR)
   DEF i
@@ -561,6 +594,66 @@ PROC freeGads()
   visInfo:=NIL
   eGList:=NIL
 ENDPROC
+
+PROC waitSocketLib()
+  DEF n=0,id=0
+  IF socketbase=NIL THEN socketbase:=OpenLibrary('bsdsocket.library', 2)
+  WHILE (socketbase=NIL) AND (n<60)
+    Delay(50)
+    n++
+    socketbase:=OpenLibrary('bsdsocket.library', 2)
+  ENDWHILE
+  IF socketbase
+    n:=0
+    id:=GetHostId()
+    WHILE(id=0) AND (n<60)
+      Delay(50)
+      n++
+      id:=GetHostId()
+    ENDWHILE
+  ENDIF
+ENDPROC
+
+PROC openListenSocket(port)
+  DEF server_s
+  DEF servaddr=0:PTR TO sockaddr_in
+  DEF tempStr[255]:STRING
+
+  IF((server_s:=Socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
+    ->StringF(tempStr,'/X Telnet: Error creating listening socket. (\d)\b\n',Errno())
+    ->aePuts(tempStr)
+    RETURN -1
+  ENDIF
+ 
+  servaddr:=NEW servaddr
+  servaddr.sin_len:=SIZEOF sockaddr_in
+  servaddr.sin_family:=AF_INET
+  servaddr.sin_port:=port
+  servaddr.sin_addr:=INADDR_ANY
+
+  SetSockOpt(server_s, SOL_SOCKET, SO_REUSEADDR, [1]:LONG, SIZEOF LONG)
+
+  IF(Bind(server_s, servaddr, SIZEOF sockaddr_in) < 0)
+    ->StringF(tempStr,'/X Telnet: Error calling bind() for port \d, error=\d\b\n',port,Errno());
+    ->aePuts(tempStr)
+    CloseSocket(server_s)
+    END servaddr
+    RETURN -1
+  ENDIF
+
+  IF(Listen(server_s, LISTENQ) < 0)
+    ->StringF(tempStr,'/X Telnet: Error calling listen() for port \d, error=\d\b\n',port,Errno());
+    ->aePuts(tempStr)
+    CloseSocket(server_s)
+    END servaddr
+    RETURN -1
+  ENDIF
+
+  IoctlSocket(server_s,FIONBIO,[1])
+
+  END servaddr
+ENDPROC server_s
+
 
 ->*******************************************************************
 -> OpenMaster - This function opens a port for the nodes to interact
@@ -844,7 +937,7 @@ ENDPROC c
 ->// CallNode - This function opens a port to a nodes AEServer and tries
 ->// to send a msg to the node and waits on a reply
 ->//*********************************************************************
-PROC callNode(node,code)
+PROC callNode(node,code,data=1)
   DEF response[100]:STRING
    
   StringF(response,'AmiExpress_Node.\d',node)
@@ -861,7 +954,7 @@ PROC callNode(node,code)
     ENDIF
   ENDIF
   IF(register(node))
-    sendMessage(code)
+    sendMessage(code,data)
   ENDIF
 ENDPROC
 
@@ -869,7 +962,7 @@ PROC putToPort(message)
   PutMsg(nport,message)
 ENDPROC 1
 
-PROC sendMessage(nl)
+PROC sendMessage(nl,data=1)
   DEF jhmsg: PTR TO jhMessage
 
   jhmsg:=AllocMem(SIZEOF jhMessage,MEMF_PUBLIC OR MEMF_CLEAR)
@@ -878,10 +971,11 @@ PROC sendMessage(nl)
   jhmsg.msg.replyport:=0
  
   jhmsg.command:=nl
-  jhmsg.data:=1  ->READIT
+  jhmsg.data:=data  ->READIT
      
-	putToPort(jhmsg)
+  putToPort(jhmsg)
 ENDPROC
+
 
 PROC register(node)
   StringF(masterPort,'AEServer.\d',node)
@@ -1014,95 +1108,95 @@ PROC initGads(scr:PTR TO screen)
 
   IF ((gad:=CreateContext({eGList})))=NIL THEN RETURN 0
   
-  gad:=CreateGadgetA(TEXT_KIND, gad, ngAry[GAD_ACTION],	[GTTX_BORDER, 2,TAG_END])
+  gad:=CreateGadgetA(TEXT_KIND, gad, ngAry[GAD_ACTION], [GTTX_BORDER, 2,TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
-  gad:= CreateGadgetA(TEXT_KIND, gad, ngAry[GAD_USER],	[GTTX_BORDER, 2,TAG_END])
+  gad:= CreateGadgetA(TEXT_KIND, gad, ngAry[GAD_USER],  [GTTX_BORDER, 2,TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
-  gad:= CreateGadgetA(TEXT_KIND, gad, ngAry[GAD_LOCATION],	[GTTX_BORDER, 2,TAG_END])
+  gad:= CreateGadgetA(TEXT_KIND, gad, ngAry[GAD_LOCATION],  [GTTX_BORDER, 2,TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
-  gad:= CreateGadgetA(TEXT_KIND, gad, ngAry[GAD_BAUD],	[GTTX_BORDER, 2,TAG_END])
+  gad:= CreateGadgetA(TEXT_KIND, gad, ngAry[GAD_BAUD],  [GTTX_BORDER, 2,TAG_END])
   IF (gad = NIL) THEN RETURN 0
   
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_EXITNODE].topedge:=ngAry[GAD_EXITNODE].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_EXITNODE],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_EXITNODE],  [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_NODEOFFHOOK].topedge:=ngAry[GAD_NODEOFFHOOK].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_NODEOFFHOOK],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_NODEOFFHOOK], [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_INSTANTLOGIN].topedge:=ngAry[GAD_INSTANTLOGIN].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_INSTANTLOGIN],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_INSTANTLOGIN],  [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_AESHELL].topedge:=ngAry[GAD_AESHELL].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_AESHELL],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_AESHELL], [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_TOGGLECHAT].topedge:=ngAry[GAD_TOGGLECHAT].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_TOGGLECHAT],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_TOGGLECHAT],  [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_SYSOPLOGIN].topedge:=ngAry[GAD_SYSOPLOGIN].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_SYSOPLOGIN],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_SYSOPLOGIN],  [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_NRAMS].topedge:=ngAry[GAD_NRAMS].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_NRAMS],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_NRAMS], [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_RESERVENODE].topedge:=ngAry[GAD_RESERVENODE].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_RESERVENODE],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_RESERVENODE], [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_ACCOUNTS].topedge:=ngAry[GAD_ACCOUNTS].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_ACCOUNTS],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_ACCOUNTS],  [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_INITMODEM].topedge:=ngAry[GAD_INITMODEM].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_INITMODEM],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_INITMODEM], [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_LOCALLOGIN].topedge:=ngAry[GAD_LOCALLOGIN].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_LOCALLOGIN],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_LOCALLOGIN],  [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_MCP].topedge:=ngAry[GAD_MCP].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_MCP],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_MCP], [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_NODECONFIG].topedge:=ngAry[GAD_NODECONFIG].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_NODECONFIG],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_NODECONFIG],  [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_NODECHAT].topedge:=ngAry[GAD_NODECHAT].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_NODECHAT],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_NODECHAT],  [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_SAVEWIN].topedge:=ngAry[GAD_SAVEWIN].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_SAVEWIN],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_SAVEWIN], [TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_FLIP].topedge:=ngAry[GAD_FLIP].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_FLIP],	[GTTX_BORDER,2,TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_FLIP],  [GTTX_BORDER,2,TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_CONTROL].topedge:=ngAry[GAD_CONTROL].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_CONTROL],	[GTTX_BORDER,2,TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_CONTROL], [GTTX_BORDER,2,TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_TOPS].topedge:=ngAry[GAD_TOPS].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(CYCLE_KIND, gad, ngAry [GAD_TOPS],	[GTCY_LABELS,['Last Five Callers','Last Five Uploads','Last Five Downloads',NIL],GTCY_ACTIVE,topOption,TAG_END])
+  gad:= CreateGadgetA(CYCLE_KIND, gad, ngAry [GAD_TOPS],  [GTCY_LABELS,['Last Five Callers','Last Five Uploads','Last Five Downloads',NIL],GTCY_ACTIVE,topOption,TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_TOPSBOX].topedge:=ngAry[GAD_TOPSBOX].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_TOPSBOX],	[GTTX_BORDER,2,TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_TOPSBOX], [GTTX_BORDER,2,TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
-  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_SHORT],	[TAG_END])
+  gad:= CreateGadgetA(BUTTON_KIND, gad, ngAry[GAD_SHORT], [TAG_END])
   IF (gad = NIL) THEN RETURN 0
   
   FOR i:=0  TO MAX_NODES-1
@@ -1730,6 +1824,7 @@ PROC showQuiet(i)
 
   Move(eWin.rport,GLEF_BAUD+5,rowTop)
   Text(eWin.rport,users[i].baud,7)
+  drawChatBlock(i)
 ENDPROC
 
 PROC regLastUser(name:PTR TO CHAR,dateStr:PTR TO CHAR,node)
@@ -1988,26 +2083,10 @@ PROC checkMasterSig(signals)
               ENDIF
           CASE JH_CHATON
               tChat[msg.node]:=1
-              SetAPen(eWin.rport,getNodeTextColour(msg.node))
-              Move(eWin.rport,64,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,64,topOffset+26+(msg.node*11)+6)
-              Move(eWin.rport,63,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,63,topOffset+26+(msg.node*11)+6)
-              Move(eWin.rport,62,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,62,topOffset+26+(msg.node*11)+6)
-              Move(eWin.rport,61,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,61,topOffset+26+(msg.node*11)+6) 
+              drawChatBlock(msg.node)
           CASE JH_CHATOFF
               tChat[msg.node]:=0
-              SetAPen(eWin.rport,getNodeTextColour(msg.node))
-              Move(eWin.rport,64,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,64,topOffset+26+(msg.node*11)+6)
-              Move(eWin.rport,63,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,63,topOffset+26+(msg.node*11)+6)
-              Move(eWin.rport,62,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,62,topOffset+26+(msg.node*11)+6)
-              Move(eWin.rport,61,topOffset+26+(msg.node*11))
-              Draw(eWin.rport,61,topOffset+26+(msg.node*11)+6) 
+              drawChatBlock(msg.node)
           CASE JH_QUIETON
               quietNode[msg.node]:=1 
               showQuiet(msg.node)
@@ -2035,6 +2114,20 @@ PROC checkMasterSig(signals)
       ENDIF
     ENDWHILE
   ENDIF
+ENDPROC
+
+PROC drawChatBlock(node)
+  DEF colour
+  colour:=IF tChat[node] THEN getNodeTextColour(node) ELSE 0
+  SetAPen(eWin.rport,colour)
+  Move(eWin.rport,64,topOffset+26+(node*11))
+  Draw(eWin.rport,64,topOffset+26+(node*11)+6)
+  Move(eWin.rport,63,topOffset+26+(node*11))
+  Draw(eWin.rport,63,topOffset+26+(node*11)+6)
+  Move(eWin.rport,62,topOffset+26+(node*11))
+  Draw(eWin.rport,62,topOffset+26+(node*11)+6)
+  Move(eWin.rport,61,topOffset+26+(node*11))
+  Draw(eWin.rport,61,topOffset+26+(node*11)+6) 
 ENDPROC
 
 PROC cmdOpt(cmd:PTR TO packedCommands,maxNodes,x,y)
@@ -2089,9 +2182,9 @@ PROC initSemaSemiNodes(s:PTR TO multiPort)
     
     s.myNode[i].t:=NIL
     s.myNode[i].taskSignal:=NIL
-    s.myNode[i].startTime:=NIL
+    s.myNode[i].telnetSocket:=-1
     s.myNode[i].private:=FALSE
-    s.myNode[i].channel:=0
+    s.myNode[i].offHook:=TRUE
     s.myNode[i].chatColor:=i+1
     StringF(singleName,'AEStat\d',i)
     singleNode:=FindSemaphore(singleName)
@@ -2438,7 +2531,8 @@ PROC getIconNodeInfo(i)
        StringF(temp,'\sNode\d/',cmd.bbsLoc,i)
        strcpy(sopt.nodeScreens,temp)
     ENDIF
-
+    
+    IF(s:=FindToolType(oldtooltypes,'TELNET')) THEN telnetNode[i]:=1
     freeToolTypes(dobj,cfg)
   ENDIF
 ENDPROC
@@ -2625,12 +2719,13 @@ ENDPROC
 
 PROC readStartUp(s:PTR TO CHAR)
   DEF image[200]:STRING
+  DEF tempstr[255]:STRING
   DEF dobj:PTR TO diskobject
   DEF cmd:PTR TO packedCommands
   DEF sopt:PTR TO startOption
   DEF oldtooltypes,cfg
   DEF t:  PTR TO CHAR
-  DEF i
+  DEF i,n
   DEF nodeCount
   DEF buttonnum=0
   DEF buttontitle=0
@@ -2697,6 +2792,10 @@ PROC readStartUp(s:PTR TO CHAR)
   IF(t:=FindToolType(oldtooltypes,'ICONIFY.TOPEDGE')) THEN zim[1]:=Val(t)
   IF(t:=FindToolType(oldtooltypes,'SHORT_DONOTMOVE')) THEN shortUp:=1
   IF(t:=FindToolType(oldtooltypes,'PRIORITY')) THEN SetTaskPri(FindTask(0),Val(t))
+  IF(t:=FindToolType(oldtooltypes,'TELNETPORT')) THEN telnetPort:=Val(t)
+  IF(t:=FindToolType(oldtooltypes,'DOSCHECKTIME')) THEN dosCheckTime:=Val(t)
+  IF(t:=FindToolType(oldtooltypes,'DOSCHECKTRIGGER')) THEN dosCheckTrigger:=Val(t)
+  IF(t:=FindToolType(oldtooltypes,'DOSBANTIME')) THEN dosBanTime:=Val(t)
     
   j:=1
   StringF(image,'BACKUP.\d',j++)
@@ -2841,6 +2940,27 @@ PROC readStartUp(s:PTR TO CHAR)
   ENDIF
 
   freeToolTypes(dobj,cfg)
+
+  StringF(tempstr,'\sCONFCONFIG',cmd.bbsLoc)
+  dobj,cfg:=getToolTypes(tempstr)
+  IF(dobj)
+    oldtooltypes:=dobj.tooltypes
+    IF(t:=FindToolType(oldtooltypes,'NCONFS'))
+      n:=Val(t)
+      FOR i:=0 TO n-1
+        StringF(tempstr,'LOCATION.\d',i+1)
+        IF(t:=FindToolType(oldtooltypes,tempstr))
+          StringF(tempstr,'\sDirCaches/enabled',t)
+          IF FileLength(tempstr)>=0
+            StringF(tempstr,'COPY "\sDirCaches/Conf#?Dir#?" ALL RAM:DirCaches >NIL:',t)
+            Execute(tempstr,0,0)
+          ENDIF
+        ENDIF
+      ENDFOR
+    ENDIF
+  ENDIF
+  freeToolTypes(dobj,cfg)
+
   IF(doMultiCom)
     FOR i:=0 TO nodeCount-1
       sopt:=sopts[i]
@@ -2982,6 +3102,7 @@ PROC selectAndRunConfig(outpath:PTR TO CHAR,initialFolder:PTR TO CHAR,initialFil
                         NIL])
 
   IF AslRequest(fr, NIL)=FALSE
+    FreeAslRequest(fr)
     myrequest('No file was selected.')
     RETURN
   ENDIF
@@ -2992,7 +3113,7 @@ PROC selectAndRunConfig(outpath:PTR TO CHAR,initialFolder:PTR TO CHAR,initialFil
 ENDPROC
 
 PROC runConfig(infile:PTR TO CHAR,outpath:PTR TO CHAR) HANDLE
-	DEF r
+  DEF r
   DEF p:jsmn_parser
   DEF tok:PTR TO jsmntok_t
   DEF tokcount
@@ -3002,8 +3123,8 @@ PROC runConfig(infile:PTR TO CHAR,outpath:PTR TO CHAR) HANDLE
 
   iconbase:=OpenLibrary('icon.library',33)
 
-	/* Prepare parser */
-	jsmn_init(p)
+  /* Prepare parser */
+  jsmn_init(p)
   
   fh:=Open(infile,MODE_OLDFILE)
   IF fh<1
@@ -3026,10 +3147,10 @@ PROC runConfig(infile:PTR TO CHAR,outpath:PTR TO CHAR) HANDLE
   FreeDosObject(DOS_FIB,fib)
 
   buf:=New(filesize)
-	IF (buf = NIL)
+  IF (buf = NIL)
     myrequest('Could not allocate enough memory to read json file.')
-		RETURN 6
-	ENDIF
+    RETURN 6
+  ENDIF
   
   /* Read json into memory */
   r:=Read(fh,buf, filesize)
@@ -3041,13 +3162,13 @@ PROC runConfig(infile:PTR TO CHAR,outpath:PTR TO CHAR) HANDLE
 
   tokcount:=jsmn_parse(p, buf, filesize, 0, 0)
 
-	tok:=New(SIZEOF jsmntok_t * tokcount)
-	IF (tok = NIL)
+  tok:=New(SIZEOF jsmntok_t * tokcount)
+  IF (tok = NIL)
     myrequest('Could not allocate enough memory to parse json file.')
-		RETURN 7
-	ENDIF
+    RETURN 7
+  ENDIF
   
-	jsmn_init(p)
+  jsmn_init(p)
   r:=jsmn_parse(p, buf, filesize, tok, tokcount)
   IF (r>=0)
     createdata(outpath, buf, tok, p.toknext,TRUE)
@@ -3101,7 +3222,7 @@ ENDPROC
 
 PROC attemptShutdown()
   DEF i
-  
+ 
   IF(activeNodeCount=0)
     notDone:=0
   ELSE
@@ -3143,6 +3264,30 @@ PROC loadState()
         IF StrLen(tempStr)>0 THEN regLastDownloads(tempStr,tempStr2,i)
       ENDFOR
     ENDFOR
+    ReadStr(fh,tempStr)
+    IF StrCmp(tempStr,'##')
+      END lastUsers
+      END lastUploads
+      END lastDownloads
+      lastUsers:=NEW lastUsers.init()
+      lastUploads:=NEW lastUploads.init()
+      lastDownloads:=NEW lastDownloads.init()
+      
+      FOR j:=0 TO 4
+        ReadStr(fh,tempStr)
+        ReadStr(fh,tempStr2)
+        IF StrLen(tempStr)>0 THEN lastUsers.add(tempStr,tempStr2)
+
+        ReadStr(fh,tempStr)
+        ReadStr(fh,tempStr2)
+        IF StrLen(tempStr)>0 THEN lastUploads.add(tempStr,tempStr2)
+
+        ReadStr(fh,tempStr)
+        ReadStr(fh,tempStr2)
+        IF StrLen(tempStr)>0 THEN lastDownloads.add(tempStr,tempStr2)
+      ENDFOR
+    ENDIF
+
     Close(fh)
   ENDIF
 ENDPROC
@@ -3177,8 +3322,94 @@ PROC saveState()
         Write(fh,tempStr,StrLen(tempStr))
       ENDFOR
     ENDFOR
+
+    StringF(tempStr,'##\n')
+    Write(fh,tempStr,StrLen(tempStr))
+    
+    FOR j:=0 TO 4
+      StringF(tempStr,'\s\n',lastUsers.getItem(j))
+      Write(fh,tempStr,StrLen(tempStr))
+      StringF(tempStr,'\s\n',lastUsers.getItemDate(j))
+      Write(fh,tempStr,StrLen(tempStr))
+      
+      StringF(tempStr,'\s\n',lastUploads.getItem(j))
+      Write(fh,tempStr,StrLen(tempStr))
+      StringF(tempStr,'\s\n',lastUploads.getItemDate(j))
+      Write(fh,tempStr,StrLen(tempStr))
+
+      StringF(tempStr,'\s\n',lastDownloads.getItem(j))
+      Write(fh,tempStr,StrLen(tempStr))
+      StringF(tempStr,'\s\n',lastDownloads.getItemDate(j))
+      Write(fh,tempStr,StrLen(tempStr))
+    ENDFOR
     Close(fh)
   ENDIF
+ENDPROC
+
+PROC loadConnectionList(connList:PTR TO stdlist)
+  DEF connFile[255]:STRING
+  DEF tempStr[255]:STRING
+  DEF connItem:PTR TO connectionItem
+  DEF fh
+  StringF(connFile,'\sacpConnections.dat',bbsPath)
+  fh:=Open(connFile,MODE_OLDFILE)
+  IF fh>0
+    WHILE (ReadStr(fh,tempStr)<>-1) OR (EstrLen(tempStr)>0)
+      connItem:=NEW connItem
+      connItem.ipAddr:=Val(tempStr)
+      ReadStr(fh,tempStr)
+      connItem.connectionTime:=Val(tempStr)
+      ReadStr(fh,tempStr)
+      connItem.blocked:=Val(tempStr)
+      ReadStr(fh,tempStr)
+      connItem.blockExpiry:=Val(tempStr)
+      connList.add(connItem)
+    ENDWHILE
+
+    Close(fh)
+  ENDIF
+ENDPROC
+
+PROC saveConnectionList(connList:PTR TO stdlist)
+  DEF connFile[255]:STRING
+  DEF tempStr[255]:STRING
+  DEF connItem:PTR TO connectionItem
+  DEF i,fh
+  StringF(connFile,'\sacpConnections.dat',bbsPath)
+  fh:=Open(connFile,MODE_NEWFILE)
+  IF fh>0
+    FOR i:=0 TO connList.count()-1
+      connItem:=connList.item(i)
+     
+      StringF(tempStr,'$\h\n',connItem.ipAddr)
+      Write(fh,tempStr,StrLen(tempStr))
+      StringF(tempStr,'\d\n',connItem.connectionTime)
+      Write(fh,tempStr,StrLen(tempStr))
+      StringF(tempStr,'\d\n',connItem.blocked)
+      Write(fh,tempStr,StrLen(tempStr))
+      StringF(tempStr,'\d\n',connItem.blockExpiry)
+      Write(fh,tempStr,StrLen(tempStr))
+    ENDFOR
+    Close(fh)
+  ENDIF
+ENDPROC
+
+
+PROC telnetSend(socket,msg,len=-1)
+  DEF r
+  IF len=-1 THEN len:=StrLen(msg)
+  r:=Send(socket,msg,len,0)
+  IF r<>len THEN RETURN FALSE
+ENDPROC TRUE
+
+PROC setSingleFDS(socketVal)
+  DEF i,n
+  
+  n:=socketVal/32
+  IF (n<0) OR (n>=32) THEN Raise(ERR_FDS_RANGE)
+
+  FOR i:=0 TO 31 DO fds[i]:=0
+  fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
 ENDPROC
 
 PROC main() HANDLE
@@ -3203,12 +3434,23 @@ PROC main() HANDLE
   DEF windowSig,myappsig
   DEF i,j,class
   DEF newlock=NIL
+  DEF telnetServerSocket=-1
+  DEF telnetSocket=-1
+  DEF telnetSocket2=-1
+  DEF f
+  DEF peeraddr: sockaddr_in
+  DEF n,t
+  DEF connectionList: PTR TO stdlist
+  DEF connItem: PTR TO connectionItem
+  DEF saveConn=FALSE
 
   DEF sopt:PTR TO startOption
+
+  fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
  
   KickVersion(37)  -> E-Note: requires V37
 
-  StringF(myVerStr,'v5.1.0')
+  StringF(myVerStr,'v5.2.0')
 
   FOR i:=0 TO MAX_NODES-1
     ndUser[i]:=NIL
@@ -3216,6 +3458,7 @@ PROC main() HANDLE
     ndDownloads[i]:=NIL
   ENDFOR
 
+  connectionList:=NEW connectionList.stdlist(100)
 
   dim:=[1,1,1,1]:INT  /*** Dimensions of ZIP window default ***/
   zim:=[10,100]:INT
@@ -3286,7 +3529,7 @@ PROC main() HANDLE
       IF newlock<>NIL THEN oldDirLock:=CurrentDir(newlock)
     ENDIF
   ENDIF
-  
+ 
   FOR i:=0 TO 14
     setOriText[i]:=String(100)
   ENDFOR
@@ -3301,6 +3544,7 @@ PROC main() HANDLE
     sopts[i]:=NIL
     nodes[i]:=0
     quietNode[i]:=0
+    telnetNode[i]:=0
   ENDFOR
  
   IF (diskfontbase:=OpenLibrary('diskfont.library', 37))=NIL THEN Raise(ERR_NO_DISKFONT)
@@ -3314,12 +3558,14 @@ PROC main() HANDLE
   clearUsers()
   initCycles()
 
-  doMultiCom:=0
+  ->doMultiCom:=0
 
   StrCopy(fontName,'topaz.font')
 
   readStartUp(iconStartName)
   IF acpError THEN Raise(ERR_STARTUP)
+
+  loadConnectionList(connectionList)
 
   IF commodityEnabled  
     cxbase:=OpenLibrary('commodities.library', 37)
@@ -3354,6 +3600,15 @@ PROC main() HANDLE
   IF fontHandle=NIL THEN fontHandle:=OpenDiskFont(defaultfontattr)
 
   IF(validate()=FALSE) THEN Raise(ERR_VALIDATE)
+
+  IF telnetPort<>-1
+    waitSocketLib()
+    IF socketbase=NIL
+      myrequest('Timeout error waiting for internet connection')
+    ELSE
+      telnetServerSocket:=openListenSocket(telnetPort)
+    ENDIF
+  ENDIF
 
   theight++
   edgeX:=WLEF
@@ -3473,15 +3728,7 @@ PROC main() HANDLE
         IF(eWin AND startUp)
           FOR i:=0 TO MAX_NODES-1
             IF(StrLen(startNode[i])>0)
-              SetAPen(eWin.rport,getNodeTextColour(i))
-              Move(eWin.rport,64,topOffset+26+(i*11))
-              Draw(eWin.rport,64,topOffset+26+(i*11)+6)
-              Move(eWin.rport,63,topOffset+26+(i*11))
-              Draw(eWin.rport,63,topOffset+26+(i*11)+6)
-              Move(eWin.rport,62,topOffset+26+(i*11))
-              Draw(eWin.rport,62,topOffset+26+(i*11)+6)
-              Move(eWin.rport,61,topOffset+26+(i*11))
-              Draw(eWin.rport,61,topOffset+26+(i*11)+6) 
+              drawChatBlock(i)
               sopt:=sopts[i]
               IF sopt THEN sopt.acpWindow:=eWin
               IF(nodeIdle[i])=FALSE
@@ -3498,7 +3745,170 @@ PROC main() HANDLE
         checkStartingScript()
 
         WHILE (notDone)
-          signals:=Wait(masterSig OR windowSig OR myappsig OR cxsigflag)
+          IF (telnetServerSocket=-1)
+            signals:=Wait(masterSig OR windowSig OR myappsig OR cxsigflag)
+          ELSE
+            REPEAT
+              setSingleFDS(telnetServerSocket)
+              signals:=masterSig OR windowSig OR myappsig OR cxsigflag
+              WaitSelect(telnetServerSocket+1,fds,NIL,NIL,NIL,{signals})
+              IF telnetServerSocket>=0
+                telnetSocket:=Accept(telnetServerSocket,NIL,NIL)
+                IF telnetSocket>=0
+
+                  saveConn:=FALSE
+                  n:=SIZEOF sockaddr_in
+                  GetPeerName(telnetSocket,peeraddr,{n})
+
+                  IF (dosCheckTime>0) AND (dosCheckTrigger>0)
+                    t:=getSystemTime()
+                    FOR i:=connectionList.count()-1 TO 0 STEP -1
+                      connItem:=connectionList.item(i)
+                      IF (connItem.blocked=FALSE)
+                        IF ((connItem.connectionTime>t) OR (connItem.connectionTime<(t-dosCheckTime)))
+                          END connItem
+                          connectionList.remove(i)
+                          saveConn:=TRUE
+                        ENDIF
+                      ELSE
+                        IF (connItem.blockExpiry<>0) AND (connItem.blockExpiry<t)
+                          END connItem
+                          connectionList.remove(i)
+                          saveConn:=TRUE
+                        ENDIF
+                      ENDIF
+                    ENDFOR
+                      
+                    n:=0
+                    FOR i:=0 TO connectionList.count()-1
+                      connItem:=connectionList.item(i)
+                      IF (connItem.ipAddr=peeraddr.sin_addr)
+                        IF connItem.blocked
+                          IF (connItem.blockExpiry=0)
+                            telnetSend(telnetSocket,'\b\n/X Native Telnet:  Your ip address is permanently blocked\b\n')
+                          ELSE
+                            num:=Div(connItem.blockExpiry-t,60)
+                            StringF(tempstr,'\b\n/X Native Telnet:  Your ip address has been blocked for another \d minutes\b\n',num)
+                            telnetSend(telnetSocket,tempstr)
+                          ENDIF
+                          CloseSocket(telnetSocket)
+                          telnetSocket:=-1
+                        ELSE
+                          n++
+                        ENDIF
+                      ENDIF
+                    ENDFOR
+                    
+                    IF (telnetSocket<>-1) AND (n>=dosCheckTrigger)
+                      FOR i:=connectionList.count()-1 TO 0 STEP -1
+                        connItem:=connectionList.item(i)
+                        END connItem
+                        connectionList.remove(i)
+                        saveConn:=TRUE
+                      ENDFOR
+                      connItem:=NEW connItem
+                      connItem.ipAddr:=peeraddr.sin_addr
+                      connItem.connectionTime:=t
+                      connItem.blocked:=TRUE
+                      IF dosBanTime<0
+                        connItem.blockExpiry:=0     ->permanent ban
+                      ELSE
+                        connItem.blockExpiry:=t+Mul(dosBanTime,60)  -> apply denial of service ban period
+                      ENDIF
+                      connectionList.add(connItem)
+                      saveConn:=TRUE
+                      IF dosBanTime<0
+                        telnetSend(telnetSocket,'\b\n/X Native Telnet:  Your ip address has been blocked permanently\b\n')
+                      ELSE
+                        StringF(tempstr,'\b\n/X Native Telnet:  Your ip address has been blocked for \d minutes\b\n',dosBanTime)
+                        telnetSend(telnetSocket,tempstr)
+                      ENDIF
+                      CloseSocket(telnetSocket)
+                      telnetSocket:=-1
+                    ENDIF
+
+                    IF (telnetSocket<>-1)
+                      connItem:=NEW connItem
+                      connItem.ipAddr:=peeraddr.sin_addr
+                      connItem.connectionTime:=t
+                      connItem.blocked:=FALSE
+                      connItem.blockExpiry:=0
+                      connectionList.add(connItem)
+                      saveConn:=TRUE
+                    ENDIF
+                  ENDIF
+
+                  IF (telnetSocket<>-1)
+                    f:=FALSE
+
+                    ->WILL=251, WONT=252, DO=253, DONT=254
+
+                    IF telnetSend(telnetSocket,'\b\n/X Native Telnet:  Searching for free node...\b\n')=FALSE THEN f:=TRUE
+        
+                    IF f=FALSE
+                      i:=0
+                      REPEAT
+                        IF(users[i].actionVal=ENV_AWAITCONNECT) AND (telnetNode[i]=1)
+                          IF(doMultiCom)
+                            ObtainSemaphore(semiNodes)
+                            IF semiNodes.myNode[i].offHook=FALSE
+                              telnetSocket2:=semiNodes.myNode[i].telnetSocket
+                              
+                              ->set to -2 to prevent the node from being used between here and when the incoming_telnet message arrives
+                              IF telnetSocket2=-1 THEN semiNodes.myNode[i].telnetSocket:=-2
+                            ENDIF
+                            ReleaseSemaphore(semiNodes)
+                          ELSE
+                            telnetSocket2:=-1
+                          ENDIF
+
+                          IF telnetSocket2=-1
+                            StringF(tempstr,'/X Native Telnet:  Successful connection to node \d\b\n\b\n',i)
+                            telnetSend(telnetSocket,tempstr)
+
+                            StringF(tempstr,'\c\c\c',255,253,0)    ->DO BINARY
+                            telnetSend(telnetSocket,tempstr,3)
+                            StringF(tempstr,'\c\c\c',255,254,31)    ->DONT NAWS
+                            telnetSend(telnetSocket,tempstr,3)
+                            StringF(tempstr,'\c\c\c',255,252,5)     ->WONT STATUS
+                            telnetSend(telnetSocket,tempstr,3)
+                            StringF(tempstr,'\c\c\c',255,254,32)    ->DONT TERMSPEED
+                            telnetSend(telnetSocket,tempstr,3)
+                            StringF(tempstr,'\c\c\c',255,254,34)    ->DONT LINEMODE
+                            telnetSend(telnetSocket,tempstr,3)
+                            StringF(tempstr,'\c\c\c',255,251,3)    ->WILL SGA
+                            telnetSend(telnetSocket,tempstr,3)
+                            StringF(tempstr,'\c\c\c',255,251,1)    ->WILL ECHO
+                            telnetSend(telnetSocket,tempstr,3)
+
+
+                            IoctlSocket(telnetSocket,FIONBIO,[1])
+                            telnetSocket2:=ReleaseSocket(telnetSocket,UNIQUE_ID)
+                            callNode(i,INCOMING_TELNET,telnetSocket2)
+                            telnetSocket:=-1
+                            i:=-1
+                          ELSE
+                            i++
+                          ENDIF
+                        ELSE
+                          i++
+                        ENDIF
+                      UNTIL (i=MAX_NODES) OR (i=-1)
+                      IF i<>-1
+                        telnetSend(telnetSocket,'/X Native Telnet:  No nodes available to handle your connection \b\n\b\n')                   
+                      ENDIF
+                    ENDIF
+                      
+                    IF telnetSocket<>-1
+                      CloseSocket(telnetSocket)
+                      telnetSocket:=-1
+                    ENDIF
+                  ENDIF
+                  IF saveConn THEN saveConnectionList(connectionList)
+                ENDIF
+              ENDIF
+            UNTIL signals
+          ENDIF
           
           IF(signals AND cxsigflag) THEN processCommodityMessages()
           
@@ -3524,15 +3934,7 @@ PROC main() HANDLE
                   ENDSELECT
                   FOR i:=0 TO MAX_NODES-1
                     IF(StrLen(startNode[i])>0)
-                      SetAPen(eWin.rport,getNodeTextColour(i))
-                      Move(eWin.rport,64,topOffset+26+(i*11))
-                      Draw(eWin.rport,64,topOffset+26+(i*11)+6)
-                      Move(eWin.rport,63,topOffset+26+(i*11))
-                      Draw(eWin.rport,63,topOffset+26+(i*11)+6)
-                      Move(eWin.rport,62,topOffset+26+(i*11))
-                      Draw(eWin.rport,62,topOffset+26+(i*11)+6)
-                      Move(eWin.rport,61,topOffset+26+(i*11))
-                      Draw(eWin.rport,61,topOffset+26+(i*11)+6) 
+                      drawChatBlock(i)
                     ENDIF
                   ENDFOR
                   showNodes()
@@ -3597,10 +3999,12 @@ PROC main() HANDLE
   ENDFOR
   
 EXCEPT DO
+  IF fds<>NIL THEN END fds
   IF appicon THEN do_appicon(myappport)
   
   shutDownMaster()
   saveState()
+  saveConnectionList(connectionList)
   IF oldDirLock THEN CurrentDir(oldDirLock)
   IF newlock<>NIL THEN UnLock(newlock)
 
@@ -3627,6 +4031,13 @@ EXCEPT DO
     END ndUploads[i]
   ENDFOR
 
+  FOR i:=0 TO connectionList.count()-1
+    connItem:=connectionList.item(i)
+    END connItem
+  ENDFOR
+  END connectionList
+
+  IF (telnetServerSocket>=0) THEN CloseSocket(telnetServerSocket)
   
   IF broker THEN DeleteCxObj(broker)
   IF broker_mp
@@ -3635,6 +4046,7 @@ EXCEPT DO
     DeleteMsgPort(broker_mp) -> E-Note: C version incorrectly uses DeletePort()
   ENDIF
 
+  IF socketbase THEN CloseLibrary(socketbase)
   IF cxbase THEN CloseLibrary(cxbase)
   IF iconbase THEN CloseLibrary(iconbase)
   IF gadtoolsbase THEN CloseLibrary(gadtoolsbase)
