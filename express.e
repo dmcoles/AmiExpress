@@ -28118,8 +28118,8 @@ PROC main() HANDLE
   DEF oldWinPtr
   DEF proc: PTR TO process
 
-  StrCopy(expressVer,'v5.2.0-beta5',ALL)
-  StrCopy(expressDate,'18-Dec-2019',ALL)
+  StrCopy(expressVer,'v5.2.0',ALL)
+  StrCopy(expressDate,'02-Jan-2020',ALL)
 
   nodeStart:=getSystemTime()
 
