@@ -2004,6 +2004,7 @@ PROC checkMasterSig(signals)
   DEF datestr[20]:STRING
   DEF tempstr2[255]:STRING
   DEF i,c
+  DEF b:PTR TO button
 
   IF(signals AND masterSig)
     WHILE((cpymsg:=GetMsg(mp)))             
@@ -2105,7 +2106,8 @@ PROC checkMasterSig(signals)
                 msg.data:=msg.data-20
                 control:=0
                 handleEditGadget(NIL,GAD_SYSOPLOGIN+bm[msg.data])
-                IF(buttons[bm[msg.data]].type) THEN handleEditGadget(NIL,GAD_NODES+msg.node) 
+                b:=buttons[bm[msg.data]]
+                IF(b.type) THEN handleEditGadget(NIL,GAD_NODES+msg.node) 
               ENDIF
               button:=i
           CASE JH_TRANSFERCPS
@@ -3443,6 +3445,7 @@ PROC main() HANDLE
   DEF connectionList: PTR TO stdlist
   DEF connItem: PTR TO connectionItem
   DEF saveConn=FALSE
+  DEF b:PTR TO button
 
   DEF sopt:PTR TO startOption
 
@@ -3450,7 +3453,7 @@ PROC main() HANDLE
  
   KickVersion(37)  -> E-Note: requires V37
 
-  StringF(myVerStr,'v5.2.0')
+  StringF(myVerStr,'v5.2.1')
 
   FOR i:=0 TO MAX_NODES-1
     ndUser[i]:=NIL
@@ -3524,8 +3527,8 @@ PROC main() HANDLE
       newlock:=Lock(tempstr,ACCESS_READ)
       IF newlock<>NIL THEN oldDirLock:=CurrentDir(newlock)
     ELSE
-      StrCopy(iconStartName,'sys:wbstartup/acp')
-      newlock:=Lock('sys:wbstartup',ACCESS_READ)
+      StrCopy(iconStartName,'PROGDIR:acp')
+      newlock:=Lock('PROGDIR:',ACCESS_READ)
       IF newlock<>NIL THEN oldDirLock:=CurrentDir(newlock)
     ENDIF
   ENDIF
@@ -3955,7 +3958,8 @@ PROC main() HANDLE
                     i:=button
                     button:=1
                     handleEditGadget(NIL,GAD_SYSOPLOGIN+bm[num])
-                    IF(buttons[bm[num]].type) THEN handleEditGadget(NIL,GAD_NODES+subnum(im.code))
+                    b:=buttons[bm[num]]
+                    IF(b.type) THEN handleEditGadget(NIL,GAD_NODES+subnum(im.code))
                     button:=i
                   ENDIF     
               ENDSELECT
