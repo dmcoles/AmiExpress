@@ -14996,16 +14996,18 @@ PROC xprupdate()
   IF(xpru.xpru_updatemask AND XPRU_FILESIZE)<>0
     update:=TRUE
     IF xpru.xpru_filesize<>-1
-      IF zModemInfo.filesize<>xpru.xpru_filesize
-        zModemInfo.filesize:=xpru.xpru_filesize
-        IF zModemInfo.currentOperation=ZMODEM_DOWNLOAD
-          StringF(outmsg,'\t\sDownloading \s \d bytes',IF zModemInfo.freeDFlag THEN 'Free ' ELSE '',zModemInfo.fileName,xpru.xpru_filesize)
+      zModemInfo.filesize:=xpru.xpru_filesize
+      IF zModemInfo.currentOperation=ZMODEM_DOWNLOAD
+        StringF(outmsg,'\t\sDownloading \s \d bytes',IF zModemInfo.freeDFlag THEN 'Free ' ELSE '',zModemInfo.fileName,xpru.xpru_filesize)
+      ELSE
+        IF zModemInfo.resumePos<>0
+          StringF(outmsg,'\tResuming \s[12] \d bytes from \d',FilePart(zModemInfo.fileName),xpru.xpru_filesize,zModemInfo.resumePos)
         ELSE
           StringF(outmsg,'\tUploading \s[12] \d bytes',FilePart(zModemInfo.fileName),xpru.xpru_filesize)
         ENDIF
-        callersLog(outmsg)
-        udLog(outmsg)
       ENDIF
+      callersLog(outmsg)
+      udLog(outmsg)
     ENDIF
   ENDIF
 
@@ -16138,7 +16140,7 @@ PROC xprReceive(file) HANDLE
     ftpUpload(tempstr,ftpPort,ftpDataPort)
     closezModemStats()
     checkOffhookFlag()
-    receivePlayPen()
+    receivePlayPen(TRUE)
     IF (tBT>0) AND (tTTM>0)
       tTEFF:=Div(Mul(Div(tBT,tTTM),100),Div(onlineBaud,10))
     ELSE
@@ -16279,7 +16281,7 @@ PROC xprReceive(file) HANDLE
 
   checkOffhookFlag()
 
-  receivePlayPen()
+  receivePlayPen(FALSE)
 
   tTEFF:=Div(Mul(Div(tBT,tTTM),100),Div(onlineBaud,10))
 
@@ -16899,9 +16901,9 @@ PROC zmodemReceive(flname:PTR TO CHAR,uLFType)
     RETURN 1
   ELSE
     IF(lcFileXfr=FALSE)
-      IF(batchasl(flname)) THEN receivePlayPen()
+      IF(batchasl(flname)) THEN receivePlayPen(TRUE)
     ELSE
-      receivePlayPen()
+      receivePlayPen(TRUE)
     ENDIF
     lcFileXfr:=0
     ->AEPutStr("\b\nNot supported locally...");
@@ -16918,7 +16920,7 @@ PROC checkOffhookFlag()
   ENDIF
 ENDPROC
 
-PROC receivePlayPen()
+PROC receivePlayPen(log)
   DEF fLock
   DEF fib: PTR TO fileinfoblock
   DEF s:PTR TO CHAR
@@ -16973,9 +16975,11 @@ PROC receivePlayPen()
         ENDWHILE
         onlineNFiles++
         tBT:=tBT+fib.size
-        StringF(tempstr,'\tUploading \s[12] \d bytes',fib.filename, fib.size)
-        udLog(tempstr)
-        callersLog(tempstr)
+        IF log 
+          StringF(tempstr,'\tUploading \s[12] \d bytes',fib.filename, fib.size)
+          udLog(tempstr)
+          callersLog(tempstr)
+        ENDIF
 
         recFileNames.add(fib.filename)
       ENDIF                    /* end if(Fib->fib_DirEntryType < 0)  */
@@ -17046,9 +17050,9 @@ PROC resumeStuff(tfs)
     status:=getUN(str)  /* returns user number from end of file name */
     IF(status=loggedOnUser.slotNumber)
       IF removeAll
-        StringF(string,'Delete \s[12] [\d[6]] ',str,fBlock.size)
+        StringF(string,'Delete \s[12] [\d] ',str,fBlock.size)
       ELSE
-        StringF(string,'Resume \s[12] [\d[6]] (Y/N)? ',str,fBlock.size)
+        StringF(string,'Resume \s[12] [\d] (Y/N)? ',str,fBlock.size)
       ENDIF
       aePuts(string)
       WHILE(TRUE)
@@ -28137,8 +28141,8 @@ PROC main() HANDLE
   DEF oldWinPtr
   DEF proc: PTR TO process
 
-  StrCopy(expressVer,'v5.2.1',ALL)
-  StrCopy(expressDate,'06-Jan-2020',ALL)
+  StrCopy(expressVer,'v5.2.2',ALL)
+  StrCopy(expressDate,'20-Jan-2020',ALL)
 
   nodeStart:=getSystemTime()
 
