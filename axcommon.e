@@ -239,8 +239,8 @@ EXPORT CONST DT_REALNAME=606
 EXPORT CONST UNKNOWN4=607
 EXPORT CONST QUICK_KEY=608
 EXPORT CONST SER_INOUT=609
-EXPORT CONST UNKNOWN6=610
-EXPORT CONST UNKNOWN7=611
+EXPORT CONST AXNET_RECEIVE=610
+EXPORT CONST AXNET_SEND=611
 EXPORT CONST MEMCONF=612
 EXPORT CONST SET_SERSHARED=613
 EXPORT CONST CONF_ACCESS=614
@@ -282,10 +282,10 @@ undocumented host addresses:
 605 - get custom msgbase command to msg.string
 606 - get/set real name to/from msg.string
 607 - get/set something that isnt used anywhere else in the code (not yet implemented)
-608 - some kind of input routine ???   (not yet implemented)
+608 - some kind of input routine ???   (currently implemented as default read char routine)
 609 - set IO_Flags[IOFLAG_SER_IN] and IO_Flags[IOFLAG_SER_OUT]
-610 - trigger netmail receive (not yet implemented)
-611 - trigger netmail send (not yet implemented)
+610 - trigger netmail receive
+611 - trigger netmail send
 612 - get MemConf address (not yet implemented)
 613 - set something - something to do with external programs accessing serial ???
 614 - check conf access

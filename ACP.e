@@ -40,9 +40,7 @@
 
   MODULE '*axcommon',
          '*jsonParser',
-         '*miscfuncs',
          '*stringlist'
-
 
 /*
 'Setup'
@@ -785,10 +783,10 @@ PROC getToolTypes(filename:PTR TO CHAR)
   isCfg:=FALSE
   IF(dobj=NIL)
     StringF(fn,'\s.cfg',filename)
-    IF fileExists(fn)
+    IF (len:=FileLength(fn))<>-1
       dobj:=GetDefDiskObject(WBPROJECT)
       IF dobj<>NIL
-        fileBuf:=New(getFileSize(fn)+1)     ->allow an extra char in case file does not end in LF
+        fileBuf:=New(len+1)     ->allow an extra char in case file does not end in LF
 
         fh:=Open(fn,MODE_OLDFILE)
         IF fh>0
@@ -2284,7 +2282,7 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
   
         trans2:=NEW trans2
         AstrCopy(trans2.translatorName,translatorName,80)
-        fsize:=getFileSize(fullFileName)
+        fsize:=FileLength(fullFileName)
 
         workMem:=New(fsize+2)     ->allocate some memory (two extra bytes in case there is no newline at the end of the file)
         trans2.translationText:=New(fsize+4)     ->allocate some memory, two extra bytes for ending colon and space and some in case there is no newline
@@ -3453,7 +3451,7 @@ PROC main() HANDLE
  
   KickVersion(37)  -> E-Note: requires V37
 
-  StringF(myVerStr,'v5.2.1')
+  StringF(myVerStr,'v5.3.0')
 
   FOR i:=0 TO MAX_NODES-1
     ndUser[i]:=NIL
