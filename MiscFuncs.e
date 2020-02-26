@@ -3,7 +3,7 @@
   OPT MODULE
 
   MODULE 'dos/dos','dos/dosextens','dos/datetime'
-  MODULE '*axenums','*axconsts'
+  MODULE '*axenums','*axconsts','*errors'
 
 EXPORT PROC getFileSize(s: PTR TO CHAR)
 /* returns the file size of a given file or 8192 if an error occured */
@@ -516,3 +516,35 @@ EXPORT PROC writeFloatToFile(filename: PTR TO CHAR, v: LONG)
     RETURN RESULT_SUCCESS
   ENDIF
 ENDPROC RESULT_FAILURE
+
+EXPORT PROC findFirst(path: PTR TO CHAR,buf: PTR TO CHAR) HANDLE
+  DEF pdir=NIL: PTR TO filelock
+  DEF dir_info=NIL: PTR TO fileinfoblock
+  DEF returnval=0
+
+  IF ((dir_info:=(AllocDosObject(DOS_FIB,NIL)))=NIL)
+    Delay(300)
+    RETURN 0
+  ENDIF
+
+  IF((pdir:=(Lock(path,ACCESS_READ)))=FALSE)
+    Raise(ERR_EXCEPT)
+  ENDIF
+
+  IF(Examine(pdir,dir_info))=FALSE
+    Raise(ERR_EXCEPT)
+  ENDIF
+
+  IF(ExNext(pdir,dir_info))
+    IF(dir_info.direntrytype < 0 )
+      returnval:=1
+      StrCopy(buf,dir_info.filename)
+    ENDIF
+  ENDIF
+  UnLock(pdir)
+  FreeDosObject(DOS_FIB,dir_info)
+EXCEPT
+  IF pdir THEN UnLock(pdir)
+  IF dir_info THEN FreeDosObject(DOS_FIB,dir_info)
+  RETURN 0
+ENDPROC returnval

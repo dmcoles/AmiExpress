@@ -29,7 +29,7 @@ jsonparser.m: jsonparser.e miscfuncs.m
 stringlist.m:	stringlist.e
 							$(compiler) stringlist $(options)
 
-miscfuncs.m:	miscfuncs.e axconsts.m axenums.m
+miscfuncs.m:	miscfuncs.e axconsts.m axenums.m errors.m
 							$(compiler) miscfuncs $(options)
 
 errors.m:			errors.e

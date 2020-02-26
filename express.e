@@ -1843,12 +1843,12 @@ ENDPROC count
 
 PROC getConfIndex(confNum,msgBaseNum)
   DEF index=0
-  DEF num,i
+  DEF num=1,i
   FOR i:=1 TO confNum-1
     num:=getConfMsgBaseCount(i)
     index:=index+num
   ENDFOR
-  index:=index+msgBaseNum
+  index:=index+msgBaseNum-1
 ENDPROC index
 
 PROC getConfMsgBaseCount(confNum)
@@ -2935,38 +2935,6 @@ PROC getNodeFile(toolType,tooltypeSelector,nodeFile)
       StringF(nodeFile,'\sLanguages',cmds.bbsLoc)
   ENDSELECT
 ENDPROC
-
-PROC findFirst(path: PTR TO CHAR,buf: PTR TO CHAR) HANDLE
-  DEF pdir=NIL: PTR TO filelock
-  DEF dir_info=NIL: PTR TO fileinfoblock
-  DEF returnval=0
-
-  IF ((dir_info:=(AllocDosObject(DOS_FIB,NIL)))=NIL)
-    Delay(300)
-    RETURN 0
-  ENDIF
-
-  IF((pdir:=(Lock(path,ACCESS_READ)))=FALSE)
-    Raise(ERR_EXCEPT)
-  ENDIF
-
-  IF(Examine(pdir,dir_info))=FALSE
-    Raise(ERR_EXCEPT)
-  ENDIF
-
-  IF(ExNext(pdir,dir_info))
-    IF(dir_info.direntrytype < 0 )
-      returnval:=1
-      StrCopy(buf,dir_info.filename)
-    ENDIF
-  ENDIF
-  UnLock(pdir)
-  FreeDosObject(DOS_FIB,dir_info)
-EXCEPT
-  IF pdir THEN UnLock(pdir)
-  IF dir_info THEN FreeDosObject(DOS_FIB,dir_info)
-  RETURN 0
-ENDPROC returnval
 
 PROC findAcsLevel()
   DEF ttfile[255]:STRING,found,level
@@ -4797,7 +4765,7 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
       processSysCommand('S')
       IF getConfMsgBaseCount(conf)>1
         getMsgBaseName(conf,msgBaseNum,tempstr)
-        StringF(string,'Conference \d: \s [Message Base: \s] Auto-ReJoined',relConfNum,currentConfName,tempstr)
+        StringF(string,'Conference \d: \s [\s] Auto-ReJoined',relConfNum,currentConfName,tempstr)
       ELSE
         StringF(string,'Conference \d: \s Auto-ReJoined',relConfNum,currentConfName)
       ENDIF
@@ -4805,9 +4773,9 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
     ELSE
       IF getConfMsgBaseCount(conf)>1
         getMsgBaseName(conf,msgBaseNum,tempstr)
-        StringF(string,'[32mJoining Conference[33m:[0m \s [Message Base: \s]',currentConfName,tempstr)
+        StringF(string,'[32mJoining Conference[33m:[0m \s [\s]',currentConfName,tempstr)
         aePuts(string)
-        StringF(string,'\s [Message Base: \s] (\d) Conference Joined',currentConfName,tempstr,conf)
+        StringF(string,'\s [\s] (\d) Conference Joined',currentConfName,tempstr,conf)
       ELSE
         StringF(string,'[32mJoining Conference[33m:[0m \s',currentConfName)
         aePuts(string)
@@ -8473,6 +8441,7 @@ PROC listMSGs(gfh)
   DEF oldMsgNum
   DEF mailFlag=0
   DEF mailStatus[10]:STRING
+  DEF cb:PTR TO confBase
   
   nonStopDisplayFlag:=FALSE
   oldMsgNum:=msgNum
@@ -8498,7 +8467,9 @@ PROC listMSGs(gfh)
     stat:=loadMessageHeader(gfh)
     IF(mailHeader.status="D") THEN JUMP listNextMSG
 
-    IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS)))
+    cb:=confBases.item(getConfIndex(currentConf,currentMsgBase)-1)
+
+    IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS) OR ((stringCompare(mailHeader.toName,'all')=RESULT_SUCCESS) AND (cb.handle[0] AND MAILSCAN_ALL))))
       IF(mailFlag=0)
         aePuts('\b\n\b\n')
         aePuts('[32mMsg    Type     From                           Subject              \b\n')
@@ -10236,37 +10207,33 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
           Write(f,tempStr2,StrLen(tempStr2))
         ENDFOR
         Close(f)
-        aePuts('done!\b\n\b\n')
-      ELSE
+      ENDIF
+    ENDIF
+    getMailStatFile(currentConf,currentMsgBase)
+    mh.msgNumb:=mailStat.highMsgNum
+    stat:=saveMessageHeader(gfh,mh)
+    IF(stat<>RESULT_FAILURE)
+      StringF(string,'Message Number \d...',mh.msgNumb)
+      aePuts(string)
+      StringF(tempStr,'\s\d',msgBaseLocation,mh.msgNumb)
+      IF((f:=Open(tempStr,MODE_NEWFILE)))=0
         aePuts('Failed!\b\n\b\n')
+        rzmsg:=NIL
+        RETURN RESULT_FAILURE
+      ENDIF
+      FOR i:=0 TO lines-1
+        StringF(tempStr2,'\s\n',msgBuf.item(i))
+        Write(f,tempStr2,StrLen(tempStr2))
+      ENDFOR
+      Close(f)
+      aePuts('done!\b\n\b\n')
+
+      IF(StrLen(attachedFile)<>0)
+        SetComment(tempStr,attachedFile)
+        StrCopy(attachedFile,'',ALL)
       ENDIF
     ELSE
-      getMailStatFile(currentConf,currentMsgBase)
-      mh.msgNumb:=mailStat.highMsgNum
-      stat:=saveMessageHeader(gfh,mh)
-      IF(stat<>RESULT_FAILURE)
-        StringF(string,'Message Number \d...',mh.msgNumb)
-        aePuts(string)
-        StringF(tempStr,'\s\d',msgBaseLocation,mh.msgNumb)
-        IF((f:=Open(tempStr,MODE_NEWFILE)))=0
-          aePuts('Failed!\b\n\b\n')
-          rzmsg:=NIL
-          RETURN RESULT_FAILURE
-        ENDIF
-        FOR i:=0 TO lines-1
-          StringF(tempStr2,'\s\n',msgBuf.item(i))
-          Write(f,tempStr2,StrLen(tempStr2))
-        ENDFOR
-        Close(f)
-        aePuts('done!\b\n\b\n')
-
-        IF(StrLen(attachedFile)<>0)
-          SetComment(tempStr,attachedFile)
-          StrCopy(attachedFile,'',ALL)
-        ENDIF
-      ELSE
-        aePuts('Failed!\b\n\b\n')
-      ENDIF
+      aePuts('Failed!\b\n\b\n')
     ENDIF
     UnLock(msgbaselock)
 
@@ -11195,6 +11162,7 @@ PROC searchNewMail(gfh, cn, msgBaseNum)
   DEF tempStr[255]:STRING
   DEF msgBaseName[255]:STRING
   DEF stat,oldcn
+  DEF cb:PTR TO confBase
   msgcnt:=0
   dcnt:=0
 
@@ -11210,7 +11178,7 @@ PROC searchNewMail(gfh, cn, msgBaseNum)
     getMsgBaseName(cn,msgBaseNum,msgBaseName)
 
     IF StrLen(msgBaseName)>0
-      StringF(tempStr,'[32mScanning Conference[33m: [0m\s [Message Base: \s] - ',currentConfName,msgBaseName)
+      StringF(tempStr,'[32mScanning Conference[33m: [0m\s [\s] - ',currentConfName,msgBaseName)
     ELSE
       StringF(tempStr,'[32mScanning Conference[33m: [0m\s - ',currentConfName)
     ENDIF
@@ -11235,7 +11203,9 @@ PROC searchNewMail(gfh, cn, msgBaseNum)
     stat:=loadMessageHeader(gfh)
     IF(mailHeader.status="D") THEN JUMP getNextMSG
 
-    IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS))) AND (mailHeader.recv=0)
+    cb:=confBases.item(getConfIndex(currentConf,currentMsgBase)-1)
+    IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS) OR ((stringCompare(mailHeader.toName,'all')=RESULT_SUCCESS) AND (cb.handle[0] AND MAILSCAN_ALL)))) AND (mailHeader.recv=0)
+
       IF(currentConf=0)
 
         IF(mailFlag=0)
@@ -11277,7 +11247,7 @@ getOUT:
       WHILE (msgNum<mailStat.highMsgNum)
         stat:=loadMessageHeader(gfh)
         IF(mailHeader.status<>"D")
-          IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS))) AND (mailHeader.recv=0)
+          IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS) OR ((stringCompare(mailHeader.toName,'all')=RESULT_SUCCESS) AND (cb.handle[0] AND MAILSCAN_ALL))))
             oldcn:=currentConf
             currentConf:=cn
             stat:=displayMessage(gfh)
@@ -20259,6 +20229,7 @@ ENDPROC
 PROC conferenceMaintenance()
   DEF conf,flag=0,ch,size,n,f,m
   DEF tempstr[255]:STRING
+  DEF tempstr2[255]:STRING
   DEF confLoc[255]:STRING
   DEF path[255]:STRING
   DEF path2[255]:STRING
@@ -20280,7 +20251,15 @@ PROC conferenceMaintenance()
     conPuts('[0 p')
     aePuts('[2;1H                      [33mCONFERENCE MAINTENANCE[0m')
 
-    StringF(tempstr,'[4;1H [32mConference [34m[[0m\d[3][34m][36m:[0m \s[29]\b\n',conf,getConfName(conf))
+
+    IF getConfMsgBaseCount(conf)>1
+      getMsgBaseName(conf,msgBase,tempstr2)
+      StringF(tempstr,'\s - \s',getConfName(conf),tempstr2)
+    ELSE
+      getConfName(conf,tempstr)
+    ENDIF
+
+    StringF(tempstr,'[4;1H [32mConference [34m[[0m\d[3][34m][36m:[0m \s[29]\b\n',conf,tempstr)
     aePuts(tempstr)
     aePuts('[6;1H[0m THE FOLLOWING OPTIONS EFFECT ALL USERS FOR THIS CONFERENCE!\b\n')
     aePuts('[8;2H[33m1.>[32m Ratio[0m')
@@ -20458,16 +20437,25 @@ PROC conferenceMaintenance()
       CASE "\t"
         flag:=1
       CASE "-"
-        conf:=conf-1
-        IF conf<1 THEN conf:=cmds.numConf
+        msgBase:=msgBase-1
+        IF msgBase<1
+          conf:=conf-1
+          IF conf<1 THEN conf:=cmds.numConf
+          msgBase:=getConfMsgBaseCount(conf)
+        ENDIF
         loadMsgPointers(conf,msgBase)
         getMailStatFile(conf,msgBase)
         getConfLocation(conf,confLoc)
         getConfDbFileName(conf,msgBase,tempstr)
         size:=Div(getFileSize(tempstr),SIZEOF confBase)
       CASE "+"
-        conf:=conf+1
-        IF conf>cmds.numConf THEN conf:=1
+        msgBase:=msgBase+1
+        IF msgBase>getConfMsgBaseCount(conf)
+          conf:=conf+1
+          IF conf>cmds.numConf THEN conf:=1
+          msgBase:=1
+        ENDIF
+
         getMailStatFile(conf,msgBase)
         getConfLocation(conf,confLoc)
         getConfDbFileName(conf,msgBase,tempstr)
@@ -22007,7 +21995,8 @@ PROC internalCommandCF()
   DEF i,m,loop=TRUE,editmask
   DEF confNums[255]:STRING
   DEF tempstr[255]:STRING
-  DEF c1,c2,c3
+  DEF tempstr2[255]:STRING
+  DEF c1,c2,c3,c4
   DEF cb: PTR TO confBase
   DEF ch
   DEF stat
@@ -22020,11 +22009,11 @@ PROC internalCommandCF()
     sendCLS()
     aePuts('\b\n')
     IF (0)
-      aePuts('[32m       M F Z Conference                       M F Z Conference[0m\b\n')
-      aePuts('[33m       ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~~~        ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~~~[0m\b\n\b\n')
+      aePuts('[32m       M A F Z Conference                       M F Z Conference[0m\b\n')
+      aePuts('[33m       ~ ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~~~        ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~~~[0m\b\n\b\n')
     ELSE
-      aePuts('[32m            M F Z   Conference[0m\b\n')
-      aePuts('[33m            ~ ~ ~   ~~~~~~~~~~~~~~~~~~~~~~~~~[0m\b\n\b\n')
+      aePuts('[32m            M A F Z   Conference[0m\b\n')
+      aePuts('[33m            ~ ~ ~ ~   ~~~~~~~~~~~~~~~~~~~~~~~~~[0m\b\n\b\n')
     ENDIF
 
     FOR i:=1 TO cmds.numConf
@@ -22052,26 +22041,42 @@ PROC internalCommandCF()
             c2:=" "
           ENDIF
 
+          IF(cb.handle[0] AND MAILSCAN_ALL)
+            c4:="*"
+          ELSE
+            c4:=" "
+          ENDIF
+
           IF (cb.handle[0] AND ZOOM_SCAN_MASK) THEN c3:="*" ELSE c3:=" "
 
-          IF(0)
-            StringF(tempstr,' [34m[[0m\z\r\d[3][34m] [36m\c \c \c [0m\l\s[25] ',relConf(i),c1,c2,c3,getConfName(i))
+          IF getConfMsgBaseCount(i)>1
+            getMsgBaseName(i,m,tempstr)
+            StringF(tempstr2,'\s - \s',getConfName(i),tempstr)
           ELSE
-            StringF(tempstr,'   [34m[[0m\z\r\d[3][34m]    [36m\c \c \c   [0m\l\s[25]\b\n',relConf(i),c1,c2,c3,getConfName(i))
+            getConfName(i,tempstr2)
+          ENDIF
+
+
+          IF(0)
+            StringF(tempstr,' [34m[[0m\z\r\d[3][34m] [36m\c \c \c \c [0m\l\s[25] ',relConf(i),c1,c4, c2,c3,tempstr2)
+          ELSE
+            StringF(tempstr,'   [34m[[0m\z\r\d[3][34m]    [36m\c \c \c \c   [0m\l\s[25]\b\n',relConf(i),c1,c4, c2,c3,tempstr2)
           ENDIF
           aePuts(tempstr)
         ENDFOR
       ENDIF
     ENDFOR
 
-    aePuts('\b\n\b\nEnter Flag Type New [M]ailScan, New [F]ileScan, [Z]oom >: ')
+    aePuts('\b\n\b\nEdit which flags [M]ailScan, [A]ll Messages, [F]ileScan, [Z]oom >: ')
     ch:=readChar(INPUT_TIMEOUT)
-    IF (ch="m") OR (ch="M")
-      editmask:=4
+    IF (ch="m") OR (ch="M")  
+      editmask:=MAIL_SCAN_MASK
     ELSEIF (ch="f") OR (ch="F" )
-      editmask:=8
+      editmask:=FILE_SCAN_MASK
     ELSEIF (ch="z") OR (ch="Z")
-      editmask:=2
+      editmask:=ZOOM_SCAN_MASK
+    ELSEIF (ch="a") OR (ch="A")
+      editmask:=MAILSCAN_ALL
     ELSE
       editmask:=-1
       loop:=FALSE
@@ -22090,7 +22095,7 @@ PROC internalCommandCF()
 
       IF StrCmp(confNums,'+')
         FOR i:=1 TO cmds.numConf
-          IF checkConfAccess(i+1)
+          IF checkConfAccess(i)
             FOR m:=1 TO getConfMsgBaseCount(i)
               cb:=confBases.item(getConfIndex(i,m)-1)
               cb.handle[0]:=cb.handle[0] OR editmask
@@ -22098,8 +22103,8 @@ PROC internalCommandCF()
           ENDIF
         ENDFOR
       ELSEIF StrCmp(confNums,'-')
-        FOR i:=0 TO cmds.numConf-1
-          IF checkConfAccess(i+1)
+        FOR i:=1 TO cmds.numConf
+          IF checkConfAccess(i)
             FOR m:=1 TO getConfMsgBaseCount(i)
               cb:=confBases.item(getConfIndex(i,m)-1)
               cb.handle[0]:=cb.handle[0] AND (Not(editmask))
@@ -23958,10 +23963,10 @@ PROC qwkZoom()
   ENDIF
   fileWriteLn(fo,cmds.bbsName)
   StrCopy(tempstr,'N/A')
-  readToolType(TOOLTYPE_QWKCONFIG,'','BBS.NUMBER',tempstr)
+  readToolType(TOOLTYPE_QWKCONFIG,'','BBS.ADDRESS',tempstr)
   fileWrite(fo,tempstr); fileWrite(fo,'\b\n')
   StrCopy(tempstr,'N/A')
-  readToolType(TOOLTYPE_QWKCONFIG,'','BBS.ADDRESS',tempstr)
+  readToolType(TOOLTYPE_QWKCONFIG,'','BBS.NUMBER',tempstr)
   fileWrite(fo,tempstr); fileWrite(fo,'\b\n')
   StringF(tempstr,'\s, Sysop',cmds.sysopName)
   fileWrite(fo,tempstr); fileWrite(fo,'\b\n')
@@ -27311,7 +27316,7 @@ PROC main() HANDLE
   DEF proc: PTR TO process
 
   StrCopy(expressVer,'v5.3.0-alpha',ALL)
-  StrCopy(expressDate,'14-Feb-2020',ALL)
+  StrCopy(expressDate,'26-Feb-2020',ALL)
 
   nodeStart:=getSystemTime()
 
