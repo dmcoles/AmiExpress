@@ -3604,17 +3604,11 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
               loggedOnUser.lineLength:=Val(msg.string)
             ENDIF
           CASE ACTIVE_NODES
-              strCpy(msg.string,'          ',ALL)
-              IF(FindPort('AmiExpress_Node.0')) THEN msg.string[0]:="X"
-              IF(FindPort('AmiExpress_Node.1')) THEN msg.string[1]:="X"
-              IF(FindPort('AmiExpress_Node.2')) THEN msg.string[2]:="X"
-              IF(FindPort('AmiExpress_Node.3')) THEN msg.string[3]:="X"
-              IF(FindPort('AmiExpress_Node.4')) THEN msg.string[4]:="X"
-              IF(FindPort('AmiExpress_Node.5')) THEN msg.string[5]:="X"
-              IF(FindPort('AmiExpress_Node.6')) THEN msg.string[6]:="X"
-              IF(FindPort('AmiExpress_Node.7')) THEN msg.string[7]:="X"
-              IF(FindPort('AmiExpress_Node.8')) THEN msg.string[8]:="X"
-              IF(FindPort('AmiExpress_Node.9')) THEN msg.string[9]:="X"
+              strCpy(msg.string,'                                ',ALL)
+              FOR i:=0 TO MAXNODES-1
+                StringF(tempstring,'AmiExpress_Node.\d',i)
+                IF FindPort(tempstring) THEN msg.string[i]:="X"
+              ENDFOR
           CASE DT_DUMP
             dumpActiveUser(msg.string)
           CASE DT_MSGCODE
@@ -6654,6 +6648,10 @@ PROC processWindowMessage(signals)
   DEF windowsig
   DEF msgclass
   DEF win:PTR TO window
+
+  IF screen AND (scropen=FALSE)
+    IF CloseScreen(screen) THEN screen:=NIL
+  ENDIF
 
   IF windowClose<>NIL
     windowsig:=Shl(1, windowClose.userport.sigbit)
@@ -20231,6 +20229,7 @@ PROC conferenceMaintenance()
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
   DEF confLoc[255]:STRING
+  DEF confStr[10]:STRING
   DEF path[255]:STRING
   DEF path2[255]:STRING
   DEF dirCacheEnabled
@@ -20255,11 +20254,13 @@ PROC conferenceMaintenance()
     IF getConfMsgBaseCount(conf)>1
       getMsgBaseName(conf,msgBase,tempstr2)
       StringF(tempstr,'\s - \s',getConfName(conf),tempstr2)
+      StringF(confStr,'\d.\d',conf,msgBase)
     ELSE
       getConfName(conf,tempstr)
+      StringF(confStr,'\d',conf)
     ENDIF
 
-    StringF(tempstr,'[4;1H [32mConference [34m[[0m\d[3][34m][36m:[0m \s[29]\b\n',conf,tempstr)
+    StringF(tempstr,'[4;1H [32mConference [34m[[0m\s[5][34m][36m:[0m \s[29]\b\n',confStr,tempstr)
     aePuts(tempstr)
     aePuts('[6;1H[0m THE FOLLOWING OPTIONS EFFECT ALL USERS FOR THIS CONFERENCE!\b\n')
     aePuts('[8;2H[33m1.>[32m Ratio[0m')
@@ -21996,25 +21997,23 @@ PROC internalCommandCF()
   DEF confNums[255]:STRING
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
+  DEF confStr[10]:STRING
   DEF c1,c2,c3,c4
   DEF cb: PTR TO confBase
   DEF ch
   DEF stat
   DEF p:PTR TO CHAR
   DEF v
+  DEF n,cnt
 
   IF checkSecurity(ACS_CONFFLAGS)=FALSE THEN RETURN RESULT_NOT_ALLOWED
 
   REPEAT
     sendCLS()
     aePuts('\b\n')
-    IF (0)
-      aePuts('[32m       M A F Z Conference                       M F Z Conference[0m\b\n')
-      aePuts('[33m       ~ ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~~~        ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~~~[0m\b\n\b\n')
-    ELSE
-      aePuts('[32m            M A F Z   Conference[0m\b\n')
-      aePuts('[33m            ~ ~ ~ ~   ~~~~~~~~~~~~~~~~~~~~~~~~~[0m\b\n\b\n')
-    ENDIF
+      aePuts('[32m        M A F Z Conference                      M A F Z Conference[0m\b\n')
+      aePuts('[33m        ~ ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~         ~ ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~[0m\b\n\b\n')
+    n:=0
 
     FOR i:=1 TO cmds.numConf
       IF checkConfAccess(i)
@@ -22052,17 +22051,20 @@ PROC internalCommandCF()
           IF getConfMsgBaseCount(i)>1
             getMsgBaseName(i,m,tempstr)
             StringF(tempstr2,'\s - \s',getConfName(i),tempstr)
+            StringF(confStr,'\d.\d',relConf(i),m)
+            StringF(tempstr,'[34m[[0m\r\s[5][34m] [36m\c \c \c \c [0m\l\s[23]',confStr,c1,c4, c2,c3,tempstr2)
           ELSE
             getConfName(i,tempstr2)
+            StringF(tempstr,'[34m[[0m\r\d[5][34m] [36m\c \c \c \c [0m\l\s[23]',relConf(i),c1,c4, c2,c3,tempstr2)
           ENDIF
-
-
-          IF(0)
-            StringF(tempstr,' [34m[[0m\z\r\d[3][34m] [36m\c \c \c \c [0m\l\s[25] ',relConf(i),c1,c4, c2,c3,tempstr2)
-          ELSE
-            StringF(tempstr,'   [34m[[0m\z\r\d[3][34m]    [36m\c \c \c \c   [0m\l\s[25]\b\n',relConf(i),c1,c4, c2,c3,tempstr2)
-          ENDIF
+          
           aePuts(tempstr)
+          IF n AND 1
+            aePuts('\b\n')
+          ELSE
+            aePuts(' ')
+          ENDIF
+          n++
         ENDFOR
       ENDIF
     ENDFOR
@@ -22114,31 +22116,48 @@ PROC internalCommandCF()
       ELSEIF StrLen(confNums)>0
         p:=confNums
         WHILE((i:=InStr(p,','))<>-1) AND ((p-confNums)<StrLen(confNums))
-          IF ((v:=Val(p))>0)
-            v:=getInverse(v)
-            IF v<=cmds.numConf
-              IF checkConfAccess(v)
-                FOR m:=1 TO getConfMsgBaseCount(v)
-                  cb:=confBases.item(getConfIndex(v,m)-1)
-                  cb.handle[0]:=Eor(cb.handle[0],editmask)
-                ENDFOR
-              ENDIF
-            ENDIF
-          ENDIF
+          StrCopy(tempstr,p,i)
+          fullTrim(tempstr,tempstr2)
           p:=p+i+1
-        ENDWHILE
-        IF ((p-confNums)<StrLen(confNums)) AND ((v:=Val(p))>0)
-          v:=getInverse(v)
-          IF v<=cmds.numConf
-            IF checkConfAccess(v)
-              FOR m:=1 TO getConfMsgBaseCount(v)
-                cb:=confBases.item(getConfIndex(v,m)-1)
-                cb.handle[0]:=Eor(cb.handle[0],editmask)
+          
+          FOR i:=1 TO cmds.numConf
+            IF checkConfAccess(i)
+              v:=getInverse(i)
+              cnt:=getConfMsgBaseCount(i)
+              FOR m:=1 TO cnt
+                IF cnt=1
+                  StringF(tempstr,'\d',v)
+                ELSE
+                  StringF(tempstr,'\d.\d',v,m)
+                ENDIF
+                IF StrCmp(tempstr,tempstr2)
+                  cb:=confBases.item(getConfIndex(i,m)-1)
+                  cb.handle[0]:=Eor(cb.handle[0],editmask)
+                ENDIF
               ENDFOR
             ENDIF
-          ENDIF
+          ENDFOR
+        ENDWHILE
+        IF ((p-confNums)<StrLen(confNums))
+          fullTrim(p,tempstr2)
+          FOR i:=1 TO cmds.numConf
+            IF checkConfAccess(i)
+              v:=getInverse(i)
+              cnt:=getConfMsgBaseCount(i)
+              FOR m:=1 TO cnt
+                IF cnt=1
+                  StringF(tempstr,'\d',v)
+                ELSE
+                  StringF(tempstr,'\d.\d',v,m)
+                ENDIF
+                IF StrCmp(tempstr,tempstr2)
+                  cb:=confBases.item(getConfIndex(i,m)-1)
+                  cb.handle[0]:=Eor(cb.handle[0],editmask)
+                ENDIF
+              ENDFOR
+            ENDIF
+          ENDFOR
         ENDIF
-
       ENDIF
     ENDIF
   UNTIL loop=FALSE
@@ -27316,7 +27335,7 @@ PROC main() HANDLE
   DEF proc: PTR TO process
 
   StrCopy(expressVer,'v5.3.0-alpha',ALL)
-  StrCopy(expressDate,'26-Feb-2020',ALL)
+  StrCopy(expressDate,'28-Feb-2020',ALL)
 
   nodeStart:=getSystemTime()
 
