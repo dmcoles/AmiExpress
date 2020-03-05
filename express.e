@@ -416,6 +416,28 @@ RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
       ERR_ASL  IF AllocAslRequest()=NIL
 
+PROC configFileExists(fname:PTR TO CHAR)
+  DEF lh
+  DEF fn[255]:STRING
+  
+  StringF(fn,'\s.info',fname)
+  IF lh:=Lock(fn,ACCESS_READ)
+    UnLock(lh)
+    RETURN TRUE
+  ENDIF
+  StringF(fn,'\s.cfg',fname)
+  IF lh:=Lock(fn,ACCESS_READ)
+    UnLock(lh)
+    RETURN TRUE
+  ENDIF
+
+  StringF(fn,'\s.txt',fname)
+  IF lh:=Lock(fn,ACCESS_READ)
+    UnLock(lh)
+    RETURN TRUE
+  ENDIF
+ENDPROC FALSE
+
 PROC checkIconifyMsg()
 ENDPROC
 
@@ -450,11 +472,11 @@ PROC convertAccess()
   DEF tempStr[255]:STRING
 
   acsLevel:=findAcsLevel()
-  StringF(tempStr,'\sAccess.info',cmds.bbsLoc)
-  IF fileExists(tempStr)=FALSE THEN overrideDefaultAccess:=TRUE ELSE overrideDefaultAccess:=checkSecurity(ACS_OVERRIDE_DEFAULTS)
+  StringF(tempStr,'\sAccess',cmds.bbsLoc)
+  IF configFileExists(tempStr)=FALSE THEN overrideDefaultAccess:=TRUE ELSE overrideDefaultAccess:=checkSecurity(ACS_OVERRIDE_DEFAULTS)
 
   getUserAccessFilename(tempStr)
-  userSpecificAccess:=fileExists(tempStr,TRUE);
+  userSpecificAccess:=configFileExists(tempStr);
 
   StrCopy(securityFlags,'')
 ENDPROC
@@ -2941,7 +2963,7 @@ PROC findAcsLevel()
   level:=loggedOnUser.secStatus/5*5
   REPEAT
     getNodeFile(TOOLTYPE_ACCESS,level,ttfile)
-    found:=fileExists(ttfile,TRUE)
+    found:=configFileExists(ttfile)
     IF (found=FALSE) THEN level:=level-5
   UNTIL (level=0) OR (found)
 
@@ -4363,15 +4385,15 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
 
   IF cmdtype=CMDTYPE_BBSCMD
     getNodeFile(TOOLTYPE_CONFCMD,cmd,commandfile)
-    IF fileExists(commandfile,TRUE)
+    IF configFileExists(commandfile)
       tooltype:=TOOLTYPE_CONFCMD
     ELSE
       getNodeFile(TOOLTYPE_NODECMD,cmd,commandfile)
-      IF fileExists(commandfile,TRUE)
+      IF configFileExists(commandfile)
         tooltype:=TOOLTYPE_NODECMD
       ELSE
         getNodeFile(TOOLTYPE_BBSCMD,cmd,commandfile)
-        IF fileExists(commandfile,TRUE)
+        IF configFileExists(commandfile)
           tooltype:=TOOLTYPE_BBSCMD
         ELSE
           RETURN FALSE
@@ -4381,15 +4403,15 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
 
   ELSEIF cmdtype=CMDTYPE_SYSCMD
     getNodeFile(TOOLTYPE_CONFSYSCMD,cmd,commandfile)
-    IF fileExists(commandfile,TRUE)
+    IF configFileExists(commandfile)
       tooltype:=TOOLTYPE_CONFSYSCMD
     ELSE
       getNodeFile(TOOLTYPE_NODESYSCMD,cmd,commandfile)
-      IF fileExists(commandfile,TRUE)
+      IF configFileExists(commandfile)
         tooltype:=TOOLTYPE_NODESYSCMD
       ELSE
         getNodeFile(TOOLTYPE_SYSCMD,cmd,commandfile)
-        IF fileExists(commandfile,TRUE)
+        IF configFileExists(commandfile)
           tooltype:=TOOLTYPE_SYSCMD
         ELSE
           RETURN FALSE
@@ -4398,7 +4420,7 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
     ENDIF
   ELSEIF cmdtype=CMDTYPE_CUSTOM
     getNodeFile(TOOLTYPE_CONFCMD2,cmd,commandfile)
-    IF fileExists(commandfile,TRUE)
+    IF configFileExists(commandfile)
       tooltype:=TOOLTYPE_CONFCMD2
     ELSE
       RETURN FALSE
@@ -6430,6 +6452,7 @@ PROC displayFile(filename, allowMCI=TRUE, resetNonStop=TRUE)
   DEF len,res,stat,read,lf
   DEF ripFile=FALSE
   DEF extension[4]:STRING
+  DEF fname[255]:STRING
 
   lineCount:=0
 
@@ -6437,7 +6460,8 @@ PROC displayFile(filename, allowMCI=TRUE, resetNonStop=TRUE)
   IF mcioff=TRUE THEN allowMCI:=FALSE
 
   StrCopy(mciterminator,'|')
-  RightStr(extension,filename,4)
+  StrCopy(fname,filename)
+  RightStr(extension,fname,4)
 
   IF strCmpi(extension,'.rip',ALL)
     conPuts('\b\n\b\n[0mDisplaying Rip Script\b\n\b\n')
@@ -7217,6 +7241,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       ioFlags[IOFLAG_SCR_OUT]:=-1
       onlineBaud:=cmds.openingBaud
       onlineBaudR:=cmds.openingBaud
+      intDoReset(sopt.offHook)
       reqState:=REQ_STATE_SYSOPLOGON
     ENDIF
 
@@ -7231,6 +7256,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       onlineBaud:=cmds.openingBaud
       onlineBaudR:=cmds.openingBaud
       logonType:=LOGON_TYPE_LOCAL
+      intDoReset(sopt.offHook)
       reqState:=REQ_STATE_LOGON
     ENDIF
 
@@ -9682,8 +9708,8 @@ PROC edit(allowFullscreen=TRUE,maxLineLen=75,updatePosted=FALSE)
   x:=0
   bkFlag:=0
 
-  StringF(str,'\sCommands/SysCmd/FULLEDIT.info',cmds.bbsLoc)
-  IF(fileExists(str) AND checkSecurity(ACS_FULL_EDIT) AND (loggedOnUser.editorType<>1))
+  StringF(str,'\sCommands/SysCmd/FULLEDIT',cmds.bbsLoc)
+  IF(configFileExists(str) AND checkSecurity(ACS_FULL_EDIT) AND (loggedOnUser.editorType<>1))
     stat:=0
     IF allowFullscreen
       IF(loggedOnUser.editorType<>2)
@@ -26369,6 +26395,7 @@ PROC processAwait()
 
   IF (netTrans<>0)
     logonType:=LOGON_TYPE_SYSOP
+    intDoReset(sopt.offHook)
     reqState:=REQ_STATE_SYSOPLOGON
   ELSE
     IF sopt.toggles[TOGGLES_MULTICOM]
@@ -26779,7 +26806,7 @@ PROC initNewUser(userData:PTR TO user,userKeys: PTR TO userKeys,userMisc: PTR TO
   DEF ttdata[255]:STRING
 
   StringF(ttdata,'\sNode\d/Preset.1',cmds.bbsLoc,node)
-  IF fileExists(ttdata,TRUE)
+  IF configFileExists(ttdata)
     userData.secStatus:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.ACCESS')
     userData.secBoard:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.RATIO_TYPE')
     userData.secLibrary:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.RATIO')

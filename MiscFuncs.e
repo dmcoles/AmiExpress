@@ -24,14 +24,10 @@ EXPORT PROC getFileSize(s: PTR TO CHAR)
   FreeDosObject(DOS_FIB,fBlock)
 ENDPROC fsize
 
-EXPORT PROC fileExists(filename, addInfo = FALSE)
+EXPORT PROC fileExists(filename)
 /* checks to see if a file exists and returns TRUE OR FALSE */
   DEF lh
-  DEF fn[255]:STRING
-  
-  StrCopy(fn,filename)
-  IF addInfo THEN StrAdd(fn,'.info')
-  IF lh:=Lock(fn,ACCESS_READ)
+  IF lh:=Lock(filename,ACCESS_READ)
     UnLock(lh)
     RETURN TRUE
   ENDIF

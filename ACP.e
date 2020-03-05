@@ -782,8 +782,15 @@ PROC getToolTypes(filename:PTR TO CHAR)
   dobj:=GetDiskObject(filename)
   isCfg:=FALSE
   IF(dobj=NIL)
-    StringF(fn,'\s.cfg',filename)
-    IF (len:=FileLength(fn))<>-1
+    StringF(fn,'\s.txt',filename)
+    IF (len:=FileLength(fn))=-1
+      StringF(fn,'\s.cfg',filename)
+      IF (len:=FileLength(fn))=-1
+        StrCopy(fn,'')
+      ENDIF
+    ENDIF
+    
+    IF StrLen(fn)>0
       dobj:=GetDefDiskObject(WBPROJECT)
       IF dobj<>NIL
         fileBuf:=New(len+1)     ->allow an extra char in case file does not end in LF
@@ -3521,6 +3528,10 @@ PROC main() HANDLE
   ELSE
     IF StrLen(arg)>0
       StrCopy(iconStartName,arg)
+      RightStr(tempstr,iconStartName,3)
+      UpperStr(tempstr)
+      IF StrCmp(tempstr,'acp')=FALSE THEN StrAdd(iconStartName,'acp')
+      
       StrCopy(tempstr,iconStartName,PathPart(iconStartName)-iconStartName)
       newlock:=Lock(tempstr,ACCESS_READ)
       IF newlock<>NIL THEN oldDirLock:=CurrentDir(newlock)
