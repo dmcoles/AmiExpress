@@ -784,8 +784,15 @@ PROC getToolTypes(filename:PTR TO CHAR)
   dobj:=GetDiskObject(filename)
   isCfg:=FALSE
   IF(dobj=NIL)
-    StringF(fn,'\s.cfg',filename)
-    IF fileExists(fn)
+    StringF(fn,'\s.txt',filename)
+    IF fileExists(fn)=FALSE
+      StringF(fn,'\s.cfg',filename)
+      IF fileExists(fn)=FALSE
+        StrCopy(fn,'')
+      ENDIF
+    ENDIF
+    
+    IF StrLen(fn)>0
       dobj:=GetDefDiskObject(WBPROJECT)
       IF dobj<>NIL
         fileBuf:=New(getFileSize(fn)+1)     ->allow an extra char in case file does not end in LF
@@ -3453,7 +3460,7 @@ PROC main() HANDLE
  
   KickVersion(37)  -> E-Note: requires V37
 
-  StringF(myVerStr,'v5.2.1')
+  StringF(myVerStr,'v5.2.3')
 
   FOR i:=0 TO MAX_NODES-1
     ndUser[i]:=NIL
@@ -3523,6 +3530,10 @@ PROC main() HANDLE
   ELSE
     IF StrLen(arg)>0
       StrCopy(iconStartName,arg)
+      RightStr(tempstr,iconStartName,3)
+      UpperStr(tempstr)
+      IF StrCmp(tempstr,'acp')=FALSE THEN StrAdd(iconStartName,'acp')
+      
       StrCopy(tempstr,iconStartName,PathPart(iconStartName)-iconStartName)
       newlock:=Lock(tempstr,ACCESS_READ)
       IF newlock<>NIL THEN oldDirLock:=CurrentDir(newlock)
