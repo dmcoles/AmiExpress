@@ -3218,6 +3218,7 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
   DEF i,f
   DEF nodes = 0,msgcmd
   DEF tempstring[255]:STRING
+  DEF tempstring2[255]:STRING
   DEF runOnExit[255]:STRING
   DEF runOnExit2[255]:STRING
   DEF cb:PTR TO confBase
@@ -4020,9 +4021,11 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
               ENDIF
               msg.data:=chooseAName(msg.string,tuserdata,tuserkeys,tusermisc,msg.data)
           CASE CHECK_REALNAME
-            IF checkToolTypeExists(TOOLTYPE_CONF,currentConf,'USERNAME')
+            StringF(tempstring,'USERNAME.\d',currentMsgBase)
+            StringF(tempstring2,'REALNAME.\d',currentMsgBase)
+            IF checkToolTypeExists(TOOLTYPE_CONF,currentConf,'USERNAME') OR checkToolTypeExists(TOOLTYPE_MSGBASE,currentConf,tempstring)
               msg.data:=2
-            ELSEIF checkToolTypeExists(TOOLTYPE_CONF,currentConf,'REALNAME')
+            ELSEIF checkToolTypeExists(TOOLTYPE_CONF,currentConf,'REALNAME') OR checkToolTypeExists(TOOLTYPE_MSGBASE,currentConf,tempstring2)
               msg.data:=1
             ELSE
               msg.data:=0
@@ -4708,10 +4711,14 @@ ENDPROC
 
 PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFORCE)
   DEF string[255]:STRING,tempstr[255]:STRING
+  DEF namestr1[255]:STRING
+  DEF namestr2[255]:STRING
   DEF mystat, temp
 
   IF (checkConfAccess(conf)=FALSE) THEN conf:=1
   IF((conf<1) OR (conf>cmds.numConf)) THEN conf:=1
+
+  IF (msgBaseNum<1 ) OR (msgBaseNum>getConfMsgBaseCount(conf)) THEN msgBaseNum:=1
 
   IF confScan=FALSE
     currentConf:=conf
@@ -4732,9 +4739,11 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
   StringF(uploadLocation,'\sUpload/',currentConfDir)
 
   confNameType:=NAME_TYPE_USERNAME
-  IF checkToolTypeExists(TOOLTYPE_CONF,conf,'REALNAME')
+  StringF(namestr1,'REALNAME.\d',msgBaseNum)
+  StringF(namestr2,'INTERNETNAME.\d',msgBaseNum)
+  IF checkToolTypeExists(TOOLTYPE_CONF,conf,'REALNAME') OR checkToolTypeExists(TOOLTYPE_MSGBASE,conf,namestr1)
     confNameType:=NAME_TYPE_REALNAME
-  ELSEIF checkToolTypeExists(TOOLTYPE_CONF,conf,'INTERNETNAME')
+  ELSEIF checkToolTypeExists(TOOLTYPE_CONF,conf,'INTERNETNAME') OR checkToolTypeExists(TOOLTYPE_MSGBASE,conf,namestr2)
     confNameType:=NAME_TYPE_INTERNETNAME
   ENDIF
 
@@ -4838,8 +4847,11 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
     ENDIF
   ENDIF
 
-  IF (auto=FALSE) AND (confScan=FALSE) THEN loggedOnUser.confRJoin:=conf
-
+  IF (auto=FALSE) AND (confScan=FALSE)
+    loggedOnUser.confRJoin:=conf
+    loggedOnUser.msgBaseRJoin:=msgBaseNum
+    captureRealAndInternetNames(conf,msgBaseNum)
+  ENDIF
 ENDPROC mystat
 
 PROC doPause()
@@ -6445,7 +6457,7 @@ PROC displayScreen(screenType)
   ENDSELECT
 ENDPROC res
 
-PROC displayFile(filename, allowMCI=TRUE, resetNonStop=TRUE)
+PROC displayFile(filename, allowMCI=TRUE, resetNonStop=TRUE, resetLineCount=TRUE)
   DEF fh
   DEF firstline=TRUE
   DEF linedata[999]:STRING
@@ -6454,7 +6466,7 @@ PROC displayFile(filename, allowMCI=TRUE, resetNonStop=TRUE)
   DEF extension[4]:STRING
   DEF fname[255]:STRING
 
-  lineCount:=0
+  IF resetLineCount THEN lineCount:=0
 
   IF (mciViewSafe=FALSE) AND ((checkSecurity(ACS_MCI_MSG)=FALSE) OR (sopt.toggles[TOGGLES_NOMCIMSGS]=TRUE)) THEN allowMCI:=FALSE
   IF mcioff=TRUE THEN allowMCI:=FALSE
@@ -6750,20 +6762,46 @@ PROC closeAEStats()
 ENDPROC
 
 PROC toggleStatusDisplay()
-  DEF dp,bp,tags
+  DEF dp,bp,sz,tags
+  DEF pub=FALSE
+  DEF pubScreen[255]:STRING
+  DEF pubLock=0:PTR TO screen
 
-  IF screen=NIL THEN RETURN
+
+  IF bitPlanes=0
+    pub:=TRUE
+  ENDIF
+
+  IF readToolType(TOOLTYPE_WINDOW,node,'WINDOW.PUBSCREEN',pubScreen)
+    pub:=TRUE
+  ENDIF
+
+  IF checkToolTypeExists(TOOLTYPE_NODE,node,'SHOW_CACHE_STATS')
+    sz:=37
+  ELSE
+    sz:=27
+  ENDIF
+
+  IF pub
+    IF StrLen(pubScreen)>0
+      pubLock:=LockPubScreen(pubScreen)
+    ELSE
+      pubLock:=LockPubScreen(NIL)
+    ENDIF
+    IF pubLock=FALSE
+      pub:=FALSE
+    ELSE
+      sz:=sz+pubLock.wbortop+pubLock.font.ysize+pubLock.wborbottom
+    ENDIF
+  ENDIF
+
+  IF (screen=NIL) AND (pub=FALSE) THEN RETURN
 
   IF(dStatBar)
     dStatBar:=0
     closeAEStats()
-    IF(bitPlanes)
-      MoveWindow(window,0,-37)
-      SizeWindow(window,0,37)
-    ELSE
-      MoveWindow(window,0,-38)
-      SizeWindow(window,0,38)
-    ENDIF
+    MoveWindow(window,0,-sz)
+    SizeWindow(window,0,sz)
     IF (loggedOnUser<>NIL) AND (StrLen(loggedOnUser.name)>0) THEN statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
   ELSE
 
@@ -6775,33 +6813,44 @@ PROC toggleStatusDisplay()
       bp:=4
     ENDIF
 
-    tags:=NEW [WA_CUSTOMSCREEN,screen,
-       WA_LEFT,0,
-       WA_TOP,10,
-       WA_WIDTH,640,
-       WA_HEIGHT,39,
-       WA_DETAILPEN,dp,
-       WA_BLOCKPEN,bp,
-       WA_FLAGS,
-       WFLG_SIMPLE_REFRESH,NIL]
+    IF pub
+      tags:=NEW [WA_PUBSCREEN,pubLock,
+         WA_DEPTHGADGET,1,
+         WA_DRAGBAR,1,
+         WA_LEFT,window.leftedge,
+         WA_TOP,window.topedge,
+         WA_WIDTH,sopt.width,
+         WA_HEIGHT,sz,
+         WA_DETAILPEN,dp,
+         WA_BLOCKPEN,bp,
+         WA_FLAGS,
+         WFLG_SIMPLE_REFRESH,NIL]
+    ELSE
+      tags:=NEW [WA_CUSTOMSCREEN,screen,
+         WA_LEFT,0,
+         WA_TOP,screen.wbortop+screen.font.ysize-1,
+         WA_WIDTH,640,
+         WA_HEIGHT,sz,
+         WA_DETAILPEN,dp,
+         WA_BLOCKPEN,bp,
+         WA_FLAGS,
+         WFLG_SIMPLE_REFRESH,NIL]
+    ENDIF
     IF(( windowStat:=OpenWindowTagList(NIL,tags))<>NIL)
 
       dStatBar:=1
-      IF(bitPlanes)
-        SizeWindow(window,0,-37)
-        MoveWindow(window,0,37)
-      ELSE
-        SizeWindow(window,0,-38)
-        MoveWindow(window,0,38)
-      ENDIF
-
+      SizeWindow(window,0,-sz)
+      MoveWindow(window,0,sz)
+      
       initStatCon()
       clearStatusPane()
+      SetWindowTitles(windowStat,titlebar,titlebar)
       SetWindowTitles(window,titlebar,titlebar)
       IF (loggedOnUser<>NIL) AND (StrLen(loggedOnUser.name)>0) THEN statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
       statChatFlag()
     ENDIF
     END tags
+    IF pubLock THEN UnlockPubScreen(NIL,pubLock)
   ENDIF
 ENDPROC
 
@@ -7126,8 +7175,10 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
 
   IF (ch=0) AND allowSer AND (signals AND (serialsig OR telnetsig))
     IF rawMode
-      lch:=readMayGetChar(serialReadMP,TRUE,{serbuff})
-      IF lch<>-1 THEN ch:=lch
+      IF (ioFlags[IOFLAG_SER_IN])
+        lch:=readMayGetChar(serialReadMP,TRUE,{serbuff})
+        IF lch<>-1 THEN ch:=lch
+      ENDIF
     ELSEIF -1<>(lch:=readMayGetChar(serialReadMP,TRUE,{serbuff}))
       IF (ioFlags[IOFLAG_SER_IN])
         ch:=lch
@@ -7169,8 +7220,10 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     -> If a console signal was received, get the character
 
     IF rawMode
-      lch:=readMayGetChar(consoleReadMP, FALSE,{ibuf})
-      IF lch<>-1 THEN ch:=lch
+      IF (ioFlags[IOFLAG_KBD_IN])
+        lch:=readMayGetChar(consoleReadMP, FALSE,{ibuf})
+        IF lch<>-1 THEN ch:=lch
+      ENDIF
     ELSEIF -1<>(lch:=readMayGetChar(consoleReadMP, FALSE, {ibuf}))
       IF (ioFlags[IOFLAG_KBD_IN])
         ch:=lch
@@ -7238,7 +7291,10 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       statClearTime()
       StrCopy(connectString,'SYSOP_LOCAL')
       IF (scropen) THEN expressToFront() ELSE openExpressScreen()
+      ioFlags[IOFLAG_SER_IN]:=0
+      ioFlags[IOFLAG_SER_OUT]:=0
       ioFlags[IOFLAG_SCR_OUT]:=-1
+      ioFlags[IOFLAG_KBD_IN]:=-1
       onlineBaud:=cmds.openingBaud
       onlineBaudR:=cmds.openingBaud
       intDoReset(sopt.offHook)
@@ -7252,7 +7308,10 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       statClearTime()
       StrCopy(connectString,'F2_LOCAL')
       IF (scropen) THEN expressToFront() ELSE openExpressScreen()
+      ioFlags[IOFLAG_SER_IN]:=0
+      ioFlags[IOFLAG_SER_OUT]:=0
       ioFlags[IOFLAG_SCR_OUT]:=-1
+      ioFlags[IOFLAG_KBD_IN]:=-1
       onlineBaud:=cmds.openingBaud
       onlineBaudR:=cmds.openingBaud
       logonType:=LOGON_TYPE_LOCAL
@@ -7863,7 +7922,7 @@ PROC processLoggingOff()
     IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_LOGOFF')) AND (StrLen(mailOptions.sysopEmail)>0)
       StringF(tempstr,'\s: Ami-Express logoff notification',cmds.bbsName)
       StringF(tempstr2,'This is a notification that \s from \s has logged off\n\n',loggedOnUser.name,loggedOnUser.location)
-      sendMail(tempstr,tempstr2,TRUE, msgBuf,lines,mailOptions.sysopEmail)
+      sendMail(tempstr,tempstr2,FALSE, NIL,0,mailOptions.sysopEmail)
     ENDIF
 
     StrCopy(reservedName,'')
@@ -8380,11 +8439,13 @@ PROC commentToSYSOP()
   DEF stat
   DEF str[255]:STRING
 
-  stat:=chooseAName(cmds.sysopName,tempUser,tempUserKeys,tempUserMisc,1)
+  stat:=captureRealAndInternetNames(currentConf,currentMsgBase)
+  IF stat<0 THEN RETURN stat
+  
+  stat:=loadAccount(1,tempUser,tempUserKeys,tempUserMisc)
   IF(stat<0)
     RETURN stat
   ENDIF
-  stat:=loadAccount(tempUser.slotNumber,tempUser,tempUserKeys,tempUserMisc)
 
   SELECT confNameType
     CASE NAME_TYPE_USERNAME
@@ -8411,6 +8472,7 @@ PROC commentToSYSOP()
   mailHeader.status:="R"
   comment:=1
   stat:=callMsgFuncs(MAIL_CREATE,0,0)
+  comment:=0
   IF(stat<0) THEN RETURN stat
 ENDPROC RESULT_SUCCESS
 
@@ -8572,6 +8634,7 @@ PROC displayMessage(gfh)
     aePuts(str)
     StringF(str,'[32mSubject[33m: [0m\s\b\n\b\n',mailHeader.subject)
     aePuts(str)
+    lineCount:=lineCount+5
 
     alreadyRecvd:=mailHeader.recv
 
@@ -8589,11 +8652,11 @@ PROC displayMessage(gfh)
   IF(nonStopMail)
     nonStopDisplayFlag:=TRUE
     mcioff:=TRUE
-    displayFile(tempStr,TRUE,FALSE)
+    displayFile(tempStr,TRUE,FALSE,FALSE)
     IF(stat=RESULT_FAILURE) THEN nonStopMail:=FALSE
   ELSE
     mcioff:=TRUE
-    displayFile(tempStr,TRUE)
+    displayFile(tempStr,TRUE,TRUE,FALSE)
   ENDIF
   mcioff:=FALSE
   stat:=checkAttachedFile(mailHeader.msgNumb,1)
@@ -10209,7 +10272,7 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
   strCpy(mh.fromName,confMailName,31)
   IF(msgbaselock:=lockMsgBase())
     StringF(tempStr,'EXTSEND.\d',currentMsgBase)
-    IF checkToolTypeExists(TOOLTYPE_MSGBASE,currentConf,tempStr)
+    IF checkToolTypeExists(TOOLTYPE_MSGBASE,currentConf,tempStr) AND (comment=0)
       getMsgBaseLocation(currentConf,currentMsgBase,tempStr)
       StrAdd(tempStr,'EXT-OUT')
       IF (lock:=CreateDir(tempStr)) THEN UnLock(lock)
@@ -10317,14 +10380,11 @@ PROC enterMSG(gfh)
   DEF exit,i,i2,i3,stat
   DEF extSend
   DEF t
-
+ 
   aFlag:=0
 
   StrCopy(attachedFile,'',ALL)
-  IF(comment=1)
-    comment:=0
-    JUMP skipAll
-  ENDIF
+  IF(comment=1) THEN JUMP skipAll
 
   IF(replyFlag=1)
     JUMP skipBegin
@@ -10753,8 +10813,11 @@ contloop:
 
     IF(((str[0]="r") OR (str[0]="R")))
       IF((privateFlag=0) OR ((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)) OR (StrCmp(mailHeader.toName,'EALL',4)))
-        stat:=replyToMSG(gfh)
-        RETURN RESULT_SUCCESS
+        stat:=captureRealAndInternetNames(currentConf,currentMsgBase)
+        IF stat=RESULT_SUCCESS
+          stat:=replyToMSG(gfh)
+          RETURN RESULT_SUCCESS
+        ENDIF
       ELSE
         aePuts('Not your message.\b\n')
         JUMP contloop
@@ -11227,7 +11290,8 @@ PROC searchNewMail(gfh, cn, msgBaseNum)
     stat:=loadMessageHeader(gfh)
     IF(mailHeader.status="D") THEN JUMP getNextMSG
 
-    cb:=confBases.item(getConfIndex(currentConf,currentMsgBase)-1)
+    cb:=confBases.item(getConfIndex(cn,msgBaseNum)-1)
+
     IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS) OR ((stringCompare(mailHeader.toName,'all')=RESULT_SUCCESS) AND (cb.handle[0] AND MAILSCAN_ALL)))) AND (mailHeader.recv=0)
 
       IF(currentConf=0)
@@ -11599,8 +11663,11 @@ PROC readMSG(gfh)
             noDirF:=1
             JUMP nextMenu
           CASE "r"
-            stat:=replyToMSG(gfh)
-            IF(stat<0) THEN RETURN stat
+            stat:=captureRealAndInternetNames(currentConf,currentMsgBase)
+            IF stat=RESULT_SUCCESS
+              stat:=replyToMSG(gfh)
+              IF(stat<0) THEN RETURN stat
+            ENDIF
             noDirF:=1
             JUMP goNextMsg
         ENDSELECT
@@ -11898,6 +11965,9 @@ PROC callMsgFuncs(msgfunc, conf, msgBaseNum)
   currentSeekPos:=0
   stat:=RESULT_FAILURE
   mciViewSafe:=FALSE
+ 
+  stat:=captureRealAndInternetNames(currentConf,currentMsgBase)
+  IF stat<0 THEN RETURN stat
 
   SELECT confNameType
     CASE NAME_TYPE_USERNAME
@@ -12402,7 +12472,7 @@ ENDPROC
 
 
 PROC statPrint(s: PTR TO CHAR)
-  DEF str[25]:STRING
+  DEF str[255]:STRING
 
   IF(dStatBar AND (statWriteIO<>NIL))
     IF(bitPlanes<3)
@@ -13035,6 +13105,7 @@ PROC updateTitle(hoozer: PTR TO user)
 
   IF hoozer=NIL
     IF window<>NIL THEN SetWindowTitles(window,titlebar,titlebar)
+    IF windowStat<>NIL THEN SetWindowTitles(windowStat,titlebar,titlebar)
     RETURN
   ENDIF
 
@@ -13042,9 +13113,10 @@ PROC updateTitle(hoozer: PTR TO user)
     StringF(ititlebar,'   \c\s, \s, (\d \l\s[10] [\d]) \d mins, \d \c',pflag,hoozer.name,hoozer.phoneNumber,hoozer.secStatus,hoozer.conferenceAccess,currentConf,Div(timeLimit,60),onlineBaud,aflag) ->//(RTS) was Online_BaudR
     IF(dStatBar=NIL)
       SetWindowTitles(window,ititlebar,ititlebar)
-
+      IF windowStat<>NIL THEN SetWindowTitles(windowStat,ititlebar,ititlebar)
     ELSE
       SetWindowTitles(window,titlebar,titlebar)
+      IF windowStat<>NIL THEN SetWindowTitles(windowStat,titlebar,titlebar)
     ENDIF
   ENDIF
 ENDPROC
@@ -13076,6 +13148,7 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
 
   IF hoozer=NIL
     SetWindowTitles(window,titlebar,titlebar)
+    IF windowStat<>NIL THEN SetWindowTitles(windowStat,titlebar,titlebar)
     RETURN
   ENDIF
 
@@ -13181,13 +13254,15 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
   StringF(string,' \r\s[15]',hostIP)
   statMessage(19,3,string)
 
-  IF (cacheTests>0)
-    RealF(bcdStr,!(cacheHits!*100.0)/(cacheTests!),2)
-  ELSE
-    StrCopy(bcdStr,'0')
+  IF checkToolTypeExists(TOOLTYPE_NODE,node,'SHOW_CACHE_STATS')
+    IF (cacheTests>0)
+      RealF(bcdStr,!(cacheHits!*100.0)/(cacheTests!),2)
+    ELSE
+      StrCopy(bcdStr,'0')
+    ENDIF
+    StringF(string,'Tooltype cache: Used \d/\d Hit rate: \d/\d (\s%)                     ',diskObjectCache.count(),diskObjectCache.maxSize(),cacheHits,cacheTests,bcdStr)
+    statMessage(1,4,string)
   ENDIF
-  StringF(string,'Tooltype cache: Used \d/\d Hit rate: \d/\d (\s%)                     ',diskObjectCache.count(),diskObjectCache.maxSize(),cacheHits,cacheTests,bcdStr)
-  statMessage(1,4,string)
 ENDPROC
 
 PROC pGoodbye()
@@ -16951,7 +17026,7 @@ PROC uploadaFile(uLFType,cmd,params)            -> JOE
     IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_UPLOAD')) AND (StrLen(mailOptions.sysopEmail)>0)
       StringF(str,'\s: Ami-Express logoff notification',cmds.bbsName)
       StringF(string,'This is a notification that \s from \s has logged off\n\n',loggedOnUser.name,loggedOnUser.location)
-      sendMail(str,string,TRUE, msgBuf,lines,mailOptions.sysopEmail)
+      sendMail(str,string,FALSE, NIL,0,mailOptions.sysopEmail)
     ENDIF
   ELSE
     callersLog('\tUpload Failed..')
@@ -19064,6 +19139,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
 
           hoozer.newUser:=0
           hoozer.confRJoin:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.CONFRJOIN')
+          hoozer.msgBaseRJoin:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.MSGBASERJOIN')
           hoozer.secStatus:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.ACCESS')
           hoozer.secLibrary:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.RATIO')
           hoozer.timeLimit:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.TIME_LIMIT')
@@ -21438,6 +21514,7 @@ PROC applyBulkPresetChanges(preset:LONG,allConf:LONG,areaName:PTR TO CHAR,secLev
 
           tempUser.newUser:=0
           tempUser.confRJoin:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.CONFRJOIN')
+          tempUser.msgBaseRJoin:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.MSGBASERJOIN')
           tempUser.secStatus:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.ACCESS')
           tempUser.secLibrary:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.RATIO')
           tempUser.timeLimit:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.TIME_LIMIT')
@@ -21586,7 +21663,7 @@ PROC sysopPaged()
   IF(checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_SYSOP_PAGE')) AND (StrLen(mailOptions.sysopEmail)>0)
     StringF(tempstring,'\s: Ami-Express page notification',cmds.bbsName)
     StringF(tempstring2,'This is a notification that you were paged by \s.',loggedOnUser.name)
-    sendMail(tempstring,tempstring2,FALSE,msgBuf,lines,mailOptions.sysopEmail)
+    sendMail(tempstring,tempstring2,FALSE,NIL,0,mailOptions.sysopEmail)
   ENDIF
 ENDPROC
 
@@ -23037,9 +23114,16 @@ PROC internalCommandW()
     aePuts('\b\n')
 
     IF((checkSecurity(ACS_EDIT_USER_NAME))=FALSE)
+      aePuts('[34m[[0m  0[34m][31m [DISABLED][0m\b\n')
+    ELSE
+      StringF(str,'[34m[[0m  0[34m][35m LOGIN NAME.............. [33m\s[0m\b\n',loggedOnUser.name)
+      aePuts(str)
+    ENDIF
+
+    IF((checkSecurity(ACS_EDIT_EMAIL))=FALSE)
       aePuts('[34m[[0m  1[34m][31m [DISABLED][0m\b\n')
     ELSE
-      StringF(str,'[34m[[0m  1[34m][35m LOGIN NAME.............. [33m\s[0m\b\n',loggedOnUser.name)
+      StringF(str,'[34m[[0m  1[34m][35m EMAIL ADDRESS........... [33m\s[0m\b\n',loggedOnUserMisc.eMail)
       aePuts(str)
     ENDIF
 
@@ -23195,7 +23279,7 @@ PROC internalCommandW()
     option:=Val(str)
 
     SELECT option
-      CASE 1
+      CASE 0
          ->EDIT USER NAME
         IF (checkSecurity(ACS_EDIT_USER_NAME)=FALSE) THEN JUMP cant
         loop1:
@@ -23222,9 +23306,19 @@ PROC internalCommandW()
         UpperStr(str)
         strCpy(loggedOnUserKeys.userName,str,31)
         saveAccount(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc,0,0)
+      CASE 1
+         ->EDIT EMAIL ADDRESS
+        IF (checkSecurity(ACS_EDIT_EMAIL)=FALSE) THEN JUMP cant
+        aePuts('Email Address: ')
+        StrCopy(str,loggedOnUserMisc.eMail,50)
+        stat:=lineInput('',str,100,INPUT_TIMEOUT,str)
+        IF(stat<0) THEN RETURN stat
+        IF(StrLen(str)=0) THEN JUMP cant
+        strCpy(loggedOnUserMisc.eMail,str,50)
       CASE 2
          ->EDIT REAL NAME
         IF (checkSecurity(ACS_EDIT_REAL_NAME)=FALSE) THEN JUMP cant
+        loop2:
         aePuts('Real Name: (Alpha Numeric) ')
         StrCopy(str,loggedOnUserMisc.realName,26)
         stat:=lineInput('',str,25,INPUT_TIMEOUT,str)
@@ -23234,18 +23328,19 @@ PROC internalCommandW()
         stat:=checkForAst(str)
         IF(stat)
           aePuts('No wildcards allowed in a name.\b\n\b\n')
-          JUMP loop1
+          JUMP loop2
         ENDIF
         stat:=findUserFromName(1,NAME_TYPE_REALNAME,str,tempUser,tempUserKeys,tempUserMisc)
         IF(stat<>0)
           aePuts('Already in use!, try another.\b\n\b\n')
-          JUMP loop1
+          JUMP loop2
         ENDIF
         aePuts('Ok!\b\n')
         strCpy(loggedOnUserMisc.realName,str,26)
       CASE 3
          ->EDIT INTERNET NAME
         IF (checkSecurity(ACS_EDIT_INTERNET_NAME)=FALSE) THEN JUMP cant
+        loop3:
         aePuts('Internet Name: (Alpha Numeric No Spaces) ')
         StrCopy(str,loggedOnUserMisc.internetName,10)
         stat:=lineInput('',str,9,INPUT_TIMEOUT,str)
@@ -23255,12 +23350,12 @@ PROC internalCommandW()
         stat:=checkForAst(str)
         IF(stat)
           aePuts('No wildcards allowed in a name.\b\n\b\n')
-          JUMP loop1
+          JUMP loop3
         ENDIF
         stat:=findUserFromName(1,NAME_TYPE_INTERNETNAME,str,tempUser,tempUserKeys,tempUserMisc)
         IF(stat<>0)
           aePuts('Already in use!, try another.\b\n\b\n')
-          JUMP loop1
+          JUMP loop3
         ENDIF
         aePuts('Ok!\b\n')
         strCpy(loggedOnUserMisc.internetName,str,10)
@@ -23766,8 +23861,10 @@ customAsciiDone:
 ENDPROC count
 
 PROC asciiZoom()
-  DEF conf,cnt
+  DEF conf,cnt,msgbase
   DEF mystat,zoomConfNameType
+  DEF tempStr1[255]:STRING
+  DEF tempStr2[255]:STRING
   DEF zoomName[255]:STRING
 
   StringF(zoomName,'\sNode\d/PlayPen/MESSAGES.DAT',cmds.bbsLoc,node)
@@ -23777,15 +23874,19 @@ PROC asciiZoom()
   cnt:=0
   FOR conf:=1 TO cmds.numConf
     IF (checkConfAccess(conf))
-      zoomConfNameType:=NAME_TYPE_USERNAME
-      IF checkToolTypeExists(TOOLTYPE_CONF,conf,'REALNAME')
-        zoomConfNameType:=NAME_TYPE_REALNAME
-      ELSEIF checkToolTypeExists(TOOLTYPE_CONF,conf,'INTERNETNAME')
-        zoomConfNameType:=NAME_TYPE_INTERNETNAME
-      ENDIF
+      FOR msgbase:=1 TO getConfMsgBaseCount(conf)
+        zoomConfNameType:=NAME_TYPE_USERNAME
+        StringF(tempStr1,'REALNAME.\d',msgbase)
+        StringF(tempStr2,'INTERNETNAME.\d',msgbase)
+        IF checkToolTypeExists(TOOLTYPE_CONF,conf,'REALNAME') OR checkToolTypeExists(TOOLTYPE_MSGBASE,conf,tempStr1)
+          zoomConfNameType:=NAME_TYPE_REALNAME
+        ELSEIF checkToolTypeExists(TOOLTYPE_CONF,conf,'INTERNETNAME') OR checkToolTypeExists(TOOLTYPE_MSGBASE,conf,tempStr2)
+          zoomConfNameType:=NAME_TYPE_INTERNETNAME
+        ENDIF
 
-      mystat:=asciiZoomConf(conf,1,zoomConfNameType)
-      IF mystat<>RESULT_ABORT THEN cnt++
+        mystat:=asciiZoomConf(conf,msgbase,zoomConfNameType)
+        IF mystat<>RESULT_ABORT THEN cnt++
+      ENDFOR
     ENDIF
     EXIT mystat=RESULT_FAILURE
     IF (mystat=RESULT_TIMEOUT) OR (mystat=RESULT_NO_CARRIER)
@@ -23987,11 +24088,13 @@ customQwkDone:
 ENDPROC count,recNum
 
 PROC qwkZoom()
-  DEF conf,cnt
-  DEF mystat
+  DEF conf,cnt,msgbase
+  DEF mystat,n
   DEF zoomName[255]:STRING
   DEF fo,count
   DEF tempstr[255]:STRING
+  DEF namestr1[255]:STRING
+  DEF namestr2[255]:STRING
   DEF zoomConfNameType
 
   StringF(zoomName,'\sNode\d/PlayPen/MESSAGES.DAT',cmds.bbsLoc,node)
@@ -24032,18 +24135,22 @@ PROC qwkZoom()
 
   count:=0
   FOR conf:=1 TO cmds.numConf
-    IF (checkConfAccess(conf)) THEN count++
+    IF (checkConfAccess(conf)) THEN count:=count+getConfMsgBaseCount(conf)
   ENDFOR
   StringF(tempstr,'\d\b\n',count-1)
   fileWrite(fo,tempstr)
+  n:=1
   FOR conf:=1 TO cmds.numConf
     IF (checkConfAccess(conf))
-      StringF(tempstr,'\d\b\n',relConf(conf))
-      fileWrite(fo,tempstr)
-      StringF(tempstr,'\s',getConfName(conf))
-      IF StrLen(tempstr)>10 THEN SetStr(tempstr,10)
-      StrAdd(tempstr,'\b\n')
-      fileWrite(fo,tempstr)
+      FOR msgbase:=1 TO getConfMsgBaseCount(conf)
+        StringF(tempstr,'\d\b\n',n)
+        fileWrite(fo,tempstr)
+        getMsgBaseName(conf,msgbase,tempstr)
+        IF StrLen(tempstr)>10 THEN SetStr(tempstr,10)
+        StrAdd(tempstr,'\b\n')
+        fileWrite(fo,tempstr)
+        n++
+      ENDFOR
     ENDIF
   ENDFOR
   fileWrite(fo,'HELLO\b\n')
@@ -24069,14 +24176,18 @@ PROC qwkZoom()
   saveMsgPointers(currentConf,currentMsgBase)
   FOR conf:=1 TO cmds.numConf
     IF (checkConfAccess(conf))
-      zoomConfNameType:=NAME_TYPE_USERNAME
-      IF checkToolTypeExists(TOOLTYPE_CONF,conf,'REALNAME')
-        zoomConfNameType:=NAME_TYPE_REALNAME
-      ELSEIF checkToolTypeExists(TOOLTYPE_CONF,conf,'INTERNETNAME')
-        zoomConfNameType:=NAME_TYPE_INTERNETNAME
-      ENDIF
-      mystat,floatMsgRecNum:=qwkZoomConf(conf,1,floatMsgRecNum,zoomConfNameType)
-      IF mystat<>RESULT_ABORT THEN cnt++
+      FOR msgbase:=1 TO getConfMsgBaseCount(conf)
+        zoomConfNameType:=NAME_TYPE_USERNAME
+        StringF(namestr1,'REALNAME.\d',msgbase)
+        StringF(namestr2,'INTERNETNAME.\d',msgbase)
+        IF checkToolTypeExists(TOOLTYPE_CONF,conf,'REALNAME') OR checkToolTypeExists(TOOLTYPE_MSGBASE,conf,namestr1)
+          zoomConfNameType:=NAME_TYPE_REALNAME
+        ELSEIF checkToolTypeExists(TOOLTYPE_CONF,conf,'INTERNETNAME') OR checkToolTypeExists(TOOLTYPE_MSGBASE,conf,namestr2)
+          zoomConfNameType:=NAME_TYPE_INTERNETNAME
+        ENDIF
+        mystat,floatMsgRecNum:=qwkZoomConf(conf,msgbase,floatMsgRecNum,zoomConfNameType)
+        IF mystat<>RESULT_ABORT THEN cnt++
+      ENDFOR
     ENDIF
     EXIT mystat=RESULT_FAILURE
     IF (mystat=RESULT_TIMEOUT) OR (mystat=RESULT_NO_CARRIER)
@@ -25339,29 +25450,31 @@ PROC confScan()
   ENDIF
 ENDPROC RESULT_SUCCESS
 
-PROC captureRealAndInternetNames()
-  DEF i,stat,valid
+PROC captureRealAndInternetNames(conf,msgbase)
+  DEF i,m,stat,valid
   DEF realNamesUsed=FALSE,internetNamesUsed=FALSE
   DEF tempstr[30]:STRING
+  DEF namestr[255]:STRING
 
-  FOR i:=1 TO cmds.numConf
-    IF checkConfAccess(i)
-      IF checkToolTypeExists(TOOLTYPE_CONF,i,'REALNAME') THEN realNamesUsed:=TRUE
-      IF checkToolTypeExists(TOOLTYPE_CONF,i,'INTERNETNAME') THEN internetNamesUsed:=TRUE
-    ENDIF
-  ENDFOR
+  IF checkToolTypeExists(TOOLTYPE_CONF,conf,'REALNAME') THEN realNamesUsed:=TRUE
+  IF checkToolTypeExists(TOOLTYPE_CONF,conf,'INTERNETNAME') THEN internetNamesUsed:=TRUE
+  StringF(namestr,'REALNAME.\d',msgbase)
+  IF checkToolTypeExists(TOOLTYPE_MSGBASE,conf,namestr) THEN realNamesUsed:=TRUE
+  StringF(namestr,'INTERNETNAME.\d',msgbase)
+  IF checkToolTypeExists(TOOLTYPE_MSGBASE,conf,namestr) THEN internetNamesUsed:=TRUE
 
   IF ((realNamesUsed=TRUE) AND (StrLen(loggedOnUserMisc.realName)=0))
     valid:=FALSE
     aePuts('\b\n')
     IF displayScreen(SCREEN_REALNAMES)=FALSE
-      aePuts('Real Names are required in some conferences\b\non this system\b\n')
+      aePuts('Real Names are required for messages in this conference/msgbase \b\n')
     ENDIF
     aePuts('\b\n')
     REPEAT
       aePuts('Real Name (Alpha Numeric): ')
       stat:=lineInput('','',25,INPUT_TIMEOUT,tempstr)
       IF stat<0 THEN RETURN stat
+      IF StrLen(tempstr)=0 THEN RETURN RESULT_FAILURE
 
       IF (StrLen(tempstr)<>1) AND (strCmpi(tempstr,loggedOnUserMisc.realName,ALL)=FALSE)
         aePuts('\b\nChecking for duplicate name...')
@@ -25384,7 +25497,7 @@ PROC captureRealAndInternetNames()
 
     aePuts('\b\n')
     IF displayScreen(SCREEN_INTERNETNAMES)=FALSE
-      aePuts('Internet Names are required in some conferences\b\non this system\b\n')
+      aePuts('Internet Names are required for messages in this conference/msgbase\b\n')
     ENDIF
     aePuts('\b\n')
 
@@ -25392,6 +25505,8 @@ PROC captureRealAndInternetNames()
       aePuts('Internet Name (Alpha Numeric No Spaces): ')
       stat:=lineInput('','',9,INPUT_TIMEOUT,tempstr)
       IF stat<0 THEN RETURN stat
+
+      IF StrLen(tempstr)=0 THEN RETURN RESULT_FAILURE
 
       IF (StrLen(tempstr)<>1) AND (strCmpi(tempstr,loggedOnUserMisc.internetName,ALL)=FALSE)
         aePuts('\b\nChecking for duplicate name...')
@@ -25667,9 +25782,6 @@ PROC processLoggedOnUser()
     IF (stat) AND (reqState=REQ_STATE_NONE)
       stat:=confScan()
       IF stat=RESULT_SUCCESS
-        stat:=captureRealAndInternetNames()
-      ENDIF
-      IF stat=RESULT_SUCCESS
         subState.subState:=SUBSTATE_DISPLAY_CONF_BULL
       ELSE
         reqState:=REQ_STATE_LOGOFF
@@ -25678,7 +25790,7 @@ PROC processLoggedOnUser()
       reqState:=REQ_STATE_LOGOFF
     ENDIF
   ELSEIF subState.subState=SUBSTATE_DISPLAY_CONF_BULL
-    joinConf(loggedOnUser.confRJoin,1,FALSE,FORCE_MAILSCAN_SKIP)
+    joinConf(loggedOnUser.confRJoin,loggedOnUser.msgBaseRJoin,FALSE,FORCE_MAILSCAN_SKIP)
     loadFlagged()
     IF StrLen(historyFolder)>0 THEN loadHistory()
     blockOLM:=FALSE
@@ -25846,22 +25958,70 @@ ENDPROC 0
 
 
 PROC checkPassword()
-  DEF tries=0,stat,lfh
+  DEF tries=0,stat,lfh,i,r
   DEF tempStr[255]:STRING
   DEF tempStr2[255]:STRING
+  DEF resetCode[25]:STRING
+  DEF resetChars[62]:STRING
   WHILE TRUE
 
     displayUserToCallersLog(0)
 
     REPEAT
+      StrCopy(resetCode,'')
       IF(tries>2)
         aePuts('\b\nExcessive Password Failure\b\n')
-        runSysCommand('PWFAIL','')
-        JUMP logoffErr
+
+        IF checkToolTypeExists(TOOLTYPE_BBSCONFIG,'','MAIL_ON_PWD_FAIL') AND (StrLen(mailOptions.smtpHost)>0) AND (StrLen(loggedOnUserMisc.eMail)>0)
+
+          aePuts('\b\nDo you want to send a reset code to your email address ')
+          stat:=yesNo(1)
+          IF(stat<0) THEN RETURN RESULT_SLEEP_LOGOFF
+          IF stat
+            FOR i:=1 TO 10
+              StrCopy(resetChars,'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789')
+              r:=Rnd(StrLen(resetChars))
+              StrAdd(resetCode,resetChars+r,1)
+            ENDFOR
+            
+            StringF(tempStr,'\s: Ami-Express password failure notification',cmds.bbsName)
+            StrCopy(tempStr2,'You have forgotten your password and requested a reset code. If you did not request the reset code then please ignore this email\b\n\b\n')
+            StrAdd(tempStr2,'The reset code is : ')
+            StrAdd(tempStr2,resetCode)
+            StrAdd(tempStr2,'\b\n\b\nYou can use this code to reset your password and gain access to the system\b\n')
+            sendMail(tempStr,tempStr2,FALSE,NIL,0,loggedOnUserMisc.eMail)
+            
+            aePuts('\b\nA reset code has been sent to yuour email address. Please enter it exactly below\b\n\b\n')
+            stat:=lineInput('Reset code: ','',20,INPUT_TIMEOUT,tempStr)
+            IF(stat<0) THEN RETURN RESULT_SLEEP_LOGOFF
+            
+            IF StrCmp(tempStr,resetCode)=FALSE
+              aePuts('\b\nThe reset code was not correct.\b\n')
+              StrCopy(resetCode,'')
+            ELSE
+              aePuts('\b\nThe reset code was correct, please now update your password.\b\n\b\n')
+              aePuts('Password: ')
+              stat:=lineInput('','',50,INPUT_TIMEOUT,tempStr)
+              IF(stat<0) THEN RETURN RESULT_NO_CARRIER
+              IF(StrLen(tempStr)>0)
+                UpperStr(tempStr)
+                loggedOnUser.pwdHash:=calcPasswordHash(tempStr)
+              ENDIF
+            ENDIF           
+          ENDIF
+        ENDIF
+        IF StrLen(resetCode)=0
+          runSysCommand('PWFAIL','')
+          JUMP logoffErr
+        ENDIF
       ENDIF
-      stat:=getPass2(passwordPrompt,0,loggedOnUser.pwdHash,50,tempStr)
-      IF(stat<0)
-        IF stat=RESULT_NO_CARRIER THEN RETURN RESULT_NO_CARRIER ELSE RETURN RESULT_SLEEP_LOGOFF
+      IF StrLen(resetCode)=0
+        stat:=getPass2(passwordPrompt,0,loggedOnUser.pwdHash,50,tempStr)
+        IF(stat<0)
+          IF stat=RESULT_NO_CARRIER THEN RETURN RESULT_NO_CARRIER ELSE RETURN RESULT_SLEEP_LOGOFF
+        ENDIF
+      ELSE
+        stat:=RESULT_SUCCESS
       ENDIF
       IF(stat<>RESULT_SUCCESS)
         StringF(tempStr2,'\tPassword Failure (\s)',tempStr)
@@ -25869,6 +26029,7 @@ PROC checkPassword()
         aePuts('Invalid PassWord\b\n')
         tries++
       ENDIF
+
     UNTIL stat=RESULT_SUCCESS
 
     IF(checkToolTypeExists(TOOLTYPE_NODE,node,'PHONECHECK'))
@@ -26293,7 +26454,7 @@ logonLoop:
     IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_LOGON')) AND (StrLen(mailOptions.sysopEmail)>0)
       StringF(tempStr,'\s: Ami-Express logon notification',cmds.bbsName)
       StringF(tempStr2,'This is a notification that \s from \s has logged on\n\n',loggedOnUser.name,loggedOnUser.location)
-      sendMail(tempStr,tempStr2,TRUE, msgBuf,lines,mailOptions.sysopEmail)
+      sendMail(tempStr,tempStr2,FALSE, NIL,0,mailOptions.sysopEmail)
     ENDIF
   ENDIF
 
@@ -26413,7 +26574,7 @@ PROC processAwait()
       ReleaseSemaphore(masterNode)
     ENDIF
 
-    IF (checkSer()) OR (sopt.trapDoor) OR (instantLogon) OR (checkTelnetConnection())
+    IF (checkSer()) OR (sopt.trapDoor) OR (instantLogon) OR (checkTelnetConnection()) AND (reqState=REQ_STATE_NONE)
       IF checkIncomingCall()=RESULT_CONNECT
         debugLog(LOG_DEBUG,'REMOTE LOGON')
         ioFlags[IOFLAG_SCR_OUT]:=-1
@@ -26637,12 +26798,23 @@ jLoop3:
     JUMP jLoop2
   ENDIF
 
+jLoop4:
+  aePuts('E-Mail Address: ')
+  stat:=lineInput('','',50,INPUT_TIMEOUT,string)
+  IF(stat<0) THEN RETURN stat
+  strCpy(loggedOnUserMisc.eMail,string,50)
+
+  IF(StrLen(loggedOnUserMisc.eMail)=0)
+    aePuts('\b\n')
+    JUMP jLoop3
+  ENDIF
+
   aePuts('Enter a PassWord: ')
   stat:=lineInput('','',50,INPUT_TIMEOUT,string)
   IF(stat<0) THEN RETURN stat
   IF(StrLen(string)=0)
     aePuts('\b\n')
-    JUMP jLoop3
+    JUMP jLoop4
   ENDIF
   UpperStr(string)
   loggedOnUser.pwdHash:=calcPasswordHash(string)
@@ -26675,6 +26847,8 @@ jLoop3:
   StringF(string,'City, St.: \s\b\n',loggedOnUser.location)
   aePuts(string)
   StringF(string,'Phone Num: \s\b\n',loggedOnUser.phoneNumber)
+  aePuts(string)
+  StringF(string,'E-Mail   : \s\b\n',loggedOnUserMisc.eMail)
   aePuts(string)
   StringF(string,'Num Lines: \d\b\n',loggedOnUser.lineLength)
   aePuts(string)
@@ -26812,6 +26986,7 @@ PROC initNewUser(userData:PTR TO user,userKeys: PTR TO userKeys,userMisc: PTR TO
     userData.secLibrary:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.RATIO')
     userData.timeLimit:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.TIME_LIMIT')
     userData.confRJoin:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.CONFRJOIN')
+    userData.msgBaseRJoin:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.MSGBASERJOIN')
     userData.dailyBytesLimit:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.DAILY_BYTE_LIMIT')
     readToolType(TOOLTYPE_NODE_PRESET,1,'PRESET.AREA',ttdata)
   ELSE
@@ -26820,6 +26995,7 @@ PROC initNewUser(userData:PTR TO user,userKeys: PTR TO userKeys,userMisc: PTR TO
     userData.secLibrary:=readToolTypeInt(TOOLTYPE_PRESET,1,'PRESET.RATIO')
     userData.timeLimit:=readToolTypeInt(TOOLTYPE_PRESET,1,'PRESET.TIME_LIMIT')
     userData.confRJoin:=readToolTypeInt(TOOLTYPE_PRESET,1,'PRESET.CONFRJOIN')
+    userData.msgBaseRJoin:=readToolTypeInt(TOOLTYPE_PRESET,1,'PRESET.MSGBASERJOIN')
     userData.dailyBytesLimit:=readToolTypeInt(TOOLTYPE_PRESET,1,'PRESET.DAILY_BYTE_LIMIT')
     readToolType(TOOLTYPE_PRESET,1,'PRESET.AREA',ttdata)
   ENDIF
@@ -26830,6 +27006,7 @@ PROC initNewUser(userData:PTR TO user,userKeys: PTR TO userKeys,userMisc: PTR TO
   userData.uploads:=0
   userData.downloads:=0
   IF(userData.confRJoin=NIL) THEN userData.confRJoin:=1
+  IF(userData.msgBaseRJoin=NIL) THEN userData.msgBaseRJoin:=1
   userData.timeLastOn:=0
   userData.timeUsed:=0
   userData.timeTotal:=userData.timeLimit
@@ -26967,6 +27144,9 @@ ENDPROC
 PROC openZmodemStat() 
   DEF tags,tags2,vi
   DEF tempstr[255]:STRING
+  DEF pubScreen[255]:STRING
+  DEF pubLock=0
+  DEF pub=FALSE
 
   IF netMailTransfer
     IF zModemInfo.currentOperation=ZMODEM_DOWNLOAD
@@ -26986,22 +27166,57 @@ PROC openZmodemStat()
     ENDIF
   ENDIF
 
-  tags:=NEW [WA_CLOSEGADGET,1,
-        WA_CUSTOMSCREEN,screen,
-        WA_SIZEGADGET,1,
-        WA_DRAGBAR,1,
-        WA_LEFT,170,
-        WA_TOP,45,
-        WA_WIDTH,350,
-        WA_HEIGHT,150,
-        WA_DETAILPEN,0,
-        WA_BLOCKPEN,7,
-        WA_TITLE,
-        zModemInfo.titleBar,
-        WA_IDCMP,IDCMP_CLOSEWINDOW,
-        WA_FLAGS,WFLG_ACTIVATE,NIL]
-  IF (windowZmodem=NIL) AND (screen<>NIL)
+  IF bitPlanes=0
+    pub:=TRUE
+  ENDIF
+
+  IF readToolType(TOOLTYPE_WINDOW,node,'WINDOW.PUBSCREEN',pubScreen)
+    pub:=TRUE
+  ENDIF
+
+  IF pub
+    IF StrLen(pubScreen)>0
+      pubLock:=LockPubScreen(pubScreen)
+    ELSE
+      pubLock:=LockPubScreen(NIL)
+    ENDIF
+    IF pubLock=FALSE THEN pub:=FALSE
+  ENDIF
+
+  IF pub 
+    tags:=NEW [WA_CLOSEGADGET,1,
+          WA_PUBSCREEN,pubLock,
+          WA_SIZEGADGET,1,
+          WA_DRAGBAR,1,
+          WA_LEFT,(window.width-350/2)+window.leftedge,
+          WA_TOP,(window.height-150/2)+window.topedge,
+          WA_WIDTH,350,
+          WA_HEIGHT,150,
+          WA_DETAILPEN,0,
+          WA_BLOCKPEN,7,
+          WA_TITLE,
+          zModemInfo.titleBar,
+          WA_IDCMP,IDCMP_CLOSEWINDOW,
+          WA_FLAGS,WFLG_ACTIVATE,NIL]
+  ELSE
+    tags:=NEW [WA_CLOSEGADGET,1,
+          WA_CUSTOMSCREEN,screen,
+          WA_SIZEGADGET,1,
+          WA_DRAGBAR,1,
+          WA_LEFT,(screen.width-350)/2,
+          WA_TOP,(screen.height-150)/2,
+          WA_WIDTH,350,
+          WA_HEIGHT,150,
+          WA_DETAILPEN,0,
+          WA_BLOCKPEN,7,
+          WA_TITLE,
+          zModemInfo.titleBar,
+          WA_IDCMP,IDCMP_CLOSEWINDOW,
+          WA_FLAGS,WFLG_ACTIVATE,NIL]
+  ENDIF
+  IF (windowZmodem=NIL) AND (scropen)
     windowZmodem:=OpenWindowTagList(NIL,tags)
+    IF pubLock THEN UnlockPubScreen(NIL,pubLock)
     initZmodemStatCon()
     IF (KickVersion(40) AND (bitPlanes>2)) THEN zmodemStatPrint('[37m[ s')
     zmodemStatPrint('[H[J[0 p[H\n FileName:\n FileSize: 0\n ETA Time:\n Cur Time:\n Position: 0\n Complete: 0%\n LastTime:\n      CPS: 0\n\n Z Status: Starting\n Errors: 0\n ErrorPos: 0')
@@ -27033,6 +27248,17 @@ PROC openExpressScreen()
 
   IF scropen THEN RETURN
 
+  top:=sopt.topEdge
+  left:=sopt.leftEdge
+  width:=sopt.width
+  height:=sopt.height
+  bitPlanes:=sopt.bitPlanes
+
+  IF bitPlanes=0 
+    StrCopy(pubScreen,'')
+    pub:=TRUE
+  ENDIF
+
   IF readToolType(TOOLTYPE_WINDOW,node,'WINDOW.PUBSCREEN',pubScreen)
     pub:=TRUE
   ENDIF
@@ -27050,37 +27276,6 @@ PROC openExpressScreen()
 
   dStatBar:=FALSE
   ->IF (checkToolTypeExists(TOOLTYPE_WINDOW,node,'WINDOW.STATBAR')) THEN toggleStatusDisplay()
-
-  /*width:=readToolTypeInt(TOOLTYPE_WINDOW,node,'WINDOW.WIDTH')
-  IF width=<1 THEN width:=640
-
-  height:=readToolTypeInt(TOOLTYPE_WINDOW,node,'WINDOW.HEIGHT')
-  IF height<1 THEN height:=256
-
-  top:=readToolTypeInt(TOOLTYPE_WINDOW,node,'WINDOW.TOPEDGE')
-  IF top<12 THEN top:=12
-
-  left:=readToolTypeInt(TOOLTYPE_WINDOW,node,'WINDOW.LEFTEDGE')
-  IF left<0 THEN left:=0
-
-  colourcount:=readToolTypeInt(TOOLTYPE_WINDOW,node,'WINDOW.NUM_COLORS')
-  SELECT colourcount
-    CASE 2
-      bitPlanes:=1
-    CASE 4
-      bitPlanes:=2
-    CASE 8
-      bitPlanes:=3
-    CASE 16
-      bitPlanes:=4
-    DEFAULT
-      bitPlanes:=3
-  ENDSELECT*/
-  top:=sopt.topEdge
-  left:=sopt.leftEdge
-  width:=sopt.width
-  height:=sopt.height
-  bitPlanes:=sopt.bitPlanes
 
   IF fontHandle=NIL
     readToolType(TOOLTYPE_NODE,node,'EXPFONT',fontName)
@@ -27140,7 +27335,7 @@ PROC openExpressScreen()
          WA_TOP,0,
          WA_LEFT,0,
          WA_WIDTH,18,
-         WA_HEIGHT,12,
+         WA_HEIGHT,screen.wbortop+screen.font.ysize+1,
          ->WA_DETAILPEN,0,
          ->WA_BLOCKPEN,blockpen,
        WA_IDCMP,IDCMP_CLOSEWINDOW,NIL]
@@ -27175,10 +27370,10 @@ PROC openExpressScreen()
       IF (window) AND (fontHandle<>NIL) THEN SetFont(window.rport,fontHandle)
     ELSE
       opentags:=NEW [WA_BORDERLESS,1,WA_CUSTOMSCREEN,screen,
-        WA_TOP,top+12,
+        WA_TOP,top+screen.wbortop+screen.font.ysize+1,
         WA_LEFT,left,
         WA_WIDTH,width,
-        WA_HEIGHT,height-12,
+        WA_HEIGHT,height-(screen.wbortop+screen.font.ysize+1),
         ->WA_DETAILPEN,0,
         ->WA_BLOCKPEN,blockpen,
         WA_FLAGS,WFLG_ACTIVATE,NIL]
@@ -27362,9 +27557,14 @@ PROC main() HANDLE
   DEF proc: PTR TO process
 
   StrCopy(expressVer,'v5.3.0-alpha',ALL)
-  StrCopy(expressDate,'28-Feb-2020',ALL)
+  StrCopy(expressDate,'12-Mar-2020',ALL)
 
   nodeStart:=getSystemTime()
+
+  ->initialise random seed from scanline position and node start time
+  p:=$dff006
+  i:=Eor(Shl(p[0],8)+p[0],nodeStart) AND $FFFF
+  Rnd((Shl(i,16)+i) OR $80000000)
 
   InitSemaphore(bgData)
   
@@ -27420,7 +27620,7 @@ PROC main() HANDLE
    'ACS.CUSTOMCOMMANDS','ACS.JOIN_SUB_CONFERENCE','ACS.ZOOM_MAIL','ACS.MCI_MESSAGE','ACS.EDIT_DIRS','ACS.EDIT_FILES','ACS.BREAK_CHAT','ACS.QUIET_NODE','ACS.SYSOP_COMMANDS','ACS.WHO_IS_ONLINE',
    'ACS.RELOGON','ACS.ULSTATS','ACS.XPR_RECEIVE','ACS.XPR_SEND','ACS.WILDCARDS','ACS.CONFERENCE_ACCOUNTING','ACS.PRI_MSGFILES','ACS.PUB_MSGFILES','ACS.FULL_EDIT','ACS.CONFFLAGS',
    'ACS.OLM','ACS.HIDE_FILES','ACS.SHOW_PAYMENTS','ACS.CREDIT_ACCESS','ACS.VOTE','ACS.MODIFY_VOTE','ACS.FILE_EXPANSION','ACS.EDIT_REAL_NAME','ACS.EDIT_USER_NAME','ACS.CENSORED',
-   'ACS.ACCOUNT_VIEW','ACS.TRANSLATION','ACS.UNKNOWN','ACS.CREATE_CONFERENCE','ACS.LOCAL_DOWNLOADS','ACS.MAX_PAGES','ACS.OVERRIDE_DEFAULTS','ACS.HOLD_ACCESS']
+   'ACS.ACCOUNT_VIEW','ACS.TRANSLATION','ACS.UNKNOWN','ACS.CREATE_CONFERENCE','ACS.LOCAL_DOWNLOADS','ACS.MAX_PAGES','ACS.OVERRIDE_DEFAULTS','ACS.HOLD_ACCESS','ACS.EDIT_EMAIL']
 
 
   StringF(tempstr,'AmiExpress_Node.\d',node)
@@ -28123,3 +28323,4 @@ threadtasksA4:
 regA4:
     LONG NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL
     LONG NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL
+    

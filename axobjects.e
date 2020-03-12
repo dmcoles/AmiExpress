@@ -60,8 +60,7 @@ EXPORT OBJECT user
   creditTotalDate: LONG -> credit total to date date
   creditTracking: CHAR ->  track uploads/downloads flags in credit account
   translatorID: CHAR
-  ansiQuickSettings:CHAR
-  unused2: CHAR
+  msgBaseRJoin:INT
   confYM9: LONG
   beginLogCall : LONG
   protocol: CHAR
@@ -88,9 +87,11 @@ EXPORT OBJECT userMisc
   realName[26]:ARRAY OF CHAR
   downloadBytesBCD[8]:ARRAY OF CHAR
   uploadBytesBCD[8]:ARRAY OF CHAR
-  unknown[28]:ARRAY OF CHAR
-  nodeFlags[32]:ARRAY OF LONG
-  confFlags2[10]:ARRAY OF LONG
+  eMail[50]:ARRAY OF CHAR
+  unused[146]:ARRAY OF CHAR
+  ->unknown[28]:ARRAY OF CHAR
+  ->nodeFlags[32]:ARRAY OF LONG
+  ->confFlags2[10]:ARRAY OF LONG
 ENDOBJECT
 
 EXPORT OBJECT tempAccess

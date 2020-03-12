@@ -1045,6 +1045,8 @@ PROC createCustomMenus(nodes)
     maddItem( NM_SUB,'   Stephan Schiemann ',0,0,0,0)
     maddItem( NM_SUB,'   Eddie Oniel       ',0,0,0,0)
 
+    maddItem( NM_ITEM,  'Quit',0,0,0,0)
+
     maddItem( NM_TITLE, 'Master Control',0,0,0,0)
     maddItem(  NM_ITEM, 'Sysop Login',0, 0, 0, 0)
     maddNodes(nodes)
@@ -3955,6 +3957,9 @@ PROC main() HANDLE
                 CASE GADGETUP
                   handleEditGadget(im,0)
                 CASE MENUPICK
+                  ->quit menu item
+                  IF(menunum(im.code)=0) AND (itemnum(im.code)=6) THEN attemptShutdown()
+                  
                   IF(menunum(im.code)=1)
                     i:=button
                     button:=0
