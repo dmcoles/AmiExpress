@@ -142,6 +142,7 @@ PROC createMessageDat2(confNum,msgDatFilename:PTR TO CHAR, srcFilename:PTR TO CH
   DEF msgDateTime[255]:STRING
   DEF msgDate[10]:STRING
   DEF msgTime[10]:STRING
+  DEF msgId[20]:STRING
   DEF msgbuf, msgsz,bufsz
   DEF status,p,i
   fh:=Open(msgDatFilename,MODE_READWRITE)
@@ -160,6 +161,7 @@ PROC createMessageDat2(confNum,msgDatFilename:PTR TO CHAR, srcFilename:PTR TO CH
       ReadStr(fh2,toName)
       ReadStr(fh2,subject)
       ReadStr(fh2,msgDateTime)
+      ReadStr(fh2,msgId)
     
       p:=Seek(fh2,0,OFFSET_END)
       msgsz:=Seek(fh2,p,OFFSET_BEGINNING)-p

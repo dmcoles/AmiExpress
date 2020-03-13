@@ -117,7 +117,7 @@ PROC getMsgBasePath(confName,msgBasePath:PTR TO CHAR)
   ENDFOR
 ENDPROC
 
-PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,packetPass:PTR TO CHAR,msgPktFilename:PTR TO CHAR, srcFilename:PTR TO CHAR,confId:PTR TO CHAR, tearLine:PTR TO CHAR, originLine:PTR TO CHAR,tzOffset:PTR TO CHAR)
+PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,packetPass:PTR TO CHAR,msgPktFilename:PTR TO CHAR, srcFilename:PTR TO CHAR,confId:PTR TO CHAR,tearLine:PTR TO CHAR, originLine:PTR TO CHAR,tzOffset:PTR TO CHAR)
   DEF fh,fh2
   DEF tempStr[255]:STRING
   DEF fromName[255]:STRING
@@ -131,6 +131,14 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
   DEF status,p,i
   DEF year,month,day,hour,minute,second
   DEF monthCodes[40]:STRING
+  DEF msgId
+  DEF originStr[100]:STRING
+  
+  IF originPoint<>0
+    StringF(originStr,'\d:\d/\d.\d',originZone,originNet,originNode,originPoint)
+  ELSE
+    StringF(originStr,'\d:\d/\d',originZone,originNet,originNode)
+  ENDIF
   
   formatLongDateTime2(getSystemTime(),msgDateTime,",")
   StrCopy(tempStr,msgDateTime,2)
@@ -222,6 +230,8 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
       ReadStr(fh2,subject)
       IF EstrLen(subject)>71 THEN SetStr(toName,71)
       ReadStr(fh2,msgDateTime)
+      ReadStr(fh2,tempStr)
+      msgId:=Val(tempStr)
     
       p:=Seek(fh2,0,OFFSET_END)
       msgsz:=Seek(fh2,p,OFFSET_BEGINNING)-p
@@ -268,14 +278,16 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
       Write(fh,subject,EstrLen(subject))
       Write(fh,null,1)
 
+      StringF(tempStr,'AREA:\s\b',confId)
+      Write(fh,tempStr,EstrLen(tempStr))
 
       StringF(tempStr,'\cCHRS: LATIN-1 2\b',1)
       Write(fh,tempStr,EstrLen(tempStr))
 
-      StringF(tempStr,'\cTZUTC: \s\b',1,IF StrLen(tzOffset)=0 THEN '0000' ELSE tzOffset)
+      StringF(tempStr,'\cMSGID: \s \z\h[8]\b',1,originStr,msgId)
       Write(fh,tempStr,EstrLen(tempStr))
 
-      StringF(tempStr,'AREA:\s\b',confId)
+      StringF(tempStr,'\cTZUTC: \s\b',1,IF StrLen(tzOffset)=0 THEN '0000' ELSE tzOffset)
       Write(fh,tempStr,EstrLen(tempStr))
 
       FOR i:=0 TO msgsz-1
@@ -290,11 +302,14 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
       Write(fh,tempStr,EstrLen(tempStr))
 
       ->write origin line
-      StringF(tempStr,'  * Origin:  \s\b',originLine)
+      StringF(tempStr,'  * Origin:  \s (\s)\b',originLine,originStr)
       Write(fh,tempStr,EstrLen(tempStr))
       
       ->write seen by line
       StringF(tempStr,'SEEN-BY: \d/\d \d/\d\b',originNet,originNode,destNet,destNode)
+      Write(fh,tempStr,EstrLen(tempStr))
+      
+      StringF(tempStr,'\cPATH: \d/\d\b',1,originNet,originNode)
       Write(fh,tempStr,EstrLen(tempStr))
       
       ->nul terminate
@@ -633,11 +648,11 @@ PROC processPacketFile(filename:PTR TO CHAR) HANDLE
               i2:=0
               StrCopy(tempStr,'')
               WHILE (i<n)
-                IF (buf2[i]<>10)
+                IF (buf2[i]<>10) AND (StrLen(tempStr)<240)
                   StrAdd(tempStr,buf2+i,1)
                   i++
                 ELSE
-                  StrAdd(tempStr,'\n')
+                  IF (buf2[i]=10) THEN StrAdd(tempStr,'\n')
                   IF (StrCmp(TrimStr(tempStr),'SEEN-BY: ',9)=FALSE) AND (StrCmp(TrimStr(tempStr),'AREA: ',6)=FALSE) AND (tempStr[0]<>1) THEN Write(fh2,tempStr,StrLen(tempStr))
                   StrCopy(tempStr,'')
                   i++
@@ -885,10 +900,12 @@ PROC main() HANDLE
       IF StrCmp('ORIGINNET',category) AND StrCmp('ZONE',optionName) THEN originZone:=Val(optionValue)
       IF StrCmp('ORIGINNET',category) AND StrCmp('NET',optionName) THEN originNet:=Val(optionValue)
       IF StrCmp('ORIGINNET',category) AND StrCmp('NODE',optionName) THEN originNode:=Val(optionValue)
+      IF StrCmp('ORIGINNET',category) AND StrCmp('POINT',optionName) THEN originPoint:=Val(optionValue)
 
       IF StrCmp('DESTNET',category) AND StrCmp('ZONE',optionName) THEN destZone:=Val(optionValue)
       IF StrCmp('DESTNET',category) AND StrCmp('NET',optionName) THEN destNet:=Val(optionValue)
       IF StrCmp('DESTNET',category) AND StrCmp('NODE',optionName) THEN destNode:=Val(optionValue)
+      IF StrCmp('DESTNET',category) AND StrCmp('POINT',optionName) THEN destPoint:=Val(optionValue)
 
       IF StrCmp('MISC',category) AND StrCmp('PASSWORD',optionName) THEN StrCopy(pktPass,optionValue)
       IF StrCmp('MISC',category) AND StrCmp('COST',optionName) THEN cost:=Val(optionValue)

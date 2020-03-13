@@ -10266,11 +10266,15 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
   DEF tempStr[255]:STRING
   DEF tempStr2[255]:STRING
   DEF filetags
+  DEF msgId
 
   mh.recv:=0
   mh.msgDate:=getSystemTime()
   strCpy(mh.fromName,confMailName,31)
   IF(msgbaselock:=lockMsgBase())
+    getMailStatFile(currentConf,currentMsgBase)
+    mh.msgNumb:=mailStat.highMsgNum
+
     StringF(tempStr,'EXTSEND.\d',currentMsgBase)
     IF checkToolTypeExists(TOOLTYPE_MSGBASE,currentConf,tempStr) AND (comment=0)
       getMsgBaseLocation(currentConf,currentMsgBase,tempStr)
@@ -10288,6 +10292,9 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
         fileWriteLn(f,mh.subject)
         formatLongDateTime2(mh.msgDate,tempStr," ")
         fileWriteLn(f,tempStr)
+        msgId:=(mh.msgNumb AND $FFFFFF) OR (Shl(getConfIndex(currentConf,currentMsgBase),24))
+        StringF(tempStr,'\d',msgId)
+        fileWriteLn(f,tempStr)
         
         FOR i:=0 TO lines-1
           StringF(tempStr2,'\s\n',msgBuf.item(i))
@@ -10296,8 +10303,6 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
         Close(f)
       ENDIF
     ENDIF
-    getMailStatFile(currentConf,currentMsgBase)
-    mh.msgNumb:=mailStat.highMsgNum
     stat:=saveMessageHeader(gfh,mh)
     IF(stat<>RESULT_FAILURE)
       StringF(string,'Message Number \d...',mh.msgNumb)
