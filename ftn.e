@@ -131,7 +131,7 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
   DEF status,p,i
   DEF year,month,day,hour,minute,second
   DEF monthCodes[40]:STRING
-  DEF msgId
+  DEF msgId[10]:STRING
   DEF originStr[100]:STRING
   
   IF originPoint<>0
@@ -230,8 +230,7 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
       ReadStr(fh2,subject)
       IF EstrLen(subject)>71 THEN SetStr(toName,71)
       ReadStr(fh2,msgDateTime)
-      ReadStr(fh2,tempStr)
-      msgId:=Val(tempStr)
+      ReadStr(fh2,msgId)
     
       p:=Seek(fh2,0,OFFSET_END)
       msgsz:=Seek(fh2,p,OFFSET_BEGINNING)-p
@@ -284,8 +283,10 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
       StringF(tempStr,'\cCHRS: LATIN-1 2\b',1)
       Write(fh,tempStr,EstrLen(tempStr))
 
-      StringF(tempStr,'\cMSGID: \s \z\h[8]\b',1,originStr,msgId)
-      Write(fh,tempStr,EstrLen(tempStr))
+      IF StrLen(msgId)>0
+        StringF(tempStr,'\cMSGID: \s \z\h[8]\b',1,originStr,Val(msgId))
+        Write(fh,tempStr,EstrLen(tempStr))
+      ENDIF
 
       StringF(tempStr,'\cTZUTC: \s\b',1,IF StrLen(tzOffset)=0 THEN '0000' ELSE tzOffset)
       Write(fh,tempStr,EstrLen(tempStr))
@@ -302,7 +303,7 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
       Write(fh,tempStr,EstrLen(tempStr))
 
       ->write origin line
-      StringF(tempStr,'  * Origin:  \s (\s)\b',originLine,originStr)
+      StringF(tempStr,'  * Origin: \s (\s)\b',originLine,originStr)
       Write(fh,tempStr,EstrLen(tempStr))
       
       ->write seen by line
@@ -483,12 +484,14 @@ PROC processPacketFile(filename:PTR TO CHAR) HANDLE
   DEF mf=0,fh=0,fh2=0
   DEF n,c,i,i2
   DEF tempStr[255]:STRING
+  DEF lineBuff:PTR TO CHAR
   DEF newMsgNum
   DEF fname[255]:STRING
   DEF msgBase[255]:STRING
   DEF ftnConfId[255]:STRING
   DEF lastConfId[255]:STRING
   DEF needToSave
+  DEF cnt,maxCnt
 
   needToSave:=FALSE
   StrCopy(lastConfId,'######')
@@ -644,21 +647,37 @@ PROC processPacketFile(filename:PTR TO CHAR) HANDLE
                 IF buf2[i]=13 THEN buf2[i]:=10
               ENDFOR
               
-              i:=0
-              i2:=0
               StrCopy(tempStr,'')
+
+              cnt:=0
+              maxCnt:=0
+              FOR i:=0 TO n-1
+                IF buf2[i]=10
+                  IF cnt>maxCnt THEN maxCnt:=cnt
+                  cnt:=0
+                ELSE 
+                  cnt++
+                ENDIF
+              ENDFOR
+              IF cnt>maxCnt THEN maxCnt:=cnt
+              
+              lineBuff:=String(maxCnt+1)
+              i:=0
               WHILE (i<n)
-                IF (buf2[i]<>10) AND (StrLen(tempStr)<240)
-                  StrAdd(tempStr,buf2+i,1)
+                IF (buf2[i]<>10)
+                  StrAdd(lineBuff,buf2+i,1)
                   i++
                 ELSE
-                  IF (buf2[i]=10) THEN StrAdd(tempStr,'\n')
-                  IF (StrCmp(TrimStr(tempStr),'SEEN-BY: ',9)=FALSE) AND (StrCmp(TrimStr(tempStr),'AREA: ',6)=FALSE) AND (tempStr[0]<>1) THEN Write(fh2,tempStr,StrLen(tempStr))
-                  StrCopy(tempStr,'')
+                  IF (buf2[i]=10) THEN StrAdd(lineBuff,'\n')
+                  IF (StrCmp(TrimStr(lineBuff),'SEEN-BY: ',9)=FALSE) AND (StrCmp(TrimStr(lineBuff),'AREA: ',6)=FALSE) AND (lineBuff[0]<>1) THEN Write(fh2,lineBuff,StrLen(lineBuff))
+                  StrCopy(lineBuff,'')
                   i++
                 ENDIF
               ENDWHILE
-              IF (StrLen(tempStr)>0) AND (StrCmp(TrimStr(tempStr),'SEEN-BY: ',9)=FALSE) AND (StrCmp(TrimStr(tempStr),'AREA: ',6)=FALSE) AND (tempStr[0]<>1) THEN Write(fh2,tempStr,StrLen(tempStr))
+              IF StrLen(lineBuff)>0
+                IF (StrCmp(TrimStr(lineBuff),'SEEN-BY: ',9)=FALSE) AND (StrCmp(TrimStr(lineBuff),'AREA: ',6)=FALSE) AND (lineBuff[0]<>1) THEN Write(fh2,lineBuff,StrLen(lineBuff))
+              ENDIF
+              Dispose(lineBuff)
               Close(fh2)
               fh2:=0
             ELSE

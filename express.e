@@ -10266,7 +10266,7 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
   DEF tempStr[255]:STRING
   DEF tempStr2[255]:STRING
   DEF filetags
-  DEF msgId
+  DEF msgId[10]:STRING
 
   mh.recv:=0
   mh.msgDate:=getSystemTime()
@@ -10292,9 +10292,9 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
         fileWriteLn(f,mh.subject)
         formatLongDateTime2(mh.msgDate,tempStr," ")
         fileWriteLn(f,tempStr)
-        msgId:=(mh.msgNumb AND $FFFFFF) OR (Shl(getConfIndex(currentConf,currentMsgBase),24))
-        StringF(tempStr,'\d',msgId)
-        fileWriteLn(f,tempStr)
+
+        StrCopy(msgId,'')     ->msg id currently not populated 
+        fileWriteLn(f,msgId)
         
         FOR i:=0 TO lines-1
           StringF(tempStr2,'\s\n',msgBuf.item(i))
