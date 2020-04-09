@@ -91,7 +91,8 @@ MODULE 'intuition/screens',
          '*ftpd',
          '*httpd',
          '*errors',
-         '*mailssl'
+         '*mailssl',
+         '*zmodem'
 
 DEF masterMsg:acpMessage
 DEF resmp: PTR TO mp
@@ -412,6 +413,12 @@ DEF cntr=0
 
 DEF fds=NIL:PTR TO LONG
 
+DEF zmodemBuffer=0
+DEF zModemBufferSize=65536
+DEF bufferedBytes=0
+DEF bufferReadOffset=0
+
+
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
       ERR_ASL  IF AllocAslRequest()=NIL
@@ -437,9 +444,6 @@ PROC configFileExists(fname:PTR TO CHAR)
     RETURN TRUE
   ENDIF
 ENDPROC FALSE
-
-PROC checkIconifyMsg()
-ENDPROC
 
 PROC getUserAccessFilename(outFilename: PTR TO CHAR)
   DEF tempStr[255]:STRING
@@ -562,14 +566,10 @@ PROC updateTimeUsed()
     timeLimit:=loggedOnUser.timeTotal-loggedOnUser.timeUsed
 
     logonTime:=Mul(currDay,86400)+21600
-    StringF(tempstr,'timeused debug: new day reset,  currday \d, logonday \d, new logontime \d',currDay,logonDay,logonTime)
-    debugLog(LOG_DEBUG,tempstr)
     lastTimeUpdate:=logonTime
   ENDIF
   IF (currTime-lastTimeUpdate)>0
     IF(chatFlag=0)
-      StringF(tempstr,'timeused debug: timeused \d, increment \d, currtime: \d, lasttime: \d',loggedOnUser.timeUsed,currTime-lastTimeUpdate,currTime,lastTimeUpdate)
-      debugLog(LOG_DEBUG,tempstr)
       loggedOnUser.timeUsed:=loggedOnUser.timeUsed+(currTime-lastTimeUpdate)
       timeLimit:=timeLimit-(currTime-lastTimeUpdate)
     ELSE
@@ -1834,7 +1834,6 @@ PROC checkCarrier()
 ENDPROC
 
 PROC checkInput()
-  checkIconifyMsg()
   checkDoorMsg(0)
 ENDPROC ((checkCon() OR checkSer() OR checkTelnetData()))
 
@@ -1932,7 +1931,6 @@ PROC getConfDbFileName(confNum,msgBaseNum,outConfDbFile)
   ENDIF
   StrAdd(outConfDbFile,confDBName)
 ENDPROC
-
 
 PROC getConfName(confNum,outConfNameString=NIL)
   IF outConfNameString<>NIL THEN StrCopy(outConfNameString,confNames.item(confNum-1))
@@ -2277,26 +2275,7 @@ PROC calcPasswordHash(pwd: PTR TO CHAR)
   MOVE.L D0,hash
   END hashdata
   RETURN hash
-/*
-d1=51
-d1=144
-d1=1C6C6162
-d1=54
-d1=36
-d1=d8
-d1=cfba9599
 
-
-d6d6a3e8
-a2677172
-e8b8d433
-ad678846
-8a65c9ec
-
-end1
-8ac8467e
-b2373032
-*/
 sub_486F0:
   MOVEM.L D1-D7/A1-A6,-(A7)
   MOVEA.L A0,A3
@@ -2347,9 +2326,7 @@ loc_48726:
   NEG.L D0
   MOVEM.L (A7)+,D1-D7/A1-A6
   RTS
--> End of function sub_486F0
 ENDPROC
--> ---------------------------------------------------------------------------
 
 PROC loadTranslator(translator:PTR TO translator,fileName)
   DEF fh
@@ -2449,7 +2426,6 @@ PROC loadTranslator(translator:PTR TO translator,fileName)
      translator.translationText:=NIL
   ENDIF
   Dispose(workMem)
-
 ENDPROC
 
 PROC loadTranslators()
@@ -3946,7 +3922,6 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
             tTCPS:=0
             
             msg.data:=doAxNetSend(msg.filler1)
-            WriteF('send result=\d\n',msg.data)
             IF logonType=LOGON_TYPE_REMOTE
               IF checkCarrier()=FALSE
                 msg.data:=RESULT_ABORT
@@ -7122,8 +7097,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
   IF signals=0
     IF timeout<>0
       openTimer()
-      timeout:=Mul(timeout,1000000)
-      setTimer(timeout)
+      setTimer(Mul(timeout,1000000))
       IF timerport<>NIL THEN timersig:=Shl(1, timerport.sigbit)
     ENDIF
   
@@ -8857,12 +8831,12 @@ ENDPROC
 
 PROC debugLog(logType,logline:PTR TO CHAR)
   DEF buff[255]:STRING
-  DEF currTime
+  DEF currTime,currTick
 
   IF consoleDebugLevel>=logType
-    currTime:=getSystemTime()
+    currTime,currTick:=getSystemTime()
 
-    WriteF('\d \s\n',currTime,logline)
+    WriteF('\d.\z\l\d[2] \s\n',currTime,currTick,logline)
   ENDIF
 
   IF debugLogLevel>=logType
@@ -10258,22 +10232,70 @@ loopHere:
   UNTIL stat<0
 ENDPROC stat
 
+PROC getMsgId()
+  DEF lock, loop, error
+  DEF fh,v,r,c
+  DEF fname[255]:STRING
+  DEF tempstr[255]:STRING
+  DEF tempstr2[255]:STRING
+
+  loop:=0
+  StringF(fname,'\smsgidnr.lck',cmds.bbsLoc)
+  REPEAT
+    lock:=Lock(fname,ACCESS_WRITE)
+    IF(lock=0)
+      error:=IoErr()
+      IF(error=205) THEN createFile(fname)
+      Delay(120)
+      aePuts('.')
+    ENDIF
+  UNTIL((lock<>0) OR (loop++>=30))
+
+  IF(lock=0)
+    StringF(tempstr,'\tError \d trying to Lock message serial file',IoErr())
+    callersLog(tempstr)
+    RETURN FALSE,0
+  ENDIF
+  
+  StringF(fname,'\smsgidnr.nxt',cmds.bbsLoc)
+
+  fh:=Open(fname,MODE_OLDFILE)
+  IF fh>0
+    ReadStr(fh,tempstr)
+    Close(fh)
+  ENDIF
+  StringF(tempstr2,'$\s',tempstr)
+  v,r:=Val(tempstr2)
+  c:=getSystemTime()
+  IF r<>9 THEN v:=c
+  r:=v  
+  v++
+  IF c>v THEN v:=c
+
+  fh:=Open(fname,MODE_NEWFILE)
+  IF fh>0
+    StringF(tempstr,'\z\h[8]\n',v)
+    Write(fh,tempstr,StrLen(tempstr))
+    Close(fh)
+  ENDIF
+  
+  UnLock(lock)
+ENDPROC TRUE,r
+
 PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
   DEF msgbaselock
-  DEF f,i,stat
+  DEF f,i,stat,id
   DEF rzmsglock,lock
   DEF string[255]:STRING
   DEF tempStr[255]:STRING
   DEF tempStr2[255]:STRING
   DEF filetags
-  DEF msgId[10]:STRING
 
   mh.recv:=0
   mh.msgDate:=getSystemTime()
   strCpy(mh.fromName,confMailName,31)
+   
   IF(msgbaselock:=lockMsgBase())
-    getMailStatFile(currentConf,currentMsgBase)
-    mh.msgNumb:=mailStat.highMsgNum
 
     StringF(tempStr,'EXTSEND.\d',currentMsgBase)
     IF checkToolTypeExists(TOOLTYPE_MSGBASE,currentConf,tempStr) AND (comment=0)
@@ -10292,9 +10314,13 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
         fileWriteLn(f,mh.subject)
         formatLongDateTime2(mh.msgDate,tempStr," ")
         fileWriteLn(f,tempStr)
-
-        StrCopy(msgId,'')     ->msg id currently not populated 
-        fileWriteLn(f,msgId)
+        stat,id:=getMsgId()
+        IF stat
+          StringF(tempStr,'\d',id)
+        ELSE
+          StrCopy(tempStr,'')
+        ENDIF
+        fileWriteLn(f,tempStr)
         
         FOR i:=0 TO lines-1
           StringF(tempStr2,'\s\n',msgBuf.item(i))
@@ -10303,6 +10329,9 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
         Close(f)
       ENDIF
     ENDIF
+
+    getMailStatFile(currentConf,currentMsgBase)
+    mh.msgNumb:=mailStat.highMsgNum
     stat:=saveMessageHeader(gfh,mh)
     IF(stat<>RESULT_FAILURE)
       StringF(string,'Message Number \d...',mh.msgNumb)
@@ -13420,8 +13449,6 @@ ENDPROC D0
 PROC xprfclose()
   DEF fp,res,task: PTR TO tc
   DEF tempstr[255]:STRING
-  DEF bgport
-  DEF msg:PTR TO jhMessage
   ->        (*xpr_fclose)(long filepointer)
   ->                      A0
   MOVE.L A0,fp
@@ -13437,21 +13464,7 @@ PROC xprfclose()
       Close(fp)
     ENDIF
     IF loggedOnUserKeys<>NIL
-      IF (zModemInfo.currentOperation=ZMODEM_UPLOAD) AND (zModemInfo.filesize>0) AND (zModemInfo.transPos=zModemInfo.filesize) AND bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
-        StringF(tempstr,'bgCheckPort\d',node)
-        IF (bgport:=FindPort(tempstr))
-          msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
-          IF msg
-            msg.command:=BG_CHECKFILE
-            strCpy(msg.string,FilePart(zModemInfo.fileName),200)
-            msg.msg.ln.type:=NT_FREEMSG
-            msg.msg.length:=SIZEOF jhMessage
-
-            ->signal background checking to check the file
-            PutMsg(bgport,msg)
-          ENDIF
-        ENDIF
-      ENDIF
+      doBgCheck()
     ENDIF
   ENDIF
 
@@ -13581,6 +13594,7 @@ PROC xprsread()
 
     timersig:=0
     IF timeout<>0
+      openTimer()
       IF timerport<>NIL THEN timersig:=Shl(1, timerport.sigbit)
       setTimer(timeout)
     ENDIF
@@ -13600,7 +13614,8 @@ PROC xprsread()
           IF avail>waiting THEN avail:=waiting
           IF avail>0
             status:=Recv(telnetSocket,buf2,avail,0)
-            IF status>0 
+            IF status>0
+            
               StringF(tempstr,'xprsread recv complete: \d bytes',status)
               debugLog(LOG_DEBUG,tempstr)
               c:=0
@@ -13654,6 +13669,7 @@ PROC xprsread()
       ELSE
         stopTime()
       ENDIF
+      closeTimer()
     ENDIF
     IF(checkCarrier())=FALSE
       i:=-1
@@ -13728,6 +13744,7 @@ PROC xprsread()
     serialsig:=0
     timersig:=0
 
+    openTimer()
     IF serialReadMP<>NIL THEN serialsig:=Shl(1, serialReadMP.sigbit)
     IF timerport<>NIL THEN timersig:=Shl(1, timerport.sigbit)
 
@@ -13757,6 +13774,7 @@ PROC xprsread()
 
 
         stopTime()
+        closeTimer()
 
 
         /* Did the request terminate gracefully? */
@@ -13784,6 +13802,7 @@ PROC xprsread()
         /* Remove the timer request. */
 
         waitTime()
+        closeTimer()
 
         /* Did the driver receive any
         * data?
@@ -13879,7 +13898,7 @@ PROC xprfseekAsm()
 ENDPROC D0
 
 PROC xprfseek()
-  DEF fp,offset,origin,task:PTR TO tc,res
+  DEF fp,offset,origin,res
   DEF tempstr[255]:STRING
   ->       long status = (*xpr_fseek)(long fileptr, long offset, long origin)
   ->              D0                     A0            D0         D1
@@ -13937,7 +13956,7 @@ ENDPROC D0
 
 PROC xprupdate()
   DEF xpru: PTR TO xpr_update
-  DEF task:PTR TO tc,updateTime
+  DEF updateTime
   DEF res,update=FALSE
   DEF outmsg[255]:STRING
 
@@ -14051,7 +14070,7 @@ PROC xprsetserialAsm()
 ENDPROC D0
 
 PROC xprsetserial()
-  DEF task:PTR TO tc,res,newstatus,oldstatus
+  DEF res,newstatus,oldstatus
   DEF tempstr[255]:STRING
 
   MOVE.L D0,newstatus
@@ -14072,7 +14091,7 @@ PROC xprfinfoAsm()
 ENDPROC D0
 
 PROC xprfinfo()
-  DEF task:PTR TO tc,i,res,fn,fitype,fp
+  DEF i,res,fn,fitype,fp
   DEF tempstr[255]:STRING
   ->long info = (*xpr_finfo)(char *filename, long typeofinfo)
   ->        D0                       A0              D0
@@ -14123,11 +14142,14 @@ PROC xprunlinkAsm()
 ENDPROC D0
 
 PROC xprunlink()
-  DEF task:PTR TO tc,res,fn,tempstr[255]:STRING
-
+  DEF fn
   MOVE.L A0,fn
-
   loadA4()
+ENDPROC xprunlink2(fn)
+
+PROC xprunlink2(fn)
+  DEF tempstr[255]:STRING
+  DEF res
 
   StringF(tempstr,'xprunlink \s',fn)
   debugLog(LOG_DEBUG,tempstr)
@@ -14155,14 +14177,16 @@ PROC xprffirstAsm()
 ENDPROC D0
 
 PROC xprffirst()
-  DEF task:PTR TO tc,res,xprObj:PTR TO xprData
-  DEF fileItem:PTR TO flagFileItem
+  DEF xprObj:PTR TO xprData
   DEF buffer:PTR TO CHAR
 
   MOVE.L A0,buffer
   MOVE.L A1,xprObj
-
   loadA4()
+ENDPROC xprffirst2(buffer,xprObj)
+
+PROC xprffirst2(buffer,xprObj:PTR TO xprData)
+  DEF fileItem:PTR TO flagFileItem
 
   fileItem:=xprObj.fileList.item(xprObj.currentFile)
   strCpy(buffer,fileItem.fileName,255)
@@ -14170,7 +14194,6 @@ PROC xprffirst()
   zModemInfo.freeDFlag:=checkFree(fileItem.fileName)
   zModemInfo.resumePos:=0
   zModemInfo.current:=1
-
 ENDPROC TRUE
 
 PROC xprfnextAsm()
@@ -14468,7 +14491,7 @@ PROC doAxNetReceive(filename:PTR TO CHAR)
   DEF res
   onlineNFiles:=0
   netMailTransfer:=TRUE 
-  res:=xprReceive(filename,TRUE)
+  res:=zModemUpload(filename,TRUE)
   netMailTransfer:=FALSE
 ENDPROC res
 
@@ -14767,6 +14790,8 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   DEF fileItem:PTR TO flagFileItem
   DEF x: PTR TO xprData
   DEF ftpPort,ftpDataPort,httpPort
+  DEF zm: PTR TO zmodem_t
+  DEF ext=TRUE
   
   DEF protocol[255]:STRING
   
@@ -14795,6 +14820,13 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   IF (strCmpi(protocol,'HYDRA',ALL))
     aePuts('\b\nHYDRA protocol is not currently supported')
     RETURN 0
+  ENDIF
+
+  IF(strCmpi(protocol,'INTERNAL',ALL)) THEN ext:=FALSE
+
+  IF (strCmpi(protocol,'XPRZM',ALL))
+    StrCopy(protocol,'INTERNAL')
+    ext:=TRUE
   ENDIF
 
   zModemInfo.currentOperation:=ZMODEM_DOWNLOAD
@@ -14835,18 +14867,16 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   aePuts(tempstr)
   ->aePuts('Control-X to Cancel\b\n')
 
-  IF(strCmpi(protocol,'INTERNAL',ALL))
-    StrCopy(tempstr,'xprzmodem.library')
-  ELSEIF(strCmpi(protocol,'HYDRA',ALL))
-    aePuts('\b\nHYDRA transfers are not currently supported\b\n')
-    RETURN 0
-  ELSE
-    StringF(tempstr,'\s.library',protocol)
-  ENDIF
-
-  IF (xprotocolbase:=OpenLibrary(tempstr,0))=NIL
-    aePuts('\b\nUnable to open the xpr library\b\n')
-    RETURN 0
+  IF ext
+    IF(strCmpi(protocol,'INTERNAL',ALL))
+      StrCopy(tempstr,'xprzmodem.library')
+    ELSE
+      StringF(tempstr,'\s.library',protocol)
+    ENDIF
+    IF (xprotocolbase:=OpenLibrary(tempstr,0))=NIL
+      aePuts('\b\nUnable to open the xpr library\b\n')
+      RETURN 0
+    ENDIF
   ENDIF
 
   zModemInfo.current:=0;zModemInfo.total:=fileList.count();zModemInfo.transPos:=0;zModemInfo.filesize:=0;zModemInfo.errorCount:=0;zModemInfo.errorPos:=0;zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
@@ -14861,58 +14891,77 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   oldshared:=serShared
   serShared:=FALSE
 
-  xprio:=NEW xprio
+  IF ext
+    xprio:=NEW xprio
 
-  xprio.xpr_extension:=4
-  xprio.xpr_fopen:={xprfopenAsm}
-  xprio.xpr_fclose:={xprfcloseAsm}
-  xprio.xpr_fread:={xprfreadAsm}
-  xprio.xpr_fwrite:={xprfwriteAsm}
-  xprio.xpr_sread:={xprsreadAsm}
-  xprio.xpr_swrite:={xprswriteAsm}
-  xprio.xpr_sflush:={xprsflushAsm}
-  xprio.xpr_update:={xprupdateAsm}
-  xprio.xpr_ffirst:={xprffirstAsm}
-  xprio.xpr_fnext:={xprfnextAsm}
-  xprio.xpr_chkabort:={xprchkabortAsm}
-  xprio.xpr_chkmisc:=0
-  xprio.xpr_gets:=0
-  xprio.xpr_setserial:={xprsetserialAsm}
-  xprio.xpr_finfo:={xprfinfoAsm}
-  xprio.xpr_fseek:={xprfseekAsm}
-  xprio.xpr_data:=0
-  xprio.xpr_options:=0
-  xprio.xpr_unlink:={xprunlink}
-  xprio.xpr_squery:=0
-  xprio.xpr_getptr:=0
+    xprio.xpr_extension:=4
+    xprio.xpr_fopen:={xprfopenAsm}
+    xprio.xpr_fclose:={xprfcloseAsm}
+    xprio.xpr_fread:={xprfreadAsm}
+    xprio.xpr_fwrite:={xprfwriteAsm}
+    xprio.xpr_sread:={xprsreadAsm}
+    xprio.xpr_swrite:={xprswriteAsm}
+    xprio.xpr_sflush:={xprsflushAsm}
+    xprio.xpr_update:={xprupdateAsm}
+    xprio.xpr_ffirst:={xprffirstAsm}
+    xprio.xpr_fnext:={xprfnextAsm}
+    xprio.xpr_chkabort:={xprchkabortAsm}
+    xprio.xpr_chkmisc:=0
+    xprio.xpr_gets:=0
+    xprio.xpr_setserial:={xprsetserialAsm}
+    xprio.xpr_finfo:={xprfinfoAsm}
+    xprio.xpr_fseek:={xprfseekAsm}
+    xprio.xpr_data:=0
+    xprio.xpr_options:=0
+    xprio.xpr_unlink:={xprunlink}
+    xprio.xpr_squery:=0
+    xprio.xpr_getptr:=0
 
-  StrCopy(tempstr,'')
-  IF(strCmpi(protocol,'INTERNAL',ALL))
-    StrCopy(tempstr,'TN,AY,OR,E9,KN,SN,RN,DN,B64')
+    StrCopy(tempstr,'')
+    IF(strCmpi(protocol,'INTERNAL',ALL))
+      StrCopy(tempstr,'TN,AY,OR,E9,KN,SN,RN,DN,B64')
+    ELSE
+      readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'OPTIONS',tempstr)
+    ENDIF
   ELSE
-    readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'OPTIONS',tempstr)
+    zm:=NEW zm
+    zm.log_level:=ZM_LOG_DEBUG
+    
+    zmodem_init(zm, 0,
+          {zmlputs},
+          {zmprogress},
+          {zmrecvbyte},
+          {zmisconnected},
+          {zmiscancelled},
+          {zmdatawaiting},
+          {zmuploadcompleted},
+          {zmuploadfailed},
+          {zmdupecheck},
+          {zmflush},
+          NIL,
+          {zmfopen},
+          {zmfclose},
+          {zmfseek},
+          {zmfread},
+          {zmfwrite},
+          {zmfirstfile},
+          {zmnextfile},
+          8192,0)
   ENDIF
   
   asynciobase:=OpenLibrary('asyncio.library',0)
 
-  StringF(debugstr,'xpr setup options = \s',tempstr)
-  debugLog(LOG_DEBUG,debugstr)
-  xprio.xpr_filename:=tempstr
-  IF XprotocolSetup(xprio)=0
-    CloseLibrary(xprotocolbase)
-    END xprio
-    zModemInfo.currentOperation:=ZMODEM_NONE
-    closezModemStats()
-    RETURN 0
-  ENDIF
-
-  IF openTimer()
-    debugLog(LOG_ERROR,'Can''t re-open Timer Device!')
-    CloseLibrary(xprotocolbase)
-    zModemInfo.currentOperation:=ZMODEM_NONE
-    closezModemStats()
-    END xprio
-    RETURN 0
+  IF ext
+    StringF(debugstr,'xpr setup options = \s',tempstr)
+    debugLog(LOG_DEBUG,debugstr)
+    xprio.xpr_filename:=tempstr
+    IF XprotocolSetup(xprio)=0
+      CloseLibrary(xprotocolbase)
+      END xprio
+      zModemInfo.currentOperation:=ZMODEM_NONE
+      closezModemStats()
+      RETURN 0
+    ENDIF
   ENDIF
 
   ->cancel current queued serial read request
@@ -14930,8 +14979,15 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   x.currentFile:=0
   x.fileList:=fileList
   x.updateDownloadStats:=updateDownloadStats
-  xprio.xpr_filename:=x
-  result:=XprotocolSend(xprio)
+
+  IF ext
+    xprio.xpr_filename:=x
+    result:=XprotocolSend(xprio)
+  ELSE
+    zm.user_data:=x
+    zmodem_send_files(zm, NIL,NIL)
+  ENDIF
+
   time2:=getSystemTime()
 
   IF zModemInfo.transPos<>zModemInfo.filesize THEN result:=FALSE
@@ -14942,21 +14998,31 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
       udLog('\tIncomplete 100% Transfer, accumulating Maximum Bytes Downloaded')
       result:=TRUE
       ->call fnext to update stats
-      xprfnext2(NIL,x)
+      IF ext
+        xprfnext2(NIL,x)
+      ELSE
+        zmnextfile(zm,NIL)
+      ENDIF
     ENDIF
   ENDIF
   END x
 
   tTTM:=time2-time1;
-  XprotocolCleanup(xprio)
+  IF ext
+    XprotocolCleanup(xprio)
+  ELSE
+    zmodem_cleanup(zm)
+  ENDIF
   transfering:=FALSE
   checkOffhookFlag()
 
-  END xprio
+  IF ext
+    END xprio
+  ELSE
+    END zm
+  ENDIF
 
-  closeTimer()
-
-  CloseLibrary(xprotocolbase)
+  IF ext THEN CloseLibrary(xprotocolbase)
 
   IF asynciobase<>NIL THEN CloseLibrary(asynciobase)
   asynciobase:=NIL
@@ -15193,7 +15259,374 @@ PROC moveFile(filename,filesize)
   DeleteFile(tempstr)
 ENDPROC 0
 
-PROC xprReceive(file,forceZmodem=FALSE) HANDLE
+PROC zmlputs(zm: PTR TO zmodem_t,level, str:PTR TO CHAR) 
+  SELECT level
+    CASE ZM_LOG_DEBUG
+      debugLog(LOG_DEBUG,str)
+    CASE ZM_LOG_INFO
+      debugLog(LOG_DEBUG,str)
+    CASE ZM_LOG_NOTICE
+      debugLog(LOG_DEBUG,str)
+    CASE ZM_LOG_WARNING
+      debugLog(LOG_WARN,str)
+    CASE ZM_LOG_ERR
+      debugLog(LOG_ERROR,str)
+  ENDSELECT
+ENDPROC
+
+PROC zmprogress(zm: PTR TO zmodem_t, pos)
+  DEF t,n
+  DEF tempStr[255]:STRING
+  DEF updateTime
+
+  t:=getZmSystemTime()-zm.transfer_start_time
+  IF t>0 THEN n:=Div(pos,t) ELSE n:=pos
+  StringF(tempStr,'\d secs',t)
+  strCpy(zModemInfo.elapsedTime,tempStr,40)
+
+  t:=Div(zm.current_file_size,n)
+  StringF(tempStr,'\d secs',t)
+  strCpy(zModemInfo.apxTime,tempStr,40)
+ 
+  zModemInfo.filesize:=zm.current_file_size
+  zModemInfo.errorCount:=zm.errors
+
+  zModemInfo.resumePos:=zm.transfer_start_pos
+  strCpy(zModemInfo.fileName,zm.current_file_name,255)
+
+  zModemInfo.cps:=n
+  zModemInfo.eff:=Div(Mul(zModemInfo.cps,100),Div(onlineBaud,10))
+
+  IF pos>=0
+    zModemInfo.transPos:=pos
+    IF pos=zm.current_file_size THEN strCpy(zModemInfo.lastTime,zModemInfo.elapsedTime,40)
+  ENDIF
+
+  IF zm.new_file
+    IF zModemInfo.currentOperation=ZMODEM_DOWNLOAD
+      StringF(tempStr,'\t\sDownloading \s \d bytes',IF zModemInfo.freeDFlag THEN 'Free ' ELSE '',zModemInfo.fileName,zModemInfo.filesize)
+    ELSE
+      IF zModemInfo.resumePos<>0
+        StringF(tempStr,'\tResuming \s[12] \d bytes from \d',FilePart(zModemInfo.fileName),zModemInfo.filesize,zModemInfo.resumePos)
+      ELSE
+        StringF(tempStr,'\tUploading \s[12] \d bytes',FilePart(zModemInfo.fileName),zModemInfo.filesize)
+      ENDIF
+    ENDIF
+    callersLog(tempStr)
+    udLog(tempStr)
+  ENDIF
+
+  updateTime:=getSystemTime()
+  IF zModemInfo.lastUpdate<>updateTime
+    updateZDisplay()
+    debugLog(LOG_DEBUG,'zmprogress update')
+    StringF(tempStr,'current block size: \d',zm.block_size)
+    debugLog(LOG_DEBUG,tempStr)
+    zModemInfo.lastUpdate:=updateTime
+
+    processWindowMessage(-1)
+    processCommodityMessage(-1)
+    checkDoorMsg(0)
+    IF servercmd=SV_UNICONIFY
+        IF scropen THEN expressToFront() ELSE openExpressScreen()
+      servercmd:=-1
+    ENDIF
+    checkCarrier()
+  ENDIF
+ENDPROC
+
+PROC zmrecvbyte(zm: PTR TO zmodem_t, timeout)
+  DEF res
+  IF telnetSocket>=0
+    res:=zmrecvbyteTelnet(zm,timeout)
+  ELSE
+    res:=zmrecvbyteSerial(zm,timeout)
+  ENDIF
+ENDPROC res
+
+PROC zmrecvbyteTelnet(zm: PTR TO zmodem_t, timeout)
+  DEF signals,timersig,res
+  DEF waiting,status,temp
+  DEF recvd,n
+  DEF tempstr[255]:STRING
+  DEF timerdone=FALSE
+  recvd:=FALSE
+  timersig:=0
+  signals:=0
+  REPEAT
+redo1:
+    IF (bufferReadOffset<bufferedBytes)
+      REPEAT
+        res:=zmodemBuffer[bufferReadOffset]
+        IF lastIAC=1
+          IF res=255
+            recvd:=TRUE
+            lastIAC:=0
+          ELSEIF (res>=250) AND (res<255)
+            lastIAC:=2        
+          ELSE
+            WriteF('unknown IAC \d\b\n',res)
+            lastIAC:=2        
+          ENDIF
+        ELSEIF lastIAC=2
+          lastIAC:=0
+        ELSEIF res=255
+          lastIAC:=1
+        ELSE
+          recvd:=TRUE
+        ENDIF
+        bufferReadOffset++
+     
+      UNTIL (bufferReadOffset>=bufferedBytes) OR (recvd)
+      IF recvd=FALSE THEN JUMP redo1
+    ELSE
+
+      IF timerdone=FALSE
+        IF timeout>0
+          openTimer()
+          setTimer(Mul(timeout,1000000))         
+          IF timerport<>NIL THEN timersig:=Shl(1, timerport.sigbit)
+          timerdone:=TRUE
+
+          setSingleFDS(telnetSocket)
+          signals:=SIGBREAKF_CTRL_C OR timersig
+          WaitSelect(telnetSocket+1,fds,NIL,NIL,NIL,{signals})
+        ELSE
+          timersig:=0
+          signals:=0
+        ENDIF
+      ENDIF
+
+      temp,n:=checkTelnetData()
+      bufferReadOffset:=0
+      bufferedBytes:=0
+      IF n>0
+        IF n>zModemBufferSize THEN n:=zModemBufferSize
+        IF Recv(telnetSocket,zmodemBuffer,n,0)=n
+          bufferedBytes:=n
+        ENDIF
+        checkCarrier()
+        JUMP redo1
+      ENDIF
+    ENDIF
+  UNTIL (signals<>0) OR (recvd) OR (timeout=0)
+  IF recvd=FALSE
+    StringF(tempstr,'timeout \d \d\b\n',timeout,signals)
+    debugLog(LOG_DEBUG,tempstr)
+  ENDIF
+
+  IF timerdone AND ((signals AND timersig)=0) THEN stopTime()
+
+  IF recvd=FALSE
+    res:=-1
+    IF timerdone
+      IF (signals AND timersig)
+        waitTime()
+      ELSEIF (signals AND SIGBREAKF_CTRL_C)
+        WriteF('zmrecvbyte break\n')
+      ENDIF
+    ENDIF
+  ENDIF
+  IF timerdone THEN closeTimer()
+ENDPROC res
+
+PROC zmrecvbyteSerial(zm: PTR TO zmodem_t, timeout)
+  DEF serialsig,signals,timersig,res
+  DEF waiting,status,temp,abort
+  
+  IF (bufferReadOffset<bufferedBytes)
+    res:=zmodemBuffer[bufferReadOffset]
+    bufferReadOffset++
+    RETURN res
+  ENDIF
+  
+  bufferReadOffset:=0
+  bufferedBytes:=0
+  
+  waiting,status:=getSerialInfo()
+  IF waiting>zModemBufferSize THEN waiting:=zModemBufferSize
+  IF(waiting > 0)
+    serialReadIO.iostd.command:=CMD_READ
+    serialReadIO.iostd.data:=zmodemBuffer
+    serialReadIO.iostd.length:=waiting
+    DoIO(serialReadIO)
+    bufferedBytes:=serialReadIO.iostd.actual
+    serialReadIO.iostd.actual:=0
+  ENDIF  
+
+  IF (timeout=0) OR (bufferedBytes>0)
+    IF bufferedBytes=0 
+      RETURN -1
+    ELSE
+      res:=zmodemBuffer[bufferReadOffset]
+      bufferReadOffset++
+      RETURN res
+    ENDIF
+  ENDIF
+
+  serialsig:=Shl(1, serialReadMP.sigbit)
+
+  ->clear the serial signal
+  SetSignal(0,serialsig)
+
+  queueRead(serialReadIO,zModemBufferSize,zmodemBuffer)
+
+  openTimer()
+  setTimer(Mul(timeout,1000000))
+  IF timerport<>NIL THEN timersig:=Shl(1, timerport.sigbit)
+
+  signals:=Wait(SIGBREAKF_CTRL_C OR serialsig OR timersig)
+  abort:=signals AND SIGBREAKF_CTRL_C
+
+  IF signals AND timersig THEN waitTime() ELSE stopTime()
+  closeTimer()
+  
+  IF (signals AND serialsig)=FALSE THEN stopSerialRead()
+  WaitIO(serialReadIO)
+  
+  IF(serialReadIO.iostd.actual > 0)
+    bufferedBytes:=serialReadIO.iostd.actual
+  ENDIF
+  
+  IF bufferedBytes>0
+    res:=zmodemBuffer[bufferReadOffset]
+    bufferReadOffset++
+  ELSE  
+    res:=-1
+  ENDIF
+  checkCarrier()
+
+  IF abort THEN res:=-1
+ENDPROC res
+
+PROC zmisconnected() IS lostCarrier=FALSE
+ 
+PROC zmiscancelled() IS xprchkabort()
+
+PROC zmdatawaiting(zm:PTR TO zmodem_t, timeout)
+  DEF signals,timersig,serialsig,recvd=0
+
+  IF bufferedBytes>bufferReadOffset 
+    RETURN TRUE
+  ENDIF
+
+  IF checkSer() OR checkTelnetData() THEN RETURN TRUE
+
+  IF timeout=0 THEN RETURN FALSE
+
+  openTimer()
+  setTimer(Mul(timeout,1000000))
+  serialsig:=Shl(1, serialReadMP.sigbit)
+  IF timerport<>NIL THEN timersig:=Shl(1, timerport.sigbit)
+
+  IF telnetSocket>=0  
+    setSingleFDS(telnetSocket)
+    signals:=SIGBREAKF_CTRL_C OR timersig
+    WaitSelect(telnetSocket+1,fds,NIL,NIL,NIL,{signals})
+    IF checkTelnetData()
+      recvd:=TRUE
+    ENDIF
+  ELSE
+    signals:=Wait(SIGBREAKF_CTRL_C OR serialsig OR timersig)
+    recvd:=(signals AND serialsig)<>0
+  ENDIF
+
+  IF (signals AND timersig)=0
+    stopTime()
+  ELSE
+    waitTime()
+  ENDIF
+  closeTimer()
+ENDPROC recvd
+ 
+PROC zmuploadcompleted(zm: PTR TO zmodem_t, fname:PTR TO CHAR) 
+  IF loggedOnUserKeys<>NIL
+    doBgCheck()
+  ENDIF
+ENDPROC
+
+PROC zmuploadfailed(zm: PTR TO zmodem_t, fname:PTR TO CHAR) IS xprunlink2(fname)
+
+PROC zmdupecheck(zm:PTR TO zmodem_t,fname:PTR TO CHAR)
+  DEF dup=FALSE
+  IF (netMailTransfer=FALSE) AND (sysopUploading=FALSE) AND (rzmsg=FALSE)
+    IF checkForFile(FilePart(fname))
+      dup:=TRUE
+    ELSEIF checkInPlaypens(FilePart(fname))
+      dup:=TRUE
+    ENDIF
+  ENDIF
+
+  IF dup
+    skipdFiles.add(FilePart(fname))
+  ENDIF
+  
+  sendMasterUpload(FilePart(fname))
+
+ENDPROC dup
+
+PROC zmflush(zm:PTR TO zmodem_t,buffer,size) IS serPuts(buffer,size,TRUE,TRUE)
+
+PROC zmfopen(fn:PTR TO CHAR,filemode)
+  DEF res
+  IF asynciobase<>NIL
+    IF filemode=MODE_OLDFILE 
+      res:=OpenAsync(fn,MODE_READ,65536)
+    ELSEIF filemode=MODE_NEWFILE
+      res:=OpenAsync(fn,MODE_WRITE,65536)
+    ELSEIF filemode=MODE_READWRITE
+      res:=OpenAsync(fn,MODE_APPEND,65536)
+    ENDIF
+  ELSE
+    res:=Open(fn,filemode)
+  ENDIF
+ENDPROC res
+
+PROC zmfclose(fh)
+  IF asynciobase<>NIL
+    CloseAsync(fh)
+  ELSE
+    Close(fh)
+  ENDIF
+ENDPROC
+
+PROC zmfseek(fh,offset,origin)
+  DEF res
+  IF asynciobase<>NIL
+    IF origin=OFFSET_BEGINNING
+      res:=SeekAsync(fh,offset,MODE_START)
+    ELSEIF origin=OFFSET_CURRENT
+      res:=SeekAsync(fh,offset,MODE_CURRENT)
+    ELSEIF origin=OFFSET_END
+      res:=SeekAsync(fh,offset,MODE_END)
+    ENDIF
+  ELSE
+    res:=Seek(fh,offset,origin)
+  ENDIF
+ENDPROC res
+
+PROC zmfread(fh,buf,size)
+  DEF res
+  IF asynciobase<>NIL
+    res:=ReadAsync(fh,buf,size)
+  ELSE
+    res:=Fread(fh,buf,1,size)
+  ENDIF 
+ENDPROC res
+
+PROC zmfwrite(fh,buf,size)
+  DEF res
+  IF asynciobase<>NIL
+    res:=WriteAsync(fh,buf,size)
+  ELSE
+    res:=Fwrite(fh,buf,1,size)
+  ENDIF
+ENDPROC res
+
+PROC zmfirstfile(zm:PTR TO zmodem_t,fname:PTR TO CHAR) IS xprffirst2(fname,zm.user_data)
+PROC zmnextfile(zm:PTR TO zmodem_t,fname:PTR TO CHAR) IS xprfnext2(fname,zm.user_data)
+
+PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   DEF tempstr[255]:STRING,debugstr[255]:STRING
   DEF result
   DEF xprio=NIL: PTR TO xprIO
@@ -15204,11 +15637,23 @@ PROC xprReceive(file,forceZmodem=FALSE) HANDLE
   DEF proc:PTR TO process
   DEF ftpPort,ftpDataPort,httpPort
   DEF protocol[255]:STRING
+  
+  DEF zm: PTR TO zmodem_t
+  DEF dlbytes
+  DEF ext=TRUE
+
 
   IF (forceZmodem) OR (loggedOnUser=NIL)
     StrCopy(protocol,'INTERNAL')
   ELSE
     StrCopy(protocol,(xprLib.item(loggedOnUser.xferProtocol)))
+  ENDIF
+
+  IF(strCmpi(protocol,'INTERNAL',ALL)) THEN ext:=FALSE
+
+  IF (strCmpi(protocol,'XPRZM',ALL))
+    StrCopy(protocol,'INTERNAL')
+    ext:=TRUE
   ENDIF
 
   IF(strCmpi(protocol,'INTERNAL',ALL))
@@ -15254,12 +15699,15 @@ PROC xprReceive(file,forceZmodem=FALSE) HANDLE
     StringF(tempstr,'\s.library',protocol)
   ENDIF
 
-  IF (xprotocolbase:=OpenLibrary(tempstr,0))=NIL
-    aePuts('\b\nUnable to open the xpr library\b\n')
-    RETURN RESULT_FAILURE
+  IF ext
+    IF (xprotocolbase:=OpenLibrary(tempstr,0))=NIL
+      aePuts('\b\nUnable to open the xpr library\b\n')
+      RETURN RESULT_FAILURE
+    ENDIF
+    xprio:=NEW xprio
+  ELSE
+    zm:=NEW zm
   ENDIF
-
-  xprio:=NEW xprio
 
   zModemInfo.current:=0; zModemInfo.transPos:=0; zModemInfo.filesize:=0; zModemInfo.errorCount:=0; zModemInfo.errorPos:=0; zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
   strCpy(zModemInfo.zStat,'',ALL)
@@ -15275,55 +15723,77 @@ PROC xprReceive(file,forceZmodem=FALSE) HANDLE
     openZmodemStat()
   ENDIF
 
-  xprio.xpr_extension:=4
-  xprio.xpr_fopen:={xprfopenAsm}
-  xprio.xpr_fclose:={xprfcloseAsm}
-  xprio.xpr_fread:={xprfreadAsm}
-  xprio.xpr_fwrite:={xprfwriteAsm}
-  xprio.xpr_sread:={xprsreadAsm}
-  xprio.xpr_swrite:={xprswriteAsm}
-  xprio.xpr_sflush:={xprsflushAsm}
-  xprio.xpr_update:={xprupdateAsm}
-  xprio.xpr_chkabort:={xprchkabortAsm}
-  xprio.xpr_chkmisc:=0
-  xprio.xpr_gets:=0
-  xprio.xpr_setserial:={xprsetserialAsm}
-  xprio.xpr_ffirst:=0
-  xprio.xpr_fnext:=0
-  xprio.xpr_finfo:={xprfinfoAsm}
-  xprio.xpr_fseek:={xprfseekAsm}
-  xprio.xpr_data:=0
-  xprio.xpr_options:=0
-  xprio.xpr_unlink:={xprunlinkAsm}
-  xprio.xpr_squery:=0
-  xprio.xpr_getptr:=0
+  IF ext
+    xprio.xpr_extension:=4
+    xprio.xpr_fopen:={xprfopenAsm}
+    xprio.xpr_fclose:={xprfcloseAsm}
+    xprio.xpr_fread:={xprfreadAsm}
+    xprio.xpr_fwrite:={xprfwriteAsm}
+    xprio.xpr_sread:={xprsreadAsm}
+    xprio.xpr_swrite:={xprswriteAsm}
+    xprio.xpr_sflush:={xprsflushAsm}
+    xprio.xpr_update:={xprupdateAsm}
+    xprio.xpr_chkabort:={xprchkabortAsm}
+    xprio.xpr_chkmisc:=0
+    xprio.xpr_gets:=0
+    xprio.xpr_setserial:={xprsetserialAsm}
+    xprio.xpr_ffirst:=0
+    xprio.xpr_fnext:=0
+    xprio.xpr_finfo:={xprfinfoAsm}
+    xprio.xpr_fseek:={xprfseekAsm}
+    xprio.xpr_data:=0
+    xprio.xpr_options:=0
+    xprio.xpr_unlink:={xprunlinkAsm}
+    xprio.xpr_squery:=0
+    xprio.xpr_getptr:=0
+  ELSE
+    zm.log_level:=ZM_LOG_DEBUG
+    
+    zmodem_init(zm, 0,
+          {zmlputs},
+          {zmprogress},
+          {zmrecvbyte},
+          {zmisconnected},
+          {zmiscancelled},
+          {zmdatawaiting},
+          {zmuploadcompleted},
+          {zmuploadfailed},
+          {zmdupecheck},
+          {zmflush},
+          NIL,
+          {zmfopen},
+          {zmfclose},
+          {zmfseek},
+          {zmfread},
+          {zmfwrite},
+          {zmfirstfile},
+          {zmnextfile},
+          8192,0)
+  ENDIF
 
   asynciobase:=OpenLibrary('asyncio.library',0)
 
-  StrCopy(tempstr,'')
-  IF(strCmpi(protocol,'INTERNAL',ALL))
-    StrCopy(tempstr,'TN,AY,OR,E9,KN,SN,RN,DN,B64')
-  ELSE
-    readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'OPTIONS',tempstr)
-  ENDIF
+  IF ext
+    StrCopy(tempstr,'')
+    IF(strCmpi(protocol,'INTERNAL',ALL))
+      StrCopy(tempstr,'TN,AY,OR,E9,KN,SN,RN,DN,B64')
+    ELSE
+      readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'OPTIONS',tempstr)
+    ENDIF
 
-  StringF(debugstr,'xpr setup options = \s',tempstr)
-  debugLog(LOG_DEBUG,debugstr)
-  xprio.xpr_filename:=tempstr
-  IF XprotocolSetup(xprio)=0
-    Raise(ERR_EXCEPT)
-  ENDIF
+    StringF(debugstr,'xpr setup options = \s',tempstr)
+    debugLog(LOG_DEBUG,debugstr)
+    xprio.xpr_filename:=tempstr
+    IF XprotocolSetup(xprio)=0
+      Raise(ERR_EXCEPT)
+    ENDIF
 
-  ->override options with thsee (P = upload folder, KN dont keep partial uploads - actually our xprlink routine moves them into partial uploads
-  StringF(tempstr,'KN,P\s',file)
-  xprio.xpr_filename:=tempstr
-  IF XprotocolSetup(xprio)=0
-    Raise(ERR_EXCEPT)
-  ENDIF
-
-  IF openTimer()
-    debugLog(LOG_ERROR,'Can''t re-open Timer Device!')
-    Raise(ERR_EXCEPT)
+    ->override options with thsee (P = upload folder, KN dont keep partial uploads - actually our xprlink routine moves them into partial uploads
+    StringF(tempstr,'KN,P\s',file)
+    xprio.xpr_filename:=tempstr
+    IF XprotocolSetup(xprio)=0
+      Raise(ERR_EXCEPT)
+    ENDIF
   ENDIF
 
   ->cancel current queued serial read request
@@ -15354,10 +15824,20 @@ PROC xprReceive(file,forceZmodem=FALSE) HANDLE
     ENDIF
   ENDIF
 
-  result:=XprotocolReceive(xprio)
+  IF ext
+    result:=XprotocolReceive(xprio)
+  ELSE
+    zmodem_recv_files(zm, file,{dlbytes}) 
+  ENDIF
+
   time2:=getSystemTime()
   tTTM:=time2-time1;
-  XprotocolCleanup(xprio)
+  
+  IF ext
+    XprotocolCleanup(xprio)
+  ELSE
+    zmodem_cleanup(zm)
+  ENDIF
 
   IF (loggedOnUserKeys<>NIL) AND (netMailTransfer=FALSE)
     IF bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
@@ -15402,14 +15882,17 @@ PROC xprReceive(file,forceZmodem=FALSE) HANDLE
   IF(result) THEN aePuts(' upload successful\b\n') ELSE aePuts(' upload unsuccessful\b\n')
 
   IF tags<>NIL THEN END tags
-  END xprio
-
-  closeTimer()
+  
+  IF ext
+    END xprio
+  ELSE
+    END zm
+  ENDIF
 
   IF asynciobase<>NIL THEN CloseLibrary(asynciobase)
   asynciobase:=NIL
 
-  CloseLibrary(xprotocolbase)
+  IF ext THEN CloseLibrary(xprotocolbase)
   zModemInfo.currentOperation:=ZMODEM_NONE
   closezModemStats()
 
@@ -15420,7 +15903,7 @@ PROC xprReceive(file,forceZmodem=FALSE) HANDLE
   
   RETURN 1
 EXCEPT
-  CloseLibrary(xprotocolbase)
+  IF ext THEN CloseLibrary(xprotocolbase)
   zModemInfo.currentOperation:=ZMODEM_NONE
   closezModemStats()
   IF xprio THEN END xprio
@@ -16016,7 +16499,7 @@ PROC zmodemReceive(flname:PTR TO CHAR,uLFType)
       ->aePuts('Control-X to Cancel\b\n')
     ENDIF
 
-    RETURN xprReceive(flname)
+    RETURN zModemUpload(flname)
   ELSE
     IF(lcFileXfr=FALSE)
       IF(batchasl(flname)) THEN receivePlayPen(TRUE)
@@ -16483,6 +16966,28 @@ PROC checkInPlaypens(s: PTR TO CHAR)
     loop++
   UNTIL lock1=NIL
 ENDPROC 0
+
+PROC doBgCheck()
+  DEF tempstr[255]:STRING
+  DEF bgport
+  DEF msg:PTR TO jhMessage
+  
+  IF (zModemInfo.currentOperation=ZMODEM_UPLOAD) AND (zModemInfo.filesize>0) AND (zModemInfo.transPos=zModemInfo.filesize) AND bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
+    StringF(tempstr,'bgCheckPort\d',node)
+    IF (bgport:=FindPort(tempstr))
+      msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
+      IF msg
+        msg.command:=BG_CHECKFILE
+        strCpy(msg.string,FilePart(zModemInfo.fileName),200)
+        msg.msg.ln.type:=NT_FREEMSG
+        msg.msg.length:=SIZEOF jhMessage
+
+        ->signal background checking to check the file
+        PutMsg(bgport,msg)
+      ENDIF
+    ENDIF
+  ENDIF
+ENDPROC
 
 PROC backgroundFileCheckThread()
   DEF bgCheckPort:PTR TO mp
@@ -21886,6 +22391,7 @@ PROC internalCommand1(params)
   IF (checkSecurity(ACS_ACCOUNT_EDITING)=FALSE)
     RETURN RESULT_NOT_ALLOWED
   ENDIF
+  callersLog('\tAccount editing.\n')
   editAccounts(FALSE)
 ENDPROC RESULT_SUCCESS
 
@@ -27562,7 +28068,7 @@ PROC main() HANDLE
   DEF proc: PTR TO process
 
   StrCopy(expressVer,'v5.3.0-alpha',ALL)
-  StrCopy(expressDate,'12-Mar-2020',ALL)
+  StrCopy(expressDate,'08-Apr-2020',ALL)
 
   nodeStart:=getSystemTime()
 
@@ -27615,6 +28121,8 @@ PROC main() HANDLE
   ENDIF
 
   stripAnsi(0,0,1,0)
+
+  zmodemBuffer:=New(zModemBufferSize)
 
   securityNames:=[
    'ACS.ACCOUNT_EDITING','ACS.READ_BULLETINS','ACS.COMMENT_TO_SYSOP','ACS.DOWNLOAD','ACS.UPLOAD','ACS.ENTER_MESSAGE','ACS.FILE_LISTINGS','ACS.JOIN_CONFERENCE','ACS.NEW_FILES_SINCE',
@@ -28198,6 +28706,8 @@ PROC main() HANDLE
 
   closeSerial()
 
+  Dispose(zmodemBuffer)
+  
   IF (doorExtSig<>NIL) THEN FreeSignal(doorExtSig)
   doorExtSig:=NIL
 

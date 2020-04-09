@@ -40,6 +40,7 @@
 
   MODULE '*axcommon',
          '*jsonParser',
+         '*jsonCreate',
          '*stringlist'
 
 /*

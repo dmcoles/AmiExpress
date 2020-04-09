@@ -4,7 +4,7 @@ JSON parser
 OPT OSVERSION=37
 
   MODULE 'dos/dos','asl','libraries/asl','workbench/workbench','icon','wb',
-        '*jsonParser'
+        '*jsonParser','*jsonCreate'
 
 
 ENUM ERR_NONE, ERR_ASL, ERR_KICK, ERR_LIB
@@ -12,7 +12,6 @@ ENUM ERR_NONE, ERR_ASL, ERR_KICK, ERR_LIB
 RAISE ERR_ASL  IF AllocAslRequest()=NIL,
       ERR_KICK IF KickVersion()=FALSE,
       ERR_LIB  IF OpenLibrary()=NIL
-
 
 PROC main() HANDLE
 	DEF r
@@ -42,7 +41,7 @@ PROC main() HANDLE
     FreeArgs(rdargs)
   ENDIF
 
-  WriteF('\nAmi-Express v5.0.0 BBS Import Tool (c)2018 Darren Coles\n\n')
+  WriteF('\nAmi-Express v5.3.0 BBS Import Tool (c)2018-2020 Darren Coles\n\n')
 
   aslbase:=OpenLibrary('asl.library',37)
   iconbase:=OpenLibrary('icon.library',33)

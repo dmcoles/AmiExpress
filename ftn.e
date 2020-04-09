@@ -294,9 +294,6 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
       FOR i:=0 TO msgsz-1
         IF msgbuf[i]=10 THEN msgbuf[i]:=13
       ENDFOR
-
-      ->write message body
-      Write(fh,msgbuf,msgsz)
       
       ->write tear line
       StringF(tempStr,'--- \s\b',tearLine)
@@ -474,6 +471,42 @@ PROC findBodyLength(fileHandle)
   UNTIL char<=0
   Seek(fileHandle,-cnt,OFFSET_CURRENT)
 ENDPROC cnt
+
+PROC writeMailLine(fh2,lineBuff:PTR TO CHAR)
+  DEF i,lineLen,ansi=FALSE
+  DEF lastSpace,s,partlen
+  
+  IF (StrCmp(TrimStr(lineBuff),'SEEN-BY: ',9)=FALSE) AND (StrCmp(TrimStr(lineBuff),'AREA: ',6)=FALSE) AND (lineBuff[0]<>1)
+    lineLen:=EstrLen(lineBuff)
+    FOR i:=0 TO lineLen-1 DO IF lineBuff[i]=27 THEN ansi:=TRUE
+    IF (ansi=FALSE) AND (lineLen>75)
+      partlen:=0
+      lastSpace:=-1
+      s:=0
+      FOR i:=0 TO lineLen-1
+        IF lineBuff[i]=" " THEN lastSpace:=i
+        IF partlen>=75
+          IF lastSpace>=0
+            lineBuff[lastSpace]:=10
+            partlen:=i-lastSpace-1
+            lastSpace:=-1
+          ELSE
+            Write(fh2,lineBuff+s,i-s)
+            Write(fh2,'\n',1)
+            s:=i
+            partlen:=0
+          ENDIF
+        ENDIF
+        partlen++
+      ENDFOR
+      StrAdd(lineBuff,'\n')
+      Write(fh2,lineBuff+s,lineLen-s+1)
+    ELSE
+      StrAdd(lineBuff,'\n')
+      Write(fh2,lineBuff,lineLen+1)
+    ENDIF
+  ENDIF
+ENDPROC
 
 PROC processPacketFile(filename:PTR TO CHAR) HANDLE
   DEF ftnh: ftnHeader
@@ -668,14 +701,13 @@ PROC processPacketFile(filename:PTR TO CHAR) HANDLE
                   StrAdd(lineBuff,buf2+i,1)
                   i++
                 ELSE
-                  IF (buf2[i]=10) THEN StrAdd(lineBuff,'\n')
-                  IF (StrCmp(TrimStr(lineBuff),'SEEN-BY: ',9)=FALSE) AND (StrCmp(TrimStr(lineBuff),'AREA: ',6)=FALSE) AND (lineBuff[0]<>1) THEN Write(fh2,lineBuff,StrLen(lineBuff))
+                  writeMailLine(fh2,lineBuff)
                   StrCopy(lineBuff,'')
                   i++
                 ENDIF
               ENDWHILE
               IF StrLen(lineBuff)>0
-                IF (StrCmp(TrimStr(lineBuff),'SEEN-BY: ',9)=FALSE) AND (StrCmp(TrimStr(lineBuff),'AREA: ',6)=FALSE) AND (lineBuff[0]<>1) THEN Write(fh2,lineBuff,StrLen(lineBuff))
+                writeMailLine(fh2,lineBuff)
               ENDIF
               Dispose(lineBuff)
               Close(fh2)

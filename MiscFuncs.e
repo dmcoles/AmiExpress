@@ -373,42 +373,23 @@ ENDPROC (c>="A") AND (c<="Z")
 EXPORT PROC getSystemDate()
   DEF currDate: datestamp
   DEF startds:PTR TO datestamp
-  DEF s1,s2,s3,s4
+  DEF s4
 
   startds:=DateStamp(currDate)
 
-  s1:=startds.days+2922
-  s1:=Mul(1440,s1)
-  s1:=Mul(60,s1)
-  s2:=Mul(60,startds.minute)
-  s3:=startds.tick/50
-  s4:=Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50)
-
-  s4:=s4+21600
-
-  s4:=Mul(Div(s4,86400),86400)
+  s4:=(Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50))+21600
   ->2922 days between 1/1/70 and 1/1/78
-
-ENDPROC s4
+ENDPROC Mul(Div(s4,86400),86400)
 
 ->returns system time converted to c time format
 EXPORT PROC getSystemTime()
   DEF currDate: datestamp
   DEF startds:PTR TO datestamp
-  DEF s1,s2,s3,s4
 
   startds:=DateStamp(currDate)
-
-  s1:=startds.days+2922
-  s1:=Mul(1440,s1)
-  s1:=Mul(60,s1)
-  s2:=Mul(60,startds.minute)
-  s3:=startds.tick/50
-  s4:=Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50)
-
   ->2922 days between 1/1/70 and 1/1/78
 
-ENDPROC s4+21600
+ENDPROC (Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50))+21600,Mod(startds.tick,50)
 
 ->returns system time converted to c time format and ticks
 EXPORT PROC getSystemTime2()
