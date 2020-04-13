@@ -8083,7 +8083,7 @@ PROC checkIncomingCall()
     StrCopy(connectString,'CONNECT 19200')
     n:=SIZEOF sockaddr_in
     GetPeerName(telnetSocket,peeraddr,{n})
-    hostent:=GetHostByAddr(telnetSocket,peeraddr.sin_addr,AF_INET)
+    hostent:=GetHostByAddr(peeraddr.sin_addr,4,AF_INET)
     StrCopy(hostName,hostent.h_name,255)
     StringF(hostIP,'\d.\d.\d.\d',Shr(peeraddr.sin_addr AND $ff000000,24),Shr(peeraddr.sin_addr AND $ff0000,16),Shr(peeraddr.sin_addr AND $ff00,8),peeraddr.sin_addr AND $ff)
     JUMP go3
@@ -28165,8 +28165,8 @@ PROC main() HANDLE
   DEF oldWinPtr
   DEF proc: PTR TO process
 
-  StrCopy(expressVer,'v5.2.3',ALL)
-  StrCopy(expressDate,'06-Mar-2020',ALL)
+  StrCopy(expressVer,'v5.2.4',ALL)
+  StrCopy(expressDate,'13-Apr-2020',ALL)
 
   nodeStart:=getSystemTime()
 
