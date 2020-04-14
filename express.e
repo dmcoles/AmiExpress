@@ -6910,9 +6910,9 @@ PROC checkIncomingCall()
     StrCopy(connectString,'CONNECT 19200')
     n:=SIZEOF sockaddr_in
     GetPeerName(telnetSocket,peeraddr,{n})
-    hostent:=GetHostByAddr(telnetSocket,peeraddr.sin_addr,AF_INET)
-    StrCopy(hostName,hostent.h_name,255)
-    StringF(hostIP,'\d.\d.\d.\d',Shr(peeraddr.sin_addr AND $ff000000,24),Shr(peeraddr.sin_addr AND $ff0000,16),Shr(peeraddr.sin_addr AND $ff00,8),peeraddr.sin_addr AND $ff)
+    hostent:=GetHostByAddr(peeraddr.sin_addr,4,AF_INET)
+    IF hostent<>NIL THEN StrCopy(hostName,hostent.h_name,255)
+    StringF(hostIP,'\d.\d.\d.\d',Shr(peeraddr.sin_addr AND $ff000000,24) AND $FF,Shr(peeraddr.sin_addr AND $ff0000,16),Shr(peeraddr.sin_addr AND $ff00,8),peeraddr.sin_addr AND $ff)
     JUMP go3
   ENDIF
 
@@ -14946,7 +14946,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
           {zmfwrite},
           {zmfirstfile},
           {zmnextfile},
-          8192,0)
+          1024,0)
   ENDIF
   
   asynciobase:=OpenLibrary('asyncio.library',0)
@@ -14985,7 +14985,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
     result:=XprotocolSend(xprio)
   ELSE
     zm.user_data:=x
-    zmodem_send_files(zm, NIL,NIL)
+    result:=zmodem_send_files(zm, NIL,NIL)
   ENDIF
 
   time2:=getSystemTime()
@@ -15284,8 +15284,12 @@ PROC zmprogress(zm: PTR TO zmodem_t, pos)
   StringF(tempStr,'\d secs',t)
   strCpy(zModemInfo.elapsedTime,tempStr,40)
 
-  t:=Div(zm.current_file_size,n)
-  StringF(tempStr,'\d secs',t)
+  IF n>0
+    t:=Div(zm.current_file_size,n)
+    StringF(tempStr,'\d secs',t)
+  ELSE
+    StrCopy(tempStr,'?? secs')
+  ENDIF
   strCpy(zModemInfo.apxTime,tempStr,40)
  
   zModemInfo.filesize:=zm.current_file_size
@@ -15504,13 +15508,14 @@ PROC zmisconnected() IS lostCarrier=FALSE
 PROC zmiscancelled() IS xprchkabort()
 
 PROC zmdatawaiting(zm:PTR TO zmodem_t, timeout)
-  DEF signals,timersig,serialsig,recvd=0
+  DEF signals,timersig,serialsig,recvd=0,waiting
 
   IF bufferedBytes>bufferReadOffset 
     RETURN TRUE
   ENDIF
 
-  IF checkSer() OR checkTelnetData() THEN RETURN TRUE
+  waiting:=getSerialInfo()
+  IF (waiting>0) OR checkTelnetData() THEN RETURN TRUE
 
   IF timeout=0 THEN RETURN FALSE
 
@@ -15768,7 +15773,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
           {zmfwrite},
           {zmfirstfile},
           {zmnextfile},
-          8192,0)
+          1024,0)
   ENDIF
 
   asynciobase:=OpenLibrary('asyncio.library',0)
@@ -15827,7 +15832,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   IF ext
     result:=XprotocolReceive(xprio)
   ELSE
-    zmodem_recv_files(zm, file,{dlbytes}) 
+    result:=zmodem_recv_files(zm, file,{dlbytes}) 
   ENDIF
 
   time2:=getSystemTime()
@@ -28068,7 +28073,7 @@ PROC main() HANDLE
   DEF proc: PTR TO process
 
   StrCopy(expressVer,'v5.3.0-alpha',ALL)
-  StrCopy(expressDate,'08-Apr-2020',ALL)
+  StrCopy(expressDate,'14-Apr-2020',ALL)
 
   nodeStart:=getSystemTime()
 
