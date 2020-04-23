@@ -2033,9 +2033,7 @@ PROC zmodem_send_from(zm: PTR TO zmodem_t, fp, pos,sent: PTR TO LONG)
 		 */
 
 		n:=doRead(zm,fp,zm.tx_data_subpacket,zm.block_size)
-
-    zm.new_file:=FALSE 
-		
+	
 		type:=ZCRCW
 
 		/** ZMODEM.DOC:
@@ -2073,6 +2071,7 @@ PROC zmodem_send_from(zm: PTR TO zmodem_t, fp, pos,sent: PTR TO LONG)
 
     p:=zm.zm_progress
 		IF(p<>NIL) THEN p(zm, zm.current_file_pos)
+    zm.new_file:=FALSE 
 
 		IF((type = ZCRCW) OR (type = ZCRCE)) 
       ->chr(type,tempstr)

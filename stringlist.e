@@ -50,6 +50,22 @@ EXPORT PROC expand() OF stringlist
   DisposeLink(old)
 ENDPROC len
 
+EXPORT PROC insert(pos,stringVal:PTR TO CHAR) OF stringlist
+  DEF s,c,i
+  
+  c:=ListLen(self.items)
+  IF c=ListMax(self.items) THEN self.expand()
+  ListAdd(self.items,[NIL])
+  
+  FOR i:=ListLen(self.items)-1 TO (pos+1) STEP -1
+    self.items[i]:=self.items[i-1]
+  ENDFOR
+  s:=String(StrLen(stringVal))
+  StrCopy(s,stringVal)
+  self.items[pos]:=s
+ENDPROC
+
+
 EXPORT PROC add(stringVal:PTR TO CHAR) OF stringlist
   DEF s,c
   

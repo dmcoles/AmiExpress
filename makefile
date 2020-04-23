@@ -1,21 +1,26 @@
 # Compile ACP and EXPRESS and any dependencies
 
 options=DEBUG IGNORECACHE
-
 compiler=EC
+expprogramname=AmiExpress
+acpprogramname=ACP
+version=5.3.0-alpha
 
 all:					acp express5 jsonimport icon2cfg
 
 release:				options = IGNORECACHE 
 release:				acp express5 jsonimport icon2cfg
 
-acp:					acp.e axcommon.m jsonparser.m jsoncreate.m stringlist.m
+acp:					acp.e acpversion.m axcommon.m jsonparser.m jsoncreate.m stringlist.m 
 							$(compiler) acp $(options)
 
-express5:			express.e axcommon.m axconsts.m miscfuncs.m axobjects.m axenums.m stringlist.m errors.m mailssl.m ftpd.m httpd.m zmodem.m
+express5:			express.e expversion.m axcommon.m axconsts.m miscfuncs.m axobjects.m axenums.m stringlist.m errors.m mailssl.m ftpd.m httpd.m zmodem.m bcd.m
 							$(compiler) express $(options)
 							copy express express5
 							delete express
+
+verinfogen:		verinfogen.e
+							$(compiler) verinfogen $(options)
 
 icon2cfg:			icon2cfg.e miscfuncs.m
 							$(compiler) icon2cfg $(options)
@@ -56,10 +61,25 @@ axobjects.m:	axobjects.e axconsts.m
 axenums.m:		axenums.e
 							$(compiler) axenums $(options)
 
+expversion.m:	expversion.e
+							$(compiler) expversion $(options)
+
+expversion.e: verinfogen
+							verinfogen expversion.e $(expprogramname) $(version) usedate
+
+acpversion.m:	acpversion.e
+							$(compiler) acpversion $(options)
+
+acpversion.e: verinfogen
+							verinfogen acpversion.e $(acpprogramname) $(version) usedate
+
+bcd.m:				bcd.e
+							$(compiler) bcd $(options)
+
 ftpd.m:				ftpd.e
 							$(compiler) ftpd $(options)
 
 httpd.m:			httpd.e axcommon.m stringlist.m
 							$(compiler) httpd $(options)
 clean :
-							delete	express express5 acp jsonimport icon2cfg miscfuncs.m stringlist.m errors.m mailssl.m jsonparser.m axcommon.m ftpd.m httpd.m axconsts.m axobjects.m axenums.m zmodem.m
+							delete expversion.e acpversion.e delete express verinfogen express5 acp jsonimport icon2cfg miscfuncs.m stringlist.m errors.m mailssl.m jsoncreate.m jsonparser.m axcommon.m ftpd.m httpd.m axconsts.m axobjects.m axenums.m zmodem.m bcd.m expversion.m acpversion.m

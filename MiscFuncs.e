@@ -176,25 +176,6 @@ EXPORT PROC removeCR(str:PTR TO CHAR)
   SetStr(str,n)
 ENDPROC
 
-EXPORT PROC stcsma(s: PTR TO CHAR,p: PTR TO CHAR)
-  DEF ret,len
-  DEF buf
-
-  len:=StrLen(p)*2+2
-  buf:=New(len)
-
-  IF(buf=NIL)
-    ret:=0
-  ELSE
-    IF (ParsePatternNoCase(p, buf, len) < 0)
-      ret:=0
-    ELSE
-      ret:=MatchPatternNoCase(buf, s)
-    ENDIF
-  ENDIF
-  Dispose(buf)
-ENDPROC ret
-
 EXPORT PROC formatSpaceValue(spaceInKB,outstr)
   DEF frac,whole
   IF (spaceInKB<10240)
@@ -223,25 +204,6 @@ EXPORT PROC formatUnsignedLong(val,outStr)
   StrCopy(outStr,outputTxt)
   END outputTxt
 EXPORT ENDPROC
-
-EXPORT PROC formatBCD(valArrayBCD:PTR TO CHAR, outStr)
-  DEF tempStr[2]:STRING
-  DEF i,n,start=FALSE
-
-  StrCopy(outStr,'')
-  FOR i:=0 TO 7
-    n:=valArrayBCD[i]
-    IF (n<>0) OR (start) OR (i=7)
-      IF (start) OR (n>=$10)
-        StringF(tempStr,'\d\d',Shr(n AND $F0,4),n AND $F)
-      ELSE
-        StringF(tempStr,'\d',n AND $F)
-      ENDIF
-      StrAdd(outStr,tempStr)
-      start:=TRUE
-    ENDIF
-  ENDFOR
-ENDPROC
 
 EXPORT PROC formatLongDate(cDateVal,outDateStr)
   DEF d : PTR TO datestamp

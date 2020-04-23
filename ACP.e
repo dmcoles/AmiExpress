@@ -41,7 +41,8 @@
   MODULE '*axcommon',
          '*jsonParser',
          '*jsonCreate',
-         '*stringlist'
+         '*stringlist',
+         '*acpversion'
 
 /*
 'Setup'
@@ -328,6 +329,7 @@ DEF activeNodes[MAX_NODES]:ARRAY OF CHAR
 DEF publicName[200]:STRING
 DEF pens[9]:ARRAY OF INT
 DEF myVerStr[255]:STRING
+DEF myBuildStr[255]:STRING
 DEF myappport=NIL:PTR TO mp
 DEF doMultiCom
 
@@ -1011,7 +1013,7 @@ PROC createCustomMenus(nodes)
   
     maddItem( NM_TITLE, 'Project', 0 , 0, 0, 0)
     maddItem( NM_ITEM,  'About',0,0,0,0)
-    StringF(version,' AmiExpress Professional \s',myVerStr)
+    StringF(version,' AmiExpress Professional \s (\s)',myVerStr,myBuildStr)
     maddItem( NM_SUB,version,0,0,0,0)
     maddItem( NM_SUB,'                  Written by Darren Coles     ',0,0,0,0)
   
@@ -3422,6 +3424,29 @@ PROC setSingleFDS(socketVal)
   fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
 ENDPROC
 
+PROC updateVersion(expVer:PTR TO CHAR,expDate:PTR TO CHAR)
+  DEF v,p
+  DEF y,m,d
+  DEF tmp[4]:STRING
+  
+  v:=getBuild()
+  p:=InStr(v,' ')
+  IF p>=0
+    StrCopy(expVer,v,p)
+    v:=v+p+1
+    StrCopy(tmp,v,4)
+    y:=Val(tmp)
+    StrCopy(tmp,v+4,2)
+    m:=Val(tmp)
+    StrCopy(tmp,v+6,2)
+    d:=Val(tmp)
+    StringF(expDate,'\d[2]-\s[3]-\d[4]',d,'JanFebMarAprMayJunJulAugSepOctNovDec'+((m-1)*3),y)
+  ELSE
+    StrCopy(expVer,v,ALL)
+    StrCopy(expDate,'',ALL)
+  ENDIF
+ENDPROC
+
 PROC main() HANDLE
 
   DEF iconStartName[200]:STRING
@@ -3461,7 +3486,7 @@ PROC main() HANDLE
  
   KickVersion(37)  -> E-Note: requires V37
 
-  StringF(myVerStr,'v5.3.0')
+  updateVersion(myVerStr,myBuildStr)
 
   FOR i:=0 TO MAX_NODES-1
     ndUser[i]:=NIL
@@ -3959,7 +3984,7 @@ PROC main() HANDLE
                   handleEditGadget(im,0)
                 CASE MENUPICK
                   ->quit menu item
-                  IF(menunum(im.code)=0) AND (itemnum(im.code)=6) THEN attemptShutdown()
+                  IF(menunum(im.code)=0) AND (itemnum(im.code)=5) THEN attemptShutdown()
                   
                   IF(menunum(im.code)=1)
                     i:=button
