@@ -24,16 +24,16 @@ EXPORT OBJECT user
  /* Note ConfYM = the last msg you actually read, ConfRead is the same ?? */
   newSinceDate: LONG
   pwdHash: LONG
-  confRead2: LONG
-  confRead3: LONG
+  confRead2: LONG   ->not used
+  confRead3: LONG   ->not used
   zoomType: INT
-  unknown: INT
-  unknown2: INT
-  unknown3: INT
+  unknown: INT      ->not used
+  unknown2: INT     ->not used
+  unknown3: INT     ->not used
   xferProtocol: INT
-  filler2: INT
-  lcFiles: INT
-  badFiles: INT
+  filler2: INT      ->not used
+  lcFiles: INT      ->not used
+  badFiles: INT     ->not used
   accountDate: LONG
   screenType: INT
   editorType: INT
@@ -61,9 +61,9 @@ EXPORT OBJECT user
   creditTracking: CHAR ->  track uploads/downloads flags in credit account
   translatorID: CHAR
   msgBaseRJoin:INT
-  confYM9: LONG
-  beginLogCall : LONG
-  protocol: CHAR
+  confYM9: LONG ->not used
+  beginLogCall : LONG ->not used
+  protocol: CHAR  ->not really used
   uucpa: CHAR
   lineLength: CHAR
   newUser: CHAR
@@ -88,7 +88,8 @@ EXPORT OBJECT userMisc
   downloadBytesBCD[8]:ARRAY OF CHAR
   uploadBytesBCD[8]:ARRAY OF CHAR
   eMail[50]:ARRAY OF CHAR
-  unused[146]:ARRAY OF CHAR
+  lastDlCPS:LONG
+  unused[142]:ARRAY OF CHAR
   ->unknown[28]:ARRAY OF CHAR
   ->nodeFlags[32]:ARRAY OF LONG
   ->confFlags2[10]:ARRAY OF LONG

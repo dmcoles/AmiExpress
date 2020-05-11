@@ -44,35 +44,6 @@
          '*stringlist',
          '*acpversion'
 
-/*
-'Setup'
-BBS:Config%d
-execute %s
-Icon Setup Complete.
-Cannot Locate Icon Config.
-
-aErrorCreatingD:dc.b 'Error Creating Directory %s',$A,0
-aCreatingIconS: dc.b 'Creating Icon %s',$A,0
-a3_3s:    dc.b '>%-3.3s',0
-aS_txt:   dc.b '%s.txt',0
-aErrorCreatingI:dc.b 'Error creating Icon %s',$A,0
-aErrorCreatin_0:dc.b 'Error Creating Directory %s',$A,0
-aCreatingIcon_0:dc.b 'Creating Icon %s',$A,0
-aDrw:   dc.b '>DRW',0
-aS_txt_0: dc.b '%s.txt',0
-aErrorCreatin_1:dc.b 'Error creating Icon %s',$A,0
-aDir:   dc.b '(DIR)',0
-aAddingTooltype:dc.b 9,'Adding ToolType %s',$A,0
-aErrorOpeningCo:dc.b 'Error opening config file',$A,0
-aDef:   dc.b '>DEF',0
-aUsingDefaultIc:dc.b 'Using Default Icon',$A,0
-aSelectIconconf:dc.b 'Select IconConfig',0
-a?:   dc.b '#?',0
-aS_1:   dc.b 's:',0
-aAeicon_config: dc.b 'aeicon.config',0
-
-*/
-       
 ENUM ERR_NONE,ERR_ALREADY_RUNNING,ERR_STARTUP, ERR_VALIDATE,ERR_NO_DISKFONT,ERR_FDS_RANGE
 
 CONST LISTENQ=100
@@ -618,7 +589,7 @@ ENDPROC
 PROC openListenSocket(port)
   DEF server_s
   DEF servaddr=0:PTR TO sockaddr_in
-  DEF tempStr[255]:STRING
+  ->DEF tempStr[255]:STRING
 
   IF((server_s:=Socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
     ->StringF(tempStr,'/X Telnet: Error creating listening socket. (\d)\b\n',Errno())
@@ -752,7 +723,7 @@ PROC initCycles()
 ENDPROC
 
 PROC initNdCycles()
-  DEF i,x
+  DEF x
   DEF list:PTR TO itemsList
   FOR x:=0 TO MAX_NODES-1
     ndUser[x]:=NEW list.init()
@@ -1752,7 +1723,7 @@ PROC maddNodes(nodes)
   ENDFOR
 ENDPROC
 
-PROC maddItem(type,label:PTR TO CHAR,commKey:PTR TO CHAR,flags,mutual,user)
+PROC maddItem(type,label:PTR TO CHAR,commKey:PTR TO CHAR,flags,mutual,userData)
    ->DEF i=0   was static
    DEF t:PTR TO newmenu
    DEF s:PTR TO CHAR
@@ -1767,10 +1738,10 @@ PROC maddItem(type,label:PTR TO CHAR,commKey:PTR TO CHAR,flags,mutual,user)
      s:=AllocMem(80,MEMF_PUBLIC OR MEMF_CLEAR)
      IF(label) THEN strcpy(s,label) ELSE strcpy(s,'')
      t.label:=s
-     t.commkey:=0->//(STRPTR)CommKey
+     t.commkey:=commKey
      t.flags:=flags
      t.mutualexclude:=mutual
-     t.userdata:=0
+     t.userdata:=userData
      maxMenus++
    ENDIF
    maddItemi++
@@ -1788,7 +1759,6 @@ PROC maddRem()
 ENDPROC
 
 PROC regLastDownloads(name:PTR TO CHAR,dateStr:PTR TO CHAR,node)
-  DEF i=0
   ->DEF num=0   was static
   
   regNodeDownloads(name,dateStr,node)
@@ -1802,7 +1772,6 @@ PROC regNodeDownloads(name:PTR TO CHAR, dateStr:PTR TO CHAR,node)
 ENDPROC
 
 PROC regLastUploads(name:PTR TO CHAR,dateStr:PTR TO CHAR,node)
-  DEF i=0
   ->DEF num=0   was static
   
   regNodeUploads(name,dateStr,node)
@@ -1838,7 +1807,6 @@ PROC showQuiet(i)
 ENDPROC
 
 PROC regLastUser(name:PTR TO CHAR,dateStr:PTR TO CHAR,node)
-  DEF i=0
   DEF tempStr[44]:STRING
   ->DEF num=0;  was static
   
@@ -2187,7 +2155,7 @@ PROC initSemaSemiNodes(s:PTR TO multiPort)
   DEF j
   WHILE(i<MAX_NODES)
     strcpy(s.myNode[i].handle,'')
-    FOR j:=0 TO 8
+    FOR j:=0 TO MAX_NODES-1
       s.myNode[i].stats[j].info:=0
       s.myNode[i].stats[j].status:=CHAT_NONE
     ENDFOR
@@ -2623,7 +2591,6 @@ PROC setTheGads()
   ->DEF j=0 ->static int j=0;
   ->DEF set=FALSE ->static BOOL Set=FALSE;
   DEF ng:PTR TO newgadget
-  DEF s
   
   IF(setTheGadsj=FALSE)
     StrCopy(setOriText[0],'Sysop Login')
@@ -3467,7 +3434,7 @@ PROC main() HANDLE
   DEF num
   DEF version[200]:STRING
   DEF windowSig,myappsig
-  DEF i,j,class
+  DEF i,class
   DEF newlock=NIL
   DEF telnetServerSocket=-1
   DEF telnetSocket=-1

@@ -102,7 +102,6 @@ ENDPROC
 EXPORT PROC convertFromBCD(inArray:PTR TO CHAR)
   DEF tempBCD[8]:ARRAY
   DEF bcdStr[20]:STRING
-  DEF i
 
   convertToBCD($ffffffff,tempBCD)
   subBCD2(tempBCD,inArray)

@@ -101,14 +101,14 @@ PROC releaseSocket(sb,fd,id)
   MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
-PROC releaseCopyOfSocket(sb,fd,id)
+/*PROC releaseCopyOfSocket(sb,fd,id)
   MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
   MOVE.L fd,D0
   MOVE.L id,D1
   JSR -$9C(A6)   ->ReleaseCopyOfSocket(fd,id)
   MOVEM.L (A7)+,D1-D7/A0-A6
-ENDPROC D0
+ENDPROC D0*/
 
 PROC closeSocket(sb,s)
   MOVEM.L D1-D7/A0-A6,-(A7)
@@ -200,10 +200,9 @@ ENDPROC D0
 
 PROC fileStart(ftpData:PTR TO ftpData,fn,pos)
   DEF fs,xprInfo
-  DEF xi
   fs:=ftpData.fileStart
-  xi:=ftpData.xprInfo
-  MOVE.L xi,-(A7)
+  xprInfo:=ftpData.xprInfo
+  MOVE.L xprInfo,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L pos,-(A7)
   fs()
@@ -246,7 +245,7 @@ PROC aePuts(ftpData:PTR TO ftpData, s:PTR TO CHAR)
 ENDPROC
 
 PROC sCheckInput(ftpData:PTR TO ftpData)
-  DEF chk,r
+  DEF chk
   chk:=ftpData.sCheckInput
 ENDPROC chk()
 
@@ -518,7 +517,7 @@ PROC cmdUser(sb,ftp_c,params:PTR TO CHAR)
 ENDPROC
 
 PROC cmdPass(sb,ftp_c,params)
-  ->WriteF('user=\s\b\n',params)
+  ->WriteF('pass=\s\b\n',params)
   writeLineEx(sb,ftp_c, '230 password accepted\b\n')
 ENDPROC
 
@@ -864,8 +863,7 @@ ENDPROC
 
 PROC cmdList(sb,ftp_c,data_s,data_c,ftpData:PTR TO ftpData)
   DEF r
-  DEF temp[255]:STRING
-
+  
   IF (data_c>=0)  
     myDir(sb,data_c,ftpData.workingPath)
     writeLineEx(sb,ftp_c, '226 Transfer Complete\b\n')
@@ -889,8 +887,6 @@ PROC ftpThread()
   DEF sb,r
   DEF data_s=-1,data_c=-1
   DEF ftpData:PTR TO ftpData
-  DEF t,svA4
-  DEF temp[255]:STRING
 
   ftpData:=loadA4()
 
@@ -1023,7 +1019,6 @@ ENDPROC pa
 
 PROC createThread(node,sockid,ftpData:PTR TO ftpData)
   DEF tags,proc:PTR TO process
-  DEF tempstr[255]:STRING
   tags:=NEW [NP_ENTRY,{ftpThread},NP_STACKSIZE,10000,0]:LONG
  
   ftpData.sockId:=sockid
@@ -1036,7 +1031,7 @@ PROC createThread(node,sockid,ftpData:PTR TO ftpData)
 ENDPROC
 
 EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, xprInfo, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, uploadMode)
-  DEF r,ftp_s,ftp_c,s,sb,myargs:PTR TO LONG,rdargs
+  DEF r,ftp_s,ftp_c,s,sb
   DEF temp[255]:STRING
   DEF ftpData:PTR TO ftpData
   DEF flg,rchar

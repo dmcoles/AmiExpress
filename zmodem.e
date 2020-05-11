@@ -92,13 +92,13 @@ PROC flength(file)
   FreeDosObject(DOS_FIB,fBlock)
 ENDPROC fsize
 
-PROC getFreeDiskSpace(drive,n)
-ENDPROC 300000000
+->todo proper disk space check
+PROC getFreeDiskSpace() IS 300000000
 
 EXPORT PROC getZmSystemTime()
   DEF currDate: datestamp 
   DateStamp(currDate)
-ENDPROC Mul(Mul(currDate.days,1440),60)+(currDate.minute*60)+(currDate.tick/50)
+ENDPROC Mul(Mul(currDate.days,1440),60)+(currDate.minute*60)+(currDate.tick/50),Mod(currDate.tick,50)
 
 PROC getFileSize(zm,fp)
   DEF p
@@ -428,7 +428,8 @@ EXPORT OBJECT zmodem_t
 	files_remaining:LONG
 	bytes_remaining:LONG
 	transfer_start_pos:LONG
-	transfer_start_time:LONG
+	transfer_start_time1:LONG
+	transfer_start_time2:INT
   new_file:INT 
 	receive_32bit_data:INT
 	use_crc16:INT
@@ -485,14 +486,14 @@ PROC ucrc16(zm:PTR TO zmodem_t,ch,crc)
   n:=Eor(Shr(crc,8) AND $ff,ch)
 ENDPROC Eor(zm.crc16tbl[n],Shl(crc,8)) AND $ffff
 
-PROC crc16(zm:PTR TO zmodem_t,data: PTR TO CHAR,len)
+/*PROC crc16(zm:PTR TO zmodem_t,data: PTR TO CHAR,len)
 	DEF crc=0
 	DEF l
 	IF((len=0) AND (data<>NIL)) THEN len:=StrLen(data)
 	FOR l:=0 TO len-1
 		crc:=ucrc16(zm,data[l],crc)
   ENDFOR
-ENDPROC crc
+ENDPROC crc*/
 
 /*PROC ucrc32(ch,crc)
   DEF a,b
@@ -517,7 +518,8 @@ PROC fcrc32(zm:PTR TO zmodem_t,fp,  len)
     IF rl=1
       crc:=ucrc32(zm,ch,crc)
     ENDIF   
-	UNTIL rl=0
+    len--
+	UNTIL (rl=0) OR (len=0)
 ENDPROC Not(crc)
 
 
@@ -573,7 +575,6 @@ PROC zmodem_data_waiting(zm: PTR TO zmodem_t,timeout)
 ENDPROC FALSE
 
 PROC chr(ch,output)
-  DEF str[25]:STRING
 
   SELECT ch
     CASE TIMEOUT
@@ -752,9 +753,9 @@ PROC frame_desc(frame,output)
   StrCopy(output,str)
  ENDPROC
 
-PROC frame_pos(zm: PTR TO zmodem_t,type)
+/*PROC frame_pos(zm: PTR TO zmodem_t,type)
 	IF (type=ZRPOS) OR (type=ZACK) OR (type=ZEOF) OR (type=ZDATA) THEN RETURN zm.rxd_header_pos
-ENDPROC 0
+ENDPROC 0*/
 
 /*
  * read bytes as long as rdchk indicates that
@@ -784,8 +785,6 @@ ENDPROC
  */
 /* Returns 0 on success */
 EXPORT PROC zmodem_send_raw(zm: PTR TO zmodem_t,ch)
-	DEF result
-  DEF tempstr[255]:STRING
 
   zm.sendBuffer[zm.sendBufferPos]:=ch
   zm.sendBufferPos:=zm.sendBufferPos+1
@@ -838,7 +837,7 @@ ENDPROC zmodem_send_raw(zm,c)
 /**********************************************/
 PROC zmodem_send_hex(zm:PTR TO zmodem_t,val)
   DEF xdigit[16]:STRING
-  DEF tempstr[255]:STRING
+  ->DEF tempstr[255]:STRING
 	DEF result
 
   StrCopy(xdigit,'0123456789abcdef')
@@ -866,8 +865,8 @@ PROC zmodem_send_hex_header(zm:PTR TO zmodem_t, p: PTR TO CHAR)
 	DEF  result;
   DEF type
 	DEF crc;
-  DEF tempstr[255]:STRING
-  DEF tempstr2[255]:STRING
+  ->DEF tempstr[255]:STRING
+  ->DEF tempstr2[255]:STRING
 
   type:=p[]
   ->chr(type,tempstr)
@@ -928,8 +927,8 @@ PROC zmodem_send_bin32_header(zm:PTR TO zmodem_t, p: PTR TO CHAR)
 	DEF i
 	DEF result
 	DEF crc
-  DEF tempstr[255]:STRING
-  DEF tempstr2[255]:STRING
+  ->DEF tempstr[255]:STRING
+  ->DEF tempstr2[255]:STRING
   DEF pp
 
   ->chr(p[],tempstr)
@@ -963,8 +962,8 @@ PROC zmodem_send_bin16_header(zm:PTR TO zmodem_t, p: PTR TO CHAR)
 	DEF i
 	DEF result
 	DEF crc
-  DEF tempstr[255]:STRING
-  DEF tempstr2[255]:STRING
+  ->DEF tempstr[255]:STRING
+  ->DEF tempstr2[255]:STRING
   DEF tmp
 
   ->chr(p[],tempstr)
@@ -1009,8 +1008,8 @@ PROC zmodem_send_data32(zm: PTR TO zmodem_t, subpkt_type, p: PTR TO CHAR, l)
 	DEF result
 	DEF crc
   DEF tmp
-  DEF tempstr[255]:STRING
-  DEF tempstr2[255]:STRING
+  ->DEF tempstr[255]:STRING
+  ->DEF tempstr2[255]:STRING
 
   ->chr(subpkt_type,tempstr)
   ->StringF(tempstr2,'send_data32: \s (\d bytes)', tempstr,l)
@@ -1045,8 +1044,8 @@ PROC zmodem_send_data16(zm: PTR TO zmodem_t, subpkt_type,p: PTR TO CHAR, l)
 
 	DEF	result
 	DEF crc
-  DEF tempstr[255]:STRING
-  DEF tempstr2[255]:STRING
+  ->DEF tempstr[255]:STRING
+  ->DEF tempstr2[255]:STRING
   DEF tmp
 
   ->chr(subpkt_type,tempstr)
@@ -1099,7 +1098,7 @@ PROC zmodem_send_data_subpkt(zm: PTR TO zmodem_t, subpkt_type, p: PTR TO CHAR, l
 ENDPROC result
 
 PROC zmodem_send_data(zm: PTR TO zmodem_t, subpkt_type, p: PTR TO CHAR, l)
-  DEF tempstr[255]:STRING
+  ->DEF tempstr[255]:STRING
 
 	IF(zm.frame_in_transit)=0	 /* Start of frame, include ZDATA header */
     ->StringF(tempstr,'send_data: start of frame, offset \d',zm.current_file_pos)
@@ -1374,7 +1373,7 @@ PROC zmodem_recv_data16(zm: PTR TO zmodem_t, p:PTR TO CHAR,  maxlen, l: PTR TO L
  	DEF crc;
 	DEF rxd_crc
   DEF tempstr[255]:STRING
-  DEF tempstr2[255]:STRING
+  ->DEF tempstr2[255]:STRING
 
 	->lprintf(zm,ZM_LOG_DEBUG,'recv_data16')
 
@@ -1522,7 +1521,7 @@ PROC zmodem_recv_hex(zm: PTR TO zmodem_t)
 	DEF n1
 	DEF n0
 	DEF ret
-  DEF tempstr[255]:STRING
+  ->DEF tempstr[255]:STRING
 
 	n1:=zmodem_recv_nibble(zm)
 
@@ -1785,7 +1784,7 @@ zmrhcont:
 		CASE ZCOMMAND
 			IF(zmodem_recv_subpacket(zm,/* ack? */TRUE))=FALSE THEN  frame_type:=frame_type OR BADSUBPKT
 		CASE ZFREECNT
-			zmodem_send_pos_header(zm, ZACK, getFreeDiskSpace('.',1), /* Hex? */ TRUE)
+			zmodem_send_pos_header(zm, ZACK, getFreeDiskSpace(), /* Hex? */ TRUE)
 	ENDSELECT
 
 ->#if 0 /* def _DEBUG */
@@ -1797,8 +1796,8 @@ ENDPROC frame_type
 
 PROC zmodem_recv_header(zm: PTR TO zmodem_t)
 	DEF ret
-  DEF tempstr[255]:STRING
-  DEF tempstr2[255]:STRING
+  ->DEF tempstr[255]:STRING
+  ->DEF tempstr2[255]:STRING
 
   ret:=zmodem_recv_header_raw(zm, FALSE)
 	
@@ -1823,8 +1822,8 @@ ENDPROC ret
 
 PROC zmodem_recv_header_and_check(zm: PTR TO zmodem_t)
 	DEF type=ABORTED
-  DEF tempstr[255]:STRING
-  DEF tempstr2[255]:STRING
+  ->DEF tempstr[255]:STRING
+  ->DEF tempstr2[255]:STRING
 
 	WHILE(is_connected(zm) AND (is_cancelled(zm)=FALSE))
 		type:=zmodem_recv_header_raw(zm,TRUE);	
@@ -1868,9 +1867,9 @@ PROC zmodem_recv_crc(zm: PTR TO zmodem_t, crc:PTR TO LONG)
 	IF(crc<>NIL) THEN crc[]:=zm.crc_request
 ENDPROC TRUE
 
-PROC zmodem_get_crc(zm: PTR TO zmodem_t,length, crc:PTR TO LONG)
+/*PROC zmodem_get_crc(zm: PTR TO zmodem_t,length, crc:PTR TO LONG)
 	IF(zmodem_request_crc(zm, length)) THEN RETURN  zmodem_recv_crc(zm, crc)
-ENDPROC FALSE
+ENDPROC FALSE*/
 
 PROC zmodem_parse_zrinit(zm: PTR TO zmodem_t)
   DEF tempstr[255]:STRING
@@ -1938,7 +1937,7 @@ ENDPROC zmodem_send_hex_header(zm, zrinit_header)
 
 
 /* Returns ZFIN on success */
-PROC zmodem_get_zfin(zm: PTR TO zmodem_t)
+/*PROC zmodem_get_zfin(zm: PTR TO zmodem_t)
 
 	DEF result
 	DEF type=ZCAN
@@ -1967,7 +1966,7 @@ PROC zmodem_get_zfin(zm: PTR TO zmodem_t)
 		zmodem_send_raw(zm,"O")
 		zmodem_send_raw(zm,"O")
 	ENDIF
-ENDPROC type
+ENDPROC type*/
 
 
 PROC zmodem_handle_zrpos(zm: PTR TO zmodem_t, pos:PTR TO LONG)
@@ -2010,8 +2009,6 @@ PROC zmodem_send_from(zm: PTR TO zmodem_t, fp, pos,sent: PTR TO LONG)
 	DEF rx_type
 	DEF c
   DEF p
-
-	IF(sent<>NIL) THEN sent[]:=0
 
   IF doSeek(zm,fp,pos,OFFSET_BEGINING)=-1 
     StringF(tempstr,'ERROR \d seeking to file offset \d',IoErr(), pos)
@@ -2148,7 +2145,7 @@ PROC zmodem_send_from(zm: PTR TO zmodem_t, fp, pos,sent: PTR TO LONG)
 
 ENDPROC ZACK
 
-EXPORT PROC zmodem_send_files(zm: PTR TO zmodem_t,start: PTR TO LONG, sent: PTR TO LONG)
+EXPORT PROC zmodem_send_files(zm: PTR TO zmodem_t,sent: PTR TO LONG, timetaken:PTR TO LONG)
   DEF p,res,init=TRUE
   DEF fname[255]:STRING
   
@@ -2156,7 +2153,7 @@ EXPORT PROC zmodem_send_files(zm: PTR TO zmodem_t,start: PTR TO LONG, sent: PTR 
   IF p<>NIL
     IF p(zm,fname)
       REPEAT
-        res:=zmodem_send_file(zm, fname, init,{start}, {sent})
+        res:=zmodem_send_file(zm, fname, init,sent, timetaken)
         IF res=FALSE THEN RETURN res
         init:=FALSE
         IF res
@@ -2179,7 +2176,7 @@ ENDPROC TRUE
  * send a file; returns true when session is successful. (or file is skipped)
  */
 
-PROC zmodem_send_file(zm: PTR TO zmodem_t, fname: PTR TO CHAR, request_init,start: PTR TO LONG, sent: PTR TO LONG)
+PROC zmodem_send_file(zm: PTR TO zmodem_t, fname: PTR TO CHAR, request_init,sent: PTR TO LONG, timetaken: PTR TO LONG)
 
 	DEF	pos=0
 	DEF	sent_bytes
@@ -2192,6 +2189,7 @@ PROC zmodem_send_file(zm: PTR TO zmodem_t, fname: PTR TO CHAR, request_init,star
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
   DEF loop = TRUE
+  DEF t1,t2,t
 
   fp:=doOpen(zm,fname,MODE_OLDFILE)
   IF fp<=0
@@ -2211,10 +2209,6 @@ PROC zmodem_send_file(zm: PTR TO zmodem_t, fname: PTR TO CHAR, request_init,star
 	IF(zm.max_block_size < zm.block_size) THEN zm.max_block_size:=zm.block_size;
 
 	IF(zm.max_block_size > RXSUBPACKETSIZE) THEN zm.max_block_size:= RXSUBPACKETSIZE
-
-	IF(sent<>NIL)	THEN sent[]:=0
-
-	IF(start<>NIL) THEN start[]:=getZmSystemTime()
 
 	zm.file_skipped:=FALSE
 
@@ -2395,9 +2389,10 @@ zsendignore:
   ENDIF
 
 	zm.transfer_start_pos:=pos;
-	zm.transfer_start_time:=getZmSystemTime()
-
-	IF(start<>NIL) THEN start[]:=zm.transfer_start_time
+  
+  t1,t2:=getZmSystemTime()
+	zm.transfer_start_time1:=t1
+  zm.transfer_start_time2:=t2
 
   doSeek(zm,fp,0,OFFSET_BEGINNING)
 	zm.errors:=0
@@ -2415,6 +2410,12 @@ zsendcont2:
 
 		type:=zmodem_send_from(zm, fp, pos, {sent_bytes})
 
+    t1,t2:=getZmSystemTime()
+    t:=Mul((t1-zm.transfer_start_time1),50)+t2-zm.transfer_start_time2
+
+		IF(sent<>NIL) THEN sent[]:=sent[]+sent_bytes
+    IF(timetaken<>NIL) THEN timetaken[]:=timetaken[]+t
+
 		IF(is_connected(zm))=FALSE
       doClose(zm,fp)
       RETURN FALSE
@@ -2431,8 +2432,6 @@ zsendcont2:
       doClose(zm,fp)
 			RETURN TRUE
 		ENDIF
-
-		IF(sent<>NIL) THEN sent[]:=sent[]+sent_bytes
 
 		IF(type=ZRINIT) 
       doClose(zm,fp)
@@ -2472,7 +2471,7 @@ zsendcont2:
   doClose(zm,fp)
 ENDPROC FALSE
 
-EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,bytes_received: PTR TO LONG)
+EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,bytes_received: PTR TO LONG,timetaken:PTR TO LONG)
 	DEF fpath[MAX_PATH]:STRING
   DEF fp
 	DEF	l
@@ -2490,11 +2489,10 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
 	DEF	timeout
 	DEF	errors
   DEF tempstr[255]:STRING
-  DEF tempstr2[255]:STRING
   DEF brk=FALSE
   DEF p
+  DEF t1,t2
 
-	IF(bytes_received<>NIL) THEN bytes_received[]:=0
 	zm.current_file_num:=1
 	WHILE(zmodem_recv_init(zm)=ZFILE)
 		bytes:=zm.current_file_size;
@@ -2592,6 +2590,10 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
         lprintf(zm,ZM_LOG_INFO,tempstr)
 			ENDIF
 
+      t1,t2:=getZmSystemTime()
+      zm.transfer_start_time1:=t1
+      zm.transfer_start_time2:=t2
+
 			IF((fp:=doOpen(zm,fpath,MODE_READWRITE)))=NIL
         StringF(tempstr,'Error \d opening/creating/appending \s',IoErr(),fpath)
 				lprintf(zm,ZM_LOG_ERR,tempstr)
@@ -2614,6 +2616,11 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
 
 			doClose(zm,fp)
       
+      t1,t2:=getZmSystemTime()
+      t:=Mul((t1-zm.transfer_start_time1),50)+t2-zm.transfer_start_time2
+      IF t<=0 THEN t:=1
+      IF timetaken<>NIL THEN timetaken[]:=timetaken[]+t
+
 			l:=flength(fpath);
 			IF(errors AND (l=0))	/* aborted/failed download */
 				IF(DeleteFile(fpath))	/* don't save 0-byte file */
@@ -2629,9 +2636,18 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
 					lprintf(zm,ZM_LOG_WARNING,tempstr)
           upload_failed(zm,fpath)
 				ELSE
-					IF((t:=(getZmSystemTime()-zm.transfer_start_time)))<=0 THEN t:=1
 					b:=l-start_bytes
-					IF((cps:=Div(b,t)))=0 THEN cps:=1
+
+          IF t>0
+            IF b>40000000
+              cps:=Div(b,Div(t,50)) 
+            ELSE
+              cps:=Div(Mul(b,50),t) 
+            ENDIF
+          ELSE
+            cps:=b
+          ENDIF
+          IF cps=0 THEN cps:=1
           StringF(tempstr,'Received \d bytes successfully (\d CPS)',b,cps)
 					lprintf(zm,ZM_LOG_INFO,tempstr)
 					files_received++
@@ -2789,7 +2805,6 @@ PROC zmodem_recv_file_data(zm: PTR TO zmodem_t, fp, offset)
   DEF brk=FALSE
   
 	zm.transfer_start_pos:=offset
-	zm.transfer_start_time:=getZmSystemTime()
 
 	IF(doSeek(zm,fp,offset,OFFSET_BEGINNING))<0 
     StringF(tempstr,'ERROR \d seeking to file offset \d',IoErr(), offset)
@@ -2966,74 +2981,6 @@ EXPORT PROC zmodem_init(zm: PTR TO zmodem_t, cbdata: PTR TO CHAR,
 
 	IF max_errors<>0 THEN zm.max_errors:=max_errors ELSE zm.max_errors:=9
 
-  zm.crc16tbl:= [
-$0000, $1021, $2042, $3063, $4084, $50A5, $60C6, $70E7,
-$8108, $9129, $A14A, $B16B, $C18C, $D1AD, $E1CE, $F1EF,
-$1231, $0210, $3273, $2252, $52B5, $4294, $72F7, $62D6,
-$9339, $8318, $B37B, $A35A, $D3BD, $C39C, $F3FF, $E3DE,
-$2462, $3443, $0420, $1401, $64E6, $74C7, $44A4, $5485,
-$A56A, $B54B, $8528, $9509, $E5EE, $F5CF, $C5AC, $D58D,
-$3653, $2672, $1611, $0630, $76D7, $66F6, $5695, $46B4,
-$B75B, $A77A, $9719, $8738, $F7DF, $E7FE, $D79D, $C7BC,
-$48C4, $58E5, $6886, $78A7, $0840, $1861, $2802, $3823,
-$C9CC, $D9ED, $E98E, $F9AF, $8948, $9969, $A90A, $B92B,
-$5AF5, $4AD4, $7AB7, $6A96, $1A71, $0A50, $3A33, $2A12,
-$DBFD, $CBDC, $FBBF, $EB9E, $9B79, $8B58, $BB3B, $AB1A,
-$6CA6, $7C87, $4CE4, $5CC5, $2C22, $3C03, $0C60, $1C41,
-$EDAE, $FD8F, $CDEC, $DDCD, $AD2A, $BD0B, $8D68, $9D49,
-$7E97, $6EB6, $5ED5, $4EF4, $3E13, $2E32, $1E51, $0E70,
-$FF9F, $EFBE, $DFDD, $CFFC, $BF1B, $AF3A, $9F59, $8F78,
-$9188, $81A9, $B1CA, $A1EB, $D10C, $C12D, $F14E, $E16F,
-$1080, $00A1, $30C2, $20E3, $5004, $4025, $7046, $6067,
-$83B9, $9398, $A3FB, $B3DA, $C33D, $D31C, $E37F, $F35E,
-$02B1, $1290, $22F3, $32D2, $4235, $5214, $6277, $7256,
-$B5EA, $A5CB, $95A8, $8589, $F56E, $E54F, $D52C, $C50D,
-$34E2, $24C3, $14A0, $0481, $7466, $6447, $5424, $4405,
-$A7DB, $B7FA, $8799, $97B8, $E75F, $F77E, $C71D, $D73C,
-$26D3, $36F2, $0691, $16B0, $6657, $7676, $4615, $5634,
-$D94C, $C96D, $F90E, $E92F, $99C8, $89E9, $B98A, $A9AB,
-$5844, $4865, $7806, $6827, $18C0, $08E1, $3882, $28A3,
-$CB7D, $DB5C, $EB3F, $FB1E, $8BF9, $9BD8, $ABBB, $BB9A,
-$4A75, $5A54, $6A37, $7A16, $0AF1, $1AD0, $2AB3, $3A92,
-$FD2E, $ED0F, $DD6C, $CD4D, $BDAA, $AD8B, $9DE8, $8DC9,
-$7C26, $6C07, $5C64, $4C45, $3CA2, $2C83, $1CE0, $0CC1,
-$EF1F, $FF3E, $CF5D, $DF7C, $AF9B, $BFBA, $8FD9, $9FF8,
-$6E17, $7E36, $4E55, $5E74, $2E93, $3EB2, $0ED1, $1EF0
-]:INT
-
-  zm.crc32tbl:=[
-$00000000, $77073096, $ee0e612c, $990951ba, $076dc419, $706af48f, $e963a535, $9e6495a3,
-$0edb8832, $79dcb8a4, $e0d5e91e, $97d2d988, $09b64c2b, $7eb17cbd, $e7b82d07, $90bf1d91,
-$1db71064, $6ab020f2, $f3b97148, $84be41de, $1adad47d, $6ddde4eb, $f4d4b551, $83d385c7,
-$136c9856, $646ba8c0, $fd62f97a, $8a65c9ec, $14015c4f, $63066cd9, $fa0f3d63, $8d080df5,
-$3b6e20c8, $4c69105e, $d56041e4, $a2677172, $3c03e4d1, $4b04d447, $d20d85fd, $a50ab56b,
-$35b5a8fa, $42b2986c, $dbbbc9d6, $acbcf940, $32d86ce3, $45df5c75, $dcd60dcf, $abd13d59,
-$26d930ac, $51de003a, $c8d75180, $bfd06116, $21b4f4b5, $56b3c423, $cfba9599, $b8bda50f,
-$2802b89e, $5f058808, $c60cd9b2, $b10be924, $2f6f7c87, $58684c11, $c1611dab, $b6662d3d,
-$76dc4190, $01db7106, $98d220bc, $efd5102a, $71b18589, $06b6b51f, $9fbfe4a5, $e8b8d433,
-$7807c9a2, $0f00f934, $9609a88e, $e10e9818, $7f6a0dbb, $086d3d2d, $91646c97, $e6635c01,
-$6b6b51f4, $1c6c6162, $856530d8, $f262004e, $6c0695ed, $1b01a57b, $8208f4c1, $f50fc457,
-$65b0d9c6, $12b7e950, $8bbeb8ea, $fcb9887c, $62dd1ddf, $15da2d49, $8cd37cf3, $fbd44c65,
-$4db26158, $3ab551ce, $a3bc0074, $d4bb30e2, $4adfa541, $3dd895d7, $a4d1c46d, $d3d6f4fb,
-$4369e96a, $346ed9fc, $ad678846, $da60b8d0, $44042d73, $33031de5, $aa0a4c5f, $dd0d7cc9,
-$5005713c, $270241aa, $be0b1010, $c90c2086, $5768b525, $206f85b3, $b966d409, $ce61e49f,
-$5edef90e, $29d9c998, $b0d09822, $c7d7a8b4, $59b33d17, $2eb40d81, $b7bd5c3b, $c0ba6cad,
-$edb88320, $9abfb3b6, $03b6e20c, $74b1d29a, $ead54739, $9dd277af, $04db2615, $73dc1683,
-$e3630b12, $94643b84, $0d6d6a3e, $7a6a5aa8, $e40ecf0b, $9309ff9d, $0a00ae27, $7d079eb1,
-$f00f9344, $8708a3d2, $1e01f268, $6906c2fe, $f762575d, $806567cb, $196c3671, $6e6b06e7,
-$fed41b76, $89d32be0, $10da7a5a, $67dd4acc, $f9b9df6f, $8ebeeff9, $17b7be43, $60b08ed5,
-$d6d6a3e8, $a1d1937e, $38d8c2c4, $4fdff252, $d1bb67f1, $a6bc5767, $3fb506dd, $48b2364b,
-$d80d2bda, $af0a1b4c, $36034af6, $41047a60, $df60efc3, $a867df55, $316e8eef, $4669be79,
-$cb61b38c, $bc66831a, $256fd2a0, $5268e236, $cc0c7795, $bb0b4703, $220216b9, $5505262f,
-$c5ba3bbe, $b2bd0b28, $2bb45a92, $5cb36a04, $c2d7ffa7, $b5d0cf31, $2cd99e8b, $5bdeae1d,
-$9b64c2b0, $ec63f226, $756aa39c, $026d930a, $9c0906a9, $eb0e363f, $72076785, $05005713,
-$95bf4a82, $e2b87a14, $7bb12bae, $0cb61b38, $92d28e9b, $e5d5be0d, $7cdcefb7, $0bdbdf21,
-$86d3d2d4, $f1d4e242, $68ddb3f8, $1fda836e, $81be16cd, $f6b9265b, $6fb077e1, $18b74777,
-$88085ae6, $ff0f6a70, $66063bca, $11010b5c, $8f659eff, $f862ae69, $616bffd3, $166ccf45,
-$a00ae278, $d70dd2ee, $4e048354, $3903b3c2, $a7672661, $d06016f7, $4969474d, $3e6e77db,
-$aed16a4a, $d9d65adc, $40df0b66, $37d83bf0, $a9bcae53, $debb9ec5, $47b2cf7f, $30b5ffe9,
-$bdbdf21c, $cabac28a, $53b39330, $24b4a3a6, $bad03605, $cdd70693, $54de5729, $23d967bf,
-$b3667a2e, $c4614ab8, $5d681b02, $2a6f2b94, $b40bbe37, $c30c8ea1, $5a05df1b, $2d02ef8d]:LONG
 
 	zm.cbdata:=cbdata
 	zm.zm_lputs:=lputs
@@ -3060,6 +3007,9 @@ $b3667a2e, $c4614ab8, $5d681b02, $2a6f2b94, $b40bbe37, $c30c8ea1, $5a05df1b, $2d
   zm.sendBuffer:=New(zm.max_block_size+512)
   zm.sendBufferPos:=0
   zm.sendBufferSize:=zm.max_block_size+512 
+  
+  zm.crc16tbl:={crc16tbl}
+  zm.crc32tbl:={crc32tbl}
 ENDPROC
 
 EXPORT PROC zmodem_cleanup(zm: PTR TO zmodem_t)
@@ -3113,3 +3063,68 @@ PROC doWrite(zm:PTR TO zmodem_t,fhandle,buffer,length)
   ->lprintf(zm,ZM_LOG_WARNING,'zm_fwrite not set, defaulting to dos library FWrite')
 ENDPROC Fwrite(fhandle,buffer,1,length)
 
+crc16tbl: INT $0000, $1021, $2042, $3063, $4084, $50A5, $60C6, $70E7,
+  $8108, $9129, $A14A, $B16B, $C18C, $D1AD, $E1CE, $F1EF,
+  $1231, $0210, $3273, $2252, $52B5, $4294, $72F7, $62D6,
+  $9339, $8318, $B37B, $A35A, $D3BD, $C39C, $F3FF, $E3DE,
+  $2462, $3443, $0420, $1401, $64E6, $74C7, $44A4, $5485,
+  $A56A, $B54B, $8528, $9509, $E5EE, $F5CF, $C5AC, $D58D,
+  $3653, $2672, $1611, $0630, $76D7, $66F6, $5695, $46B4,
+  $B75B, $A77A, $9719, $8738, $F7DF, $E7FE, $D79D, $C7BC,
+  $48C4, $58E5, $6886, $78A7, $0840, $1861, $2802, $3823,
+  $C9CC, $D9ED, $E98E, $F9AF, $8948, $9969, $A90A, $B92B,
+  $5AF5, $4AD4, $7AB7, $6A96, $1A71, $0A50, $3A33, $2A12,
+  $DBFD, $CBDC, $FBBF, $EB9E, $9B79, $8B58, $BB3B, $AB1A,
+  $6CA6, $7C87, $4CE4, $5CC5, $2C22, $3C03, $0C60, $1C41,
+  $EDAE, $FD8F, $CDEC, $DDCD, $AD2A, $BD0B, $8D68, $9D49,
+  $7E97, $6EB6, $5ED5, $4EF4, $3E13, $2E32, $1E51, $0E70,
+  $FF9F, $EFBE, $DFDD, $CFFC, $BF1B, $AF3A, $9F59, $8F78,
+  $9188, $81A9, $B1CA, $A1EB, $D10C, $C12D, $F14E, $E16F,
+  $1080, $00A1, $30C2, $20E3, $5004, $4025, $7046, $6067,
+  $83B9, $9398, $A3FB, $B3DA, $C33D, $D31C, $E37F, $F35E,
+  $02B1, $1290, $22F3, $32D2, $4235, $5214, $6277, $7256,
+  $B5EA, $A5CB, $95A8, $8589, $F56E, $E54F, $D52C, $C50D,
+  $34E2, $24C3, $14A0, $0481, $7466, $6447, $5424, $4405,
+  $A7DB, $B7FA, $8799, $97B8, $E75F, $F77E, $C71D, $D73C,
+  $26D3, $36F2, $0691, $16B0, $6657, $7676, $4615, $5634,
+  $D94C, $C96D, $F90E, $E92F, $99C8, $89E9, $B98A, $A9AB,
+  $5844, $4865, $7806, $6827, $18C0, $08E1, $3882, $28A3,
+  $CB7D, $DB5C, $EB3F, $FB1E, $8BF9, $9BD8, $ABBB, $BB9A,
+  $4A75, $5A54, $6A37, $7A16, $0AF1, $1AD0, $2AB3, $3A92,
+  $FD2E, $ED0F, $DD6C, $CD4D, $BDAA, $AD8B, $9DE8, $8DC9,
+  $7C26, $6C07, $5C64, $4C45, $3CA2, $2C83, $1CE0, $0CC1,
+  $EF1F, $FF3E, $CF5D, $DF7C, $AF9B, $BFBA, $8FD9, $9FF8,
+  $6E17, $7E36, $4E55, $5E74, $2E93, $3EB2, $0ED1, $1EF0
+
+crc32tbl: LONG  $00000000, $77073096, $ee0e612c, $990951ba, $076dc419, $706af48f, $e963a535, $9e6495a3,
+  $0edb8832, $79dcb8a4, $e0d5e91e, $97d2d988, $09b64c2b, $7eb17cbd, $e7b82d07, $90bf1d91,
+  $1db71064, $6ab020f2, $f3b97148, $84be41de, $1adad47d, $6ddde4eb, $f4d4b551, $83d385c7,
+  $136c9856, $646ba8c0, $fd62f97a, $8a65c9ec, $14015c4f, $63066cd9, $fa0f3d63, $8d080df5,
+  $3b6e20c8, $4c69105e, $d56041e4, $a2677172, $3c03e4d1, $4b04d447, $d20d85fd, $a50ab56b,
+  $35b5a8fa, $42b2986c, $dbbbc9d6, $acbcf940, $32d86ce3, $45df5c75, $dcd60dcf, $abd13d59,
+  $26d930ac, $51de003a, $c8d75180, $bfd06116, $21b4f4b5, $56b3c423, $cfba9599, $b8bda50f,
+  $2802b89e, $5f058808, $c60cd9b2, $b10be924, $2f6f7c87, $58684c11, $c1611dab, $b6662d3d,
+  $76dc4190, $01db7106, $98d220bc, $efd5102a, $71b18589, $06b6b51f, $9fbfe4a5, $e8b8d433,
+  $7807c9a2, $0f00f934, $9609a88e, $e10e9818, $7f6a0dbb, $086d3d2d, $91646c97, $e6635c01,
+  $6b6b51f4, $1c6c6162, $856530d8, $f262004e, $6c0695ed, $1b01a57b, $8208f4c1, $f50fc457,
+  $65b0d9c6, $12b7e950, $8bbeb8ea, $fcb9887c, $62dd1ddf, $15da2d49, $8cd37cf3, $fbd44c65,
+  $4db26158, $3ab551ce, $a3bc0074, $d4bb30e2, $4adfa541, $3dd895d7, $a4d1c46d, $d3d6f4fb,
+  $4369e96a, $346ed9fc, $ad678846, $da60b8d0, $44042d73, $33031de5, $aa0a4c5f, $dd0d7cc9,
+  $5005713c, $270241aa, $be0b1010, $c90c2086, $5768b525, $206f85b3, $b966d409, $ce61e49f,
+  $5edef90e, $29d9c998, $b0d09822, $c7d7a8b4, $59b33d17, $2eb40d81, $b7bd5c3b, $c0ba6cad,
+  $edb88320, $9abfb3b6, $03b6e20c, $74b1d29a, $ead54739, $9dd277af, $04db2615, $73dc1683,
+  $e3630b12, $94643b84, $0d6d6a3e, $7a6a5aa8, $e40ecf0b, $9309ff9d, $0a00ae27, $7d079eb1,
+  $f00f9344, $8708a3d2, $1e01f268, $6906c2fe, $f762575d, $806567cb, $196c3671, $6e6b06e7,
+  $fed41b76, $89d32be0, $10da7a5a, $67dd4acc, $f9b9df6f, $8ebeeff9, $17b7be43, $60b08ed5,
+  $d6d6a3e8, $a1d1937e, $38d8c2c4, $4fdff252, $d1bb67f1, $a6bc5767, $3fb506dd, $48b2364b,
+  $d80d2bda, $af0a1b4c, $36034af6, $41047a60, $df60efc3, $a867df55, $316e8eef, $4669be79,
+  $cb61b38c, $bc66831a, $256fd2a0, $5268e236, $cc0c7795, $bb0b4703, $220216b9, $5505262f,
+  $c5ba3bbe, $b2bd0b28, $2bb45a92, $5cb36a04, $c2d7ffa7, $b5d0cf31, $2cd99e8b, $5bdeae1d,
+  $9b64c2b0, $ec63f226, $756aa39c, $026d930a, $9c0906a9, $eb0e363f, $72076785, $05005713,
+  $95bf4a82, $e2b87a14, $7bb12bae, $0cb61b38, $92d28e9b, $e5d5be0d, $7cdcefb7, $0bdbdf21,
+  $86d3d2d4, $f1d4e242, $68ddb3f8, $1fda836e, $81be16cd, $f6b9265b, $6fb077e1, $18b74777,
+  $88085ae6, $ff0f6a70, $66063bca, $11010b5c, $8f659eff, $f862ae69, $616bffd3, $166ccf45,
+  $a00ae278, $d70dd2ee, $4e048354, $3903b3c2, $a7672661, $d06016f7, $4969474d, $3e6e77db,
+  $aed16a4a, $d9d65adc, $40df0b66, $37d83bf0, $a9bcae53, $debb9ec5, $47b2cf7f, $30b5ffe9,
+  $bdbdf21c, $cabac28a, $53b39330, $24b4a3a6, $bad03605, $cdd70693, $54de5729, $23d967bf,
+  $b3667a2e, $c4614ab8, $5d681b02, $2a6f2b94, $b40bbe37, $c30c8ea1, $5a05df1b, $2d02ef8d

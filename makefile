@@ -4,7 +4,7 @@ options=DEBUG IGNORECACHE
 compiler=EC
 expprogramname=AmiExpress
 acpprogramname=ACP
-version=5.3.0-alpha
+version=5.3.0-beta
 
 all:					acp express5 jsonimport icon2cfg
 
@@ -14,7 +14,7 @@ release:				acp express5 jsonimport icon2cfg
 acp:					acp.e acpversion.m axcommon.m jsonparser.m jsoncreate.m stringlist.m 
 							$(compiler) acp $(options)
 
-express5:			express.e expversion.m axcommon.m axconsts.m miscfuncs.m axobjects.m axenums.m stringlist.m errors.m mailssl.m ftpd.m httpd.m zmodem.m bcd.m
+express5:			express.e expversion.m axcommon.m axconsts.m miscfuncs.m axobjects.m axenums.m stringlist.m errors.m mailssl.m ftpd.m httpd.m zmodem.m tooltypes.m pwdhash.m bcd.m
 							$(compiler) express $(options)
 							copy express express5
 							delete express
@@ -49,6 +49,12 @@ errors.m:			errors.e
 mailssl.m:		mailssl.e
 							$(compiler) mailssl $(options)
 
+tooltypes.m:	tooltypes.e
+							$(compiler) tooltypes $(options)
+
+pwdhash.m:		pwdhash.e
+							$(compiler) pwdhash $(options)
+
 axcommon.m:		axcommon.e stringlist.m
 							$(compiler) axcommon $(options)
               
@@ -81,5 +87,10 @@ ftpd.m:				ftpd.e
 
 httpd.m:			httpd.e axcommon.m stringlist.m
 							$(compiler) httpd $(options)
-clean :
-							delete expversion.e acpversion.e delete express verinfogen express5 acp jsonimport icon2cfg miscfuncs.m stringlist.m errors.m mailssl.m jsoncreate.m jsonparser.m axcommon.m ftpd.m httpd.m axconsts.m axobjects.m axenums.m zmodem.m bcd.m expversion.m acpversion.m
+
+clean:
+							delete expversion.e acpversion.e delete express verinfogen express5 acp jsonimport icon2cfg miscfuncs.m stringlist.m errors.m mailssl.m jsoncreate.m jsonparser.m axcommon.m ftpd.m httpd.m axconsts.m axobjects.m axenums.m zmodem.m bcd.m expversion.m acpversion.m pwdhash.m tooltypes.m
+              
+              
+.PHONY: 			expversion.e
+              

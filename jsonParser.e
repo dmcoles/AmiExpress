@@ -108,7 +108,7 @@ ENDPROC
  * Fills next available token with JSON primitive.
  */
 PROC jsmn_parse_primitive(parser:PTR TO jsmn_parser, js: PTR TO CHAR,len,tokens, num_tokens)
-	DEF token:PTR TO jsmntok_t, start,i,ch,found
+	DEF token:PTR TO jsmntok_t, start,ch,found
 
 	start:=parser.pos
 

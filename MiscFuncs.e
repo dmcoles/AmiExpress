@@ -79,6 +79,10 @@ EXPORT PROC strCmpi(test1: PTR TO CHAR, test2: PTR TO CHAR, len)
   ENDFOR
 ENDPROC TRUE
 
+EXPORT PROC midStr2(dest,src,pos,len)
+  IF len>0 THEN MidStr(dest,src,pos,len) ELSE StrCopy(dest,'')
+ENDPROC
+
 EXPORT PROC charToLower(c)
   /* convert a given char to lowercase */
   DEF str[1]:STRING
@@ -209,7 +213,7 @@ EXPORT PROC formatLongDate(cDateVal,outDateStr)
   DEF d : PTR TO datestamp
   DEF dt : datetime
   DEF datestr[10]:STRING
-  DEF r,dateVal
+  DEF dateVal
 
   dateVal:=cDateVal-21600
 
@@ -236,7 +240,7 @@ EXPORT PROC formatLongTime(cDateVal,outDateStr)
   DEF d : PTR TO datestamp
   DEF dt : datetime
   DEF time[10]:STRING
-  DEF r,dateVal
+  DEF dateVal
 
   dateVal:=cDateVal-21600
 
@@ -265,7 +269,7 @@ EXPORT PROC formatLongDateTime(cDateVal,outDateStr)
   DEF datestr[10]:STRING
   DEF daystr[10]:STRING
   DEF timestr[10]:STRING
-  DEF r,dateVal
+  DEF dateVal
 
   dateVal:=cDateVal-21600
 
@@ -283,7 +287,36 @@ EXPORT PROC formatLongDateTime(cDateVal,outDateStr)
   dt.strtime:=timestr
 
   IF DateToStr(dt)
-    StringF(outDateStr,'\s[3] \s \s',daystr,datestr,timestr)
+    StringF(outDateStr,'\s[3] \s[7]\d\s \s',daystr,datestr,IF dt.stamp.days>=8035 THEN 20 ELSE 19,datestr+7,timestr)
+    RETURN TRUE
+  ENDIF
+ENDPROC FALSE
+
+EXPORT PROC formatCDateTime(cDateVal,outDateStr)
+  DEF d : PTR TO datestamp
+  DEF dt : datetime
+  DEF datestr[10]:STRING
+  DEF daystr[10]:STRING
+  DEF timestr[10]:STRING
+  DEF dateVal
+
+  dateVal:=cDateVal-21600
+
+  d:=dt.stamp
+  d.tick:=(dateVal-Mul(Div(dateVal,60),60))
+  d.tick:=Mul(d.tick,50)
+  dateVal:=Div(dateVal,60)
+  d.days:=Div((dateVal),1440)-2922   ->-2922 days between 1/1/70 and 1/1/78
+  d.minute:=dateVal-(Mul(d.days+2922,1440))
+
+  dt.format:=FORMAT_DOS
+  dt.flags:=0
+  dt.strday:=daystr
+  dt.strdate:=datestr
+  dt.strtime:=timestr
+
+  IF DateToStr(dt)
+    StringF(outDateStr,'\s[3] \s[3] \s[2] \s \d\s',daystr,datestr+3,datestr,timestr,IF dt.stamp.days>=8035 THEN 20 ELSE 19,datestr+7)
     RETURN TRUE
   ENDIF
 ENDPROC FALSE
@@ -293,7 +326,7 @@ EXPORT PROC formatLongDateTime2(cDateVal,outDateStr,seperatorChar)
   DEF dt : datetime
   DEF datestr[10]:STRING
   DEF timestr[10]:STRING
-  DEF r,dateVal
+  DEF dateVal
 
   dateVal:=cDateVal-21600
 

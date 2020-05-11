@@ -311,7 +311,7 @@ undocumented host addresses:
 637 - get or set internet name
 638 - get or set translator
 639 - get or set host language name (languages.info)
-640 - set amixnet outbound path (not yet implemented)
+640 - set amixnet outbound path
 */
 
 /* New host commands for /X5 using range 700+ */
