@@ -497,6 +497,14 @@ PROC add(name:PTR TO CHAR, dateStr:PTR TO CHAR) OF itemsList
   self.num:=self.num+1 
 ENDPROC
 
+PROC checkPathSlash(path)
+  DEF c
+  c:=path[StrLen(path)-1]
+  IF (c<>":") AND (c<>"/")
+    StrAdd(path,'/')
+  ENDIF
+ENDPROC 
+
 PROC getSystemDate(outDateStr:PTR TO CHAR)
   DEF dt : datetime
   DEF datestr[255]:STRING
@@ -2248,8 +2256,7 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
   trans1:=NIL
   trans2:=NIL
   StrCopy(baseLang,baseDir)
-  temp:=baseLang[StrLen(baseLang)-1]
-  IF (temp<>":") AND (temp<>"/") THEN StrAdd(baseLang,'/')
+  checkPathSlash(baseLang)
   
   IF findFirst(baseLang,fileName)
     REPEAT
@@ -2394,7 +2401,7 @@ PROC getIconNodeInfo(i)
   DEF s:PTR TO CHAR
   DEF basis[200]:STRING
   DEF fileName[200]:STRING
-  DEF temp[100]:STRING
+  DEF temp[255]:STRING
   DEF cmd:PTR TO packedCommands
   DEF sopt:PTR TO startOption
   DEF n
@@ -2454,7 +2461,7 @@ PROC getIconNodeInfo(i)
     IF(s:=FindToolType(oldtooltypes,'WINDOW.TO_FRONT')) THEN cmd.acLvl[LVL_SCREEN_TO_FRONT]:=1
     IF(s:=FindToolType(oldtooltypes,'WINDOW.NUM_COLORS'))
        n:=Val(s)
-       SELECT 9 OF n
+       SELECT 17 OF n
          CASE 0
            sopt.bitPlanes:=0
          CASE 1,2
@@ -2463,6 +2470,8 @@ PROC getIconNodeInfo(i)
            sopt.bitPlanes:=2
          CASE 5,6,7,8
            sopt.bitPlanes:=3
+         CASE 9,10,11,12,13,14,15,16
+           sopt.bitPlanes:=4
          DEFAULT 
            sopt.bitPlanes:=3
        ENDSELECT
@@ -2487,7 +2496,11 @@ PROC getIconNodeInfo(i)
       
     IF(s:=FindToolType(oldtooltypes,'IDLENODE')) THEN nodeIdle[i]:=1
     IF(s:=FindToolType(oldtooltypes,'TRAPDOOR')) THEN sopt.trapDoor:=TRUE
-    IF(s:=FindToolType(oldtooltypes,'PLAYPEN')) THEN strcpy(sopt.ramPen,s)
+    IF(s:=FindToolType(oldtooltypes,'PLAYPEN')) 
+      StrCopy(temp,s)
+      checkPathSlash(temp)
+      strcpy(sopt.ramPen,temp)
+    ENDIF
     IF(s:=FindToolType(oldtooltypes,'SENTBY_FILES')) THEN cmd.acLvl[LVL_SENTBY_FILES]:=1
     IF(s:=FindToolType(oldtooltypes,'CHAT_ON')) THEN cmd.acLvl[LVL_DEFAULT_CHAT_ON]:=1
     IF(s:=FindToolType(oldtooltypes,'CAPITOL_FILES')) THEN cmd.acLvl[LVL_CAPITOLS_in_FILE]:=1
@@ -2506,7 +2519,9 @@ PROC getIconNodeInfo(i)
     IF(s:=FindToolType(oldtooltypes,'DISABLE_QUICK_LOGONS')) THEN sopt.qLogon:=1
     IF(s:=FindToolType(oldtooltypes,'FILESNOTALLOWED')) THEN strcpy(sopt.filesNot,s)
     IF(s:=FindToolType(oldtooltypes,'SCREENS')) 
-      strcpy(sopt.nodeScreens,s)
+      StrCopy(temp,s)
+      checkPathSlash(temp)
+      strcpy(sopt.nodeScreens,temp)
     ELSE
        StringF(temp,'\sNode\d/',cmd.bbsLoc,i)
        strcpy(sopt.nodeScreens,temp)
@@ -2828,9 +2843,10 @@ PROC readStartUp(s:PTR TO CHAR)
   IF(t:=FindToolType(oldtooltypes,'BBS_GEOGRAPHIC')) THEN StrCopy(mybbslocation,t)
   IF(t:=FindToolType(oldtooltypes,'BBS_LOCATION'))
     StrCopy(bbsPath,t)
+    checkPathSlash(bbsPath)
     FOR i:=0 TO nodeCount-1
       cmd:=cmds[i]
-      strcpy(cmd.bbsLoc,t)
+      strcpy(cmd.bbsLoc,bbsPath)
     ENDFOR
   ENDIF
 

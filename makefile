@@ -1,15 +1,15 @@
 # Compile ACP and EXPRESS and any dependencies
 
-options=DEBUG IGNORECACHE
+options=DEBUG IGNORECACHE NILCHECK
 compiler=EC
 expprogramname=AmiExpress
 acpprogramname=ACP
 version=5.3.0-beta
 
-all:					acp express5 jsonimport icon2cfg
+all:					acp express5 jsonimport icon2cfg qwk ftn
 
 release:				options = IGNORECACHE 
-release:				acp express5 jsonimport icon2cfg
+release:				acp express5 jsonimport icon2cfg qwk ftn
 
 acp:					acp.e acpversion.m axcommon.m jsonparser.m jsoncreate.m stringlist.m 
 							$(compiler) acp $(options)
@@ -21,6 +21,12 @@ express5:			express.e expversion.m axcommon.m axconsts.m miscfuncs.m axobjects.m
 
 verinfogen:		verinfogen.e
 							$(compiler) verinfogen $(options)
+
+ftn:					ftn.e stringlist.m
+							$(compiler) ftn $(options)
+
+qwk:					qwk.e stringlist.m
+							$(compiler) qwk $(options)
 
 icon2cfg:			icon2cfg.e miscfuncs.m
 							$(compiler) icon2cfg $(options)
@@ -89,8 +95,7 @@ httpd.m:			httpd.e axcommon.m stringlist.m
 							$(compiler) httpd $(options)
 
 clean:
-							delete expversion.e acpversion.e delete express verinfogen express5 acp jsonimport icon2cfg miscfuncs.m stringlist.m errors.m mailssl.m jsoncreate.m jsonparser.m axcommon.m ftpd.m httpd.m axconsts.m axobjects.m axenums.m zmodem.m bcd.m expversion.m acpversion.m pwdhash.m tooltypes.m
-              
+							delete expversion.e acpversion.e delete express verinfogen express5 acp qwk ftn jsonimport icon2cfg miscfuncs.m stringlist.m errors.m mailssl.m jsoncreate.m jsonparser.m axcommon.m ftpd.m httpd.m axconsts.m axobjects.m axenums.m zmodem.m bcd.m expversion.m acpversion.m pwdhash.m tooltypes.m
               
 .PHONY: 			expversion.e
               

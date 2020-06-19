@@ -2017,7 +2017,6 @@ PROC zmodem_send_from(zm: PTR TO zmodem_t, fp, pos,sent: PTR TO LONG)
 		RETURN ZFERR
   ENDIF
 	zm.current_file_pos:=pos
-  zm.new_file:=TRUE
 
 	/*
 	 * send the data in the file
@@ -2094,6 +2093,11 @@ PROC zmodem_send_from(zm: PTR TO zmodem_t, fp, pos,sent: PTR TO LONG)
       StringF(tempstr,'send_from: end of file (or read error) reached at offset: \d',zm.current_file_pos)
 			lprintf(zm,ZM_LOG_DEBUG,tempstr)
 			zmodem_send_zeof(zm, zm.current_file_pos);
+
+      ->send a progress update at end of file just to be safe
+      p:=zm.zm_progress
+      IF(p<>NIL) THEN p(zm, zm.current_file_size)
+      
 			RETURN zmodem_recv_header(zm)	/* If this is ZRINIT, Success */
 		ENDIF
 
@@ -2149,6 +2153,7 @@ EXPORT PROC zmodem_send_files(zm: PTR TO zmodem_t,sent: PTR TO LONG, timetaken:P
   DEF p,res,init=TRUE
   DEF fname[255]:STRING
   
+  timetaken[]:=0
   p:=zm.zm_firstfile
   IF p<>NIL
     IF p(zm,fname)
@@ -2400,6 +2405,7 @@ zsendignore:
 
   StringF(tempstr,'Sending \s from offset \d', fname, pos)
 	lprintf(zm,ZM_LOG_DEBUG,tempstr)
+  zm.new_file:=TRUE
 
   loop:=TRUE
 	WHILE loop
@@ -2493,6 +2499,7 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
   DEF p
   DEF t1,t2
 
+  timetaken[]:=0
 	zm.current_file_num:=1
 	WHILE(zmodem_recv_init(zm)=ZFILE)
 		bytes:=zm.current_file_size;

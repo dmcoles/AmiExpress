@@ -5,6 +5,22 @@ OPT MODULE
 
    MODULE '*axobjects'
 
+/*PROC unsignedCompare(v1,v2)
+
+  MOVE.L #0,D0
+  MOVE.L v1,D1
+  MOVE.L v2,D2
+  CMP.L D1,D2
+  BEQ done
+  BHI high
+  
+  MOVE.L #-1,D0 
+  BRA done
+high:
+  MOVE.L #1,D0
+done:
+ENDPROC D0*/
+
 EXPORT PROC formatBCD(valArrayBCD:PTR TO CHAR, outStr)
   DEF tempStr[2]:STRING
   DEF i,n,start=FALSE
@@ -139,12 +155,13 @@ ENDPROC
 
 EXPORT PROC convertUserUDBytesTOBCD(userPtr: PTR TO user, userMiscPtr: PTR TO userMisc)
   DEF updateUpload=TRUE, updateDownload=TRUE
-  DEF i
+  DEF i,v
 
-  FOR i:=0 TO 7
-    IF (userMiscPtr.downloadBytesBCD[i]<>0) THEN updateDownload:=FALSE
-    IF (userMiscPtr.uploadBytesBCD[i]<>0) THEN updateUpload:=FALSE
-  ENDFOR
+  v:=convertFromBCD(userMiscPtr.downloadBytesBCD)
+  IF (userPtr.bytesDownload=-1) AND (v=-1) THEN updateDownload:=FALSE
+
+  v:=convertFromBCD(userMiscPtr.uploadBytesBCD)
+  IF (userPtr.bytesUpload=-1) AND (v=-1) THEN updateUpload:=FALSE
 
   IF updateUpload
     convertToBCD(userPtr.bytesUpload,userMiscPtr.uploadBytesBCD)
@@ -157,12 +174,13 @@ ENDPROC
 
 EXPORT PROC convertConfUDBytesTOBCD(confPtr: PTR TO confBase)
   DEF updateUpload=TRUE, updateDownload=TRUE
-  DEF i
+  DEF i,v
 
-  FOR i:=0 TO 7
-    IF (confPtr.downloadBytesBCD[i]<>0) THEN updateDownload:=FALSE
-    IF (confPtr.uploadBytesBCD[i]<>0) THEN updateUpload:=FALSE
-  ENDFOR
+  v:=convertFromBCD(confPtr.downloadBytesBCD)
+  IF (confPtr.bytesDownload=-1) AND (v=-1) THEN updateDownload:=FALSE
+
+  v:=convertFromBCD(confPtr.uploadBytesBCD)
+  IF (confPtr.bytesUpload=-1) AND (v=-1) THEN updateUpload:=FALSE
 
   IF updateUpload
     convertToBCD(confPtr.bytesUpload,confPtr.uploadBytesBCD)

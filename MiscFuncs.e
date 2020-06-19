@@ -63,6 +63,14 @@ EXPORT PROC dirExists(path: PTR TO CHAR)
   FreeDosObject(DOS_FIB,dir_info)
 ENDPROC returnval
 
+EXPORT PROC checkPathSlash(path)
+  DEF c
+  c:=path[StrLen(path)-1]
+  IF (c<>":") AND (c<>"/")
+    StrAdd(path,'/')
+  ENDIF
+ENDPROC 
+
 EXPORT PROC strCmpi(test1: PTR TO CHAR, test2: PTR TO CHAR, len)
   /* case insensitive string compare */
   DEF i,l1,l2
@@ -180,19 +188,20 @@ EXPORT PROC removeCR(str:PTR TO CHAR)
   SetStr(str,n)
 ENDPROC
 
-EXPORT PROC formatSpaceValue(spaceInKB,outstr)
+EXPORT PROC formatSpaceValue(spaceInMB,spacelo,outstr)
   DEF frac,whole
-  IF (spaceInKB<10240)
-    StringF(outstr,'\d KB',spaceInKB)
-  ELSEIF(spaceInKB<1048576)
-    frac:=Shr(Mul((spaceInKB AND 1023),10),10)
-    whole:=Shr(spaceInKB,10)
-    StringF(outstr,'\d.\d MB',whole,frac)
-  ELSE
-    spaceInKB:=Shr(spaceInKB,10)
-    frac:=Shr(Mul((spaceInKB AND 1023),10),10)
-    whole:=Shr(spaceInKB,10)
+  IF (spaceInMB<10240)
+    frac:=Shr(Mul((spacelo AND $FFFFF),10),20)
+    StringF(outstr,'\d.\d MB',spaceInMB,frac)
+  ELSEIF(spaceInMB<1048576)
+    frac:=Shr(Mul((spaceInMB AND 1023),10),10)
+    whole:=Shr(spaceInMB,10)
     StringF(outstr,'\d.\d GB',whole,frac)
+  ELSE
+    spaceInMB:=Shr(spaceInMB,10)
+    frac:=Shr(Mul((spaceInMB AND 1023),10),10)
+    whole:=Shr(spaceInMB,10)
+    StringF(outstr,'\d.\d TB',whole,frac)
   ENDIF
 ENDPROC
 
@@ -488,6 +497,46 @@ EXPORT PROC writeFloatToFile(filename: PTR TO CHAR, v: LONG)
     RETURN RESULT_SUCCESS
   ENDIF
 ENDPROC RESULT_FAILURE
+
+EXPORT PROC mulu64(src1,src2)
+  DEF res1,res2
+-> umult64 - mulu.l d0,d0:d1
+
+  MOVE.L src1,D0
+  MOVE.L src2,D1
+
+  MOVE.L D2,-(A7)
+  MOVE.W D0,D2
+  MULU D1,D2
+  MOVE.L D2,-(A7)
+  MOVE.L D1,D2
+  SWAP D2
+  MOVE.W D2,-(A7)
+  MULU D0,D2
+  SWAP D0
+  MULU D0,D1
+  MULU (A7)+,D0
+  ADD.L D2,D1
+  MOVEQ #0,D2
+  ADDX.W D2,D2
+  SWAP D2
+  SWAP D1
+  MOVE.W D1,D2
+  CLR.W D1
+  ADD.L (A7)+,D1
+  ADDX.L D2,D0
+  MOVE.L (A7)+,D2
+  MOVE.L D0,res1
+  MOVE.L D1,res2
+ENDPROC res1,res2
+
+EXPORT PROC addWO(x,y)
+  MOVE.L x,D0
+  ADD.L y,D0
+  BCC noover
+  MOVEQ.L #-1,D0
+noover:
+ENDPROC D0
 
 EXPORT PROC findFirst(path: PTR TO CHAR,buf: PTR TO CHAR) HANDLE
   DEF pdir=NIL: PTR TO filelock

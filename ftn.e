@@ -117,8 +117,8 @@ PROC getMsgBasePath(confName,msgBasePath:PTR TO CHAR)
   ENDFOR
 ENDPROC
 
-PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,packetPass:PTR TO CHAR,msgPktFilename:PTR TO CHAR, srcFilename:PTR TO CHAR,confId:PTR TO CHAR,tearLine:PTR TO CHAR, originLine:PTR TO CHAR,tzOffset:PTR TO CHAR)
-  DEF fh,fh2
+PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,packetPass:PTR TO CHAR,msgPktFileHandle, srcFilename:PTR TO CHAR,confId:PTR TO CHAR,tearLine:PTR TO CHAR, originLine:PTR TO CHAR,tzOffset:PTR TO CHAR)
+  DEF fh2
   DEF tempStr[255]:STRING
   DEF fromName[255]:STRING
   DEF toName[255]:STRING
@@ -155,11 +155,8 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
   StrCopy(tempStr,msgDateTime+15,2)
   second:=Val(tempStr)
   
-  fh:=Open(msgPktFilename,MODE_READWRITE)
-  
-  IF fh>0
-    Seek(fh,0,OFFSET_END)
-    IF Seek(fh,0,OFFSET_CURRENT)=0
+  IF msgPktFileHandle>0
+    IF Seek(msgPktFileHandle,0,OFFSET_CURRENT)=0
       
       ->create packet header
       phdr[0]:=originNode AND 255
@@ -217,7 +214,7 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
       phdr[57]:=0
       
       ->write packet header
-      Write(fh,phdr,58)      
+      Write(msgPktFileHandle,phdr,58)      
     ENDIF
     
     fh2:=Open(srcFilename,MODE_OLDFILE)
@@ -256,7 +253,7 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
       mhdr[11]:=Shr(attr,8) AND 255
       mhdr[12]:=cost AND 255
       mhdr[13]:=Shr(cost,8) AND 255
-      Write(fh,mhdr,14)
+      Write(msgPktFileHandle,mhdr,14)
 
       null[0]:=0
 
@@ -265,31 +262,31 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
       month:=Val(tempStr)-1
       
       StringF(tempStr,'\s[2] \s[3] \s[2]  \s[2]:\s[2]:\s[2]',msgDateTime+3,monthCodes+(month*3),msgDateTime+6,msgDateTime+9,msgDateTime+12,msgDateTime+15)
-      Write(fh,tempStr,19)
-      Write(fh,null,1)
+      Write(msgPktFileHandle,tempStr,19)
+      Write(msgPktFileHandle,null,1)
       
-      Write(fh,toName,EstrLen(toName))
-      Write(fh,null,1)
+      Write(msgPktFileHandle,toName,EstrLen(toName))
+      Write(msgPktFileHandle,null,1)
 
-      Write(fh,fromName,EstrLen(fromName))
-      Write(fh,null,1)
+      Write(msgPktFileHandle,fromName,EstrLen(fromName))
+      Write(msgPktFileHandle,null,1)
 
-      Write(fh,subject,EstrLen(subject))
-      Write(fh,null,1)
+      Write(msgPktFileHandle,subject,EstrLen(subject))
+      Write(msgPktFileHandle,null,1)
 
       StringF(tempStr,'AREA:\s\b',confId)
-      Write(fh,tempStr,EstrLen(tempStr))
+      Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
 
       StringF(tempStr,'\cCHRS: LATIN-1 2\b',1)
-      Write(fh,tempStr,EstrLen(tempStr))
+      Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
 
       IF StrLen(msgId)>0
         StringF(tempStr,'\cMSGID: \s \z\h[8]\b',1,originStr,Val(msgId))
-        Write(fh,tempStr,EstrLen(tempStr))
+        Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
       ENDIF
 
       StringF(tempStr,'\cTZUTC: \s\b',1,IF StrLen(tzOffset)=0 THEN '0000' ELSE tzOffset)
-      Write(fh,tempStr,EstrLen(tempStr))
+      Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
 
       FOR i:=0 TO msgsz-1
         IF msgbuf[i]=10 THEN msgbuf[i]:=13
@@ -297,31 +294,30 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
       
       ->write tear line
       StringF(tempStr,'--- \s\b',tearLine)
-      Write(fh,tempStr,EstrLen(tempStr))
+      Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
 
       ->write origin line
       StringF(tempStr,'  * Origin: \s (\s)\b',originLine,originStr)
-      Write(fh,tempStr,EstrLen(tempStr))
+      Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
       
       ->write seen by line
       StringF(tempStr,'SEEN-BY: \d/\d \d/\d\b',originNet,originNode,destNet,destNode)
-      Write(fh,tempStr,EstrLen(tempStr))
+      Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
       
       StringF(tempStr,'\cPATH: \d/\d\b',1,originNet,originNode)
-      Write(fh,tempStr,EstrLen(tempStr))
+      Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
       
       ->nul terminate
       StrCopy(tempStr,'')
-      Write(fh,tempStr,1)
+      Write(msgPktFileHandle,tempStr,1)
       
       Dispose(msgbuf)
     ENDIF
-    Close (fh)
   ENDIF
 ENDPROC
 
 PROC createMessagesBundle(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,packetPass,msgFilename:PTR TO CHAR,tearLine:PTR TO CHAR, originLine:PTR TO CHAR,tzOffset:PTR TO CHAR)
-  DEF i,fh
+  DEF i,fh=0
   DEF msgOutPath[255]:STRING
   DEF fBlock:PTR TO fileinfoblock
   DEF fLock
@@ -335,9 +331,17 @@ PROC createMessagesBundle(originNode,destNode,originNet,destNet,originZone,destZ
         IF(Examine(fLock,fBlock))
           WHILE(ExNext(fLock,fBlock))
             StringF(msgFile,'\s/\s',msgOutPath,fBlock.filename)
-            createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,packetPass,msgFilename,msgFile,confNames.item(i),tearLine,originLine,tzOffset)
-            SetProtection(msgFile,FIBF_OTR_DELETE)
-            DeleteFile(msgFile)
+            
+            IF fh=0
+              fh:=Open(msgFilename,MODE_READWRITE)
+              IF fh>0 THEN Seek(fh,-2,OFFSET_END)
+            ENDIF
+            
+            IF fh>0
+              createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,packetPass,fh,msgFile,confNames.item(i),tearLine,originLine,tzOffset)
+              SetProtection(msgFile,FIBF_OTR_DELETE)
+              DeleteFile(msgFile)
+            ENDIF
           ENDWHILE
         ENDIF
         UnLock(fLock)
@@ -345,19 +349,14 @@ PROC createMessagesBundle(originNode,destNode,originNet,destNet,originZone,destZ
       ENDIF
     ENDFOR
     FreeDosObject(DOS_FIB,fBlock)
-  ENDIF
-  
-  IF FileLength(msgFilename)<>-1
-    fh:=Open(msgFilename,MODE_READWRITE)
-    IF fh>0
-      Seek(fh,0,OFFSET_END)
-      null[0]:=0
-      null[1]:=0
-      Write(fh,null,2)
-      Close(fh)
-    ENDIF
-  ENDIF
+  ENDIF 
 
+  IF fh>0
+    null[0]:=0
+    null[1]:=0
+    Write(fh,null,2)
+    Close(fh)
+  ENDIF
 ENDPROC
 
 PROC fileWriteLn(fh,str: PTR TO CHAR)
@@ -982,26 +981,10 @@ PROC main() HANDLE
   IF StrCmp(mode,'OUT') OR StrCmp(mode,'BOTH')
     WriteF('Processing outgoing messages\n')
     
-    ->remove trailing slash
-    StrCopy(tempStr,tempDir,StrLen(tempDir)-1)
-    
-    IF (lock:=CreateDir(tempStr)) THEN UnLock(lock)
-
-    StringF(msgPacketFilename,'\s\z\h[4]\z\h[4].Out',tempDir,destNet,destNode)
+    StringF(msgPacketFilename,'\s\z\h[4]\z\h[4].Out',outboundDir,destNet,destNode)
 
     ->create messages bundle by scraping confs
-    createMessagesBundle(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,pktPass,msgPacketFilename,tearLine,originLine,tzOffset)
-    
-    IF FileLength(msgPacketFilename)<>-1
-      StringF(cmdCopy,'copy \s \s',msgPacketFilename,outboundDir)
-      IF exec(cmdCopy)=0
-        DeleteFile(msgPacketFilename)
-      ELSE
-        WriteF('Failure when copying message bundle to outbound folder\n\n')
-      ENDIF
-    ELSE
-      WriteF('No messages to post\n\n')
-    ENDIF
+    createMessagesBundle(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,pktPass,msgPacketFilename,tearLine,originLine,tzOffset)    
   ENDIF
   
   IF StrCmp(mode,'IN') OR StrCmp(mode,'BOTH')
