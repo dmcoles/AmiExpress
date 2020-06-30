@@ -424,8 +424,9 @@ ENDPROC
 EXPORT PROC initssl(createctx) HANDLE
   DEF tags
 
-  sslerrno=0
+  sslerrno:=0
   ctx:=0
+  
   bio_err:=0
 
   IF socketbase=NIL THEN socketbase:=OpenLibrary('bsdsocket.library', 4)
