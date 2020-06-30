@@ -155,7 +155,7 @@ ENDPROC
 
 EXPORT PROC convertUserUDBytesTOBCD(userPtr: PTR TO user, userMiscPtr: PTR TO userMisc)
   DEF updateUpload=TRUE, updateDownload=TRUE
-  DEF i,v
+  DEF v
 
   v:=convertFromBCD(userMiscPtr.downloadBytesBCD)
   IF (userPtr.bytesDownload=-1) AND (v=-1) THEN updateDownload:=FALSE
@@ -174,7 +174,7 @@ ENDPROC
 
 EXPORT PROC convertConfUDBytesTOBCD(confPtr: PTR TO confBase)
   DEF updateUpload=TRUE, updateDownload=TRUE
-  DEF i,v
+  DEF v
 
   v:=convertFromBCD(confPtr.downloadBytesBCD)
   IF (confPtr.bytesDownload=-1) AND (v=-1) THEN updateDownload:=FALSE

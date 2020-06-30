@@ -569,3 +569,9 @@ EXCEPT
   IF dir_info THEN FreeDosObject(DOS_FIB,dir_info)
   RETURN 0
 ENDPROC returnval
+
+EXPORT PROC byteSignExtend(n)
+  DEF r
+  r:=n AND 255
+  IF r>127 THEN r:=-(256-r)
+ENDPROC r

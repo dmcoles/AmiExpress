@@ -41,6 +41,7 @@ OBJECT ftpData
   fileStart:LONG
   fileEnd:LONG
   fileProgress:LONG
+  fileDupeCheck:LONG
   xprInfo:LONG
 ENDOBJECT
  
@@ -234,6 +235,18 @@ PROC fileProgress(ftpData:PTR TO ftpData,fn,pos,cps)
   fp()
   ADD.L #12,A7
 ENDPROC
+
+PROC fileDupeCheck(ftpData:PTR TO ftpData,fn)
+  DEF fdc
+  DEF xprInfo
+  fdc:=ftpData.fileDupeCheck
+  xprInfo:=ftpData.xprInfo
+  
+  MOVE.L xprInfo,-(A7)
+  MOVE.L fn,-(A7)
+  fdc()
+  ADD.L #8,A7
+ENDPROC D0
 
 PROC aePuts(ftpData:PTR TO ftpData, s:PTR TO CHAR)
   DEF puts
@@ -598,6 +611,25 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF cps,lastpos
   DEF asynclib
 
+  IF (ftpData.fileDupeCheck<>NIL)
+    IF fileDupeCheck(ftpData,filename)=TRUE
+      StringF(temp,'553 \s: Duplicate file skipped\b\n',filename)
+      writeLineEx(sb,ftp_c,temp)
+
+      IF (data_c>=0)
+        ftpData.scount:=ftpData.scount-1
+        r:=closeSocket(sb,data_c)
+      ENDIF
+      
+      IF (data_s>=0)
+        ftpData.scount:=ftpData.scount-1
+        r:=closeSocket(sb,data_s)
+      ENDIF
+
+      RETURN
+    ENDIF
+  ENDIF
+
   IF ftpData.uploadMode=FALSE
     StringF(temp,'550 \s: Not expecting any uploads\b\n',filename)
     writeLineEx(sb,ftp_c,temp)
@@ -668,7 +700,7 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
             t:=t2
           ENDIF
         ENDIF
-      UNTIL l=0
+      UNTIL (l=0) OR (CtrlC())
       Dispose(buff)
 
       IF ftpData.fileProgress<>NIL
@@ -691,7 +723,7 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
         fileEnd(ftpData,filename)
       ENDIF
 
-      fail:=FALSE
+      fail:=(CtrlC()<>FALSE)
 
       StringF(temp, '\d \s ... \s\b\n', 
       IF (fail=FALSE) THEN 226 ELSE 426, 
@@ -810,7 +842,7 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
             ENDIF
           ENDIF
         ENDIF
-      UNTIL l=0
+      UNTIL (l=0) OR (CtrlC())
       Dispose(buff)
 
       IF ftpData.fileProgress<>NIL
@@ -828,7 +860,7 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
       ELSE
         Close(fh)
       ENDIF
-      fail:=FALSE
+      fail:=(CtrlC()<>FALSE)
       IF ftpData.fileEnd<>NIL
         fileEnd(ftpData,filename)
       ENDIF
@@ -900,7 +932,7 @@ PROC ftpThread()
   ftpData.scount:=ftpData.scount+1
   writeLineEx(sb,ftp_c, '220 Hi, I''m your Amiga FTP server.\b\n')
     
-  WHILE((readLine(sb,ftp_c, request, MAX_LINE-1) > 0) AND (StrCmp(request, 'QUIT', 4)=FALSE))
+  WHILE((readLine(sb,ftp_c, request, MAX_LINE-1) > 0) AND (StrCmp(request, 'QUIT', 4)=FALSE)) AND (CtrlC()=FALSE)
     
     IF(StrCmp(request, 'USER ', 5))
       cmdUser(sb,ftp_c,request+5)
@@ -1017,9 +1049,12 @@ taskfound:
 ENDPROC pa
 
 
-PROC createThread(node,sockid,ftpData:PTR TO ftpData)
+PROC createThread(num,node,sockid,ftpData:PTR TO ftpData)
   DEF tags,proc:PTR TO process
-  tags:=NEW [NP_ENTRY,{ftpThread},NP_STACKSIZE,10000,0]:LONG
+  DEF name[255]:STRING
+  
+  StringF(name,'ftpThread\d-\d',node,num)
+  tags:=NEW [NP_ENTRY,{ftpThread},NP_NAME,name,NP_STACKSIZE,10000,0]:LONG
  
   ftpData.sockId:=sockid
 
@@ -1030,11 +1065,12 @@ PROC createThread(node,sockid,ftpData:PTR TO ftpData)
  END tags
 ENDPROC
 
-EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, xprInfo, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, uploadMode)
+EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, xprInfo, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, ftpDupeCheckPtr,uploadMode)
   DEF r,ftp_s,ftp_c,s,sb
   DEF temp[255]:STRING
   DEF ftpData:PTR TO ftpData
   DEF flg,rchar
+  DEF tcount=0,i,t
   
   ftpData:=NEW ftpData
   ftpData.rest:=0
@@ -1049,6 +1085,7 @@ EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPt
   ftpData.fileStart:=ftpFileStartPtr
   ftpData.fileEnd:=ftpFileEndPtr
   ftpData.fileProgress:=ftpFileProgressPtr
+  ftpData.fileDupeCheck:=ftpDupeCheckPtr
   ftpData.workingPath:=String(255)
   ftpData.hostName:=String(255)
   ftpData.xprInfo:=xprInfo
@@ -1092,7 +1129,8 @@ EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPt
 
           s:=releaseSocket(sb,ftp_c,UNIQUE_ID)
           ->r:=closeSocket(sb,ftp_c)
-          createThread(node,s,ftpData)
+          createThread(tcount,node,s,ftpData)
+          tcount++
         ENDIF
       ENDWHILE
       ftpData.scount:=ftpData.scount-1
@@ -1101,6 +1139,14 @@ EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPt
     IF flg THEN aePuts(ftpData,'\b\n')
     IF rchar=3
       aePuts(ftpData,'CTRL-C detected, FTP transfer aborted\b\n')
+      FOR i:=0 TO tcount-1
+        StringF(temp,'ftpThread\d-\d',node,i)
+        Forbid()
+        t:=FindTask(temp)
+        IF t<>NIL THEN Signal(t,SIGBREAKF_CTRL_C)
+        Permit()       
+      ENDFOR
+      
     ELSE
       aePuts(ftpData,'FTP transfers complete, all ftp connections closed\b\n')
     ENDIF

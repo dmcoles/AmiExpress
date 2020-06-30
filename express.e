@@ -553,7 +553,9 @@ PROC updateTimeUsed()
       loggedOnUser.timeUsed:=loggedOnUser.timeUsed+(currTime-lastTimeUpdate)
       timeLimit:=timeLimit-(currTime-lastTimeUpdate)
     ELSE
-      loggedOnUser.chatRemain:=loggedOnUser.chatRemain-(currTime-lastTimeUpdate)
+      IF loggedOnUser.chatLimit>0
+        loggedOnUser.chatRemain:=loggedOnUser.chatRemain-(currTime-lastTimeUpdate)
+      ENDIF
     ENDIF
     lastTimeUpdate:=currTime
   ENDIF
@@ -2768,7 +2770,7 @@ PROC startProcess(exestring, stacksize, priority, async, doorTrap)
   DEF doorTrapFH=0
   DEF processOutFile[255]:STRING
 
-  IF (cmds.taskPri<=priority)
+  IF (byteSignExtend(cmds.taskPri)<=priority)
     task:=FindTask(0)
     SetTaskPri(task,priority+1)
   ENDIF
@@ -2779,12 +2781,12 @@ PROC startProcess(exestring, stacksize, priority, async, doorTrap)
 
     doorTrapFH:=Open(processOutFile,MODE_NEWFILE)
   ENDIF
-
+  
   filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,doorTrapFH,SYS_ASYNCH,async,NP_STACKSIZE,stacksize,NP_PRIORITY,priority,0]
   temp:=SystemTagList(exestring,filetags)
   END filetags
-
-  IF (cmds.taskPri<=priority)
+ 
+  IF (byteSignExtend(cmds.taskPri)<=priority)
     SetTaskPri(task,cmds.taskPri)
   ENDIF
 
@@ -2794,7 +2796,7 @@ PROC startProcess(exestring, stacksize, priority, async, doorTrap)
 
 ENDPROC
 
-PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=20000)
+PROC runDoor(cmd,type,command,tooltype,params,resident,doorTrap,privcmd,pri=0,stacksize=20000)
   DEF doorPort[12]:STRING
   DEF mp: PTR TO mp
   DEF exestring[100]:STRING
@@ -2816,13 +2818,14 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
 
   StringF(tempstring,'run door: \s',cmd)
   debugLog(LOG_DEBUG,tempstring)
+  
 
   IF serShared=FALSE THEN purgeLine()
 
   StrCopy(runOnExit,'')
   StrCopy(runOnExit2,'')
 
-  IF resident=FALSE
+  IF (resident=FALSE) AND ((type<>DOORTYPE_MCI) OR (StrLen(cmd)>0))
     IF (fileExists(cmd)=FALSE)
       IF privcmd=FALSE
         aePuts('\b\nError, can''t locate Custom Command\b\n')
@@ -2859,7 +2862,9 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
       StringF(exestring,'\s \d',cmd,node)
       purgeLineStart()
     CASE DOORTYPE_MCI
-      StringF(exestring,'~\s|',cmd)
+      StringF(cmd,'~SS_\s',cmd)
+      readToolType(tooltype,command,'MCI_TEXT',cmd)
+      StringF(exestring,'~|\s|',cmd)
       processMci(exestring)
     CASE DOORTYPE_AEM
       IF resident
@@ -2883,6 +2888,8 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
     StringF(doorPort,'\s\d','DoorControl',node)
   ENDIF
 
+  IF (type=DOORTYPE_MCI) THEN RETURN
+
   IF (mp:=FindPort(doorPort))
     alreadyActive:=TRUE
   ELSE
@@ -2890,11 +2897,6 @@ PROC runDoor(cmd,type,command,params,resident,doorTrap,privcmd,pri=0,stacksize=2
   ENDIF
 
   ximSig:=Shl(1,mp.sigbit)
-
-  IF (type=DOORTYPE_MCI )
-    IF alreadyActive=FALSE THEN deletePort(mp)
-    RETURN
-  ENDIF
 
   doorLog(type,cmd)
 
@@ -4034,8 +4036,6 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
     commandTypeCode:=DOORTYPE_IIM
   ELSEIF checkToolType(tooltype,cmd,'TYPE','MCI')
     commandTypeCode:=DOORTYPE_MCI
-    StrCopy(commandfile,'')
-    readToolType(tooltype,cmd,'MCI_TEXT',commandfile)
   ELSEIF checkToolType(tooltype,cmd,'TYPE','AEM')
     commandTypeCode:=DOORTYPE_AEM
   ELSEIF checkToolType(tooltype,cmd,'TYPE','SUP')
@@ -4097,6 +4097,7 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
     default:=FALSE
   ENDIF
 
+  StrCopy(commandfile,'')
   IF (default) OR (readToolType(tooltype,cmd,'LOCATION',commandfile))
 
     IF commandTypeCode=-1 THEN RETURN FALSE
@@ -4109,7 +4110,7 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
     stacksize:=20000
     IF readToolType(tooltype,cmd,'PRIORITY',passwordstr)
       IF strCmpi(passwordstr,'same',ALL)
-        pri:=cmds.taskPri
+        pri:=byteSignExtend(cmds.taskPri)
       ELSE
         pri:=Val(passwordstr)
       ENDIF
@@ -4123,7 +4124,7 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
     doorTrap:=checkToolTypeExists(tooltype,cmd,'TRAPON')
 
     readToolType(tooltype,cmd,'MIMICVER',mimicVersion)
-    runDoor(commandfile,commandTypeCode,cmd,params,resident,doorTrap,privcmd,pri,stacksize)
+    runDoor(commandfile,commandTypeCode,cmd,tooltype,params,resident,doorTrap,privcmd,pri,stacksize)
     StrCopy(mimicVersion,'')
     
   ENDIF
@@ -5356,7 +5357,7 @@ PROC tranChat()
       RETURN c
     ENDIF
     updateTimeUsed()
-    IF (loggedOnUser.chatRemain<=0)
+    IF (loggedOnUser.chatLimit<>0) AND (loggedOnUser.chatRemain<=0)
       chatFlag:=0
     ENDIF
     EXIT chatFlag=0
@@ -5547,7 +5548,7 @@ next:
     ENDIF
 
     updateTimeUsed()
-    IF (loggedOnUser.chatRemain<=0)
+    IF (loggedOnUser.chatLimit<>0) AND (loggedOnUser.chatRemain<=0)
       chatFlag:=0
       JUMP chatbrk
     ENDIF
@@ -13068,7 +13069,7 @@ PROC xprfclose()
     ELSE
       Close(fp)
     ENDIF
-    IF loggedOnUserKeys<>NIL
+    IF (loggedOnUserKeys<>NIL) AND (zModemInfo.filesize>0) AND (zModemInfo.transPos=zModemInfo.filesize)
       doBgCheck()
     ENDIF
   ENDIF
@@ -14123,7 +14124,7 @@ PROC httpUpload(uploadFolder: PTR TO CHAR,httpPort)
     StrCopy(tempstr,'localhost')
   ENDIF
   
-  doHttpd(node,tempstr,httpPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd}, {ftpTransferFileProgress},TRUE)
+  doHttpd(node,tempstr,httpPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},TRUE)
   serialCacheEnabled:=oldSerCache
   END x 
 ENDPROC
@@ -14172,7 +14173,7 @@ PROC httpDownload(fileList: PTR TO stdlist, pupdateDownloadStats,httpPort)
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
-  doHttpd(node,tempstr,httpPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd}, {ftpTransferFileProgress},FALSE)
+  doHttpd(node,tempstr,httpPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},FALSE)
   serialCacheEnabled:=oldSerCache
  
   ->clean up ram links
@@ -14244,6 +14245,18 @@ PROC ftpTransferFileProgress(xprInfo:PTR TO xprData, fileName:PTR TO CHAR,pos,cp
   updateZDisplay()
 ENDPROC
 
+PROC ftpDupeCheck(xprInfo:PTR TO xprData, fileName:PTR TO CHAR)
+  DEF dup=FALSE
+  
+  IF checkForFile(FilePart(fileName))
+    dup:=TRUE
+  ELSEIF checkInPlaypens(FilePart(fileName))
+    dup:=TRUE
+  ENDIF
+    
+  IF dup THEN skipdFiles.add(FilePart(fileName))
+ENDPROC dup
+
 PROC updateDownloadStats(xprObj:PTR TO xprData, fileItem:PTR TO flagFileItem)
   DEF tempsize
   DEF cb:PTR TO confBase
@@ -14307,7 +14320,7 @@ PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPort,ftpDataPort)
     StrCopy(tempstr,'localhost')
   ENDIF
 
-  doftp(node,tempstr,ftpPort,ftpDataPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},TRUE)
+  doftp(node,tempstr,ftpPort,ftpDataPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},TRUE)
   serialCacheEnabled:=oldSerCache
   END x 
 
@@ -14357,7 +14370,7 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort,ftpDataPo
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
-  doftp(node,tempstr,ftpPort,ftpDataPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},FALSE)
+  doftp(node,tempstr,ftpPort,ftpDataPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},FALSE)
   serialCacheEnabled:=oldSerCache
  
   ->clean up ram links
@@ -15216,6 +15229,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   DEF zm: PTR TO zmodem_t
   DEF ulTimeTaken
   DEF ext=TRUE
+  DEF bgStack
 
 
   IF (forceZmodem) OR (loggedOnUser=NIL)
@@ -15390,12 +15404,15 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   IF loggedOnUserKeys<>NIL
     IF bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
       bgChecking:=TRUE
-      tags:=NEW [NP_ENTRY,{backgroundFileCheckThread},NP_STACKSIZE,10000,0]:LONG
+      bgStack:=readToolTypeInt(TOOLTYPE_NODE,node,'BGFILECHECKSTACK')
+      IF bgStack<=0 THEN bgStack:=20000
+
+      tags:=NEW [NP_ENTRY,{backgroundFileCheckThread},NP_STACKSIZE,bgStack,0]:LONG
       Forbid()
       proc:=CreateNewProc(tags)
       END tags
       saveA4thread(proc.task)
-      Permit()
+      Permit()     
     ENDIF
   ENDIF
 
@@ -16556,7 +16573,7 @@ PROC doBgCheck()
   DEF bgport
   DEF msg:PTR TO jhMessage
   
-  IF (zModemInfo.currentOperation=ZMODEM_UPLOAD) AND (zModemInfo.filesize>0) AND (zModemInfo.transPos=zModemInfo.filesize) AND bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
+  IF (zModemInfo.currentOperation=ZMODEM_UPLOAD) AND bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
     StringF(tempstr,'bgCheckPort\d',node)
     IF (bgport:=FindPort(tempstr))
       msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
@@ -17079,6 +17096,7 @@ PROC uploadaFile(uLFType,cmd)            -> JOE
     IF bgCnt>0
       StringF(tempstr,'\b\n\b\n\d files were checked and posted in the background during upload',bgCnt)
       aePuts(tempstr)
+      onlineNFiles:=onlineNFiles+bgCnt
     ENDIF
     bgCnt:=0
   ENDIF
@@ -17088,7 +17106,7 @@ PROC uploadaFile(uLFType,cmd)            -> JOE
   StrCopy(str,'\t')
   StrAdd(str,string)
 
-  IF(onlineNFiles>0)
+  IF((onlineNFiles)>0)
     callersLog(str)
     udLog(str)
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_UPLOAD',str))
@@ -17581,7 +17599,7 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
             exitLoop:=(runSysCommand(tempstr2,fileName)=FALSE)
           ENDIF
         UNTIL(exitLoop)
-
+        
         IF fileExists(tempstr)
 
           fh:=Open(tempstr,MODE_OLDFILE)
@@ -17598,9 +17616,11 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
 
           fsize:=getFileSize(fileName)
 
+
           status2:=RESULT_NOT_ALLOWED
           status2:=testFile(fname,path)
           status:=checkForFile(fname)
+
 
           IF(fcomment[0]="/") THEN status:=RESULT_PRIVATE
 
@@ -23430,9 +23450,9 @@ PROC internalCommandW()
     IF(checkToolTypeExists(TOOLTYPE_NODE,node,'BGFILECHECK'))
       option:=loggedOnUserKeys.userFlags AND USER_BGFILECHECK
       IF option
-        StringF(str,'[34m[[0m 16[34m][35m BACKGROUND FILE CHECK... [37mNO[0m\b\n')
-      ELSE
         StringF(str,'[34m[[0m 16[34m][35m BACKGROUND FILE CHECK... [32mYES[0m\b\n')
+      ELSE
+        StringF(str,'[34m[[0m 16[34m][35m BACKGROUND FILE CHECK... [37mNO[0m\b\n')
       ENDIF
       aePuts(str)
     ELSE

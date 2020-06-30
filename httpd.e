@@ -43,6 +43,7 @@ OBJECT httpData
   fileStart:LONG
   fileEnd:LONG
   fileProgress:LONG
+  fileDupeCheck:LONG
   xprInfo:LONG
 ENDOBJECT
  
@@ -197,6 +198,18 @@ PROC fileProgress(httpData:PTR TO httpData,fn,pos,cps)
   fp()
   ADD.L #12,A7
 ENDPROC
+
+PROC fileDupeCheck(httpData:PTR TO httpData,fn)
+  DEF fdc
+  DEF xprInfo
+  fdc:=httpData.fileDupeCheck
+  xprInfo:=httpData.xprInfo
+  
+  MOVE.L xprInfo,-(A7)
+  MOVE.L fn,-(A7)
+  fdc()
+  ADD.L #8,A7
+ENDPROC D0
 
 PROC aePuts(httpData:PTR TO httpData, s:PTR TO CHAR)
   DEF puts
@@ -477,17 +490,19 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
     ENDWHILE
     fh:=0
     IF StrLen(fname)>0
-      IF asynclib<>NIL
-        DeleteFile(fname)
-        fh:=OpenAsync(fname,MODE_APPEND,32768)
-      ELSE
-        fh:=Open(fname,MODE_NEWFILE)
+      IF fileDupeCheck(httpData,fname)=FALSE
+        IF asynclib<>NIL
+          DeleteFile(fname)
+          fh:=OpenAsync(fname,MODE_APPEND,32768)
+        ELSE
+          fh:=Open(fname,MODE_NEWFILE)
+        ENDIF
+        IF httpData.fileStart<>NIL
+          fileStart(httpData,fname,0)
+        ENDIF
+        t:=fastSystemTime()
+        lastfilepos:=0
       ENDIF
-      IF httpData.fileStart<>NIL
-        fileStart(httpData,fname,0)
-      ENDIF
-      t:=fastSystemTime()
-      lastfilepos:=0
     ENDIF
 
     loop:=TRUE
@@ -552,7 +567,7 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
 ENDPROC
 
 
-EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sCheckInputPtr, xprInfo:PTR TO xprData, httpFileStartPtr, httpFileEndPtr, httpFileProgressPtr, uploadMode)
+EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sCheckInputPtr, xprInfo:PTR TO xprData, httpFileStartPtr, httpFileEndPtr, httpFileProgressPtr, httpDupeCheckPtr, uploadMode)
   DEF r,http_s,http_c,sb
   DEF temp[255]:STRING
   DEF httpData:PTR TO httpData
@@ -579,6 +594,7 @@ EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sChe
   httpData.fileStart:=httpFileStartPtr
   httpData.fileEnd:=httpFileEndPtr
   httpData.fileProgress:=httpFileProgressPtr
+  httpData.fileDupeCheck:=httpDupeCheckPtr
   httpData.workingPath:=String(255)
   httpData.hostName:=String(255)
   httpData.xprInfo:=xprInfo

@@ -245,7 +245,7 @@ PROC formatLongDateTime2(cDateVal,outDateStr,seperatorChar)
   DEF dt : datetime
   DEF datestr[10]:STRING
   DEF timestr[10]:STRING
-  DEF r,dateVal
+  DEF dateVal
 
   dateVal:=cDateVal-21600
 

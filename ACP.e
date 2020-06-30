@@ -2234,7 +2234,6 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
   DEF fullFileName[512]:STRING
   DEF ext[4]:STRING
   DEF translatorName[80]:STRING
-  DEF temp
   DEF trans1: PTR TO translator
   DEF trans2: PTR TO translator
   DEF tempstr1[255]:STRING
