@@ -40,39 +40,10 @@
 
   MODULE '*axcommon',
          '*jsonParser',
-         '*miscfuncs',
-         '*stringlist'
+         '*jsonCreate',
+         '*stringlist',
+         '*acpversion'
 
-
-/*
-'Setup'
-BBS:Config%d
-execute %s
-Icon Setup Complete.
-Cannot Locate Icon Config.
-
-aErrorCreatingD:dc.b 'Error Creating Directory %s',$A,0
-aCreatingIconS: dc.b 'Creating Icon %s',$A,0
-a3_3s:    dc.b '>%-3.3s',0
-aS_txt:   dc.b '%s.txt',0
-aErrorCreatingI:dc.b 'Error creating Icon %s',$A,0
-aErrorCreatin_0:dc.b 'Error Creating Directory %s',$A,0
-aCreatingIcon_0:dc.b 'Creating Icon %s',$A,0
-aDrw:   dc.b '>DRW',0
-aS_txt_0: dc.b '%s.txt',0
-aErrorCreatin_1:dc.b 'Error creating Icon %s',$A,0
-aDir:   dc.b '(DIR)',0
-aAddingTooltype:dc.b 9,'Adding ToolType %s',$A,0
-aErrorOpeningCo:dc.b 'Error opening config file',$A,0
-aDef:   dc.b '>DEF',0
-aUsingDefaultIc:dc.b 'Using Default Icon',$A,0
-aSelectIconconf:dc.b 'Select IconConfig',0
-a?:   dc.b '#?',0
-aS_1:   dc.b 's:',0
-aAeicon_config: dc.b 'aeicon.config',0
-
-*/
-       
 ENUM ERR_NONE,ERR_ALREADY_RUNNING,ERR_STARTUP, ERR_VALIDATE,ERR_NO_DISKFONT,ERR_FDS_RANGE
 
 CONST LISTENQ=100
@@ -329,6 +300,7 @@ DEF activeNodes[MAX_NODES]:ARRAY OF CHAR
 DEF publicName[200]:STRING
 DEF pens[9]:ARRAY OF INT
 DEF myVerStr[255]:STRING
+DEF myBuildStr[255]:STRING
 DEF myappport=NIL:PTR TO mp
 DEF doMultiCom
 
@@ -525,6 +497,14 @@ PROC add(name:PTR TO CHAR, dateStr:PTR TO CHAR) OF itemsList
   self.num:=self.num+1 
 ENDPROC
 
+PROC checkPathSlash(path)
+  DEF c
+  c:=path[StrLen(path)-1]
+  IF (c<>":") AND (c<>"/")
+    StrAdd(path,'/')
+  ENDIF
+ENDPROC 
+
 PROC getSystemDate(outDateStr:PTR TO CHAR)
   DEF dt : datetime
   DEF datestr[255]:STRING
@@ -617,7 +597,7 @@ ENDPROC
 PROC openListenSocket(port)
   DEF server_s
   DEF servaddr=0:PTR TO sockaddr_in
-  DEF tempStr[255]:STRING
+  ->DEF tempStr[255]:STRING
 
   IF((server_s:=Socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
     ->StringF(tempStr,'/X Telnet: Error creating listening socket. (\d)\b\n',Errno())
@@ -751,7 +731,7 @@ PROC initCycles()
 ENDPROC
 
 PROC initNdCycles()
-  DEF i,x
+  DEF x
   DEF list:PTR TO itemsList
   FOR x:=0 TO MAX_NODES-1
     ndUser[x]:=NEW list.init()
@@ -785,9 +765,9 @@ PROC getToolTypes(filename:PTR TO CHAR)
   isCfg:=FALSE
   IF(dobj=NIL)
     StringF(fn,'\s.txt',filename)
-    IF fileExists(fn)=FALSE
+    IF (len:=FileLength(fn))=-1
       StringF(fn,'\s.cfg',filename)
-      IF fileExists(fn)=FALSE
+      IF (len:=FileLength(fn))=-1
         StrCopy(fn,'')
       ENDIF
     ENDIF
@@ -795,7 +775,7 @@ PROC getToolTypes(filename:PTR TO CHAR)
     IF StrLen(fn)>0
       dobj:=GetDefDiskObject(WBPROJECT)
       IF dobj<>NIL
-        fileBuf:=New(getFileSize(fn)+1)     ->allow an extra char in case file does not end in LF
+        fileBuf:=New(len+1)     ->allow an extra char in case file does not end in LF
 
         fh:=Open(fn,MODE_OLDFILE)
         IF fh>0
@@ -1012,7 +992,7 @@ PROC createCustomMenus(nodes)
   
     maddItem( NM_TITLE, 'Project', 0 , 0, 0, 0)
     maddItem( NM_ITEM,  'About',0,0,0,0)
-    StringF(version,' AmiExpress Professional \s',myVerStr)
+    StringF(version,' AmiExpress Professional \s (\s)',myVerStr,myBuildStr)
     maddItem( NM_SUB,version,0,0,0,0)
     maddItem( NM_SUB,'                  Written by Darren Coles     ',0,0,0,0)
   
@@ -1046,6 +1026,8 @@ PROC createCustomMenus(nodes)
     maddItem( NM_SUB,'   Krzysztof Wianecki',0,0,0,0)
     maddItem( NM_SUB,'   Stephan Schiemann ',0,0,0,0)
     maddItem( NM_SUB,'   Eddie Oniel       ',0,0,0,0)
+
+    maddItem( NM_ITEM,  'Quit',0,0,0,0)
 
     maddItem( NM_TITLE, 'Master Control',0,0,0,0)
     maddItem(  NM_ITEM, 'Sysop Login',0, 0, 0, 0)
@@ -1749,7 +1731,7 @@ PROC maddNodes(nodes)
   ENDFOR
 ENDPROC
 
-PROC maddItem(type,label:PTR TO CHAR,commKey:PTR TO CHAR,flags,mutual,user)
+PROC maddItem(type,label:PTR TO CHAR,commKey:PTR TO CHAR,flags,mutual,userData)
    ->DEF i=0   was static
    DEF t:PTR TO newmenu
    DEF s:PTR TO CHAR
@@ -1764,10 +1746,10 @@ PROC maddItem(type,label:PTR TO CHAR,commKey:PTR TO CHAR,flags,mutual,user)
      s:=AllocMem(80,MEMF_PUBLIC OR MEMF_CLEAR)
      IF(label) THEN strcpy(s,label) ELSE strcpy(s,'')
      t.label:=s
-     t.commkey:=0->//(STRPTR)CommKey
+     t.commkey:=commKey
      t.flags:=flags
      t.mutualexclude:=mutual
-     t.userdata:=0
+     t.userdata:=userData
      maxMenus++
    ENDIF
    maddItemi++
@@ -1785,7 +1767,6 @@ PROC maddRem()
 ENDPROC
 
 PROC regLastDownloads(name:PTR TO CHAR,dateStr:PTR TO CHAR,node)
-  DEF i=0
   ->DEF num=0   was static
   
   regNodeDownloads(name,dateStr,node)
@@ -1799,7 +1780,6 @@ PROC regNodeDownloads(name:PTR TO CHAR, dateStr:PTR TO CHAR,node)
 ENDPROC
 
 PROC regLastUploads(name:PTR TO CHAR,dateStr:PTR TO CHAR,node)
-  DEF i=0
   ->DEF num=0   was static
   
   regNodeUploads(name,dateStr,node)
@@ -1835,7 +1815,6 @@ PROC showQuiet(i)
 ENDPROC
 
 PROC regLastUser(name:PTR TO CHAR,dateStr:PTR TO CHAR,node)
-  DEF i=0
   DEF tempStr[44]:STRING
   ->DEF num=0;  was static
   
@@ -2184,7 +2163,7 @@ PROC initSemaSemiNodes(s:PTR TO multiPort)
   DEF j
   WHILE(i<MAX_NODES)
     strcpy(s.myNode[i].handle,'')
-    FOR j:=0 TO 8
+    FOR j:=0 TO MAX_NODES-1
       s.myNode[i].stats[j].info:=0
       s.myNode[i].stats[j].status:=CHAT_NONE
     ENDFOR
@@ -2255,7 +2234,6 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
   DEF fullFileName[512]:STRING
   DEF ext[4]:STRING
   DEF translatorName[80]:STRING
-  DEF temp
   DEF trans1: PTR TO translator
   DEF trans2: PTR TO translator
   DEF tempstr1[255]:STRING
@@ -2277,8 +2255,7 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
   trans1:=NIL
   trans2:=NIL
   StrCopy(baseLang,baseDir)
-  temp:=baseLang[StrLen(baseLang)-1]
-  IF (temp<>":") AND (temp<>"/") THEN StrAdd(baseLang,'/')
+  checkPathSlash(baseLang)
   
   IF findFirst(baseLang,fileName)
     REPEAT
@@ -2291,7 +2268,7 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
   
         trans2:=NEW trans2
         AstrCopy(trans2.translatorName,translatorName,80)
-        fsize:=getFileSize(fullFileName)
+        fsize:=FileLength(fullFileName)
 
         workMem:=New(fsize+2)     ->allocate some memory (two extra bytes in case there is no newline at the end of the file)
         trans2.translationText:=New(fsize+4)     ->allocate some memory, two extra bytes for ending colon and space and some in case there is no newline
@@ -2423,7 +2400,7 @@ PROC getIconNodeInfo(i)
   DEF s:PTR TO CHAR
   DEF basis[200]:STRING
   DEF fileName[200]:STRING
-  DEF temp[100]:STRING
+  DEF temp[255]:STRING
   DEF cmd:PTR TO packedCommands
   DEF sopt:PTR TO startOption
   DEF n
@@ -2483,7 +2460,7 @@ PROC getIconNodeInfo(i)
     IF(s:=FindToolType(oldtooltypes,'WINDOW.TO_FRONT')) THEN cmd.acLvl[LVL_SCREEN_TO_FRONT]:=1
     IF(s:=FindToolType(oldtooltypes,'WINDOW.NUM_COLORS'))
        n:=Val(s)
-       SELECT 9 OF n
+       SELECT 17 OF n
          CASE 0
            sopt.bitPlanes:=0
          CASE 1,2
@@ -2492,6 +2469,8 @@ PROC getIconNodeInfo(i)
            sopt.bitPlanes:=2
          CASE 5,6,7,8
            sopt.bitPlanes:=3
+         CASE 9,10,11,12,13,14,15,16
+           sopt.bitPlanes:=4
          DEFAULT 
            sopt.bitPlanes:=3
        ENDSELECT
@@ -2516,7 +2495,11 @@ PROC getIconNodeInfo(i)
       
     IF(s:=FindToolType(oldtooltypes,'IDLENODE')) THEN nodeIdle[i]:=1
     IF(s:=FindToolType(oldtooltypes,'TRAPDOOR')) THEN sopt.trapDoor:=TRUE
-    IF(s:=FindToolType(oldtooltypes,'PLAYPEN')) THEN strcpy(sopt.ramPen,s)
+    IF(s:=FindToolType(oldtooltypes,'PLAYPEN')) 
+      StrCopy(temp,s)
+      checkPathSlash(temp)
+      strcpy(sopt.ramPen,temp)
+    ENDIF
     IF(s:=FindToolType(oldtooltypes,'SENTBY_FILES')) THEN cmd.acLvl[LVL_SENTBY_FILES]:=1
     IF(s:=FindToolType(oldtooltypes,'CHAT_ON')) THEN cmd.acLvl[LVL_DEFAULT_CHAT_ON]:=1
     IF(s:=FindToolType(oldtooltypes,'CAPITOL_FILES')) THEN cmd.acLvl[LVL_CAPITOLS_in_FILE]:=1
@@ -2535,7 +2518,9 @@ PROC getIconNodeInfo(i)
     IF(s:=FindToolType(oldtooltypes,'DISABLE_QUICK_LOGONS')) THEN sopt.qLogon:=1
     IF(s:=FindToolType(oldtooltypes,'FILESNOTALLOWED')) THEN strcpy(sopt.filesNot,s)
     IF(s:=FindToolType(oldtooltypes,'SCREENS')) 
-      strcpy(sopt.nodeScreens,s)
+      StrCopy(temp,s)
+      checkPathSlash(temp)
+      strcpy(sopt.nodeScreens,temp)
     ELSE
        StringF(temp,'\sNode\d/',cmd.bbsLoc,i)
        strcpy(sopt.nodeScreens,temp)
@@ -2620,7 +2605,6 @@ PROC setTheGads()
   ->DEF j=0 ->static int j=0;
   ->DEF set=FALSE ->static BOOL Set=FALSE;
   DEF ng:PTR TO newgadget
-  DEF s
   
   IF(setTheGadsj=FALSE)
     StrCopy(setOriText[0],'Sysop Login')
@@ -2858,9 +2842,10 @@ PROC readStartUp(s:PTR TO CHAR)
   IF(t:=FindToolType(oldtooltypes,'BBS_GEOGRAPHIC')) THEN StrCopy(mybbslocation,t)
   IF(t:=FindToolType(oldtooltypes,'BBS_LOCATION'))
     StrCopy(bbsPath,t)
+    checkPathSlash(bbsPath)
     FOR i:=0 TO nodeCount-1
       cmd:=cmds[i]
-      strcpy(cmd.bbsLoc,t)
+      strcpy(cmd.bbsLoc,bbsPath)
     ENDFOR
   ENDIF
 
@@ -3421,6 +3406,29 @@ PROC setSingleFDS(socketVal)
   fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
 ENDPROC
 
+PROC updateVersion(expVer:PTR TO CHAR,expDate:PTR TO CHAR)
+  DEF v,p
+  DEF y,m,d
+  DEF tmp[4]:STRING
+  
+  v:=getBuild()
+  p:=InStr(v,' ')
+  IF p>=0
+    StrCopy(expVer,v,p)
+    v:=v+p+1
+    StrCopy(tmp,v,4)
+    y:=Val(tmp)
+    StrCopy(tmp,v+4,2)
+    m:=Val(tmp)
+    StrCopy(tmp,v+6,2)
+    d:=Val(tmp)
+    StringF(expDate,'\d[2]-\s[3]-\d[4]',d,'JanFebMarAprMayJunJulAugSepOctNovDec'+((m-1)*3),y)
+  ELSE
+    StrCopy(expVer,v,ALL)
+    StrCopy(expDate,'',ALL)
+  ENDIF
+ENDPROC
+
 PROC main() HANDLE
 
   DEF iconStartName[200]:STRING
@@ -3441,7 +3449,7 @@ PROC main() HANDLE
   DEF num
   DEF version[200]:STRING
   DEF windowSig,myappsig
-  DEF i,j,class
+  DEF i,class
   DEF newlock=NIL
   DEF telnetServerSocket=-1
   DEF telnetSocket=-1
@@ -3460,7 +3468,7 @@ PROC main() HANDLE
  
   KickVersion(37)  -> E-Note: requires V37
 
-  StringF(myVerStr,'v5.2.3')
+  updateVersion(myVerStr,myBuildStr)
 
   FOR i:=0 TO MAX_NODES-1
     ndUser[i]:=NIL
@@ -3957,6 +3965,9 @@ PROC main() HANDLE
                 CASE GADGETUP
                   handleEditGadget(im,0)
                 CASE MENUPICK
+                  ->quit menu item
+                  IF(menunum(im.code)=0) AND (itemnum(im.code)=5) THEN attemptShutdown()
+                  
                   IF(menunum(im.code)=1)
                     i:=button
                     button:=0

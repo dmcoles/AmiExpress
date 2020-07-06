@@ -17,7 +17,7 @@ EXPORT ENUM ACS_ACCOUNT_EDITING,ACS_READ_BULLETINS,ACS_COMMENT_TO_SYSOP,ACS_DOWN
      ACS_CUSTOMCOMMANDS,ACS_JOIN_SUB_CONFERENCE,ACS_ZOOM_MAIL,ACS_MCI_MSG,ACS_EDIT_DIRS,ACS_EDIT_FILES,ACS_BREAK_CHAT,ACS_QUIET_NODE,ACS_SYSOP_COMMANDS,ACS_WHO_IS_ONLINE,
      ACS_RELOGON,ACS_ULSTATS,ACS_XPR_RECEIVE,ACS_XPR_SEND,ACS_WILDCARDS,ACS_CONFERENCE_ACCOUNTING,ACS_PRI_MSGFILES,ACS_PUB_MSGFILES,ACS_FULL_EDIT,ACS_CONFFLAGS,
      ACS_OLM,ACS_HIDE_FILES,ACS_SHOW_PAYMENTS,ACS_CREDIT_ACCESS,ACS_VOTE,ACS_MODIFY_VOTE,ACS_FILE_EXPANSION,ACS_EDIT_REAL_NAME,ACS_EDIT_USER_NAME,ACS_CENSORED,
-     ACS_ACCOUNT_VIEW,ACS_TRANSLATION,ACS_UNKNOWN,ACS_CREATE_CONFERENCE,ACS_LOCAL_DOWNLOADS,ACS_MAX_PAGES,ACS_OVERRIDE_DEFAULTS,ACS_HOLD_ACCESS
+     ACS_ACCOUNT_VIEW,ACS_TRANSLATION,ACS_UNKNOWN,ACS_CREATE_CONFERENCE,ACS_LOCAL_DOWNLOADS,ACS_MAX_PAGES,ACS_OVERRIDE_DEFAULTS,ACS_HOLD_ACCESS,ACS_EDIT_EMAIL
 
 EXPORT ENUM ENV_IDLE=0,ENV_DOWNLOADING=1,ENV_UPLOADING=2,ENV_DOORS=3,ENV_MAIL=4,ENV_STATS=5,ENV_ACCOUNT=6,ENV_ZOOM=7,ENV_FILES=8,ENV_BULLETINS=9,
       ENV_VIEWING=10,ENV_ACCOUNTSEQ=11,ENV_LOGOFF=12,ENV_SYSOP=13,ENV_SHELL=14,ENV_EMACS=15,ENV_JOIN=16,ENV_CHAT=17,ENV_NOTACTIVE=18,
@@ -239,8 +239,8 @@ EXPORT CONST DT_REALNAME=606
 EXPORT CONST UNKNOWN4=607
 EXPORT CONST QUICK_KEY=608
 EXPORT CONST SER_INOUT=609
-EXPORT CONST UNKNOWN6=610
-EXPORT CONST UNKNOWN7=611
+EXPORT CONST AXNET_RECEIVE=610
+EXPORT CONST AXNET_SEND=611
 EXPORT CONST MEMCONF=612
 EXPORT CONST SET_SERSHARED=613
 EXPORT CONST CONF_ACCESS=614
@@ -282,10 +282,10 @@ undocumented host addresses:
 605 - get custom msgbase command to msg.string
 606 - get/set real name to/from msg.string
 607 - get/set something that isnt used anywhere else in the code (not yet implemented)
-608 - some kind of input routine ???   (not yet implemented)
+608 - some kind of input routine ???   (currently implemented as default read char routine)
 609 - set IO_Flags[IOFLAG_SER_IN] and IO_Flags[IOFLAG_SER_OUT]
-610 - trigger netmail receive (not yet implemented)
-611 - trigger netmail send (not yet implemented)
+610 - trigger netmail receive
+611 - trigger netmail send
 612 - get MemConf address (not yet implemented)
 613 - set something - something to do with external programs accessing serial ???
 614 - check conf access
@@ -311,7 +311,7 @@ undocumented host addresses:
 637 - get or set internet name
 638 - get or set translator
 639 - get or set host language name (languages.info)
-640 - set amixnet outbound path (not yet implemented)
+640 - set amixnet outbound path
 */
 
 /* New host commands for /X5 using range 700+ */

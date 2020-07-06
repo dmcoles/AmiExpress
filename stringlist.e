@@ -23,6 +23,7 @@ EXPORT PROC stringlist(maxSize=-1) OF stringlist  ->constructor
 ENDPROC
 
 EXPORT PROC item(n) OF stringlist
+  ->IF (n<0) OR (n>=ListLen(self.items)) THEN WriteF('stringlist index error \d',n)
 ENDPROC self.items[n]
 
 EXPORT PROC clear() OF stringlist
@@ -49,6 +50,22 @@ EXPORT PROC expand() OF stringlist
   ListAdd(self.items,old)
   DisposeLink(old)
 ENDPROC len
+
+EXPORT PROC insert(pos,stringVal:PTR TO CHAR) OF stringlist
+  DEF s,c,i
+  
+  c:=ListLen(self.items)
+  IF c=ListMax(self.items) THEN self.expand()
+  ListAdd(self.items,[NIL])
+  
+  FOR i:=ListLen(self.items)-1 TO (pos+1) STEP -1
+    self.items[i]:=self.items[i-1]
+  ENDFOR
+  s:=String(StrLen(stringVal))
+  StrCopy(s,stringVal)
+  self.items[pos]:=s
+ENDPROC
+
 
 EXPORT PROC add(stringVal:PTR TO CHAR) OF stringlist
   DEF s,c
@@ -117,10 +134,10 @@ EXPORT PROC stdlist(maxSize=-1) OF stdlist  ->constructor
 ENDPROC
 
 EXPORT PROC item(n) OF stdlist
+  ->IF (n<0) OR (n>=ListLen(self.items)) THEN WriteF('stdlist index error \d',n)
 ENDPROC self.items[n]
 
 EXPORT PROC clear() OF stdlist
-  DEF i
   IF ListMax(self.items)>self.initialMax
     DisposeLink(self.items)
     self.items:=List(self.initialMax)
@@ -142,7 +159,7 @@ EXPORT PROC expand() OF stdlist
 ENDPROC len
 
 EXPORT PROC add(v:LONG) OF stdlist
-  DEF s,c
+  DEF c
   
   c:=ListLen(self.items)
   IF c=ListMax(self.items) THEN self.expand()

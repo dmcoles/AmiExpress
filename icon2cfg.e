@@ -9,8 +9,6 @@ ENUM ERR_NOICON=1
 ENUM SOURCE_ICON,SOURCE_CFG
 
 PROC main() HANDLE
-  DEF rdargs
-  DEF myargs:PTR TO LONG
   DEF tempstr[255]:STRING
   DEF inFile
   DEF sourceFile[255]:STRING
