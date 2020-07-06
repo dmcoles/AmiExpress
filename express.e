@@ -6549,6 +6549,7 @@ PROC checkIncomingCall()
       hostent:=GetHostByAddr({s},4,AF_INET)
       IF hostent<>NIL THEN StrCopy(hostName,hostent.h_name,255)
     ENDIF
+
     JUMP go3
   ENDIF
 
@@ -23269,7 +23270,7 @@ ENDPROC RESULT_SUCCESS
 
 PROC internalCommandVER()
   DEF tempStr[255]:STRING
-  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ©2018-2020 Darren Coles\b\n',expressVer,expressDate)
+  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ï¿½2018-2020 Darren Coles\b\n',expressVer,expressDate)
   aePuts(tempStr)
   aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   StringF(tempStr,'Registered to \s.\b\n',regKey)
@@ -26450,7 +26451,7 @@ PROC processLogon()
   ENDIF
   aePuts(tempStr)
 
-  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018-2020 Darren Coles\b\n',expressVer)
+  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ï¿½2018-2020 Darren Coles\b\n',expressVer)
   aePuts(tempStr)
   aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
@@ -26750,9 +26751,9 @@ PROC processAwait()
       send017()
       sendCLS()
 
-      StringF(tempstr,'\b\n           [33m© 1992-1995 AmiExpress [37mby[35m Light Speed Technologies Inc.[0m\b\n')
+      StringF(tempstr,'\b\n           [33mï¿½ 1992-1995 AmiExpress [37mby[35m Light Speed Technologies Inc.[0m\b\n')
       aePuts(tempstr)
-      StringF(tempstr,'\b\n                           [33m Version 5 ©2018-2020[0m\b\n')
+      StringF(tempstr,'\b\n                           [33m Version 5 ï¿½2018-2020[0m\b\n')
       aePuts(tempstr)
 
       StringF(tempstr,'\b\n                       [37m Programming by: [33m Darren Coles')
