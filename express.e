@@ -3972,7 +3972,6 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
   DEF commandTypeCode
   DEF cmdfound = FALSE
   DEF tooltype,pri,stacksize
-  DEF default=FALSE
   DEF acsLevel
   DEF passparams=-1
   DEF access=0
@@ -4088,46 +4087,35 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
     RETURN (processCommand(commandfile,TRUE)=RESULT_SUCCESS)
   ENDIF
 
-  IF (commandTypeCode=DOORTYPE_SIM)
-    getNodeFile(tooltype,cmd,commandfile)
-    default:=fileExists(commandfile)
-  ELSEIF commandTypeCode=DOORTYPE_MCI
-    default:=TRUE
-  ELSE
-    default:=FALSE
-  ENDIF
+  getNodeFile(tooltype,cmd,commandfile)
+  readToolType(tooltype,cmd,'LOCATION',commandfile)
 
-  StrCopy(commandfile,'')
-  IF (default) OR (readToolType(tooltype,cmd,'LOCATION',commandfile))
+  IF commandTypeCode=-1 THEN RETURN FALSE
 
-    IF commandTypeCode=-1 THEN RETURN FALSE
+  IF (checkToolTypeExists(tooltype,cmd,'QUICKMODE')) AND (quickFlag) THEN RETURN TRUE
 
-    IF (checkToolTypeExists(tooltype,cmd,'QUICKMODE')) AND (quickFlag) THEN RETURN TRUE
+  cmdfound:=TRUE
 
-    cmdfound:=TRUE
-
-    pri:=0
-    stacksize:=20000
-    IF readToolType(tooltype,cmd,'PRIORITY',passwordstr)
-      IF strCmpi(passwordstr,'same',ALL)
-        pri:=byteSignExtend(cmds.taskPri)
-      ELSE
-        pri:=Val(passwordstr)
-      ENDIF
+  pri:=0
+  stacksize:=20000
+  IF readToolType(tooltype,cmd,'PRIORITY',passwordstr)
+    IF strCmpi(passwordstr,'same',ALL)
+      pri:=byteSignExtend(cmds.taskPri)
+    ELSE
+      pri:=Val(passwordstr)
     ENDIF
-
-    IF readToolType(tooltype,cmd,'STACK',passwordstr) THEN stacksize:=Val(passwordstr)
-
-    resident:=checkToolTypeExists(tooltype,cmd,'RESIDENT')
-    IF checkToolTypeExists(tooltype,cmd,'EXPERT_MODE') THEN doorExpertMode:=TRUE
-
-    doorTrap:=checkToolTypeExists(tooltype,cmd,'TRAPON')
-
-    readToolType(tooltype,cmd,'MIMICVER',mimicVersion)
-    runDoor(commandfile,commandTypeCode,cmd,tooltype,params,resident,doorTrap,privcmd,pri,stacksize)
-    StrCopy(mimicVersion,'')
-    
   ENDIF
+
+  IF readToolType(tooltype,cmd,'STACK',passwordstr) THEN stacksize:=Val(passwordstr)
+
+  resident:=checkToolTypeExists(tooltype,cmd,'RESIDENT')
+  IF checkToolTypeExists(tooltype,cmd,'EXPERT_MODE') THEN doorExpertMode:=TRUE
+
+  doorTrap:=checkToolTypeExists(tooltype,cmd,'TRAPON')
+
+  readToolType(tooltype,cmd,'MIMICVER',mimicVersion)
+  runDoor(commandfile,commandTypeCode,cmd,tooltype,params,resident,doorTrap,privcmd,pri,stacksize)
+  StrCopy(mimicVersion,'')
 ENDPROC cmdfound
 
 PROC runBbsCommand(cmd,params,privcmd=FALSE)
@@ -6549,7 +6537,6 @@ PROC checkIncomingCall()
       hostent:=GetHostByAddr({s},4,AF_INET)
       IF hostent<>NIL THEN StrCopy(hostName,hostent.h_name,255)
     ENDIF
-
     JUMP go3
   ENDIF
 
@@ -8427,23 +8414,27 @@ PROC runFifoHandler()
   
   ->check to see if fifo handler is running and run it if not
   
+  Forbid()
   m:=MaxCli()
    
   FOR i:=1 TO m
     p:=FindCliProc(i)
-    c:=p.cli
-    IF c
-      c:=Shl(c,2)
-      s:=c.commandname
-      IF s
-        s:=Shl(s,2)
-        StrCopy(tempstr,s+1,s[0])
-        LowerStr(tempstr)
-        IF StrCmp(tempstr,'l:fifo-handler') THEN found:=TRUE
+    IF p
+      c:=p.cli
+      IF c
+        c:=Shl(c,2)
+        s:=c.commandname
+        IF s
+          s:=Shl(s,2)
+          StrCopy(tempstr,s+1,s[0])
+          LowerStr(tempstr)
+          IF StrCmp(tempstr,'l:fifo-handler') THEN found:=TRUE
+        ENDIF
       ENDIF
     ENDIF
     
   ENDFOR
+  Permit()
   IF found=FALSE THEN Execute('Run >NIL: <NIL: l:fifo-handler',0,0)
 ENDPROC
 
@@ -23270,7 +23261,7 @@ ENDPROC RESULT_SUCCESS
 
 PROC internalCommandVER()
   DEF tempStr[255]:STRING
-  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ï¿½2018-2020 Darren Coles\b\n',expressVer,expressDate)
+  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ©2018-2020 Darren Coles\b\n',expressVer,expressDate)
   aePuts(tempStr)
   aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   StringF(tempStr,'Registered to \s.\b\n',regKey)
@@ -26451,7 +26442,7 @@ PROC processLogon()
   ENDIF
   aePuts(tempStr)
 
-  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ï¿½2018-2020 Darren Coles\b\n',expressVer)
+  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018-2020 Darren Coles\b\n',expressVer)
   aePuts(tempStr)
   aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
@@ -26751,9 +26742,9 @@ PROC processAwait()
       send017()
       sendCLS()
 
-      StringF(tempstr,'\b\n           [33mï¿½ 1992-1995 AmiExpress [37mby[35m Light Speed Technologies Inc.[0m\b\n')
+      StringF(tempstr,'\b\n           [33m© 1992-1995 AmiExpress [37mby[35m Light Speed Technologies Inc.[0m\b\n')
       aePuts(tempstr)
-      StringF(tempstr,'\b\n                           [33m Version 5 ï¿½2018-2020[0m\b\n')
+      StringF(tempstr,'\b\n                           [33m Version 5 ©2018-2020[0m\b\n')
       aePuts(tempstr)
 
       StringF(tempstr,'\b\n                       [37m Programming by: [33m Darren Coles')
