@@ -3284,6 +3284,7 @@ PROC loadState()
 
     Close(fh)
   ENDIF
+  showLastUser(eWin)
 ENDPROC
 
 PROC saveState()

@@ -29,8 +29,6 @@ node tooltypes
 door tooltypes
  PASS_PARAMETERS=<res>- options 3 and 4
 
-STICKY - trapdoor command line parameter
-
 */
 
 MODULE 'intuition/screens',
@@ -4990,7 +4988,7 @@ PROC processMciCmd(mcidata,len,pos)
       midStr2(cmd,mcidata,pos,nval)
       slowmo:=Val(cmd)
       IF (slowmo<1) OR (slowmo>5) THEN slowmo:=1
-      pos:=pos+t
+      pos:=pos+nval+t
     ELSEIF StrCmp(cmd,'SMC',ALL)
       slowmo:=0
       pos:=pos+3+t
