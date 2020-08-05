@@ -14002,7 +14002,11 @@ PROC updateZDisplay()
       SetAPen(windowZmodem.rport,0)
       RectFill(windowZmodem.rport,11,136,322,143)
     ELSE
-      StringF(tempstr,' Complete: \d%\n',Div(zModemInfo.transPos,Div(zModemInfo.filesize,100)))
+      IF zModemInfo.filesize<100
+        StringF(tempstr,' Complete: \d%\n',Div(Mul(zModemInfo.transPos,100),zModemInfo.filesize))
+      ELSE
+        StringF(tempstr,' Complete: \d%\n',Div(zModemInfo.transPos,Div(zModemInfo.filesize,100)))
+      ENDIF
       zmodemStatPrint(tempstr)
 
       v1:=zModemInfo.transPos
