@@ -15013,8 +15013,10 @@ redo1:
         IF Recv(telnetSocket,zmodemBuffer,n,0)=n
           bufferedBytes:=n
         ENDIF
-        checkCarrier()
-        JUMP redo1
+        IF checkCarrier() THEN JUMP redo1
+        res:=0
+      ELSE
+        IF checkCarrier()=FALSE THEN res:=0
       ENDIF
     ENDIF
   UNTIL (res=0) OR (recvd) OR (timeout=0)
