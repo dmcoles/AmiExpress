@@ -567,7 +567,7 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
 ENDPROC
 
 
-EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sCheckInputPtr, xprInfo:PTR TO xprData, httpFileStartPtr, httpFileEndPtr, httpFileProgressPtr, httpDupeCheckPtr, uploadMode)
+EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sCheckInputPtr, xprInfo:PTR TO xprData, httpFileStartPtr, httpFileEndPtr, httpFileProgressPtr, httpDupeCheckPtr, httpCheckConnection, uploadMode)
   DEF r,http_s,http_c,sb
   DEF temp[255]:STRING
   DEF httpData:PTR TO httpData
@@ -580,6 +580,7 @@ EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sChe
   DEF fh,buff,l,t,t2,lastpos,pos,cps
   DEF asynclib
   DEF p,contentLength
+  DEF connected=TRUE
   
   httpData:=NEW httpData
   httpData.rest:=0
@@ -615,13 +616,16 @@ EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sChe
     IF r
       ioctlSocket(sb,http_s,FIONBIO,[1])
       rchar:=0
-      WHILE (rchar<>3)
+      WHILE (rchar<>3) AND connected
         Delay(10)
         rchar:=0
         IF sCheckInput(httpData)
           rchar:=readChar(httpData)
         ENDIF
         EXIT rchar=3
+        
+        IF httpCheckConnection<>NIL THEN connected:=httpCheckConnection()
+        EXIT connected=FALSE       
         
         http_c:=accept(sb,http_s,NIL,NIL)
         IF(http_c< 0)
@@ -735,8 +739,9 @@ EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sChe
       r:=closeSocket(sb,http_s)
     ENDIF
     IF flg THEN aePuts(httpData,'\b\n')
-    IF rchar=3
-      aePuts(httpData,'CTRL-C detected, HTTP processor closed\b\n')
+    IF (rchar=3) OR (connected=FALSE)
+      StringF(temp,'\s detected, , HTTP processor closed\b\n',IF rchar=3 THEN 'CTRL-C' ELSE 'Disconnect')    
+      aePuts(httpData,temp)
     ELSE
       aePuts(httpData,'HTTP transfers complete, all connections closed\b\n')
     ENDIF

@@ -14118,7 +14118,7 @@ PROC httpUpload(uploadFolder: PTR TO CHAR,httpPort)
     StrCopy(tempstr,'localhost')
   ENDIF
   
-  doHttpd(node,tempstr,httpPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},TRUE)
+  doHttpd(node,tempstr,httpPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},TRUE)
   serialCacheEnabled:=oldSerCache
   END x 
 ENDPROC
@@ -14167,7 +14167,7 @@ PROC httpDownload(fileList: PTR TO stdlist, pupdateDownloadStats,httpPort)
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
-  doHttpd(node,tempstr,httpPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},FALSE)
+  doHttpd(node,tempstr,httpPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},FALSE)
   serialCacheEnabled:=oldSerCache
  
   ->clean up ram links
@@ -14314,7 +14314,7 @@ PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPort,ftpDataPort)
     StrCopy(tempstr,'localhost')
   ENDIF
 
-  doftp(node,tempstr,ftpPort,ftpDataPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},TRUE)
+  doftp(node,tempstr,ftpPort,ftpDataPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},TRUE)
   serialCacheEnabled:=oldSerCache
   END x 
 
@@ -14364,7 +14364,7 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort,ftpDataPo
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
-  doftp(node,tempstr,ftpPort,ftpDataPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},FALSE)
+  doftp(node,tempstr,ftpPort,ftpDataPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},FALSE)
   serialCacheEnabled:=oldSerCache
  
   ->clean up ram links
@@ -15013,8 +15013,10 @@ redo1:
         IF Recv(telnetSocket,zmodemBuffer,n,0)=n
           bufferedBytes:=n
         ENDIF
-        checkCarrier()
-        JUMP redo1
+        IF checkCarrier() THEN JUMP redo1
+        res:=0
+      ELSE
+        IF checkCarrier()=FALSE THEN res:=0
       ENDIF
     ENDIF
   UNTIL (res=0) OR (recvd) OR (timeout=0)
