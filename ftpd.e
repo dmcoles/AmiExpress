@@ -1065,12 +1065,13 @@ PROC createThread(num,node,sockid,ftpData:PTR TO ftpData)
  END tags
 ENDPROC
 
-EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, xprInfo, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, ftpDupeCheckPtr,uploadMode)
+EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, xprInfo, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, ftpDupeCheckPtr,ftpCheckConnection,uploadMode)
   DEF r,ftp_s,ftp_c,s,sb
   DEF temp[255]:STRING
   DEF ftpData:PTR TO ftpData
   DEF flg,rchar
   DEF tcount=0,i,t
+  DEF connected=TRUE
   
   ftpData:=NEW ftpData
   ftpData.rest:=0
@@ -1115,6 +1116,9 @@ EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPt
         ENDIF
         EXIT rchar=3
         
+        IF ftpCheckConnection<>NIL THEN connected:=ftpCheckConnection()
+        EXIT connected=FALSE
+        
         ftp_c:=accept(sb,ftp_s,NIL,NIL)
         IF(ftp_c< 0)
           IF errno(sb)<>35
@@ -1137,8 +1141,9 @@ EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPt
       r:=closeSocket(sb,ftp_s)
     ENDIF
     IF flg THEN aePuts(ftpData,'\b\n')
-    IF rchar=3
-      aePuts(ftpData,'CTRL-C detected, FTP transfer aborted\b\n')
+    IF (rchar=3) OR (connected=FALSE)
+      StringF(temp,'\s detected, FTP transfer aborted\b\n',IF rchar=3 THEN 'CTRL-C' ELSE 'Disconnect')
+      aePuts(ftpData,temp)
       FOR i:=0 TO tcount-1
         StringF(temp,'ftpThread\d-\d',node,i)
         Forbid()
@@ -1146,7 +1151,6 @@ EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPt
         IF t<>NIL THEN Signal(t,SIGBREAKF_CTRL_C)
         Permit()       
       ENDFOR
-      
     ELSE
       aePuts(ftpData,'FTP transfers complete, all ftp connections closed\b\n')
     ENDIF
