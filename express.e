@@ -111,6 +111,7 @@ DEF masterNode=0: PTR TO multiPort
 DEF debug=FALSE
 DEF consoleDebugLevel=LOG_NONE
 DEF debugLogLevel=LOG_NONE
+DEF inputLogging=FALSE
 
 DEF inac=FALSE
 
@@ -325,6 +326,7 @@ DEF customMsgParam2=0
 DEF customMsgCmd[255]:STRING
 
 DEF transfering=FALSE
+DEF doorSilent=FALSE
 
 DEF cancelTransferOffHook=FALSE
 DEF aeGoodFile=0
@@ -558,7 +560,7 @@ PROC updateTimeUsed()
     lastTimeUpdate:=currTime
   ENDIF
 
-  IF (timeLimit<0) AND (state<>STATE_LOGGING_OFF)
+  IF (timeLimit<0) AND (state<>STATE_LOGGING_OFF) AND (checkSecurity(ACS_OVERRIDE_TIMELIMIT)=FALSE)
     IF displayScreen(SCREEN_LOGON24)=FALSE
       aePuts('You have exceeded your time limit\b\n')
       aePuts('Goodbye\b\n\b\n')
@@ -1669,7 +1671,7 @@ PROC serPuts(string: PTR TO CHAR, putlen=-1,binary=FALSE, force=FALSE)
   DEF tempTime1,tempTime2
 
   IF (serialWriteIO<>NIL) OR (telnetSocket>=0)
-    IF (transfering=FALSE) OR (force)
+    IF ((transfering=FALSE) AND (doorSilent=FALSE)) OR (force)
 
       serFlushTime:=0
       IF serialCacheEnabled
@@ -1752,7 +1754,7 @@ ENDPROC
 -> Output a NIL-terminated string of characters to a console.
 PROC conPuts(string, putlen=-1, force=FALSE)
   DEF actlen
-  IF (consoleIO<>NIL) AND ((transfering=FALSE) OR (force))
+  IF (consoleIO<>NIL) AND (((transfering=FALSE) AND (doorSilent=FALSE)) OR (force))
     IF (actlen:=StrLen(string))<putlen THEN putlen:=actlen
     consoleIO.command:=CMD_WRITE
     consoleIO.data:=string
@@ -1762,11 +1764,11 @@ PROC conPuts(string, putlen=-1, force=FALSE)
 ENDPROC
 
 PROC checkCon()
-  IF (consoleReadIO=NIL) OR (transfering) THEN RETURN FALSE
+  IF (consoleReadIO=NIL) OR (transfering) OR (doorSilent) THEN RETURN FALSE
 ENDPROC CheckIO(consoleReadIO)
 
 PROC checkSer()
-  IF (serialReadIO=NIL) OR (transfering) THEN RETURN FALSE
+  IF (serialReadIO=NIL) OR (transfering) OR (doorSilent) THEN RETURN FALSE
 ENDPROC CheckIO(serialReadIO)
 
 PROC lineReset()
@@ -1781,7 +1783,7 @@ ENDPROC
 PROC purgeLineEnd()
   DEF result
 
-  IF serialReadIO<>NIL AND (transfering=FALSE)
+  IF (serialReadIO<>NIL) AND (transfering=FALSE) AND (doorSilent=FALSE)
     result:=CheckIO(serialReadIO)
       IF(result=FALSE)
       AbortIO(serialReadIO)
@@ -1793,7 +1795,7 @@ PROC purgeLineEnd()
 ENDPROC
 
 PROC purgeLineStart()
-  IF serialReadIO<>NIL AND (transfering=FALSE)
+  IF (serialReadIO<>NIL) AND (transfering=FALSE) AND (doorSilent=FALSE)
     serialReadIO.iostd.command:=CMD_CLEAR
     DoIO(serialReadIO);
     queueSerialRead({serbuff})
@@ -1801,7 +1803,7 @@ PROC purgeLineStart()
 ENDPROC
 
 PROC purgeLine()
-  IF serialReadIO<>NIL AND (transfering=FALSE)
+  IF (serialReadIO<>NIL) AND (transfering=FALSE) AND (doorSilent=FALSE)
     AbortIO(serialReadIO)
     WaitIO(serialReadIO)
     serialReadIO.iostd.command:=CMD_CLEAR
@@ -2194,6 +2196,10 @@ redoinput:
   IF ch=13 THEN result:=RESULT_SUCCESS
   IF (result=RESULT_SUCCESS) AND (StrLen(outputString)>0) AND (allowHistory)
     addToHistory(outputString)
+    IF inputLogging
+      StringF(tempstr,'\tUser Input: \s',outputString)
+      callersLog(tempstr)
+    ENDIF
   ENDIF
 
   IF (captureFP)
@@ -2794,6 +2800,844 @@ PROC startProcess(exestring, stacksize, priority, async, doorTrap)
 
 ENDPROC
 
+PROC calcSizeText(bcdValue:PTR TO CHAR,outString:PTR TO CHAR)
+  DEF i
+  DEF tempBCD[8]:ARRAY OF CHAR
+  DEF tempBCD2[8]:ARRAY OF CHAR
+  i:=0           
+  CopyMem(bcdValue,tempBCD,8)
+  CopyMem(tempBCD,tempBCD2,8)
+  REPEAT
+    subBCD(tempBCD,1024)
+    IF tempBCD[0]<$50
+      addBCD(tempBCD2,512)
+      divBCD1024(tempBCD2)
+      CopyMem(tempBCD2,tempBCD,8)
+      i++
+    ENDIF
+  UNTIL tempBCD[0]>=$50
+  
+  formatBCD(tempBCD2,outString)
+  SELECT i
+    CASE 0
+      StrAdd(outString,'b')
+    CASE 1
+      StrAdd(outString,'kb')
+    CASE 2
+      StrAdd(outString,'mb')
+    CASE 3
+      StrAdd(outString,'gb')
+    CASE 4
+      StrAdd(outString,'tb')
+    CASE 5
+      StrAdd(outString,'pb')
+    DEFAULT
+      formatBCD(bcdValue,outString)
+  ENDSELECT           
+ENDPROC
+
+PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:PTR TO LONG, exitPtr:PTR TO LONG, runOnExit:PTR TO CHAR, runOnExit2:PTR TO CHAR)
+  DEF tempstring[255]:STRING
+  DEF tempstring2[255]:STRING
+  DEF tuserdata:PTR TO user,tuserkeys:PTR TO userKeys, tusermisc: PTR TO userMisc
+  DEF i,ch,temp
+  
+  SELECT MAX_CMD OF msgcmd
+    CASE JH_REGISTER
+        msg.command:=IF loggedOnUser<>NIL THEN loggedOnUser.lineLength ELSE 29
+        nodesPtr[]:=nodesPtr[]+1
+    CASE JH_WRITE
+      IF (transfering=FALSE) AND (doorSilent=FALSE)
+        aePuts(msg.string)
+      ENDIF
+    CASE CHAIN
+        nodesPtr[]:=nodesPtr[]-1
+    CASE JH_SHUTDOWN
+        nodesPtr[]:=nodesPtr[]-1
+         IF(nodesPtr[]=0)
+            rawArrow:=FALSE
+            exitPtr[]:=TRUE
+         ENDIF
+    CASE JH_CO
+      conPuts(msg.string,-1)
+      IF msg.data
+        conPuts('\b\n',-1)
+        checkForPause()
+      ENDIF
+    CASE JH_SO
+      serPuts(msg.string,-1)
+      IF msg.data
+        serPuts('\b\n',-1)
+      ENDIF
+    CASE JH_SM
+      aePuts(msg.string)
+      IF msg.data
+        aePuts('\b\n')
+        checkForPause()
+      ENDIF
+    CASE JH_SMPTR
+      aePuts(msg.strptr)
+      IF msg.data
+        aePuts('\b\n')
+        checkForPause()
+      ENDIF
+    CASE JH_PM
+      IF(lineInput(msg.string,'',msg.data,doorTimeout,tempstring)<>RESULT_SUCCESS)
+        msg.data:=-1
+      ELSE
+        msg.data:=1
+        strCpy(msg.string,tempstring,200)
+      ENDIF
+    CASE JH_LI
+      IF(lineInput('',msg.string,msg.data,doorTimeout,tempstring)<>RESULT_SUCCESS)
+        msg.data:=-1
+      ELSE
+        msg.data:=1
+        strCpy(msg.string,tempstring,200)
+      ENDIF
+    CASE JH_ExtHK
+        lineCount:=0
+        msg.command:=readChar(doorTimeout,Shl(1,msg.signal))
+        IF (msg.command<0) THEN msg.data:=-1 ELSE msg.data:=1
+    CASE JH_HK
+      lineCount:=0
+      aePuts(msg.string)
+      ch:=readChar(doorTimeout)
+      IF (ch<0)
+        msg.data:=-1
+      ELSE
+        msg.data:=1
+      ENDIF
+      msg.string[0]:=ch
+      msg.string[1]:=0
+      msg.command:=ximPort /*XIMPort=1 for console,2for serial  */
+    CASE JH_20
+       ch:=readChar(doorTimeout)
+       msg.data:=ch
+       msg.command:=ximPort
+    CASE QUICK_KEY
+       ch:=readChar(doorTimeout)
+       msg.data:=ch
+       msg.command:=ximPort
+    CASE JH_MCI
+      StrCopy(tempstring,msg.string)
+      processMci(tempstring)
+      IF msg.data
+        aePuts('\b\n')
+        checkForPause()
+      ENDIF
+    CASE JH_SIGBIT
+      msg.data:=doorExtSig
+    CASE JH_FetchKey
+      IF checkInput()
+        msg.command:=readChar(doorTimeout)
+        IF (msg.command<0)  THEN msg.data:=-1 ELSE msg.data:=1
+      ELSE
+        msg.command:=0
+        msg.data:=1
+      ENDIF
+    CASE JH_SG
+      IF (findSecurityScreen(msg.string,tempstring)) THEN displayFile(tempstring)
+    CASE JH_SF
+      displayFile(msg.string)
+    CASE JH_EF
+      fileattach:=FALSE
+      loadMsg(msg.string)
+      IF(edit()=RESULT_SUCCESS)
+        saveMsg(msg.string)
+        msg.data:=1
+      ELSE
+        msg.data:=-1
+      ENDIF
+    CASE JH_BBSNAME
+      strCpy(msg.string,cmds.bbsName,41)
+    CASE JH_SYSOP
+      strCpy(msg.string,cmds.sysopName,41)
+    CASE JH_FLAGFILE
+       addFlagToList(msg.string)
+    CASE RETURNCOMMAND
+      StrCopy(runOnExit,msg.string,200)
+    CASE DT_NAME
+      IF (msg.data)
+        strCpy(msg.string,loggedOnUser.name,31)
+      ELSE
+        strCpy(loggedOnUser.name,msg.string,31)
+      ENDIF
+    CASE DT_PASSWORD
+      IF (msg.data)
+        ->we dont allow doors to grab the password
+        strCpy(msg.string,'',ALL)
+      ELSE
+        ->calculate the new password hash
+        StrCopy(tempstring,msg.string)
+        IF StrLen(tempstring)>0 
+          UpperStr(tempstring)
+          loggedOnUser.pwdHash:=calcPasswordHash(tempstring)
+        ENDIF
+      ENDIF
+    CASE DT_LOCATION
+      IF (msg.data)
+        strCpy(msg.string,loggedOnUser.location,30)
+      ELSE
+        strCpy(loggedOnUser.location,msg.string,30)
+      ENDIF
+    CASE DT_PHONENUMBER
+      IF (msg.data)
+        strCpy(msg.string,loggedOnUser.phoneNumber,13)
+      ELSE
+        strCpy(loggedOnUser.phoneNumber,msg.string,13)
+      ENDIF
+    CASE DT_SLOTNUMBER
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.slotNumber)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.slotNumber:=Val(msg.string)
+      ENDIF
+    CASE DT_SECSTATUS
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.secStatus)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.secStatus:=Val(msg.string)
+        convertAccess()
+      ENDIF
+    CASE DT_SECBOARD
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.secBoard)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.secBoard:=Val(msg.string)
+      ENDIF
+    CASE DT_SECLIBRARY
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.secLibrary)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.secLibrary:=Val(msg.string)
+      ENDIF
+    CASE DT_SECBULLETIN
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.secBulletin)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.secBulletin:=Val(msg.string)
+      ENDIF
+    CASE DT_MESSAGESPOSTED
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.messagesPosted AND $FFFF)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.messagesPosted:=Val(msg.string)
+      ENDIF
+    CASE DT_UPLOADS
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.uploads AND $FFFF)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.uploads:=Val(msg.string)
+      ENDIF
+    CASE DT_DOWNLOADS
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.downloads AND $FFFF)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.downloads:=Val(msg.string)
+      ENDIF
+    CASE DT_TIMESCALLED
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.timesCalled AND $FFFF)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.timesCalled:=Val(msg.string)
+      ENDIF
+    CASE DT_TIMELASTON
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.timeLastOn)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.timeLastOn:=Val(msg.string)
+      ENDIF
+    CASE DT_TIMEUSED
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.timeUsed)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.timeUsed:=Val(msg.string)
+      ENDIF
+    CASE DT_TIMELIMIT
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.timeLimit)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.timeLimit:=Val(msg.string)
+      ENDIF
+    CASE DT_TIMETOTAL
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.timeTotal)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.timeTotal:=Val(msg.string)
+      ENDIF
+    CASE DT_BYTESUPLOAD
+      IF (msg.data)
+        formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstring)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        bcdVal(msg.string,loggedOnUserMisc.uploadBytesBCD)
+        loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
+      ENDIF
+    CASE DT_BYTEDOWNLOAD
+      IF (msg.data)
+        formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstring)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        bcdVal(msg.string,loggedOnUserMisc.downloadBytesBCD)
+        loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
+      ENDIF
+    CASE DT_DAILYBYTELIMIT
+      IF (msg.data)
+        formatUnsignedLong(loggedOnUser.dailyBytesLimit,tempstring)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.dailyBytesLimit:=Val(msg.string)
+      ENDIF
+    CASE DT_DAILYBYTEDLD
+      IF (msg.data)
+        formatUnsignedLong(loggedOnUser.dailyBytesDld,tempstring)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.dailyBytesDld:=Val(msg.string)
+      ENDIF
+    CASE DT_EXPERT
+      IF (msg.data)
+        StringF(tempstring,'\c',loggedOnUser.expert)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.expert:=msg.string[0]
+      ENDIF
+    CASE DT_LINELENGTH
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.lineLength)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.lineLength:=Val(msg.string)
+      ENDIF
+    CASE ACTIVE_NODES
+        strCpy(msg.string,'                                ',ALL)
+        FOR i:=0 TO MAXNODES-1
+          StringF(tempstring,'AmiExpress_Node.\d',i)
+          IF FindPort(tempstring) THEN msg.string[i]:="X"
+        ENDFOR
+    CASE DT_DUMP
+      dumpActiveUser(msg.string)
+    CASE DT_MSGCODE
+      IF(msg.data=1 )
+        doormsgcode:=1
+      ELSEIF (msg.data=2)
+        doormsgcode:=0
+      ELSE
+        msg.data:=doormsgcode
+      ENDIF
+    CASE ENVSTAT
+        IF(msg.data)
+          StringF(tempstring,'\d',currentStat)
+          strCpy(msg.string,tempstring,10)
+        ELSE
+          setEnvStat(Val(msg.string))
+        ENDIF
+    CASE SV_NEWMSG
+      setEnvMsg(msg.string)
+    CASE DT_TIMEOUT
+      IF (msg.data)
+        StringF(tempstring,'\d',doorTimeout)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        doorTimeout:=Val(msg.string)
+      ENDIF
+    CASE BB_CONFNAME
+      IF (msg.data)
+        StrCopy(tempstring,currentConfName)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        StrCopy(currentConfName,msg.string)
+        setConfName(loggedOnUser.confRJoin-1,msg.string)
+      ENDIF
+    CASE BB_CONFLOCAL
+      IF (msg.data)
+        StrCopy(tempstring,currentConfDir)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        setConfLocation(loggedOnUser.confRJoin-1,msg.string)
+      ENDIF
+    CASE BB_LOCAL
+      strCpy(msg.string,cmds.bbsLoc,200)
+    CASE ZMODEMSEND
+        dTBT:=0
+        tBT:=0
+        tTTM:=NIL
+        tTEFF:=NIL
+        tTCPS:=NIL
+        StrCopy(tempstring,msg.string)
+        ch:=downloadFile(tempstring)
+        IF((logonType>=LOGON_TYPE_REMOTE) AND (checkCarrier()=FALSE)) THEN msg.data:=-2 ELSE msg.data:=ch
+    CASE BATCHZMODEMSEND
+        dTBT:=0
+        tBT:=0
+        tTTM:=NIL
+        tTEFF:=NIL
+        tTCPS:=NIL
+        ch:=downloadFile(msg.filler1)
+        IF((logonType>=LOGON_TYPE_REMOTE) AND (checkCarrier()=FALSE)) THEN msg.data:=-2 ELSE msg.data:=ch
+    CASE ZMODEMRECEIVE
+        dTBT:=0
+        tBT:=0
+        tTTM:=NIL
+        tTEFF:=NIL
+        tTCPS:=NIL
+        bgFileCheck:=FALSE
+        StrCopy(tempstring,msg.string);
+        ch:=zmodemReceive(tempstring,1);
+        IF((logonType>=LOGON_TYPE_REMOTE) AND (checkCarrier()=FALSE)) THEN msg.data:=-2 ELSE msg.data:=ch
+    CASE SCREEN_ADDRESS
+        StringF(tempstring,'\z\h[8]',screen)
+        LowerStr(tempstring)
+        strCpy(msg.string,tempstring,200)
+    CASE BB_TASKPRI
+      StringF(tempstring,'\c',cmds.taskPri)
+      strCpy(msg.string,tempstring,200)
+    CASE RAWSCREEN_ADDRESS
+      StringF(tempstring,'\d',screen)
+      strCpy(msg.string,tempstring,200)
+    CASE BB_CHATFLAG
+      IF sysopAvail
+        strCpy(msg.string,'ON',ALL)
+      ELSE
+        strCpy(msg.string,'OFF',ALL)
+      ENDIF
+    CASE BB_CHATSET
+      IF msg.data
+        StringF(tempstring,'\d',pagedFlag)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        temp:=pagedFlag
+        pagedFlag:=Val(msg.string)
+
+        IF pagedFlag AND Not(temp)
+          sysopPaged()
+        ENDIF
+      ENDIF
+    CASE DT_STAMP_LASTON
+      formatCDateTime(loggedOnUser.timeLastOn,tempstring)
+      strCpy(msg.string,tempstring,200)
+    CASE DT_CURR_TIME
+        StringF(tempstring,'\d',getSystemTime())
+        strCpy(msg.string,tempstring,200)
+    CASE DT_STAMP_CTIME
+      formatCDateTime(getSystemTime(),tempstring)
+      strCpy(msg.string,tempstring,200)
+    CASE DT_CONFACCESS
+        IF(msg.data) THEN strCpy(msg.string,loggedOnUser.conferenceAccess,10) ELSE strCpy(loggedOnUser.conferenceAccess,msg.string,10)
+    CASE BB_PCONFNAME
+        temp:=Val(msg.string)
+        IF((temp<1) OR (temp>9))
+          strCpy(msg.string,'ERROR',10)
+        ELSE
+          strCpy(msg.string,getConfName(temp),200)
+        ENDIF
+    CASE BB_PCONFLOCAL
+        temp:=Val(msg.string)
+        IF((temp<1) OR (temp>9))
+          strCpy(msg.string,'ERROR',10)
+        ELSE
+          getConfLocation(temp,tempstring)
+          strCpy(msg.string,tempstring,200)
+        ENDIF
+    CASE BB_MAINLINE
+      IF StrLen(params)>0
+        StringF(tempstring,'\s \s',command,params)
+      ELSE
+        StrCopy(tempstring,command)
+      ENDIF
+      strCpy(msg.string,tempstring,200)
+    CASE BB_NODEID
+      StringF(tempstring,'\d',node)
+      strCpy(msg.string,tempstring,200)
+    CASE BB_CALLERSLOG
+      callersLog(msg.string,FALSE)
+    CASE BB_UDLOG
+      udLog(msg.string)
+    CASE EXPRESS_VERSION
+        getExpressMajorVer(tempstring)
+        strCpy(msg.string,tempstring,200)
+    CASE GETKEY
+      IF checkInput() THEN msg.string[0]:="1" ELSE msg.string[0]:="0"
+      msg.string[1]:=0
+    CASE RAWARROW
+      IF(rawArrow) THEN rawArrow:=FALSE ELSE rawArrow:=TRUE
+    CASE PRV_COMMAND
+      StrCopy(tempstring,msg.string)
+      processCommand(tempstring,FALSE,TRUE)
+    CASE PRV_GROUP
+      StrCopy(tempstring,msg.string)
+        temp:=Val(tempstring)
+          strCpy(cmds.conf1Loc+(temp*54),tempstring+40,54)
+        IF(temp=(currentConf-1)) THEN StrCopy(currentConfDir,tempstring+40)
+        tempstring[39]:=0
+        stripReturn(tempstring)
+          strCpy(cmds.conf1Name+(temp*54),tempstring+2,54)
+        IF(temp=(currentConf-1)) THEN StrCopy(currentConfName,tempstring+2)
+    CASE BB_CONFNUM
+      StringF(tempstring,'\d',currentConf-1)
+      strCpy(msg.string,tempstring,200)
+    CASE BB_DROPDTR
+      processOlmMessageQueue(TRUE)
+      Delay(30)
+      modemOffHook()
+      resetSerOut:=TRUE
+      ->reqState:=REQ_STATE_LOGOFF
+    CASE BB_GETTASK
+      msg.task:=FindTask(0)
+    CASE NODE_BAUD
+      StringF(tempstring,'\d',onlineBaud)
+      strCpy(msg.string,tempstring,10)
+    CASE NODE_BAUDRATE
+      StringF(tempstring,'\d',onlineBaudR)
+      strCpy(msg.string,tempstring,10)
+    CASE NODE_DEVICE
+      strCpy(msg.string,cmds.serDev,ALL)
+    CASE NODE_UNIT
+      StringF(tempstring,'\d',cmds.serDevUnit)
+      strCpy(msg.string,tempstring,10)
+    CASE DT_ADDBIT
+        setTempSecurityFlags(msg.data)
+    CASE DT_REMBIT
+        clearTempSecurityFlags(msg.data)
+    CASE DT_QUERYBIT
+        msg.command:=checkSecurity(msg.data)
+    CASE BB_LOGONTYPE
+        msg.data:=logonType
+    CASE BB_SCRLEFT
+        msg.data:=screen.leftedge
+    CASE BB_SCRTOP
+        msg.data:=screen.topedge
+    CASE BB_SCRWIDTH
+        msg.data:=screen.width
+    CASE BB_SCRHEIGHT
+        msg.data:=screen.height
+    CASE BB_PURGELINE
+        purgeLine()
+    CASE BB_PURGELINESTART
+        purgeLineStart()
+    CASE BB_PURGELINEEND
+        purgeLineEnd()
+    CASE BB_NONSTOPTEXT
+      IF (msg.data=0) THEN nonStopDisplayFlag:=FALSE ELSE nonStopDisplayFlag:=TRUE
+    CASE BB_LINECOUNT
+      IF(msg.data)
+        StringF(tempstring,'\d',lineCount)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        lineCount:=Val(msg.string)
+      ENDIF
+    CASE DT_LANGUAGE
+      IF msg.data
+        strCpy(msg.string,'txt',ALL)
+        IF loggedOnUser<>NIL
+          IF (loggedOnUser.screenType<screenTypeExt.count())
+            strCpy(msg.string,screenTypeExt.item(loggedOnUser.screenType),200)
+          ENDIF
+        ENDIF
+      ELSE
+        debugLog(LOG_WARN,'DT_LANGUAGE set yet implemented')
+      ENDIF
+
+    CASE DT_QUICKFLAG
+      quickFlag:=msg.data
+    CASE DT_GOODFILE
+      aeGoodFile:=msg.data
+    CASE DT_ANSICOLOR
+        IF msg.data THEN ansiColour:=TRUE ELSE ansiColour:=FALSE
+        IF msg.data=2 THEN ripMode:=TRUE
+    CASE DT_ISANSI
+        IF ansiColour THEN msg.data:=1 ELSE msg.data:=0
+    CASE MULTICOM
+        msg.semi:=masterNode
+    CASE EXT_LOAD_ACCOUNT,LOAD_ACCOUNT
+        doorMsgLoadAccount(msg)
+    CASE SEARCH_ACCOUNT
+        IF(findUserFromNumber(msg.data,msg.filler1)) THEN msg.data:=1 ELSE msg.data:=0
+    CASE APPEND_ACCOUNT
+
+        tuserdata:=msg.filler1
+        tuserkeys:=msg.filler2
+        IF (msg.msg.length>=SIZEOF jhMessage)
+          tusermisc:=msg.filler3
+        ELSE
+          tusermisc:=NIL
+        ENDIF
+        findOpenAccount(tuserdata,tuserkeys,tusermisc)
+    CASE LAST_ACCOUNTNUM
+        msg.data:=findLastAccount()
+    CASE SAVE_ACCOUNT
+       doorMsgSaveAccount(msg)
+    CASE EDITOR_STRUCT
+        IF(msg.data)
+          CopyMem(msg.filler1,editor,SIZEOF editor)
+        ELSE
+          CopyMem(editor,msg.filler1,SIZEOF editor)
+        ENDIF
+    CASE LOAD_CONFDB
+      loadConfDB(msg.data,msg.nodeID,1,msg.filler1)
+    CASE SAVE_CONFDB
+      saveConfDB(msg.data,msg.nodeID,1,msg.filler1)
+      IF(loggedOnUser.slotNumber=msg.data) THEN loadMsgPointers(currentConf,1)
+    CASE GET_CONFNUM
+      strCpy(msg.filler1,getConfName(msg.data),54)
+      strCpy(msg.filler2,getConfLocation(msg.data),54)
+    CASE MOD_TYPE
+      msg.data:=IF privcmd THEN 1 ELSE 0
+    CASE DT_FILECODE
+      checksym:=msg.data
+    CASE ACP_COMMAND
+        sendACPCommand(msg.string,msg.data,msg.lineNum)
+    CASE BYPASS_CSI_CHECK
+        debugLog(LOG_WARN,'BYPASS_CSI_CHECK not yet implemented')
+    CASE SENTBY
+       msg.data:=cmds.acLvl[LVL_SENTBY_FILES]
+    CASE SETOVERIDE
+        debugLog(LOG_WARN,'SETOVERIDE not yet implemented')
+    CASE FULLEDIT
+        debugLog(LOG_WARN,'FULLEDIT not yet implemented')
+    CASE SETMCIOFF
+      mcioff:=msg.data<>0
+    CASE GET_CUSTOM_MSGBASE_PARAM1
+      msg.data:=customMsgParam1
+    CASE GET_CUSTOM_MSGBASE_PARAM2
+      msg.data:=customMsgParam2
+    CASE LAST_READ
+      msg.data:=lastMsgReadConf
+    CASE LAST_SCANNED
+      msg.data:=lastNewReadConf
+    CASE MSGBASE_LOC
+      IF (msg.data)
+        strCpy(msg.string,msgBaseLocation,26)
+      ELSE
+        StrCopy(msgBaseLocation,msg.string,26)
+      ENDIF
+    CASE GET_CUSTOM_MSGBASE_MENUCMD
+      strCpy(msg.string,customMsgCmd,200)
+    CASE DT_REALNAME
+      IF (msg.data)
+        strCpy(msg.string,loggedOnUserMisc.realName,26)
+      ELSE
+        strCpy(loggedOnUserMisc.realName,msg.string,26)
+      ENDIF
+    CASE SER_INOUT
+      ioFlags[IOFLAG_SER_IN]:=msg.data
+      ioFlags[IOFLAG_SER_OUT]:=msg.data
+      
+    CASE AXNET_SEND
+      dTBT:=0
+      tBT:=0
+      tTTM:=0
+      tTEFF:=0
+      tTCPS:=0
+      
+      msg.data:=doAxNetSend(msg.filler1)
+      IF logonType=LOGON_TYPE_REMOTE
+        IF checkCarrier()=FALSE
+          msg.data:=RESULT_ABORT
+        ENDIF
+      ENDIF           
+    CASE AXNET_RECEIVE
+      dTBT:=0
+      tBT:=0
+      tTTM:=0
+      tTEFF:=0
+      tTCPS:=0
+      StrCopy(tempstring,msg.string)
+
+      msg.data:=doAxNetReceive(tempstring)
+      IF logonType=LOGON_TYPE_REMOTE
+        IF checkCarrier()=FALSE
+          msg.data:=RESULT_ABORT
+        ENDIF
+      ENDIF
+    CASE MEMCONF
+        debugLog(LOG_WARN,'MEMCONF not yet implemented')
+    CASE SET_SERSHARED
+      serShared:=msg.data
+    CASE CONF_ACCESS
+      IF (msg.data<0) OR (msg.data>=cmds.numConf)
+        msg.data:=2
+      ELSE
+        IF checkConfAccess(msg.data+1) THEN msg.data:=1 ELSE msg.data:=0
+      ENDIF
+    CASE PASSWORD_HASH
+      formatUnsignedLong(calcPasswordHash(msg.string),tempstring)
+      strCpy(msg.string,tempstring,20)
+    CASE GET_GNSFLAG
+      msg.data:=IF(nonStopDisplayFlag) THEN 1  ELSE 0
+    CASE DISPLAY_FILE
+      displayFile(msg.string,TRUE,FALSE)
+    CASE CHECK_TO_DISPLAY
+      IF (findSecurityScreen(msg.string,tempstring)) THEN displayFile(tempstring,TRUE,FALSE)
+    CASE SET_FILEATTACH
+      fileattach:=(msg.data<>0)
+    CASE INTERPRET_MCI
+        debugLog(LOG_WARN,'INTERPRET_MCI not yet implemented')
+    CASE GET_XIMPORT
+      msg.data:=ximPort
+    CASE GET_MENU_COMMAND_CHAR
+      msg.data:=messageMenuChar
+    CASE FILE_REQUEST
+      asl(msg.string)
+    CASE DISABLE_FILE_ATTACH
+      disallowFileAttach:=(msg.data<>0)
+    CASE QWKZOOM_REC
+      IF msg.data
+        RealF(tempstring,floatMsgRecNum,2)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        floatMsgRecNum:=RealVal(msg.string)
+      ENDIF
+    CASE REL_CONF
+      msg.data:=relConf(msg.data)
+    CASE RETURNCOMMAND2
+      StrCopy(runOnExit2,msg.string,200)
+    CASE CHECK_PLAYPEN_EXISTS
+      msg.data:=checkForFile(msg.string)
+      IF msg.data=0 THEN msg.data:=checkInPlaypens(msg.string)
+    CASE EXT_CHOOSE_NAME,CHOOSE_NAME
+        tuserdata:=msg.filler1
+        tuserkeys:=msg.filler2
+        IF (msg.msg.length>=SIZEOF jhMessage)
+          tusermisc:=msg.filler3
+        ELSE
+          tusermisc:=NIL
+        ENDIF
+        msg.data:=chooseAName(msg.string,tuserdata,tuserkeys,tusermisc,msg.data)
+    CASE CHECK_REALNAME
+      StringF(tempstring,'USERNAME.\d',currentMsgBase)
+      StringF(tempstring2,'REALNAME.\d',currentMsgBase)
+      IF checkToolTypeExists(TOOLTYPE_CONF,currentConf,'USERNAME') OR checkToolTypeExists(TOOLTYPE_MSGBASE,currentConf,tempstring)
+        msg.data:=2
+      ELSEIF checkToolTypeExists(TOOLTYPE_CONF,currentConf,'REALNAME') OR checkToolTypeExists(TOOLTYPE_MSGBASE,currentConf,tempstring2)
+        msg.data:=1
+      ELSE
+        msg.data:=0
+      ENDIF
+    CASE DT_INTERNETNAME
+      IF (msg.data)
+        strCpy(msg.string,loggedOnUserMisc.internetName,10)
+      ELSE
+        strCpy(loggedOnUserMisc.internetName,msg.string,10)
+      ENDIF
+    CASE DT_TRANSLATOR
+      IF (msg.data)
+        strCpy(msg.string,userLanguage,200)
+      ELSE
+        strCpy(userLanguage,msg.string,200)
+        IF sopt.translation=NIL THEN loadTranslators()
+      ENDIF
+    CASE DT_HOST_LANGUAGE
+      IF (msg.data)
+        strCpy(msg.string,hostLanguage,200)
+      ELSE
+        strCpy(hostLanguage,msg.string,200)
+      ENDIF
+    CASE XNET_OUTBOUND
+      strCpy(amixnetOutboundDir,msg.string,200)
+    CASE DT_HOSTNAME
+      strCpy(msg.string,hostName,200)
+    CASE DT_HOSTIP
+      strCpy(msg.string,hostIP,20)
+    CASE DT_GEOGRAPHIC
+      strCpy(msg.string,mybbsLoc,200)
+    CASE DT_SIZEUPLOAD
+      calcSizeText(loggedOnUserMisc.uploadBytesBCD,tempstring)
+      strCpy(msg.string,tempstring,200)
+    CASE DT_SIZEDOWNLOAD
+      calcSizeText(loggedOnUserMisc.downloadBytesBCD,tempstring)
+      strCpy(msg.string,tempstring,200)          
+    CASE DT_CONFACCESS2
+      StrCopy(tempstring,'')
+      IF msg.data
+        FOR i:=1 TO Min(25,cmds.numConf)
+          IF checkConfAccess(i) THEN StrAdd(tempstring,'X') ELSE StrAdd(tempstring,'_')
+        ENDFOR
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        strCpy(loggedOnUser.conferenceAccess,msg.string,10)
+      ENDIF
+    CASE DT_CBYTESUPLOAD
+    /*DUPE of DT_BYTESUPLOAD - logged on user will always be current conf stats when using confacc. */
+      IF (msg.data)
+        formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstring)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        bcdVal(msg.string,loggedOnUserMisc.uploadBytesBCD)
+        loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
+      ENDIF            
+    CASE DT_CBYTESDOWNLOAD
+    /*DUPE of DT_BYTESUPLOAD - logged on user will always be current conf stats when using confacc. */
+      IF (msg.data)
+        formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstring)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        bcdVal(msg.string,loggedOnUserMisc.downloadBytesBCD)
+        loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
+      ENDIF
+    CASE DT_CFILESUPLOAD
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.uploads)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.uploads:=Val(msg.string)
+      ENDIF         
+    CASE DT_CFILESDOWNLOAD
+      IF (msg.data)
+        StringF(tempstring,'\d',loggedOnUser.downloads)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUser.downloads:=Val(msg.string)
+      ENDIF         
+    CASE BB_CONFACCOUNT
+      IF (msg.data)
+        strCpy(msg.string,IF checkSecurity(ACS_CONFERENCE_ACCOUNTING) THEN 'YES' ELSE 'NO',200)
+      ELSE
+        debugLog(LOG_WARN,'BB_CONFACCOUNT cannot currently set conf accounting')             
+      ENDIF
+    CASE DT_CALLEDTODAY
+      IF (msg.data)
+        StringF(tempstring,'\d',getTodaysCalls(loggedOnUser,loggedOnUserKeys))
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        loggedOnUserKeys.timesOnToday:=Val(msg.string)
+      ENDIF         
+    CASE SIG_PLAYPEN
+      IF(StrLen(sopt.ramPen)>0) THEN StringF(tempstring,'\s/',sopt.ramPen) ELSE StringF(tempstring,'\sNode\d/Playpen/',cmds.bbsLoc,node)
+      strCpy(msg.string,tempstring,200)
+    CASE ICONIFYQUERY
+      strCpy(msg.string,IF scropen THEN 'NO' ELSE 'YES',200)
+    CASE LOGON_UNAME
+      debugLog(LOG_WARN,'LOGON_UNAME not currently supported')
+    CASE LOGON_UPASS
+      debugLog(LOG_WARN,'LOGON_UPASS not currently supported')
+    CASE SIG_LI
+      getPass2(msg.string,NIL,0,msg.data,tempstring)
+      strCpy(msg.string,tempstring,200)
+    DEFAULT
+      StringF(tempstring,'currently not implemented msg request: \d',msgcmd)
+      debugLog(LOG_WARN,tempstring)
+      StringF(tempstring,'data: \d',msg.data)
+      debugLog(LOG_WARN,tempstring)
+      StringF(tempstring,'string: \s',msg.string)
+      debugLog(LOG_WARN,tempstring)
+    ENDSELECT
+ENDPROC
+
 PROC runDoor(cmd,type,command,tooltype,params,resident,doorTrap,privcmd,pri=0,stacksize=20000)
   DEF doorPort[12]:STRING
   DEF mp: PTR TO mp
@@ -2806,12 +3650,10 @@ PROC runDoor(cmd,type,command,tooltype,params,resident,doorTrap,privcmd,pri=0,st
   DEF i
   DEF nodes = 0,msgcmd
   DEF tempstring[255]:STRING
-  DEF tempstring2[255]:STRING
   DEF runOnExit[255]:STRING
   DEF runOnExit2[255]:STRING
   DEF exit=0
   DEF alreadyActive=FALSE
-  DEF tuserdata:PTR TO user,tuserkeys:PTR TO userKeys, tusermisc: PTR TO userMisc
   DEF oldViewSafe
 
   StringF(tempstring,'run door: \s',cmd)
@@ -2931,793 +3773,8 @@ PROC runDoor(cmd,type,command,tooltype,params,resident,doorTrap,privcmd,pri=0,st
         StringF(tempstring,'string: \s',msg.string)
         debugLog(LOG_DEBUG,tempstring)
         IF(msgcmd<>ACP_COMMAND) THEN msg.lineNum:=0
-
-        SELECT MAX_CMD OF msgcmd
-          CASE JH_REGISTER
-              msg.command:=IF loggedOnUser<>NIL THEN loggedOnUser.lineLength ELSE 29
-              nodes:=nodes+1
-          CASE JH_WRITE
-            IF transfering=FALSE
-              aePuts(msg.string)
-            ENDIF
-          CASE CHAIN
-              nodes:=nodes-1
-          CASE JH_SHUTDOWN
-              nodes:=nodes-1
-               IF(nodes=0)
-                  rawArrow:=FALSE
-                  exit:=TRUE
-               ENDIF
-          CASE JH_CO
-            conPuts(msg.string,-1)
-            IF msg.data
-              conPuts('\b\n',-1)
-              checkForPause()
-            ENDIF
-          CASE JH_SO
-            serPuts(msg.string,-1)
-            IF msg.data
-              serPuts('\b\n',-1)
-            ENDIF
-          CASE JH_SM
-            aePuts(msg.string)
-            IF msg.data
-              aePuts('\b\n')
-              checkForPause()
-            ENDIF
-          CASE JH_SMPTR
-            aePuts(msg.strptr)
-            IF msg.data
-              aePuts('\b\n')
-              checkForPause()
-            ENDIF
-          CASE JH_PM
-            IF(lineInput(msg.string,'',msg.data,doorTimeout,tempstring)<>RESULT_SUCCESS)
-              msg.data:=-1
-            ELSE
-              msg.data:=1
-              strCpy(msg.string,tempstring,200)
-            ENDIF
-          CASE JH_LI
-            IF(lineInput('',msg.string,msg.data,doorTimeout,tempstring)<>RESULT_SUCCESS)
-              msg.data:=-1
-            ELSE
-              msg.data:=1
-              strCpy(msg.string,tempstring,200)
-            ENDIF
-          CASE JH_ExtHK
-              lineCount:=0
-              msg.command:=readChar(doorTimeout,Shl(1,msg.signal))
-              IF (msg.command<0) THEN msg.data:=-1 ELSE msg.data:=1
-          CASE JH_HK
-            lineCount:=0
-            aePuts(msg.string)
-            ch:=readChar(doorTimeout)
-            IF (ch<0)
-              msg.data:=-1
-            ELSE
-              msg.data:=1
-            ENDIF
-            msg.string[0]:=ch
-            msg.string[1]:=0
-            msg.command:=ximPort /*XIMPort=1 for console,2for serial  */
-          CASE JH_20
-             ch:=readChar(doorTimeout)
-             msg.data:=ch
-             msg.command:=ximPort
-          CASE QUICK_KEY
-             ch:=readChar(doorTimeout)
-             msg.data:=ch
-             msg.command:=ximPort
-          CASE JH_MCI
-            StrCopy(tempstring,msg.string)
-            processMci(tempstring)
-            IF msg.data
-              aePuts('\b\n')
-              checkForPause()
-            ENDIF
-          CASE JH_SIGBIT
-            msg.data:=doorExtSig
-          CASE JH_FetchKey
-            IF checkInput()
-              msg.command:=readChar(doorTimeout)
-              IF (msg.command<0)  THEN msg.data:=-1 ELSE msg.data:=1
-            ELSE
-              msg.command:=0
-              msg.data:=1
-            ENDIF
-          CASE JH_SG
-            IF (findSecurityScreen(msg.string,tempstring)) THEN displayFile(tempstring)
-          CASE JH_SF
-            displayFile(msg.string)
-          CASE JH_EF
-            fileattach:=FALSE
-            loadMsg(msg.string)
-            IF(edit()=RESULT_SUCCESS)
-              saveMsg(msg.string)
-              msg.data:=1
-            ELSE
-              msg.data:=-1
-            ENDIF
-          CASE JH_BBSNAME
-            strCpy(msg.string,cmds.bbsName,41)
-          CASE JH_SYSOP
-            strCpy(msg.string,cmds.sysopName,41)
-          CASE JH_FLAGFILE
-             addFlagToList(msg.string)
-          CASE RETURNCOMMAND
-            StrCopy(runOnExit,msg.string,200)
-          CASE DT_NAME
-            IF (msg.data)
-              strCpy(msg.string,loggedOnUser.name,31)
-            ELSE
-              strCpy(loggedOnUser.name,msg.string,31)
-            ENDIF
-          CASE DT_PASSWORD
-            IF (msg.data)
-              ->we dont allow doors to grab the password
-              strCpy(msg.string,'',ALL)
-            ELSE
-              ->calculate the new password hash
-              StrCopy(tempstring,msg.string)
-              IF StrLen(tempstring)>0 
-                UpperStr(tempstring)
-                loggedOnUser.pwdHash:=calcPasswordHash(tempstring)
-              ENDIF
-            ENDIF
-          CASE DT_LOCATION
-            IF (msg.data)
-              strCpy(msg.string,loggedOnUser.location,30)
-            ELSE
-              strCpy(loggedOnUser.location,msg.string,30)
-            ENDIF
-          CASE DT_PHONENUMBER
-            IF (msg.data)
-              strCpy(msg.string,loggedOnUser.phoneNumber,13)
-            ELSE
-              strCpy(loggedOnUser.phoneNumber,msg.string,13)
-            ENDIF
-          CASE DT_SLOTNUMBER
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.slotNumber)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.slotNumber:=Val(msg.string)
-            ENDIF
-          CASE DT_SECSTATUS
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.secStatus)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.secStatus:=Val(msg.string)
-              convertAccess()
-            ENDIF
-          CASE DT_SECBOARD
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.secBoard)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.secBoard:=Val(msg.string)
-            ENDIF
-          CASE DT_SECLIBRARY
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.secLibrary)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.secLibrary:=Val(msg.string)
-            ENDIF
-          CASE DT_SECBULLETIN
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.secBulletin)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.secBulletin:=Val(msg.string)
-            ENDIF
-          CASE DT_MESSAGESPOSTED
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.messagesPosted AND $FFFF)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.messagesPosted:=Val(msg.string)
-            ENDIF
-          CASE DT_UPLOADS
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.uploads AND $FFFF)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.uploads:=Val(msg.string)
-            ENDIF
-          CASE DT_DOWNLOADS
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.downloads AND $FFFF)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.downloads:=Val(msg.string)
-            ENDIF
-          CASE DT_TIMESCALLED
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.timesCalled AND $FFFF)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.timesCalled:=Val(msg.string)
-            ENDIF
-          CASE DT_TIMELASTON
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.timeLastOn)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.timeLastOn:=Val(msg.string)
-            ENDIF
-          CASE DT_TIMEUSED
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.timeUsed)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.timeUsed:=Val(msg.string)
-            ENDIF
-          CASE DT_TIMELIMIT
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.timeLimit)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.timeLimit:=Val(msg.string)
-            ENDIF
-          CASE DT_TIMETOTAL
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.timeTotal)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.timeTotal:=Val(msg.string)
-            ENDIF
-          CASE DT_BYTESUPLOAD
-            IF (msg.data)
-              formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstring)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              bcdVal(msg.string,loggedOnUserMisc.uploadBytesBCD)
-              loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
-            ENDIF
-          CASE DT_BYTEDOWNLOAD
-            IF (msg.data)
-              formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstring)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              bcdVal(msg.string,loggedOnUserMisc.downloadBytesBCD)
-              loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
-            ENDIF
-          CASE DT_DAILYBYTELIMIT
-            IF (msg.data)
-              formatUnsignedLong(loggedOnUser.dailyBytesLimit,tempstring)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.dailyBytesLimit:=Val(msg.string)
-            ENDIF
-          CASE DT_DAILYBYTEDLD
-            IF (msg.data)
-              formatUnsignedLong(loggedOnUser.dailyBytesDld,tempstring)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.dailyBytesDld:=Val(msg.string)
-            ENDIF
-          CASE DT_EXPERT
-            IF (msg.data)
-              StringF(tempstring,'\c',loggedOnUser.expert)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.expert:=msg.string[0]
-            ENDIF
-          CASE DT_LINELENGTH
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.lineLength)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.lineLength:=Val(msg.string)
-            ENDIF
-          CASE ACTIVE_NODES
-              strCpy(msg.string,'                                ',ALL)
-              FOR i:=0 TO MAXNODES-1
-                StringF(tempstring,'AmiExpress_Node.\d',i)
-                IF FindPort(tempstring) THEN msg.string[i]:="X"
-              ENDFOR
-          CASE DT_DUMP
-            dumpActiveUser(msg.string)
-          CASE DT_MSGCODE
-            IF(msg.data=1 )
-              doormsgcode:=1
-            ELSEIF (msg.data=2)
-              doormsgcode:=0
-            ELSE
-              msg.data:=doormsgcode
-            ENDIF
-          CASE ENVSTAT
-              IF(msg.data)
-                StringF(tempstring,'\d',currentStat)
-                strCpy(msg.string,tempstring,10)
-              ELSE
-                setEnvStat(Val(msg.string))
-              ENDIF
-          CASE SV_NEWMSG
-            setEnvMsg(msg.string)
-          CASE DT_TIMEOUT
-            IF (msg.data)
-              StringF(tempstring,'\d',doorTimeout)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              doorTimeout:=Val(msg.string)
-            ENDIF
-          CASE BB_CONFNAME
-            IF (msg.data)
-              StrCopy(tempstring,currentConfName)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              StrCopy(currentConfName,msg.string)
-              setConfName(loggedOnUser.confRJoin-1,msg.string)
-            ENDIF
-          CASE BB_CONFLOCAL
-            IF (msg.data)
-              StrCopy(tempstring,currentConfDir)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              setConfLocation(loggedOnUser.confRJoin-1,msg.string)
-            ENDIF
-          CASE BB_LOCAL
-            strCpy(msg.string,cmds.bbsLoc,200)
-          CASE ZMODEMSEND
-              dTBT:=0
-              tBT:=0
-              tTTM:=NIL
-              tTEFF:=NIL
-              tTCPS:=NIL
-              StrCopy(tempstring,msg.string)
-              ch:=downloadFile(tempstring)
-              IF((logonType>=LOGON_TYPE_REMOTE) AND (checkCarrier()=FALSE)) THEN msg.data:=-2 ELSE msg.data:=ch
-          CASE BATCHZMODEMSEND
-              dTBT:=0
-              tBT:=0
-              tTTM:=NIL
-              tTEFF:=NIL
-              tTCPS:=NIL
-              ch:=downloadFile(msg.filler1)
-              IF((logonType>=LOGON_TYPE_REMOTE) AND (checkCarrier()=FALSE)) THEN msg.data:=-2 ELSE msg.data:=ch
-          CASE ZMODEMRECEIVE
-              dTBT:=0
-              tBT:=0
-              tTTM:=NIL
-              tTEFF:=NIL
-              tTCPS:=NIL
-              bgFileCheck:=FALSE
-              StrCopy(tempstring,msg.string);
-              ch:=zmodemReceive(tempstring,1);
-              IF((logonType>=LOGON_TYPE_REMOTE) AND (checkCarrier()=FALSE)) THEN msg.data:=-2 ELSE msg.data:=ch
-          CASE SCREEN_ADDRESS
-              StringF(tempstring,'\z\h[8]',screen)
-              LowerStr(tempstring)
-              strCpy(msg.string,tempstring,200)
-          CASE BB_TASKPRI
-            StringF(tempstring,'\c',cmds.taskPri)
-            strCpy(msg.string,tempstring,200)
-          CASE RAWSCREEN_ADDRESS
-            StringF(tempstring,'\d',screen)
-            strCpy(msg.string,tempstring,200)
-          CASE BB_CHATFLAG
-            IF sysopAvail
-              strCpy(msg.string,'ON',ALL)
-            ELSE
-              strCpy(msg.string,'OFF',ALL)
-            ENDIF
-          CASE BB_CHATSET
-            IF msg.data
-              StringF(tempstring,'\d',pagedFlag)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              temp:=pagedFlag
-              pagedFlag:=Val(msg.string)
-
-              IF pagedFlag AND Not(temp)
-                sysopPaged()
-              ENDIF
-            ENDIF
-          CASE DT_STAMP_LASTON
-            formatCDateTime(loggedOnUser.timeLastOn,tempstring)
-            strCpy(msg.string,tempstring,200)
-          CASE DT_CURR_TIME
-              StringF(tempstring,'\d',getSystemTime())
-              strCpy(msg.string,tempstring,200)
-          CASE DT_STAMP_CTIME
-            formatCDateTime(getSystemTime(),tempstring)
-            strCpy(msg.string,tempstring,200)
-          CASE DT_CONFACCESS
-              IF(msg.data) THEN strCpy(msg.string,loggedOnUser.conferenceAccess,10) ELSE strCpy(loggedOnUser.conferenceAccess,msg.string,10)
-          CASE BB_PCONFNAME
-              temp:=Val(msg.string)
-              IF((temp<1) OR (temp>9))
-                strCpy(msg.string,'ERROR',10)
-              ELSE
-                strCpy(msg.string,getConfName(temp),200)
-              ENDIF
-          CASE BB_PCONFLOCAL
-              temp:=Val(msg.string)
-              IF((temp<1) OR (temp>9))
-                strCpy(msg.string,'ERROR',10)
-              ELSE
-                getConfLocation(temp,tempstring)
-                strCpy(msg.string,tempstring,200)
-              ENDIF
-          CASE BB_MAINLINE
-            IF StrLen(params)>0
-              StringF(tempstring,'\s \s',command,params)
-            ELSE
-              StrCopy(tempstring,command)
-            ENDIF
-            strCpy(msg.string,tempstring,200)
-          CASE BB_NODEID
-            StringF(tempstring,'\d',node)
-            strCpy(msg.string,tempstring,200)
-          CASE BB_CALLERSLOG
-            callersLog(msg.string,FALSE)
-          CASE BB_UDLOG
-            udLog(msg.string)
-          CASE EXPRESS_VERSION
-              getExpressMajorVer(tempstring)
-              strCpy(msg.string,tempstring,200)
-          CASE GETKEY
-            IF checkInput() THEN msg.string[0]:="1" ELSE msg.string[0]:="0"
-            msg.string[1]:=0
-          CASE RAWARROW
-            IF(rawArrow) THEN rawArrow:=FALSE ELSE rawArrow:=TRUE
-          CASE PRV_COMMAND
-            StrCopy(tempstring,msg.string)
-            processCommand(tempstring,FALSE,TRUE)
-          CASE PRV_GROUP
-            StrCopy(tempstring,msg.string)
-              temp:=Val(tempstring)
-                strCpy(cmds.conf1Loc+(temp*54),tempstring+40,54)
-              IF(temp=(currentConf-1)) THEN StrCopy(currentConfDir,tempstring+40)
-              tempstring[39]:=0
-              stripReturn(tempstring)
-                strCpy(cmds.conf1Name+(temp*54),tempstring+2,54)
-              IF(temp=(currentConf-1)) THEN StrCopy(currentConfName,tempstring+2)
-          CASE BB_CONFNUM
-            StringF(tempstring,'\d',currentConf-1)
-            strCpy(msg.string,tempstring,200)
-          CASE BB_DROPDTR
-            processOlmMessageQueue(TRUE)
-            Delay(30)
-            modemOffHook()
-            resetSerOut:=TRUE
-            ->reqState:=REQ_STATE_LOGOFF
-          CASE BB_GETTASK
-            msg.task:=FindTask(0)
-          CASE NODE_BAUD
-            StringF(tempstring,'\d',onlineBaud)
-            strCpy(msg.string,tempstring,10)
-          CASE NODE_BAUDRATE
-            StringF(tempstring,'\d',onlineBaudR)
-            strCpy(msg.string,tempstring,10)
-          CASE NODE_DEVICE
-            strCpy(msg.string,cmds.serDev,ALL)
-          CASE NODE_UNIT
-            StringF(tempstring,'\d',cmds.serDevUnit)
-            strCpy(msg.string,tempstring,10)
-          CASE DT_ADDBIT
-              setTempSecurityFlags(msg.data)
-          CASE DT_REMBIT
-              clearTempSecurityFlags(msg.data)
-          CASE DT_QUERYBIT
-              msg.command:=checkSecurity(msg.data)
-          CASE BB_LOGONTYPE
-              msg.data:=logonType
-          CASE BB_SCRLEFT
-              msg.data:=screen.leftedge
-          CASE BB_SCRTOP
-              msg.data:=screen.topedge
-          CASE BB_SCRWIDTH
-              msg.data:=screen.width
-          CASE BB_SCRHEIGHT
-              msg.data:=screen.height
-          CASE BB_PURGELINE
-              purgeLine()
-          CASE BB_PURGELINESTART
-              purgeLineStart()
-          CASE BB_PURGELINEEND
-              purgeLineEnd()
-          CASE BB_NONSTOPTEXT
-            IF (msg.data=0) THEN nonStopDisplayFlag:=FALSE ELSE nonStopDisplayFlag:=TRUE
-          CASE BB_LINECOUNT
-            IF(msg.data)
-              StringF(tempstring,'\d',lineCount)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              lineCount:=Val(msg.string)
-            ENDIF
-          CASE DT_LANGUAGE
-            IF msg.data
-              strCpy(msg.string,'txt',ALL)
-              IF loggedOnUser<>NIL
-                IF (loggedOnUser.screenType<screenTypeExt.count())
-                  strCpy(msg.string,screenTypeExt.item(loggedOnUser.screenType),200)
-                ENDIF
-              ENDIF
-            ELSE
-              debugLog(LOG_WARN,'DT_LANGUAGE set yet implemented')
-            ENDIF
-
-          CASE DT_QUICKFLAG
-            quickFlag:=msg.data
-          CASE DT_GOODFILE
-            aeGoodFile:=msg.data
-          CASE DT_ANSICOLOR
-              IF msg.data THEN ansiColour:=TRUE ELSE ansiColour:=FALSE
-              IF msg.data=2 THEN ripMode:=TRUE
-          CASE DT_ISANSI
-              IF ansiColour THEN msg.data:=1 ELSE msg.data:=0
-          CASE MULTICOM
-              msg.semi:=masterNode
-          CASE EXT_LOAD_ACCOUNT,LOAD_ACCOUNT
-              doorMsgLoadAccount(msg)
-          CASE SEARCH_ACCOUNT
-              IF(findUserFromNumber(msg.data,msg.filler1)) THEN msg.data:=1 ELSE msg.data:=0
-          CASE APPEND_ACCOUNT
-
-              tuserdata:=msg.filler1
-              tuserkeys:=msg.filler2
-              IF (msg.msg.length>=SIZEOF jhMessage)
-                tusermisc:=msg.filler3
-              ELSE
-                tusermisc:=NIL
-              ENDIF
-              findOpenAccount(tuserdata,tuserkeys,tusermisc)
-          CASE LAST_ACCOUNTNUM
-              msg.data:=findLastAccount()
-          CASE SAVE_ACCOUNT
-             doorMsgSaveAccount(msg)
-          CASE EDITOR_STRUCT
-              IF(msg.data)
-                CopyMem(msg.filler1,editor,SIZEOF editor)
-              ELSE
-                CopyMem(editor,msg.filler1,SIZEOF editor)
-              ENDIF
-          CASE LOAD_CONFDB
-            loadConfDB(msg.data,msg.nodeID,1,msg.filler1)
-          CASE SAVE_CONFDB
-            saveConfDB(msg.data,msg.nodeID,1,msg.filler1)
-            IF(loggedOnUser.slotNumber=msg.data) THEN loadMsgPointers(currentConf,1)
-          CASE GET_CONFNUM
-            strCpy(msg.filler1,getConfName(msg.data),54)
-            strCpy(msg.filler2,getConfLocation(msg.data),54)
-          CASE MOD_TYPE
-            msg.data:=IF privcmd THEN 1 ELSE 0
-          CASE DT_FILECODE
-            checksym:=msg.data
-          CASE ACP_COMMAND
-              sendACPCommand(msg.string,msg.data,msg.lineNum)
-          CASE BYPASS_CSI_CHECK
-              debugLog(LOG_WARN,'BYPASS_CSI_CHECK not yet implemented')
-          CASE SENTBY
-             msg.data:=cmds.acLvl[LVL_SENTBY_FILES]
-          CASE SETOVERIDE
-              debugLog(LOG_WARN,'SETOVERIDE not yet implemented')
-          CASE FULLEDIT
-              debugLog(LOG_WARN,'FULLEDIT not yet implemented')
-          CASE SETMCIOFF
-            mcioff:=msg.data<>0
-          CASE GET_CUSTOM_MSGBASE_PARAM1
-            msg.data:=customMsgParam1
-          CASE GET_CUSTOM_MSGBASE_PARAM2
-            msg.data:=customMsgParam2
-          CASE LAST_READ
-            msg.data:=lastMsgReadConf
-          CASE LAST_SCANNED
-            msg.data:=lastNewReadConf
-          CASE MSGBASE_LOC
-            IF (msg.data)
-              strCpy(msg.string,msgBaseLocation,26)
-            ELSE
-              StrCopy(msgBaseLocation,msg.string,26)
-            ENDIF
-          CASE GET_CUSTOM_MSGBASE_MENUCMD
-            strCpy(msg.string,customMsgCmd,200)
-          CASE DT_REALNAME
-            IF (msg.data)
-              strCpy(msg.string,loggedOnUserMisc.realName,26)
-            ELSE
-              strCpy(loggedOnUserMisc.realName,msg.string,26)
-            ENDIF
-          CASE SER_INOUT
-            ioFlags[IOFLAG_SER_IN]:=msg.data
-            ioFlags[IOFLAG_SER_OUT]:=msg.data
-            
-          CASE AXNET_SEND
-            dTBT:=0
-            tBT:=0
-            tTTM:=0
-            tTEFF:=0
-            tTCPS:=0
-            
-            msg.data:=doAxNetSend(msg.filler1)
-            IF logonType=LOGON_TYPE_REMOTE
-              IF checkCarrier()=FALSE
-                msg.data:=RESULT_ABORT
-              ENDIF
-            ENDIF           
-          CASE AXNET_RECEIVE
-            dTBT:=0
-            tBT:=0
-            tTTM:=0
-            tTEFF:=0
-            tTCPS:=0
-            StrCopy(tempstring,msg.string)
-
-            msg.data:=doAxNetReceive(tempstring)
-            IF logonType=LOGON_TYPE_REMOTE
-              IF checkCarrier()=FALSE
-                msg.data:=RESULT_ABORT
-              ENDIF
-            ENDIF
-          CASE MEMCONF
-              debugLog(LOG_WARN,'MEMCONF not yet implemented')
-          CASE SET_SERSHARED
-            serShared:=msg.data
-          CASE CONF_ACCESS
-            IF (msg.data<0) OR (msg.data>=cmds.numConf)
-              msg.data:=2
-            ELSE
-              IF checkConfAccess(msg.data+1) THEN msg.data:=1 ELSE msg.data:=0
-            ENDIF
-          CASE PASSWORD_HASH
-            formatUnsignedLong(calcPasswordHash(msg.string),tempstring)
-            strCpy(msg.string,tempstring,20)
-          CASE GET_GNSFLAG
-            msg.data:=IF(nonStopDisplayFlag) THEN 1  ELSE 0
-          CASE DISPLAY_FILE
-            displayFile(msg.string,TRUE,FALSE)
-          CASE CHECK_TO_DISPLAY
-            IF (findSecurityScreen(msg.string,tempstring)) THEN displayFile(tempstring,TRUE,FALSE)
-          CASE SET_FILEATTACH
-            fileattach:=(msg.data<>0)
-          CASE INTERPRET_MCI
-              debugLog(LOG_WARN,'INTERPRET_MCI not yet implemented')
-          CASE GET_XIMPORT
-            msg.data:=ximPort
-          CASE GET_MENU_COMMAND_CHAR
-            msg.data:=messageMenuChar
-          CASE FILE_REQUEST
-            asl(msg.string)
-          CASE DISABLE_FILE_ATTACH
-            disallowFileAttach:=(msg.data<>0)
-          CASE QWKZOOM_REC
-            IF msg.data
-              RealF(tempstring,floatMsgRecNum,2)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              floatMsgRecNum:=RealVal(msg.string)
-            ENDIF
-          CASE REL_CONF
-            msg.data:=relConf(msg.data)
-          CASE RETURNCOMMAND2
-            StrCopy(runOnExit2,msg.string,200)
-          CASE CHECK_PLAYPEN_EXISTS
-            msg.data:=checkForFile(msg.string)
-            IF msg.data=0 THEN msg.data:=checkInPlaypens(msg.string)
-          CASE EXT_CHOOSE_NAME,CHOOSE_NAME
-              tuserdata:=msg.filler1
-              tuserkeys:=msg.filler2
-              IF (msg.msg.length>=SIZEOF jhMessage)
-                tusermisc:=msg.filler3
-              ELSE
-                tusermisc:=NIL
-              ENDIF
-              msg.data:=chooseAName(msg.string,tuserdata,tuserkeys,tusermisc,msg.data)
-          CASE CHECK_REALNAME
-            StringF(tempstring,'USERNAME.\d',currentMsgBase)
-            StringF(tempstring2,'REALNAME.\d',currentMsgBase)
-            IF checkToolTypeExists(TOOLTYPE_CONF,currentConf,'USERNAME') OR checkToolTypeExists(TOOLTYPE_MSGBASE,currentConf,tempstring)
-              msg.data:=2
-            ELSEIF checkToolTypeExists(TOOLTYPE_CONF,currentConf,'REALNAME') OR checkToolTypeExists(TOOLTYPE_MSGBASE,currentConf,tempstring2)
-              msg.data:=1
-            ELSE
-              msg.data:=0
-            ENDIF
-          CASE DT_INTERNETNAME
-            IF (msg.data)
-              strCpy(msg.string,loggedOnUserMisc.internetName,10)
-            ELSE
-              strCpy(loggedOnUserMisc.internetName,msg.string,10)
-            ENDIF
-          CASE DT_TRANSLATOR
-            IF (msg.data)
-              strCpy(msg.string,userLanguage,200)
-            ELSE
-              strCpy(userLanguage,msg.string,200)
-              IF sopt.translation=NIL THEN loadTranslators()
-            ENDIF
-          CASE DT_HOST_LANGUAGE
-            IF (msg.data)
-              strCpy(msg.string,hostLanguage,200)
-            ELSE
-              strCpy(hostLanguage,msg.string,200)
-            ENDIF
-          CASE XNET_OUTBOUND
-            strCpy(amixnetOutboundDir,msg.string,200)
-          CASE DT_HOSTNAME
-            strCpy(msg.string,hostName,200)
-          CASE DT_HOSTIP
-            strCpy(msg.string,hostIP,20)
-          CASE DT_CONFACCESS2
-            StrCopy(tempstring,'')
-            IF msg.data
-              FOR i:=1 TO Min(25,cmds.numConf)
-                IF checkConfAccess(i) THEN StrAdd(tempstring,'X') ELSE StrAdd(tempstring,'_')
-              ENDFOR
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              strCpy(loggedOnUser.conferenceAccess,msg.string,10)
-            ENDIF
-          CASE DT_CBYTESUPLOAD
-          /*DUPE of DT_BYTESUPLOAD - logged on user will always be current conf stats when using confacc. */
-            IF (msg.data)
-              formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstring)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              bcdVal(msg.string,loggedOnUserMisc.uploadBytesBCD)
-              loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
-            ENDIF            
-          CASE DT_CBYTESDOWNLOAD
-          /*DUPE of DT_BYTESUPLOAD - logged on user will always be current conf stats when using confacc. */
-            IF (msg.data)
-              formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstring)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              bcdVal(msg.string,loggedOnUserMisc.downloadBytesBCD)
-              loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
-            ENDIF
-          CASE DT_CFILESUPLOAD
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.uploads)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.uploads:=Val(msg.string)
-            ENDIF         
-          CASE DT_CFILESDOWNLOAD
-            IF (msg.data)
-              StringF(tempstring,'\d',loggedOnUser.downloads)
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUser.downloads:=Val(msg.string)
-            ENDIF         
-          CASE BB_CONFACCOUNT
-            IF (msg.data)
-              strCpy(msg.string,IF checkSecurity(ACS_CONFERENCE_ACCOUNTING) THEN 'YES' ELSE 'NO',200)
-            ELSE
-              debugLog(LOG_WARN,'BB_CONFACCOUNT cannot currently set conf accounting')             
-            ENDIF
-          CASE DT_CALLEDTODAY
-            IF (msg.data)
-              StringF(tempstring,'\d',getTodaysCalls(loggedOnUser,loggedOnUserKeys))
-              strCpy(msg.string,tempstring,200)
-            ELSE
-              loggedOnUserKeys.timesOnToday:=Val(msg.string)
-            ENDIF         
-          CASE SIG_PLAYPEN
-            IF(StrLen(sopt.ramPen)>0) THEN StringF(tempstring,'\s/',sopt.ramPen) ELSE StringF(tempstring,'\sNode\d/Playpen/',cmds.bbsLoc,node)
-            strCpy(msg.string,tempstring,200)
-          CASE ICONIFYQUERY
-            strCpy(msg.string,IF scropen THEN 'NO' ELSE 'YES',200)
-          CASE LOGON_UNAME
-            debugLog(LOG_WARN,'LOGON_UNAME not currently supported')
-          CASE LOGON_UPASS
-            debugLog(LOG_WARN,'LOGON_UPASS not currently supported')
-          CASE SIG_LI
-            getPass2(msg.string,NIL,0,msg.data,tempstring)
-            strCpy(msg.string,tempstring,200)
-          DEFAULT
-            StringF(tempstring,'currently not implemented msg request: \d',msgcmd)
-            debugLog(LOG_WARN,tempstring)
-            StringF(tempstring,'data: \d',msg.data)
-            debugLog(LOG_WARN,tempstring)
-            StringF(tempstring,'string: \s',msg.string)
-            debugLog(LOG_WARN,tempstring)
-        ENDSELECT
+        
+        processXimMsg(msgcmd,msg,command,privcmd,params,{nodes},{exit},runOnExit,runOnExit2)
         ReplyMsg(msg)
       ENDWHILE
     ENDWHILE
@@ -3966,6 +4023,7 @@ ENDPROC
 PROC runCommand(cmdtype,cmd,params,privcmd)
   DEF commandfile[255]:STRING
   DEF passwordstr[255]:STRING
+  DEF bannerScreen[255]:STRING
   DEF doorname[255]:STRING
   DEF commandTypeCode
   DEF cmdfound = FALSE
@@ -4111,8 +4169,18 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
 
   doorTrap:=checkToolTypeExists(tooltype,cmd,'TRAPON')
 
+  doorSilent:=checkToolTypeExists(tooltype,cmd,'SILENT')
+
+  IF readToolType(tooltype,cmd,'BANNER',bannerScreen) THEN showCustomScreen(bannerScreen)
+
   readToolType(tooltype,cmd,'MIMICVER',mimicVersion)
+  
+  inputLogging:=checkToolTypeExists(TOOLTYPE_NODE,node,'LOG_INPUTS')
+  
   runDoor(commandfile,commandTypeCode,cmd,tooltype,params,resident,doorTrap,privcmd,pri,stacksize)
+  
+  inputLogging:=FALSE
+  doorSilent:=FALSE
   StrCopy(mimicVersion,'')
 ENDPROC cmdfound
 
@@ -4468,6 +4536,7 @@ ENDPROC ch
 PROC readChar(timeout, extsig = 0)
   DEF wasControl,ch
   DEF timedout,signalled
+  DEF tempstr[100]:STRING
 
 
   conPuts('[ p') /* turn console cursor on */
@@ -4481,6 +4550,15 @@ PROC readChar(timeout, extsig = 0)
   IF signalled THEN ch:=0
   IF timedout THEN ch:=RESULT_TIMEOUT
   IF reqState<>REQ_STATE_NONE THEN ch:=RESULT_NO_CARRIER
+  
+  IF inputLogging
+    IF ch<32
+      StringF(tempstr,'\tUser Input: \d',ch)
+    ELSE
+      StringF(tempstr,'\tUser Input: \c',ch)
+    ENDIF
+    callersLog(tempstr)
+  ENDIF
 ENDPROC ch
 
 PROC checkForPause()
@@ -4676,6 +4754,14 @@ PROC processMciCmd(mcidata,len,pos)
     ELSEIF (StrCmp(cmd,'DB',ALL))
       pos:=pos+2+t
       formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstr)
+      aePuts2(tempstr,maxLen)
+    ELSEIF (StrCmp(cmd,'SU',ALL))
+      pos:=pos+2+t
+      calcSizeText(loggedOnUserMisc.uploadBytesBCD,tempstr)
+      aePuts2(tempstr,maxLen)
+    ELSEIF (StrCmp(cmd,'SD',ALL))
+      pos:=pos+2+t
+      calcSizeText(loggedOnUserMisc.downloadBytesBCD,tempstr)
       aePuts2(tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'FU',ALL))
       pos:=pos+2+t
@@ -5111,6 +5197,14 @@ PROC processMciCmd2(mcidata,len,pos,outdata)
       pos:=pos+2+t
       formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstr)
       StrAdd(outdata,tempstr,maxLen)
+    ELSEIF (StrCmp(cmd,'SU',ALL))
+      pos:=pos+2+t
+      calcSizeText(loggedOnUserMisc.uploadBytesBCD,tempstr)
+      StrAdd(outdata,tempstr,maxLen)
+    ELSEIF (StrCmp(cmd,'SD',ALL))
+      pos:=pos+2+t
+      calcSizeText(loggedOnUserMisc.downloadBytesBCD,tempstr)
+      StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'FU',ALL))
       pos:=pos+2+t
       StringF(tempstr,'\d',loggedOnUser.uploads AND $FFFF)
@@ -5343,7 +5437,7 @@ PROC tranChat()
       RETURN c
     ENDIF
     updateTimeUsed()
-    IF (loggedOnUser.chatLimit<>0) AND (loggedOnUser.chatRemain<=0)
+    IF (loggedOnUser.chatLimit<>0) AND (loggedOnUser.chatRemain<=0)  AND (checkSecurity(ACS_OVERRIDE_CHATLIMIT)=FALSE)
       chatFlag:=0
     ENDIF
     EXIT chatFlag=0
@@ -5534,7 +5628,7 @@ next:
     ENDIF
 
     updateTimeUsed()
-    IF (loggedOnUser.chatLimit<>0) AND (loggedOnUser.chatRemain<=0)
+    IF (loggedOnUser.chatLimit<>0) AND (loggedOnUser.chatRemain<=0)  AND (checkSecurity(ACS_OVERRIDE_CHATLIMIT)=FALSE)
       chatFlag:=0
       JUMP chatbrk
     ENDIF
@@ -6041,7 +6135,19 @@ PROC displayScreen(screenType)
     CASE SCREEN_REALNAMES
       StringF(screencheck,'\s',cmds.bbsLoc,'RealNames')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
+    CASE SCREEN_MAILSCAN      
+      StringF(screencheck,'\s',cmds.bbsLoc,'MailScan')
+      IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
   ENDSELECT
+ENDPROC res
+
+PROC showCustomScreen(screenName:PTR TO CHAR)
+  DEF screenfile[255]:STRING
+  DEF screencheck[255]:STRING
+  DEF res
+  res:=FALSE
+  StringF(screencheck,'\s\s',cmds.bbsLoc,screenName)
+  IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
 ENDPROC res
 
 PROC displayFile(filename, allowMCI=TRUE, resetNonStop=TRUE, resetLineCount=TRUE)
@@ -6683,7 +6789,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
   DEF temp[255]:STRING
   DEF statePtr: PTR TO awaitState
 
-  IF (transfering)
+  IF (transfering) OR (doorSilent)
     RETURN TRUE,RESULT_TIMEOUT
   ENDIF
 
@@ -11427,6 +11533,8 @@ PROC readit(gfh)
     privateFlag:=0
     IF(((mailHeader.status="R") OR (mailHeader.status="p")) AND (Not(checkSecurity(ACS_SYSOP_READ))))
       IF((stringCompare(mailHeader.toName,confMailName)<>RESULT_SUCCESS) AND
+        ((stringCompare(mailHeader.toName,'eall')<>RESULT_SUCCESS) OR (Not(checkSecurity(ACS_READ_PRIV_EALL)))) AND
+        ((stringCompare(mailHeader.toName,'all')<>RESULT_SUCCESS) OR (Not(checkSecurity(ACS_READ_PRIV_ALL)))) AND
         (stringCompare(mailHeader.fromName,confMailName)<>RESULT_SUCCESS))
         privateFlag:=1
         IF(noDirF<>0) THEN JUMP nextMSG
@@ -14002,7 +14110,11 @@ PROC updateZDisplay()
       SetAPen(windowZmodem.rport,0)
       RectFill(windowZmodem.rport,11,136,322,143)
     ELSE
-      StringF(tempstr,' Complete: \d%\n',Div(zModemInfo.transPos,Div(zModemInfo.filesize,100)))
+      IF zModemInfo.filesize<100
+        StringF(tempstr,' Complete: \d%\n',Div(Mul(zModemInfo.transPos,100),zModemInfo.filesize))
+      ELSE
+        StringF(tempstr,' Complete: \d%\n',Div(zModemInfo.transPos,Div(zModemInfo.filesize,100)))
+      ENDIF
       zmodemStatPrint(tempstr)
 
       v1:=zModemInfo.transPos
@@ -14114,7 +14226,7 @@ PROC httpUpload(uploadFolder: PTR TO CHAR,httpPort)
     StrCopy(tempstr,'localhost')
   ENDIF
   
-  doHttpd(node,tempstr,httpPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},TRUE)
+  doHttpd(node,tempstr,httpPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},TRUE)
   serialCacheEnabled:=oldSerCache
   END x 
 ENDPROC
@@ -14163,7 +14275,7 @@ PROC httpDownload(fileList: PTR TO stdlist, pupdateDownloadStats,httpPort)
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
-  doHttpd(node,tempstr,httpPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},FALSE)
+  doHttpd(node,tempstr,httpPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},FALSE)
   serialCacheEnabled:=oldSerCache
  
   ->clean up ram links
@@ -14310,7 +14422,7 @@ PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPort,ftpDataPort)
     StrCopy(tempstr,'localhost')
   ENDIF
 
-  doftp(node,tempstr,ftpPort,ftpDataPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},TRUE)
+  doftp(node,tempstr,ftpPort,ftpDataPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},TRUE)
   serialCacheEnabled:=oldSerCache
   END x 
 
@@ -14360,7 +14472,7 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort,ftpDataPo
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
-  doftp(node,tempstr,ftpPort,ftpDataPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},FALSE)
+  doftp(node,tempstr,ftpPort,ftpDataPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},FALSE)
   serialCacheEnabled:=oldSerCache
  
   ->clean up ram links
@@ -15009,8 +15121,10 @@ redo1:
         IF Recv(telnetSocket,zmodemBuffer,n,0)=n
           bufferedBytes:=n
         ENDIF
-        checkCarrier()
-        JUMP redo1
+        IF checkCarrier() THEN JUMP redo1
+        res:=0
+      ELSE
+        IF checkCarrier()=FALSE THEN res:=0
       ENDIF
     ENDIF
   UNTIL (res=0) OR (recvd) OR (timeout=0)
@@ -17986,7 +18100,7 @@ arestart:
   WHILE TRUE
     tsec:=Div(dtfsize,estDlCPS)
     min:=tsec/60
-    IF(((Div(timeLimit,60))-min)<0)
+    IF(((Div(timeLimit,60))-min)<0) AND (checkSecurity(ACS_OVERRIDE_TIMELIMIT)=FALSE)
       aePuts('Not enough time for requested downloads.\b\n\b\n')
       Throw(ERR_EXCEPT,RESULT_SUCCESS)
     ENDIF
@@ -18162,7 +18276,7 @@ astart:
   StringF(tempStr,'   \d files, \dk bytes, \d mins \d secs\b\n',numFiles,Shr(dtfsize,10) AND $003fffff,min,secs)
   aePuts(tempStr)
 
-  IF(min>(Div(timeLimit,60)))
+  IF(min>(Div(timeLimit,60))) AND (checkSecurity(ACS_OVERRIDE_TIMELIMIT)=FALSE)
     aePuts('  Insufficent time for transfer.\b\n\b\n')
     RETURN RESULT_SUCCESS
   ENDIF
@@ -23153,12 +23267,10 @@ PROC internalCommandS()
   formatUnsignedLong(loggedOnUserKeys.dnCPS2,tmp2)
   StringF(tmp,'[32mRate CPS DN[33m:[0m \s\b\n',tmp2)
   aePuts(tmp)
-  IF(loggedOnUserKeys.userFlags AND USER_SCRNCLR)
-    StrCopy(tmp,'[32mScreen  Clr[33m:[0m YES\b\n')
-  ELSE
-    StrCopy(tmp,'[32mScreen  Clr[33m:[0m NO\b\n')
-  ENDIF
+
+  StringF(tmp,'[32mScreen  Clr[33m:[0m \s\b\n',IF loggedOnUserKeys.userFlags AND USER_SCRNCLR THEN 'YES' ELSE 'NO')
   aePuts(tmp)
+
   StringF(tmp,'[32mProtocol   [33m:[0m \s\b\n',xprTitle.item(loggedOnUser.xferProtocol))
   aePuts(tmp)
 
@@ -23171,6 +23283,9 @@ PROC internalCommandS()
       aePuts('[31mCredit Account has EXPIRED[0m\b\n')
     ENDIF
   ENDIF
+
+  StringF(tmp,'[32mSysop  Here[33m:[0m \s\b\n',IF sysopAvail THEN 'YES' ELSE 'NO')
+  aePuts(tmp)
 
   IF(pagesAllowed<>-1)
     StringF(tmp,'[32mSysop Pages Remaining[33m:[0m \d\b\n',pagesAllowed)
@@ -25580,6 +25695,8 @@ PROC confScan()
   DEF fscan=TRUE
   setEnvStat(ENV_SCANNING)
 
+  displayScreen(SCREEN_MAILSCAN)
+
   IF (prompt:=checkToolTypeExists(TOOLTYPE_NODE,node,'MAILSCAN_PROMPT'))
     aePuts('\b\n[0mScan for Mail ')
     mystat:=yesNo(1)
@@ -25588,7 +25705,6 @@ PROC confScan()
   ENDIF
 
   IF (prompt=FALSE) OR (mscan=TRUE)
-
     aePuts('\b\nScanning conferences for mail...\b\n\b\n')
     lineCount:=2
     mciViewSafe:=FALSE
@@ -27896,7 +28012,8 @@ PROC main() HANDLE
    'ACS.CUSTOMCOMMANDS','ACS.JOIN_SUB_CONFERENCE','ACS.ZOOM_MAIL','ACS.MCI_MESSAGE','ACS.EDIT_DIRS','ACS.EDIT_FILES','ACS.BREAK_CHAT','ACS.QUIET_NODE','ACS.SYSOP_COMMANDS','ACS.WHO_IS_ONLINE',
    'ACS.RELOGON','ACS.ULSTATS','ACS.XPR_RECEIVE','ACS.XPR_SEND','ACS.WILDCARDS','ACS.CONFERENCE_ACCOUNTING','ACS.PRI_MSGFILES','ACS.PUB_MSGFILES','ACS.FULL_EDIT','ACS.CONFFLAGS',
    'ACS.OLM','ACS.HIDE_FILES','ACS.SHOW_PAYMENTS','ACS.CREDIT_ACCESS','ACS.VOTE','ACS.MODIFY_VOTE','ACS.FILE_EXPANSION','ACS.EDIT_REAL_NAME','ACS.EDIT_USER_NAME','ACS.CENSORED',
-   'ACS.ACCOUNT_VIEW','ACS.TRANSLATION','ACS.UNKNOWN','ACS.CREATE_CONFERENCE','ACS.LOCAL_DOWNLOADS','ACS.MAX_PAGES','ACS.OVERRIDE_DEFAULTS','ACS.HOLD_ACCESS','ACS.EDIT_EMAIL']
+   'ACS.ACCOUNT_VIEW','ACS.TRANSLATION','ACS.UNKNOWN','ACS.CREATE_CONFERENCE','ACS.LOCAL_DOWNLOADS','ACS.MAX_PAGES','ACS.OVERRIDE_DEFAULTS','ACS.HOLD_ACCESS','ACS.EDIT_EMAIL',
+   'ACS.READ_PRIV_EALL','ACS.READ_PRIV_ALL','ACS.OVERRIDE_TIMELIMIT','ACS.OVERRIDE_CHATLIMIT']
 
 
   StringF(tempstr,'AmiExpress_Node.\d',node)
@@ -28510,8 +28627,10 @@ PROC main() HANDLE
     StringF(tempstr,'NIL pointer error at line \d',exceptioninfo)
     debugLog(LOG_ERROR,tempstr) 
   DEFAULT
-    StringF(tempstr,'Unknown exception \d',exception)
-    debugLog(LOG_ERROR,tempstr) 
+    IF exception<>0
+      StringF(tempstr,'Unknown exception \d',exception)
+      debugLog(LOG_ERROR,tempstr) 
+    ENDIF
   ENDSELECT
 ENDPROC
 

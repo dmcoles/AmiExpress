@@ -77,6 +77,13 @@ EXPORT PROC addBCD2(bcdTotal:PTR TO CHAR, bcdValToAdd: PTR TO CHAR)
   ABCD -(A0),-(A1)
 ENDPROC
 
+EXPORT PROC subBCD(bcdTotal:PTR TO CHAR, valToSub)
+  DEF bcdVal[8]:ARRAY OF CHAR
+
+  convertToBCD(valToSub,bcdVal)
+  subBCD2(bcdTotal,bcdVal)
+ENDPROC
+
 
 EXPORT PROC addBCD(bcdTotal:PTR TO CHAR, valToAdd)
   DEF bcdVal[8]:ARRAY OF CHAR
