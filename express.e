@@ -424,7 +424,7 @@ DEF zmodemBuffer=0
 DEF zModemBufferSize=65536
 DEF bufferedBytes=0
 DEF bufferReadOffset=0
-
+DEF lastCarrierCheck=0
 
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
@@ -15079,6 +15079,8 @@ PROC zmrecvbyteTelnet(zm: PTR TO zmodem_t, timeout)
   DEF temp
   DEF recvd,n
   DEF tv:timeval
+  DEF sysTime
+  
   recvd:=FALSE
   REPEAT
 redo1:
@@ -15116,15 +15118,25 @@ redo1:
       temp,n:=checkTelnetData()
       bufferReadOffset:=0
       bufferedBytes:=0
+      sysTime:=getSystemTime()
       IF n>0
         IF n>zModemBufferSize THEN n:=zModemBufferSize
         IF Recv(telnetSocket,zmodemBuffer,n,0)=n
           bufferedBytes:=n
         ENDIF
-        IF checkCarrier() THEN JUMP redo1
-        res:=0
+        
+        IF ((lastCarrierCheck+5)<sysTime)
+          lastCarrierCheck:=sysTime
+          IF checkCarrier() THEN JUMP redo1
+          res:=0
+        ELSE
+          JUMP redo1
+        ENDIF
       ELSE
-        IF checkCarrier()=FALSE THEN res:=0
+        IF ((lastCarrierCheck+5)<sysTime)
+          IF checkCarrier()=FALSE THEN res:=0
+          lastCarrierCheck:=sysTime
+        ENDIF
       ENDIF
     ENDIF
   UNTIL (res=0) OR (recvd) OR (timeout=0)
