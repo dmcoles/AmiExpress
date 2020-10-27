@@ -1618,7 +1618,7 @@ PROC flushSerialCache()
 ENDPROC
 
 PROC telnetSend(string:PTR TO CHAR, putlen)
-  DEF i,c,e,maxBlkSize,tot,offs,n,telsendDelay
+  DEF i,c,e,tot,offs,n
   DEF buf2
 
   c:=0
@@ -1638,12 +1638,8 @@ PROC telnetSend(string:PTR TO CHAR, putlen)
     c++
   ENDFOR
             
-  maxBlkSize:=readToolTypeInt(TOOLTYPE_BBSCONFIG,'','MAX_TELNET_BLOCKSIZE')
-  telsendDelay:=readToolTypeInt(TOOLTYPE_BBSCONFIG,'','TELNET_RESEND_DELAY')
-  IF maxBlkSize=-1 THEN maxBlkSize:=c
   tot:=c
   offs:=0
-  IF c>maxBlkSize THEN c:=maxBlkSize
   WHILE tot>0
     IF c>tot THEN c:=tot
     
@@ -1653,7 +1649,6 @@ PROC telnetSend(string:PTR TO CHAR, putlen)
       IF (i=-1) AND ((e=EWOULDBLOCK) OR (e=ENOBUFS))
         n:=0
         REPEAT
-          IF (n<>0) AND (telsendDelay>0) THEN Delay(telsendDelay)
           i:=Send(telnetSocket,buf2+offs,c,0)
           e:=Errno()
           n++
@@ -17488,7 +17483,7 @@ cNext:
       ENDIF
       status:=checkForFile(str)
 
-      IF(moveToLCFILES=1)
+      IF(moveToLCFILES)
         status:=RESULT_LCFILES
       ELSE
         IF((fcomment[0]="/") AND (rzmsg=NIL)) THEN status:=RESULT_PRIVATE
