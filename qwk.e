@@ -147,7 +147,7 @@ PROC createMessageDat2(confNum,msgDatFilename:PTR TO CHAR, srcFilename:PTR TO CH
   DEF status,p,i
   fh:=Open(msgDatFilename,MODE_READWRITE)
   
-  IF fh>0
+  IF fh<>0
     Seek(fh,0,OFFSET_END)
     IF Seek(fh,0,OFFSET_CURRENT)=0
       StringF(tempStr,'\l\s[128]',bbsId,'')
@@ -155,7 +155,7 @@ PROC createMessageDat2(confNum,msgDatFilename:PTR TO CHAR, srcFilename:PTR TO CH
     ENDIF
     
     fh2:=Open(srcFilename,MODE_OLDFILE)
-    IF fh2>0
+    IF fh2<>0
     
       ReadStr(fh2,fromName)
       ReadStr(fh2,toName)
@@ -453,7 +453,7 @@ PROC main() HANDLE
   msgBasePaths:=NEW msgBasePaths.stringlist(100)
 
   fh:=Open(cfgFile,MODE_OLDFILE)
-  IF fh>0
+  IF fh<>0
   
     REPEAT
       ReadStr(fh,tempStr)
@@ -570,7 +570,7 @@ PROC main() HANDLE
        
     needToSave:=FALSE
     mf:=Open(qwkMessageFilename,MODE_OLDFILE)
-    IF mf>0
+    IF mf<>0
       Seek(mf,128,OFFSET_BEGINNING)
       buf:=New(128)
       c:=0
@@ -612,7 +612,7 @@ PROC main() HANDLE
               ms.highMsgNum:=newMsgNum+1
               StringF(fname,'\sMailStats',msgBase)
               fh:=Open(fname,MODE_NEWFILE)
-              IF fh>0
+              IF fh<>0
                 Write(fh,ms,SIZEOF mailStat)
                 Close(fh)
                 fh:=0
@@ -633,7 +633,7 @@ PROC main() HANDLE
               StringF(fname,'\sMailStats',msgBase)
               IF fh>0 THEN Close(fh)
               fh:=Open(fname,MODE_READWRITE)
-              IF fh>0
+              IF fh<>0
                 IF Read(fh,ms,SIZEOF mailStat)=0
                   ms.lowestKey:=1
                   ms.lowestNotDel:=1
@@ -654,7 +654,7 @@ PROC main() HANDLE
               newMsgNum:=ms.highMsgNum-1
               StringF(fname,'\sHeaderFile',msgBase)
               fh:=Open(fname,MODE_READWRITE)
-              IF fh>0
+              IF fh<>0
                 Seek(fh,0,OFFSET_END)
               ELSE
                 WriteF('Error opening HeaderFile\n\n')
@@ -697,7 +697,7 @@ PROC main() HANDLE
             
             StringF(fname,'\s\d',msgBase,newMsgNum)
             fh2:=Open(fname,MODE_NEWFILE)
-            IF fh2>0
+            IF fh2<>0
               FOR i:=0 TO bufsz-1
                 IF buf2[i]=$e3 THEN buf2[i]:=10
               ENDFOR
@@ -723,7 +723,7 @@ PROC main() HANDLE
         ms.highMsgNum:=newMsgNum+1
         StringF(fname,'\sMailStats',msgBase)
         fh:=Open(fname,MODE_NEWFILE)
-        IF fh>0
+        IF fh<>0
           Write(fh,ms,SIZEOF mailStat)
           Close(fh)
           fh:=0

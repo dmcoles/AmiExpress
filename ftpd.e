@@ -42,7 +42,6 @@ OBJECT ftpData
   fileEnd:LONG
   fileProgress:LONG
   fileDupeCheck:LONG
-  xprInfo:LONG
 ENDOBJECT
  
 
@@ -200,52 +199,42 @@ PROC setSockOpt(sb,s,level,optname,optval,optlen )
 ENDPROC D0
 
 PROC fileStart(ftpData:PTR TO ftpData,fn,pos)
-  DEF fs,xprInfo
+  DEF fs
   fs:=ftpData.fileStart
-  xprInfo:=ftpData.xprInfo
-  MOVE.L xprInfo,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L pos,-(A7)
   fs()
-  ADD.L #12,A7
+  ADD.L #8,A7
 ENDPROC
 
-PROC fileEnd(ftpData:PTR TO ftpData,fn)
+PROC fileEnd(ftpData:PTR TO ftpData,fn,result)
   DEF fe
-  DEF xprInfo
   fe:=ftpData.fileEnd
-  xprInfo:=ftpData.xprInfo
 
-  MOVE.L xprInfo,-(A7)
   MOVE.L fn,-(A7)
+  MOVE.L result,-(A7)  
   fe()
   ADDQ.L #8,A7
 ENDPROC
 
 PROC fileProgress(ftpData:PTR TO ftpData,fn,pos,cps)
   DEF fp
-  DEF xprInfo
   fp:=ftpData.fileProgress
-  xprInfo:=ftpData.xprInfo
   
-  MOVE.L xprInfo,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L pos,-(A7)
   MOVE.L cps,-(A7)
   fp()
-  ADD.L #12,A7
+  ADD.L #8,A7
 ENDPROC
 
 PROC fileDupeCheck(ftpData:PTR TO ftpData,fn)
   DEF fdc
-  DEF xprInfo
   fdc:=ftpData.fileDupeCheck
-  xprInfo:=ftpData.xprInfo
   
-  MOVE.L xprInfo,-(A7)
   MOVE.L fn,-(A7)
   fdc()
-  ADD.L #8,A7
+  ADD.L #4,A7
 ENDPROC D0
 
 PROC aePuts(ftpData:PTR TO ftpData, s:PTR TO CHAR)
@@ -508,7 +497,7 @@ PROC myDir(sb,data_c, path: PTR TO CHAR)
       size:=-1
       StringF(fn,'\s\s',path,f_info.filename)
       fh:=Open(fn,MODE_OLDFILE)
-      IF fh>=0
+      IF fh<>0
         Seek(fh,0,OFFSET_END)
         size:=Seek(fh,0,OFFSET_END)
         Close(fh)
@@ -603,7 +592,8 @@ ENDPROC
 
 PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF temp[255]:STRING
-  DEF fail=FALSE
+  DEF success=FALSE
+  DEF break=FALSE
   DEF buff
   DEF fn[500]:STRING
   DEF r,l
@@ -666,7 +656,7 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
     ELSE
       Seek(fh,ftpData.restPos,OFFSET_BEGINNING)
     ENDIF
-    IF fh<=0
+    IF fh=0
       StringF(temp,'550 \s: No such file or directory\b\n',filename)
       writeLineEx(sb,ftp_c,temp)
     ELSE
@@ -700,7 +690,8 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
             t:=t2
           ENDIF
         ENDIF
-      UNTIL (l=0) OR (CtrlC())
+        break:=CtrlC()
+      UNTIL (l=0) OR (break)
       Dispose(buff)
 
       IF ftpData.fileProgress<>NIL
@@ -719,16 +710,15 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
         Close(fh)
       ENDIF
 
+      success:=(break=FALSE)
       IF ftpData.fileEnd<>NIL
-        fileEnd(ftpData,filename)
+        fileEnd(ftpData,filename,success)
       ENDIF
 
-      fail:=(CtrlC()<>FALSE)
-
       StringF(temp, '\d \s ... \s\b\n', 
-      IF (fail=FALSE) THEN 226 ELSE 426, 
+      IF (success) THEN 226 ELSE 426, 
       filename, 
-      IF (fail=FALSE) THEN 'Transfer Complete' ELSE 'Transfer aborted')
+      IF (success) THEN 'Transfer Complete' ELSE 'Transfer aborted')
 
       writeLineEx(sb,ftp_c, temp)
     ENDIF
@@ -752,7 +742,8 @@ ENDPROC
 
 PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF temp[255]:STRING
-  DEF fail=FALSE
+  DEF success=FALSE
+  DEF break=FALSE
   DEF buff
   DEF asynclib
   DEF fn[500]:STRING
@@ -824,6 +815,7 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
         ELSE
           l:=Fread(fh,buff,1,32768)
         ENDIF
+        r:=0
         IF l>0 
           r:=send(sb,data_c, buff, l, 0)
           IF (r>0) AND (ftpData.fileProgress<>NIL)
@@ -842,7 +834,8 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
             ENDIF
           ENDIF
         ENDIF
-      UNTIL (l=0) OR (CtrlC())
+        break:=CtrlC() OR (r<>l)
+      UNTIL (l=0) OR (break)
       Dispose(buff)
 
       IF ftpData.fileProgress<>NIL
@@ -860,15 +853,15 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
       ELSE
         Close(fh)
       ENDIF
-      fail:=(CtrlC()<>FALSE)
+      success:=(break=FALSE)
       IF ftpData.fileEnd<>NIL
-        fileEnd(ftpData,filename)
+        fileEnd(ftpData,filename,success)
       ENDIF
 
       StringF(temp, '\d \s ... \s\b\n', 
-      IF (fail=FALSE) THEN 226 ELSE 426, 
+      IF (success) THEN 226 ELSE 426, 
       filename, 
-      IF (fail=FALSE) THEN 'Transfer Complete' ELSE 'Transfer aborted')
+      IF (success) THEN 'Transfer Complete' ELSE 'Transfer aborted')
 
       writeLineEx(sb,ftp_c, temp)
     ENDIF
@@ -1065,7 +1058,7 @@ PROC createThread(num,node,sockid,ftpData:PTR TO ftpData)
  END tags
 ENDPROC
 
-EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, xprInfo, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, ftpDupeCheckPtr,ftpCheckConnection,uploadMode)
+EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, ftpDupeCheckPtr,ftpCheckConnection,uploadMode)
   DEF r,ftp_s,ftp_c,s,sb
   DEF temp[255]:STRING
   DEF ftpData:PTR TO ftpData
@@ -1089,7 +1082,6 @@ EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPt
   ftpData.fileDupeCheck:=ftpDupeCheckPtr
   ftpData.workingPath:=String(255)
   ftpData.hostName:=String(255)
-  ftpData.xprInfo:=xprInfo
   ftpData.dataPort:=ftpdataport
 
 

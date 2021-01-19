@@ -143,7 +143,7 @@ EXPORT PROC createdata(folderpath: PTR TO CHAR, js:PTR TO CHAR, t, count,doit,ic
               StrCopy(tempstr,folderpath2)
               StrAdd(tempstr,'.cfg')
               fh:=Open(tempstr,MODE_NEWFILE)
-              IF fh>0
+              IF fh<>0
                 Write(fh,s3,EstrLen(s3))
                 Close(fh)
               ELSE

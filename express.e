@@ -91,6 +91,7 @@ MODULE 'intuition/screens',
          '*errors',
          '*mailssl',
          '*zmodem',
+         '*xymodem',
          '*bcd',
          '*pwdhash',
          '*tooltypes',
@@ -326,6 +327,7 @@ DEF customMsgParam2=0
 DEF customMsgCmd[255]:STRING
 
 DEF transfering=FALSE
+DEF binaryRaw=FALSE
 DEF doorSilent=FALSE
 
 DEF cancelTransferOffHook=FALSE
@@ -1618,47 +1620,41 @@ PROC flushSerialCache()
 ENDPROC
 
 PROC telnetSend(string:PTR TO CHAR, putlen)
-  DEF i,c,e,tot,offs,n
+  DEF i,c,e,offs,n
   DEF buf2
 
-  c:=0
-  FOR i:=0 TO putlen-1
-    IF string[i]=255 THEN c++
-  ENDFOR
-  buf2:=New(putlen+c)
-  c:=0
-  FOR i:=0 TO putlen-1
-    IF string[i]=255
-      buf2[c]:=255
-      c++
-      buf2[c]:=255
-    ELSE
-      buf2[c]:=string[i]
-    ENDIF
-    c++
-  ENDFOR
-            
-  tot:=c
-  offs:=0
-  WHILE tot>0
-    IF c>tot THEN c:=tot
-    
-    i:=Send(telnetSocket,buf2+offs,c,0)
-    IF (i<>c)
-      e:=Errno()
-      IF (i=-1) AND ((e=EWOULDBLOCK) OR (e=ENOBUFS))
-        n:=0
-        REPEAT
-          i:=Send(telnetSocket,buf2+offs,c,0)
-          e:=Errno()
-          n++
-        UNTIL (i<>-1) OR ((e<>EWOULDBLOCK) AND (e<>ENOBUFS))
+  IF binaryRaw
+    buf2:=string
+    c:=putlen
+  ELSE
+    c:=0
+    FOR i:=0 TO putlen-1
+      IF string[i]=255 THEN c++
+    ENDFOR
+    buf2:=New(putlen+c)
+    c:=0
+    FOR i:=0 TO putlen-1
+      IF string[i]=255
+        buf2[c]:=255
+        c++
+        buf2[c]:=255
+      ELSE
+        buf2[c]:=string[i]
       ENDIF
-    ENDIF
-    tot:=tot-c
-    offs:=offs+c
+      c++
+    ENDFOR
+  ENDIF
+            
+  offs:=0
+  WHILE c>0
+    IoctlSocket(telnetSocket,FIONBIO,[0])
+    i:=Send(telnetSocket,buf2+offs,c,0)
+    IoctlSocket(telnetSocket,FIONBIO,[1])
+    EXIT i=-1 ->socket error
+    c:=c-i
+    offs:=offs+i
   ENDWHILE
-  Dispose(buf2)
+  IF binaryRaw=FALSE THEN Dispose(buf2)
 ENDPROC
 
 PROC serPuts(string: PTR TO CHAR, putlen=-1,binary=FALSE, force=FALSE)
@@ -2023,7 +2019,7 @@ PROC lineInput(promptText,defaultOutput,maxLen,timeout,outputString,allowHistory
   lineCount:=0
 
   ->no timeout tooltype overrides normal input timeouts
-  IF sopt.toggles[TOGGLES_NOTIMEOUT]
+  IF (sopt.toggles[TOGGLES_NOTIMEOUT]) OR checkSecurity(ACS_NO_TIMEOUT)
     timeout:=0
   ELSEIF timeoutOverride<>-1
     timeout:=timeoutOverride
@@ -3612,7 +3608,7 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:P
         loggedOnUserKeys.timesOnToday:=Val(msg.string)
       ENDIF         
     CASE SIG_PLAYPEN
-      IF(StrLen(sopt.ramPen)>0) THEN StringF(tempstring,'\s/',sopt.ramPen) ELSE StringF(tempstring,'\sNode\d/Playpen/',cmds.bbsLoc,node)
+      IF(StrLen(sopt.ramPen)>0) THEN StrCopy(tempstring,sopt.ramPen) ELSE StringF(tempstring,'\sNode\d/Playpen/',cmds.bbsLoc,node)
       strCpy(msg.string,tempstring,200)
     CASE ICONIFYQUERY
       strCpy(msg.string,IF scropen THEN 'NO' ELSE 'YES',200)
@@ -6087,6 +6083,9 @@ PROC displayScreen(screenType)
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
     CASE SCREEN_UPLOAD
       StringF(screencheck,'\s\s',confScreenDir,'UploadMsg')
+      IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
+    CASE SCREEN_NOUPLOADS
+      StringF(screencheck,'\s\s',confScreenDir,'NoUploads')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
     CASE SCREEN_NEWUSERPW
       StringF(screencheck,'\s\s',nodeScreenDir,'NEWUSERPW')
@@ -9924,7 +9923,7 @@ PROC getMsgId()
   StringF(fname,'\smsgidnr.nxt',cmds.bbsLoc)
 
   fh:=Open(fname,MODE_OLDFILE)
-  IF fh>0
+  IF fh<>0
     ReadStr(fh,tempstr)
     Close(fh)
   ENDIF
@@ -9937,7 +9936,7 @@ PROC getMsgId()
   IF c>v THEN v:=c
 
   fh:=Open(fname,MODE_NEWFILE)
-  IF fh>0
+  IF fh<>0
     StringF(tempstr,'\z\h[8]\n',v)
     Write(fh,tempstr,StrLen(tempstr))
     Close(fh)
@@ -9984,7 +9983,7 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
         StringF(tempStr2,'\s/\d.msg',tempStr,i)
       UNTIL fileExists(tempStr2)=FALSE
       f:=Open(tempStr2,MODE_NEWFILE)
-      IF f>0
+      IF f<>0
         fileWriteLn(f,confMailName)
         fileWriteLn(f,mh.toName)
         fileWriteLn(f,mh.subject)
@@ -10063,7 +10062,7 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
       setEnvStat(ENV_UPLOADING)
       aePuts('\b\n')           /* 11w */
       bgFileCheck:=FALSE
-      stat:=uploadaFile(0,'')
+      stat:=uploadaFile(0,'',TRUE)
       rzmsg:=NIL
       StringF(tempStr,'\sF\d',msgBaseLocation,mh.msgNumb)
       SetProtection(tempStr,FIBF_OTR_DELETE)
@@ -11703,7 +11702,7 @@ PROC isInFlaggedList(s,confNum)
   FOR i:=0 TO flagFilesList.count()-1
     item:=flagFilesList.item(i)
     IF ((item.confNum=confNum) OR (item.confNum=-1))
-      IF (ParsePatternNoCase(item.fileName, patternBuf, 100))>=0
+      IF (parsePatternNoCase2(item.fileName, patternBuf, 100))>=0
         IF MatchPatternNoCase(patternBuf,s) THEN RETURN TRUE
       ENDIF
     ENDIF
@@ -11975,14 +11974,14 @@ PROC checkForFileSize(checkFilename:PTR TO CHAR, checkConfNum, tfsizeList:PTR TO
   ENDIF
   IF(z=1) THEN JUMP jumpIn
 
-  patBufLen:=StrLen(tempstr2)*2+2
+  patBufLen:=StrLen(tempstr2)*3+2
   patternBuf:=New(patBufLen)
   IF patternBuf=0
     myError(1)  ->// MemError()
     RETURN RESULT_FAILURE
   ENDIF
   
-  IF (ParsePatternNoCase(tempstr2, patternBuf, patBufLen))=-1
+  IF (parsePatternNoCase2(tempstr2, patternBuf, patBufLen))=-1
     Dispose(patternBuf)
     myError(1)  ->// MemError()
     RETURN RESULT_FAILURE
@@ -12022,7 +12021,7 @@ jumpIn:
       StringF(ramDir,'RAM:DirCaches/Conf\dDir\d',checkConfNum,drivenum-1)
       IF fileExists(ramDir)
         ft:=Open(ramDir,MODE_OLDFILE)
-        IF ft>0
+        IF ft<>0
           fLock:=NIL
           WHILE(Fgets(ft,ramDir,255)<>NIL) AND (fLock=0)
             IF ramDir[StrLen(ramDir)-1]=10 THEN SetStr(ramDir,StrLen(ramDir)-1)
@@ -13148,6 +13147,7 @@ ENDPROC D0
 PROC xprfclose()
   DEF fp
   DEF tempstr[255]:STRING
+  DEF fileItem:PTR TO flagFileItem
   ->        (*xpr_fclose)(long filepointer)
   ->                      A0
   MOVE.L A0,fp
@@ -13165,6 +13165,12 @@ PROC xprfclose()
     IF (loggedOnUserKeys<>NIL) AND (zModemInfo.filesize>0) AND (zModemInfo.transPos=zModemInfo.filesize)
       doBgCheck()
     ENDIF
+  ENDIF
+  IF zModemInfo.needUpdateDownloadStats
+    fileItem:=zModemInfo.fileList.item(zModemInfo.current)
+    removeFlagFromList(FilePart(fileItem.fileName),fileItem.confNum)
+    updateDownloadStats(fileItem) 
+    zModemInfo.needUpdateDownloadStats:=FALSE
   ENDIF
 
 ENDPROC FALSE
@@ -13695,6 +13701,7 @@ PROC xprupdate()
   ENDIF
   IF(xpru.xpru_updatemask AND XPRU_MSG)<>0
     IF xpru.xpru_msg<>NIL
+      IF (StrCmp(xpru.xpru_msg,'Sending EOF')) AND (zModemInfo.shouldUpdateDownloadStats) THEN zModemInfo.needUpdateDownloadStats:=TRUE
       strCpy(zModemInfo.zStat,xpru.xpru_msg,60)
       debugLog(LOG_DEBUG,xpru.xpru_msg)
     ENDIF
@@ -13851,23 +13858,21 @@ PROC xprffirstAsm()
 ENDPROC D0
 
 PROC xprffirst()
-  DEF xprObj:PTR TO xprData
   DEF buffer:PTR TO CHAR
 
   MOVE.L A0,buffer
-  MOVE.L A1,xprObj
   loadA4()
-ENDPROC xprffirst2(buffer,xprObj)
+ENDPROC xprffirst2(buffer)
 
-PROC xprffirst2(buffer,xprObj:PTR TO xprData)
+PROC xprffirst2(buffer)
   DEF fileItem:PTR TO flagFileItem
 
-  fileItem:=xprObj.fileList.item(xprObj.currentFile)
-  strCpy(buffer,fileItem.fileName,255)
-  sendMasterDownload(fileItem.fileName)
   zModemInfo.freeDFlag:=checkFree(fileItem.fileName)
   zModemInfo.resumePos:=0
-  zModemInfo.current:=1
+  zModemInfo.current:=0
+  fileItem:=zModemInfo.fileList.item(zModemInfo.current)
+  strCpy(buffer,fileItem.fileName,255)
+  sendMasterDownload(fileItem.fileName)
 ENDPROC TRUE
 
 PROC xprfnextAsm()
@@ -13877,36 +13882,28 @@ PROC xprfnextAsm()
 ENDPROC D0
 
 PROC xprfnext()
-  DEF xprObj:PTR TO xprData
   DEF buffer:PTR TO CHAR
 
   MOVE.L A0,buffer
-  MOVE.L A1,xprObj
 
   loadA4()
 
-ENDPROC xprfnext2(buffer,xprObj)
+ENDPROC xprfnext2(buffer)
 
-PROC xprfnext2(buffer:PTR TO CHAR, xprObj:PTR TO xprData)
+PROC xprfnext2(buffer:PTR TO CHAR)
   DEF fileItem:PTR TO flagFileItem
   DEF debuglog[255]:STRING
 
-  fileItem:=xprObj.fileList.item(xprObj.currentFile)
-
-  removeFlagFromList(FilePart(fileItem.fileName),fileItem.confNum)
-  updateDownloadStats(xprObj,fileItem)
-
-  xprObj.currentFile:=xprObj.currentFile+1
   zModemInfo.current:=zModemInfo.current+1
 
   IF buffer=NIL THEN RETURN FALSE
 
-  IF xprObj.currentFile=xprObj.fileList.count()
+  IF zModemInfo.current=zModemInfo.fileList.count()
     strCpy(buffer,'',ALL)
     RETURN FALSE
   ENDIF
 
-  fileItem:=xprObj.fileList.item(xprObj.currentFile)
+  fileItem:=zModemInfo.fileList.item(zModemInfo.current)
   strCpy(buffer,fileItem.fileName,255)
   sendMasterDownload(fileItem.fileName)
   zModemInfo.freeDFlag:=checkFree(fileItem.fileName)
@@ -14205,14 +14202,11 @@ PROC downloadFile(str: PTR TO CHAR,forceZmodem=FALSE)
 ENDPROC res
 
 PROC httpUpload(uploadFolder: PTR TO CHAR,httpPort)
-  DEF x: PTR TO xprData
   DEF tempstr[100]:STRING
   DEF oldSerCache
 
-  x:=NEW x
-  x.currentFile:=0
-  x.fileList:=NIL
-  x.updateDownloadStats:=FALSE
+  zModemInfo.current:=0
+  zModemInfo.fileList:=NIL
 
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
@@ -14221,9 +14215,8 @@ PROC httpUpload(uploadFolder: PTR TO CHAR,httpPort)
     StrCopy(tempstr,'localhost')
   ENDIF
   
-  doHttpd(node,tempstr,httpPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},TRUE)
+  doHttpd(node,tempstr,httpPort,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},TRUE,NIL)
   serialCacheEnabled:=oldSerCache
-  END x 
 ENDPROC
 
 PROC httpDownload(fileList: PTR TO stdlist, pupdateDownloadStats,httpPort)
@@ -14233,7 +14226,6 @@ PROC httpDownload(fileList: PTR TO stdlist, pupdateDownloadStats,httpPort)
   DEF tempDir[255]:STRING
   DEF linkStr[255]:STRING
   DEF item:PTR TO flagFileItem
-  DEF x: PTR TO xprData
   DEF oldSerCache
 
   IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'HTTPHOST',tempstr)=FALSE
@@ -14262,24 +14254,24 @@ PROC httpDownload(fileList: PTR TO stdlist, pupdateDownloadStats,httpPort)
     ENDFOR
   ENDIF
   
-  x:=NEW x
-  x.currentFile:=0
-  x.fileList:=fileList
-  x.updateDownloadStats:=pupdateDownloadStats
+  zModemInfo.current:=0
+  zModemInfo.fileList:=fileList
+  
+  zModemInfo.shouldUpdateDownloadStats:=pupdateDownloadStats
+  zModemInfo.needUpdateDownloadStats:=FALSE
  
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
-  doHttpd(node,tempstr,httpPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},FALSE)
+  doHttpd(node,tempstr,httpPort,tempDir,{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},FALSE,fileList)
   serialCacheEnabled:=oldSerCache
  
   ->clean up ram links
   StringF(linkStr,'DELETE \s ALL',tempDir)
   Execute(linkStr,NIL,NIL)
-  END x 
 ENDPROC
 
-PROC ftpUploadFileStart(xprInfo:PTR TO xprData, fileName:PTR TO CHAR,filelen)
+PROC ftpUploadFileStart(fileName:PTR TO CHAR,filelen)
   sendMasterUpload(FilePart(fileName))
   zModemInfo.filesize:=filelen
   zModemInfo.resumePos:=0
@@ -14287,25 +14279,29 @@ PROC ftpUploadFileStart(xprInfo:PTR TO xprData, fileName:PTR TO CHAR,filelen)
   updateZDisplay()
 ENDPROC
 
-PROC ftpUploadFileEnd(xprInfo:PTR TO xprData, fileName:PTR TO CHAR)
+PROC ftpUploadFileEnd(fileName:PTR TO CHAR)
   tTTM:=tTTM+getSystemTime()-ftptime
   setEnvStat(ENV_UPLOADING)
 ENDPROC
 
-PROC ftpDownloadFileStart(xprInfo:PTR TO xprData, fileName:PTR TO CHAR,filelen)
+PROC ftpDownloadFileStart(fileName:PTR TO CHAR,filelen)
   DEF fileItem:PTR TO flagFileItem
   DEF item:PTR TO flagFileItem
+  DEF fn:PTR TO CHAR
   DEF i
   fileItem:=NIL
-  FOR i:=0 TO xprInfo.fileList.count()-1
-    item:=xprInfo.fileList.item(i)
-    IF strCmpi(FilePart(item.fileName),fileName,ALL) THEN fileItem:=item
+  fn:=FilePart(fn)
+  
+  FOR i:=0 TO zModemInfo.fileList.count()-1
+    item:=zModemInfo.fileList.item(i)
+    IF strCmpi(FilePart(item.fileName),fn,ALL) THEN fileItem:=item
   ENDFOR
+
   IF fileItem<>NIL 
     sendMasterDownload(fileItem.fileName)
     zModemInfo.freeDFlag:=checkFree(fileItem.fileName)
   ELSE
-    sendMasterDownload(FilePart(fileName))
+    sendMasterDownload(fn)
     zModemInfo.freeDFlag:=FALSE
   ENDIF
   zModemInfo.filesize:=filelen
@@ -14313,38 +14309,37 @@ PROC ftpDownloadFileStart(xprInfo:PTR TO xprData, fileName:PTR TO CHAR,filelen)
   updateZDisplay()
 ENDPROC
 
-PROC ftpDownloadFileEnd(xprInfo:PTR TO xprData, fileName:PTR TO CHAR)
+PROC ftpDownloadFileEnd(fileName:PTR TO CHAR, result)
   DEF fileItem:PTR TO flagFileItem
   DEF item:PTR TO flagFileItem
+  DEF fn:PTR TO CHAR
   DEF i
   
   fileItem:=NIL
-  FOR i:=0 TO xprInfo.fileList.count()-1
-    item:=xprInfo.fileList.item(i)
-    IF strCmpi(FilePart(item.fileName),fileName,ALL) THEN fileItem:=item
+  fn:=FilePart(fileName)
+  FOR i:=0 TO zModemInfo.fileList.count()-1
+    item:=zModemInfo.fileList.item(i)
+    IF strCmpi(FilePart(item.fileName),fn,ALL) THEN fileItem:=item
   ENDFOR
 
   IF fileItem=NIL THEN RETURN
 
-  IF (zModemInfo.transPos<>0) AND (zModemInfo.transPos=zModemInfo.filesize)
+  IF (result)
     removeFlagFromList(FilePart(fileItem.fileName),fileItem.confNum)
-  ENDIF
-
-  IF (zModemInfo.transPos<>0) AND (zModemInfo.resumePos<>zModemInfo.filesize) AND (zModemInfo.transPos=zModemInfo.filesize)
-    updateDownloadStats(xprInfo,fileItem)
+    updateDownloadStats(fileItem)
   ENDIF
   setEnvStat(ENV_DOWNLOADING)
 ENDPROC
 
-PROC ftpTransferFileProgress(xprInfo:PTR TO xprData, fileName:PTR TO CHAR,pos,cps)
+PROC ftpTransferFileProgress(fileName:PTR TO CHAR,pos,cps)
   zModemInfo.transPos:=pos
   zModemInfo.cps:=cps
   updateZDisplay()
 ENDPROC
 
-PROC ftpDupeCheck(xprInfo:PTR TO xprData, fileName:PTR TO CHAR)
+PROC ftpDupeCheck(fileName:PTR TO CHAR)
   DEF dup=FALSE
-  
+ 
   IF checkForFile(FilePart(fileName))
     dup:=TRUE
   ELSEIF checkInPlaypens(FilePart(fileName))
@@ -14354,7 +14349,7 @@ PROC ftpDupeCheck(xprInfo:PTR TO xprData, fileName:PTR TO CHAR)
   IF dup THEN skipdFiles.add(FilePart(fileName))
 ENDPROC dup
 
-PROC updateDownloadStats(xprObj:PTR TO xprData, fileItem:PTR TO flagFileItem)
+PROC updateDownloadStats(fileItem:PTR TO flagFileItem)
   DEF tempsize
   DEF cb:PTR TO confBase
 
@@ -14365,50 +14360,48 @@ PROC updateDownloadStats(xprObj:PTR TO xprData, fileItem:PTR TO flagFileItem)
   tBT:=addWO(tBT,tempsize)
   dTBT:=addWO(dTBT,tempsize)
 
-  IF xprObj.updateDownloadStats
-    IF sopt.toggles[TOGGLES_CREDITBYKB]
-      tempsize:=Shr(tempsize,10) AND $003fffff
-    ENDIF
+  IF sopt.toggles[TOGGLES_CREDITBYKB]
+    tempsize:=Shr(tempsize,10) AND $003fffff
+  ENDIF
 
-    IF(checkSecurity(ACS_CONFERENCE_ACCOUNTING))
-      saveMsgPointers(currentConf,currentMsgBase)
+  IF(checkSecurity(ACS_CONFERENCE_ACCOUNTING))
+    saveMsgPointers(currentConf,currentMsgBase)
 
-      IF(freeDownloads=FALSE)
-        IF creditAccountTrackDownloads(loggedOnUser)
-          cb:=confBases.item(getConfIndex(fileItem.confNum,1))
+    IF(freeDownloads=FALSE)
+      IF creditAccountTrackDownloads(loggedOnUser)
+        cb:=confBases.item(getConfIndex(fileItem.confNum,1))
 
-          addBCD(cb.downloadBytesBCD,tempsize)
-          cb.bytesDownload:=convertFromBCD(cb.downloadBytesBCD)
-          cb.downloads:=cb.downloads+1
-        ENDIF
+        addBCD(cb.downloadBytesBCD,tempsize)
+        cb.bytesDownload:=convertFromBCD(cb.downloadBytesBCD)
+        cb.downloads:=cb.downloads+1
       ENDIF
-      cb.dailyBytesDld:=cb.dailyBytesDld+tempsize
-      IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
-      loadMsgPointers(currentConf,currentMsgBase)
-    ELSE
-      IF(freeDownloads=FALSE)
-        IF creditAccountTrackDownloads(loggedOnUser)
-
-          addBCD(loggedOnUserMisc.downloadBytesBCD,tempsize)
-          loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
-          loggedOnUser.downloads:=loggedOnUser.downloads+1
-        ENDIF
-      ENDIF
-      loggedOnUser.dailyBytesDld:=loggedOnUser.dailyBytesDld+tempsize
-      IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
     ENDIF
+    cb.dailyBytesDld:=cb.dailyBytesDld+tempsize
+    IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
+    loadMsgPointers(currentConf,currentMsgBase)
+  ELSE
+    IF(freeDownloads=FALSE)
+      IF creditAccountTrackDownloads(loggedOnUser)
+
+        addBCD(loggedOnUserMisc.downloadBytesBCD,tempsize)
+        loggedOnUser.bytesDownload:=convertFromBCD(loggedOnUserMisc.downloadBytesBCD)
+        loggedOnUser.downloads:=loggedOnUser.downloads+1
+      ENDIF
+    ENDIF
+    loggedOnUser.dailyBytesDld:=loggedOnUser.dailyBytesDld+tempsize
+    IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
   ENDIF
 ENDPROC
 
 PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPort,ftpDataPort)
-  DEF x: PTR TO xprData
   DEF tempstr[100]:STRING
   DEF oldSerCache
 
-  x:=NEW x
-  x.currentFile:=0
-  x.fileList:=NIL
-  x.updateDownloadStats:=FALSE
+  zModemInfo.current:=0
+  zModemInfo.fileList:=NIL
+  
+  zModemInfo.shouldUpdateDownloadStats:=FALSE
+  zModemInfo.needUpdateDownloadStats:=FALSE
 
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
@@ -14417,10 +14410,8 @@ PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPort,ftpDataPort)
     StrCopy(tempstr,'localhost')
   ENDIF
 
-  doftp(node,tempstr,ftpPort,ftpDataPort,uploadFolder,{aePuts},{readChar},{sCheckInput},x,{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},TRUE)
+  doftp(node,tempstr,ftpPort,ftpDataPort,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},TRUE)
   serialCacheEnabled:=oldSerCache
-  END x 
-
 ENDPROC
 
 PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort,ftpDataPort)
@@ -14430,7 +14421,6 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort,ftpDataPo
   DEF tempDir[255]:STRING
   DEF linkStr[255]:STRING
   DEF item:PTR TO flagFileItem
-  DEF x: PTR TO xprData
   DEF oldSerCache
 
   IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPHOST',tempstr)=FALSE
@@ -14459,21 +14449,22 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort,ftpDataPo
     ENDFOR
   ENDIF
   
-  x:=NEW x
-  x.currentFile:=0
-  x.fileList:=fileList
-  x.updateDownloadStats:=updateDownloadStats
+  zModemInfo.current:=0
+  zModemInfo.fileList:=fileList
+  
+  zModemInfo.shouldUpdateDownloadStats:=updateDownloadStats
+  zModemInfo.needUpdateDownloadStats:=FALSE
+  
  
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
-  doftp(node,tempstr,ftpPort,ftpDataPort,tempDir,{aePuts},{readChar},{sCheckInput},x,{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},FALSE)
+  doftp(node,tempstr,ftpPort,ftpDataPort,tempDir,{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},FALSE)
   serialCacheEnabled:=oldSerCache
  
   ->clean up ram links
   StringF(linkStr,'DELETE \s ALL',tempDir)
   Execute(linkStr,NIL,NIL)
-  END x 
 ENDPROC
 
 ->this returns 0 = fail, 1 = success unlike most of the routines
@@ -14484,11 +14475,13 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   DEF result
   DEF time1,time2
   DEF oldshared
-  DEF x: PTR TO xprData
   DEF ftpPort,ftpDataPort,httpPort
-  DEF zm: PTR TO zmodem_t
+  DEF zm=NIL: PTR TO zmodem_t
+  DEF xym=NIL: PTR TO xymodem_t
   DEF ext=TRUE
+  DEF ymodemFlag=FALSE
   DEF dlTimeTaken=0
+  DEF maxBlkSize=1024
   
   DEF protocol[255]:STRING
   
@@ -14519,7 +14512,19 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
     RETURN 0
   ENDIF
 
-  IF(strCmpi(protocol,'INTERNAL',ALL)) THEN ext:=FALSE
+  IF(strCmpi(protocol,'INTERNALYM',ALL))
+    StrCopy(protocol,'INTERNAL')
+    ymodemFlag:=TRUE
+    ext:=FALSE
+  ENDIF
+
+  IF(strCmpi(protocol,'INTERNAL8K',ALL))
+    StrCopy(protocol,'INTERNAL')
+    maxBlkSize:=8192
+    ext:=FALSE
+  ENDIF
+
+IF(strCmpi(protocol,'INTERNAL',ALL)) THEN ext:=FALSE
 
   IF (strCmpi(protocol,'XPRZM',ALL))
     StrCopy(protocol,'INTERNAL')
@@ -14527,6 +14532,8 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   ENDIF
 
   zModemInfo.currentOperation:=ZMODEM_DOWNLOAD
+  zModemInfo.shouldUpdateDownloadStats:=updateDownloadStats
+  zModemInfo.needUpdateDownloadStats:=FALSE
 
   IF (strCmpi(protocol,'FTP',ALL))
     ftpPort:=readToolTypeInt(TOOLTYPE_NODE,node,'FTPPORT')
@@ -14553,7 +14560,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   ENDIF
 
   IF(strCmpi(protocol,'INTERNAL',ALL))
-    StringF(tempstr,'Zmodem: Ready to Send\b\n')
+    StringF(tempstr,'\cmodem: Ready to Send\b\n',IF ymodemFlag THEN "Y" ELSE "Z")
   ELSEIF(checkSecurity(ACS_XPR_SEND)=FALSE)
     aePuts('\b\nYou are not allowed to download using external xpr protocols')
     RETURN 0
@@ -14621,32 +14628,59 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
       readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'OPTIONS',tempstr)
     ENDIF
   ELSE
-    zm:=NEW zm
-    zm.log_level:=ZM_LOG_DEBUG
 
     bufferedBytes:=0
     bufferReadOffset:=0
-    
-    zmodem_init(zm, 0,
-          {zmlputs},
-          {zmprogress},
-          {zmrecvbyte},
-          {zmisconnected},
-          {zmiscancelled},
-          {zmdatawaiting},
-          {zmuploadcompleted},
-          {zmuploadfailed},
-          {zmdupecheck},
-          {zmflush},
-          NIL,
-          {zmfopen},
-          {zmfclose},
-          {zmfseek},
-          {zmfread},
-          {zmfwrite},
-          {zmfirstfile},
-          {zmnextfile},
-          1024,0)
+ 
+    IF ymodemFlag
+      xym:=NEW xym
+      xym.log_level:=ZM_LOG_DEBUG
+      binaryRaw:=(telnetSocket>=0)
+      xymodem_init(xym, 0,
+            {zmlputs},
+            {zmprogress},
+            {zmrecvbyte},
+            {zmisconnected},
+            {zmiscancelled},
+            {zmdatawaiting},
+            {zmuploadcompleted},
+            {zmuploadfailed},
+            {zmdupecheck},
+            {zmflush},
+            NIL,
+            {zmfopen},
+            {zmfclose},
+            {zmfseek},
+            {zmfread},
+            {zmfwrite},
+            {zmfirstfile},
+            {zmnextfile},
+            2048,0,binaryRaw)
+    ELSE    
+      zm:=NEW zm
+      zm.log_level:=ZM_LOG_DEBUG
+      binaryRaw:=(telnetSocket>=0)
+      zmodem_init(zm, 0,
+            {zmlputs},
+            {zmprogress},
+            {zmrecvbyte},
+            {zmisconnected},
+            {zmiscancelled},
+            {zmdatawaiting},
+            {zmuploadcompleted},
+            {zmuploadfailed},
+            {zmdupecheck},
+            {zmflush},
+            NIL,
+            {zmfopen},
+            {zmfclose},
+            {zmfseek},
+            {zmfread},
+            {zmfwrite},
+            {zmfirstfile},
+            {zmnextfile},
+            maxBlkSize,0,binaryRaw)
+    ENDIF
   ENDIF
   
   asynciobase:=OpenLibrary('asyncio.library',0)
@@ -14672,27 +14706,30 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   cancelTransferOffHook:=FALSE
   lastIAC:=FALSE
 
-  x:=NEW x
-  x.currentFile:=0
-  x.fileList:=fileList
-  x.updateDownloadStats:=updateDownloadStats
+  zModemInfo.current:=0
+  zModemInfo.fileList:=fileList
 
   IF ext
-    xprio.xpr_filename:=x
+    xprio.xpr_filename:=NIL
     time1:=getSystemTime()
     result:=XprotocolSend(xprio)
     time2:=getSystemTime()
     tTTM:=time2-time1;
   ELSE
-    zm.user_data:=x
-    result:=zmodem_send_files(zm, NIL,{dlTimeTaken})
+    IF ymodemFlag
+      xym.user_data:=NIL
+      result:=xymodem_send_files(xym, NIL,{dlTimeTaken})
+    ELSE
+      zm.user_data:=NIL
+      result:=zmodem_send_files(zm, NIL,{dlTimeTaken})
+    ENDIF
     tTTM:=Div(dlTimeTaken,50)
   ENDIF
 
 
   IF zModemInfo.transPos<>zModemInfo.filesize THEN result:=FALSE
 
-  IF(result=FALSE)
+/*  IF(result=FALSE)
     IF((zModemInfo.transPos>0) AND (zModemInfo.resumePos<>zModemInfo.filesize) AND (zModemInfo.transPos=zModemInfo.filesize))
       callersLog('\tIncomplete 100% Transfer, accumulating Maximum Bytes Downloaded')
       udLog('\tIncomplete 100% Transfer, accumulating Maximum Bytes Downloaded')
@@ -14701,24 +14738,29 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
       IF ext
         xprfnext2(NIL,x)
       ELSE
-        zmnextfile(zm,NIL)
+        zmnextfile(NIL)
       ENDIF
     ENDIF
-  ENDIF
-  END x
+  ENDIF*/
 
   IF ext
     XprotocolCleanup(xprio)
   ELSE
-    zmodem_cleanup(zm)
+    IF ymodemFlag
+      xymodem_cleanup(xym)
+    ELSE
+      zmodem_cleanup(zm)
+    ENDIF
   ENDIF
   transfering:=FALSE
+  binaryRaw:=FALSE
   checkOffhookFlag()
 
   IF ext
     END xprio
   ELSE
-    END zm
+    IF xym<>NIL THEN END xym
+    IF zm<>NIL THEN END zm
   ENDIF
 
   IF ext THEN CloseLibrary(xprotocolbase)
@@ -14958,7 +15000,7 @@ PROC moveFile(filename,filesize)
   DeleteFile(tempstr)
 ENDPROC 0
 
-PROC zmlputs(zm: PTR TO zmodem_t,level, str:PTR TO CHAR) 
+PROC zmlputs(level, str:PTR TO CHAR) 
   SELECT level
     CASE ZM_LOG_DEBUG
       debugLog(LOG_DEBUG,str)
@@ -14973,14 +15015,14 @@ PROC zmlputs(zm: PTR TO zmodem_t,level, str:PTR TO CHAR)
   ENDSELECT
 ENDPROC
 
-PROC zmprogress(zm: PTR TO zmodem_t, pos)
+PROC zmprogress(pos,filesize,s1,s2,errors,startpos,filename:PTR TO CHAR,newfile,blocksize)
   DEF t1,t2,t,n
   DEF h,m,s
   DEF tempStr[255]:STRING
   DEF updateTime
 
   t1,t2:=getZmSystemTime()
-  t:=Mul((t1-zm.transfer_start_time1),50)+t2-zm.transfer_start_time2
+  t:=Mul((t1-s1),50)+t2-s2
   
   IF t>0
     IF pos>40000000
@@ -15002,7 +15044,7 @@ PROC zmprogress(zm: PTR TO zmodem_t, pos)
   strCpy(zModemInfo.elapsedTime,tempStr,40)
 
   IF n>0
-    t:=Div(zm.current_file_size,n)
+    t:=Div(filesize,n)
     h:=Div(t,3600)
     m:=Mod(t,3600)
     s:=Mod(m,60)
@@ -15013,21 +15055,21 @@ PROC zmprogress(zm: PTR TO zmodem_t, pos)
   ENDIF
   strCpy(zModemInfo.apxTime,tempStr,40)
  
-  zModemInfo.filesize:=zm.current_file_size
-  zModemInfo.errorCount:=zm.errors
+  zModemInfo.filesize:=filesize
+  zModemInfo.errorCount:=errors
 
-  zModemInfo.resumePos:=zm.transfer_start_pos
-  strCpy(zModemInfo.fileName,zm.current_file_name,255)
+  zModemInfo.resumePos:=startpos
+  strCpy(zModemInfo.fileName,filename,255)
 
   zModemInfo.cps:=n
   zModemInfo.eff:=Div(Mul(zModemInfo.cps,100),Div(onlineBaud,10))
 
   IF pos>=0
     zModemInfo.transPos:=pos
-    IF pos=zm.current_file_size THEN strCpy(zModemInfo.lastTime,zModemInfo.elapsedTime,40)
+    IF pos=filesize THEN strCpy(zModemInfo.lastTime,zModemInfo.elapsedTime,40)
   ENDIF
 
-  IF zm.new_file
+  IF newfile
     IF zModemInfo.currentOperation=ZMODEM_DOWNLOAD
       StringF(tempStr,'\t\sDownloading \s \d bytes',IF zModemInfo.freeDFlag THEN 'Free ' ELSE '',zModemInfo.fileName,zModemInfo.filesize)
     ELSE
@@ -15045,7 +15087,7 @@ PROC zmprogress(zm: PTR TO zmodem_t, pos)
   IF zModemInfo.lastUpdate<>updateTime
     updateZDisplay()
     debugLog(LOG_DEBUG,'zmprogress update')
-    StringF(tempStr,'current block size: \d',zm.block_size)
+    StringF(tempStr,'current block size: \d',blocksize)
     debugLog(LOG_DEBUG,tempStr)
     zModemInfo.lastUpdate:=updateTime
 
@@ -15060,19 +15102,19 @@ PROC zmprogress(zm: PTR TO zmodem_t, pos)
   ENDIF
 ENDPROC
 
-PROC zmrecvbyte(zm: PTR TO zmodem_t, timeout)
+PROC zmrecvbyte(timeout)
   DEF res
   IF telnetSocket>=0
-    res:=zmrecvbyteTelnet(zm,timeout)
+    res:=zmrecvbyteTelnet(timeout)
   ELSE
-    res:=zmrecvbyteSerial(zm,timeout)
+    res:=zmrecvbyteSerial(timeout)
   ENDIF
 ENDPROC res
 
-PROC zmrecvbyteTelnet(zm: PTR TO zmodem_t, timeout)
+PROC zmrecvbyteTelnet(timeout)
   DEF res
   DEF temp
-  DEF recvd,n
+  DEF recvd,n,r
   DEF tv:timeval
   DEF sysTime
   
@@ -15104,21 +15146,27 @@ redo1:
       UNTIL (bufferReadOffset>=bufferedBytes) OR (recvd)
       IF recvd=FALSE THEN JUMP redo1
     ELSE
-
-      tv.secs:=timeout
-      tv.micro:=0
-      setSingleFDS(telnetSocket)
-      res:=WaitSelect(telnetSocket+1,fds,NIL,NIL,tv,NIL)
-
       temp,n:=checkTelnetData()
+      IF n=0
+        tv.secs:=timeout
+        tv.micro:=0
+        setSingleFDS(telnetSocket)
+        res:=WaitSelect(telnetSocket+1,fds,NIL,NIL,tv,NIL)
+        temp,n:=checkTelnetData()
+      ENDIF
+
       bufferReadOffset:=0
       bufferedBytes:=0
       sysTime:=getSystemTime()
       IF n>0
-        IF n>zModemBufferSize THEN n:=zModemBufferSize
-        IF Recv(telnetSocket,zmodemBuffer,n,0)=n
-          bufferedBytes:=n
-        ENDIF
+        IF n>(zModemBufferSize-bufferedBytes) THEN n:=(zModemBufferSize-bufferedBytes)
+        WHILE n>0
+          IF (r:=Recv(telnetSocket,zmodemBuffer+bufferedBytes,n,0))<>-1
+            bufferedBytes:=bufferedBytes+r
+          ENDIF
+          temp,n:=checkTelnetData()
+          IF n>(zModemBufferSize-bufferedBytes) THEN n:=(zModemBufferSize-bufferedBytes)
+        ENDWHILE
         
         IF ((lastCarrierCheck+5)<sysTime)
           lastCarrierCheck:=sysTime
@@ -15138,7 +15186,7 @@ redo1:
   IF recvd=FALSE THEN res:=-1
 ENDPROC res
 
-PROC zmrecvbyteSerial(zm: PTR TO zmodem_t, timeout)
+PROC zmrecvbyteSerial(timeout)
   DEF serialsig,signals,timersig=0,res
   DEF waiting,abort
   
@@ -15203,7 +15251,7 @@ PROC zmisconnected() IS lostCarrier=FALSE
  
 PROC zmiscancelled() IS xprchkabort()
 
-PROC zmdatawaiting(zm:PTR TO zmodem_t, timeout)
+PROC zmdatawaiting(timeout)
   DEF signals,timersig,serialsig,recvd=0,waiting
   DEF tv:timeval
 
@@ -15239,15 +15287,15 @@ PROC zmdatawaiting(zm:PTR TO zmodem_t, timeout)
 
 ENDPROC recvd
  
-PROC zmuploadcompleted(zm: PTR TO zmodem_t, fname:PTR TO CHAR) 
+PROC zmuploadcompleted(fname:PTR TO CHAR) 
   IF loggedOnUserKeys<>NIL
     doBgCheck()
   ENDIF
 ENDPROC
 
-PROC zmuploadfailed(zm: PTR TO zmodem_t, fname:PTR TO CHAR) IS xprunlink2(fname)
+PROC zmuploadfailed(fname:PTR TO CHAR) IS xprunlink2(fname)
 
-PROC zmdupecheck(zm:PTR TO zmodem_t,fname:PTR TO CHAR)
+PROC zmdupecheck(fname:PTR TO CHAR)
   DEF dup=FALSE
   IF (netMailTransfer=FALSE) AND (sysopUploading=FALSE) AND (rzmsg=FALSE)
     IF checkForFile(FilePart(fname))
@@ -15265,10 +15313,12 @@ PROC zmdupecheck(zm:PTR TO zmodem_t,fname:PTR TO CHAR)
 
 ENDPROC dup
 
-PROC zmflush(zm:PTR TO zmodem_t,buffer,size) IS serPuts(buffer,size,TRUE,TRUE)
+PROC zmflush(buffer,size) IS serPuts(buffer,size,TRUE,TRUE)
 
 PROC zmfopen(fn:PTR TO CHAR,filemode)
   DEF res
+  IF (filemode<>MODE_OLDFILE) AND (zModemInfo.currentOperation=ZMODEM_UPLOAD) THEN zModemInfo.current:=zModemInfo.current+1
+
   IF asynciobase<>NIL
     IF filemode=MODE_OLDFILE 
       res:=OpenAsync(fn,MODE_READ,65536)
@@ -15282,11 +15332,21 @@ PROC zmfopen(fn:PTR TO CHAR,filemode)
   ENDIF
 ENDPROC res
 
-PROC zmfclose(fh)
+PROC zmfclose(fh,success)
+  DEF fileItem:PTR TO flagFileItem
+  
+  IF zModemInfo.shouldUpdateDownloadStats THEN zModemInfo.needUpdateDownloadStats:=success
   IF asynciobase<>NIL
     CloseAsync(fh)
   ELSE
     Close(fh)
+  ENDIF
+
+  IF zModemInfo.needUpdateDownloadStats
+    fileItem:=zModemInfo.fileList.item(zModemInfo.current)
+    removeFlagFromList(FilePart(fileItem.fileName),fileItem.confNum)
+    updateDownloadStats(fileItem) 
+    zModemInfo.needUpdateDownloadStats:=FALSE
   ENDIF
 ENDPROC
 
@@ -15323,8 +15383,8 @@ PROC zmfwrite(fh,buf,size)
   ENDIF
 ENDPROC res
 
-PROC zmfirstfile(zm:PTR TO zmodem_t,fname:PTR TO CHAR) IS xprffirst2(fname,zm.user_data)
-PROC zmnextfile(zm:PTR TO zmodem_t,fname:PTR TO CHAR) IS xprfnext2(fname,zm.user_data)
+PROC zmfirstfile(fname:PTR TO CHAR) IS xprffirst2(fname)
+PROC zmnextfile(fname:PTR TO CHAR) IS xprfnext2(fname)
 
 PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   DEF tempstr[255]:STRING,debugstr[255]:STRING
@@ -15337,7 +15397,10 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   DEF ftpPort,ftpDataPort,httpPort
   DEF protocol[255]:STRING
   
-  DEF zm: PTR TO zmodem_t
+  DEF zm=NIL: PTR TO zmodem_t
+  DEF xym=NIL: PTR TO xymodem_t
+  DEF ymodemFlag=FALSE
+  DEF maxBlkSize=1024
   DEF ulTimeTaken
   DEF ext=TRUE
   DEF bgStack
@@ -15347,6 +15410,18 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     StrCopy(protocol,'INTERNAL')
   ELSE
     StrCopy(protocol,(xprLib.item(loggedOnUser.xferProtocol)))
+  ENDIF
+
+  IF(strCmpi(protocol,'INTERNALYM',ALL))
+    StrCopy(protocol,'INTERNAL')
+    ymodemFlag:=TRUE
+    ext:=FALSE
+  ENDIF
+
+  IF(strCmpi(protocol,'INTERNAL8K',ALL))
+    StrCopy(protocol,'INTERNAL')
+    maxBlkSize:=8192
+    ext:=FALSE
   ENDIF
 
   IF(strCmpi(protocol,'INTERNAL',ALL)) THEN ext:=FALSE
@@ -15405,8 +15480,6 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
       RETURN RESULT_FAILURE
     ENDIF
     xprio:=NEW xprio
-  ELSE
-    zm:=NEW zm
   ENDIF
 
   zModemInfo.current:=0; zModemInfo.transPos:=0; zModemInfo.filesize:=0; zModemInfo.errorCount:=0; zModemInfo.errorPos:=0; zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
@@ -15447,31 +15520,59 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     xprio.xpr_squery:=0
     xprio.xpr_getptr:=0
   ELSE
-    zm.log_level:=ZM_LOG_DEBUG
     
     bufferedBytes:=0
     bufferReadOffset:=0  
     
-    zmodem_init(zm, 0,
-          {zmlputs},
-          {zmprogress},
-          {zmrecvbyte},
-          {zmisconnected},
-          {zmiscancelled},
-          {zmdatawaiting},
-          {zmuploadcompleted},
-          {zmuploadfailed},
-          {zmdupecheck},
-          {zmflush},
-          NIL,
-          {zmfopen},
-          {zmfclose},
-          {zmfseek},
-          {zmfread},
-          {zmfwrite},
-          {zmfirstfile},
-          {zmnextfile},
-          1024,0)
+    IF ymodemFlag
+      xym:=NEW xym
+      xym.log_level:=ZM_LOG_DEBUG
+      binaryRaw:=(telnetSocket>=0)
+      xymodem_init(xym, 0,
+            {zmlputs},
+            {zmprogress},
+            {zmrecvbyte},
+            {zmisconnected},
+            {zmiscancelled},
+            {zmdatawaiting},
+            {zmuploadcompleted},
+            {zmuploadfailed},
+            {zmdupecheck},
+            {zmflush},
+            NIL,
+            {zmfopen},
+            {zmfclose},
+            {zmfseek},
+            {zmfread},
+            {zmfwrite},
+            {zmfirstfile},
+            {zmnextfile},
+            2048,0,binaryRaw)
+    ELSE
+      zm:=NEW zm
+      zm.log_level:=ZM_LOG_DEBUG
+      binaryRaw:=(telnetSocket>=0)
+      zmodem_init(zm, 0,
+            {zmlputs},
+            {zmprogress},
+            {zmrecvbyte},
+            {zmisconnected},
+            {zmiscancelled},
+            {zmdatawaiting},
+            {zmuploadcompleted},
+            {zmuploadfailed},
+            {zmdupecheck},
+            {zmflush},
+            NIL,
+            {zmfopen},
+            {zmfclose},
+            {zmfseek},
+            {zmfread},
+            {zmfwrite},
+            {zmfirstfile},
+            {zmnextfile},
+            maxBlkSize,0,binaryRaw)
+    ENDIF
   ENDIF
 
   asynciobase:=OpenLibrary('asyncio.library',0)
@@ -15513,7 +15614,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   ReleaseSemaphore(bgData)
 
   IF loggedOnUserKeys<>NIL
-    IF bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
+    IF bgFileCheck AND ((loggedOnUserKeys.userFlags AND USER_BGFILECHECK) OR (checkToolTypeExists(TOOLTYPE_NODE,node,'FORCE_BGFILECHECK')))
       bgChecking:=TRUE
       bgStack:=readToolTypeInt(TOOLTYPE_NODE,node,'BGFILECHECKSTACK')
       IF bgStack<=0 THEN bgStack:=20000
@@ -15533,7 +15634,11 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     time2:=getSystemTime()
     tTTM:=time2-time1;
   ELSE
-    result:=zmodem_recv_files(zm, file,NIL,{ulTimeTaken}) 
+    IF ymodemFlag
+      result:=xymodem_recv_files(xym, file,NIL,{ulTimeTaken}) 
+    ELSE
+      result:=zmodem_recv_files(zm, file,NIL,{ulTimeTaken}) 
+    ENDIF
     tTTM:=Div(ulTimeTaken,50)
   ENDIF
 
@@ -15541,11 +15646,15 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   IF ext
     XprotocolCleanup(xprio)
   ELSE
-    zmodem_cleanup(zm)
+    IF ymodemFlag
+      xymodem_cleanup(xym)
+    ELSE
+      zmodem_cleanup(zm)
+    ENDIF
   ENDIF
 
   IF (loggedOnUserKeys<>NIL) AND (netMailTransfer=FALSE)
-    IF bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
+      IF bgFileCheck AND ((loggedOnUserKeys.userFlags AND USER_BGFILECHECK) OR (checkToolTypeExists(TOOLTYPE_NODE,node,'FORCE_BGFILECHECK')))
       StringF(tempstr,'bgCheckPort\d',node)
       IF (bgport:=FindPort(tempstr))
         msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
@@ -15570,6 +15679,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     ENDIF
   ENDIF
   transfering:=FALSE
+  binaryRaw:=FALSE
 
   checkOffhookFlag()
 
@@ -15591,7 +15701,8 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   IF ext
     END xprio
   ELSE
-    END zm
+    IF xym<>NIL THEN END xym
+    IF zm<>NIL THEN END zm
   ENDIF
 
   IF asynciobase<>NIL THEN CloseLibrary(asynciobase)
@@ -15731,7 +15842,7 @@ PROC scanHoldDesc()
     ELSE
       bgFileCheck:=FALSE
     ENDIF
-    uploadaFile(1,'')
+    uploadaFile(1,'',FALSE)
   ENDIF   /* end if fi != NL */
   lcFileXfr:=FALSE
   aePuts('\b\n')
@@ -15978,7 +16089,7 @@ updesccont:
 
   aePuts('\b\n')
   REPEAT
-    IF bgFileCheck
+    IF bgFileCheck AND (checkToolTypeExists(TOOLTYPE_NODE,node,'FORCE_BGFILECHECK')=FALSE)
       StringF(str,'[1A\bOkay:   (B)ackground filecheck: \s \b\n',IF loggedOnUserKeys.userFlags AND USER_BGFILECHECK THEN '[32mYES[0m' ELSE '[37mNO[0m')
       aePuts(str)
       aePuts('(Enter) to Start, (G)oodbye after transfer, (A)bort? ')
@@ -15991,7 +16102,7 @@ updesccont:
     status:=readChar(INPUT_TIMEOUT)
     IF(status<(-1)) THEN RETURN status
 
-    IF bgFileCheck
+    IF bgFileCheck AND (checkToolTypeExists(TOOLTYPE_NODE,node,'FORCE_BGFILECHECK')=FALSE)
       IF (status="B") OR (status="b") THEN loggedOnUserKeys.userFlags:=Eor(loggedOnUserKeys.userFlags,USER_BGFILECHECK)
     ENDIF
 
@@ -16197,8 +16308,10 @@ PROC zmodemReceive(flname:PTR TO CHAR,uLFType)
     ENDIF
 
     IF(uLFType=FALSE)
-      IF(strCmpi(protocol,'INTERNAL',ALL))
+      IF(strCmpi(protocol,'INTERNAL',ALL)) OR (strCmpi(protocol,'INTERNAL8K',ALL))
         StringF(temp,'\b\nZmodem: Ready to Receive\b\n')
+      ELSEIF(strCmpi(protocol,'INTERNALYM',ALL))
+        StringF(temp,'\b\nYmodem: Ready to Receive\b\n')
       ELSEIF(strCmpi(protocol,'FTP',ALL))
         StringF(temp,'\b\nFTP: Ready to Receive\b\n')
       ELSEIF(strCmpi(protocol,'HTTP',ALL))
@@ -16246,7 +16359,7 @@ PROC receivePlayPen(log)
   tBT:=0
   recFileNames.clear()
 
-  IF(StrLen(sopt.ramPen)>0) THEN StringF(tempstr,'\s/',sopt.ramPen) ELSE StringF(tempstr,'\sNode\d/Playpen',cmds.bbsLoc,node)
+  IF(StrLen(sopt.ramPen)>0) THEN StrCopy(tempstr,sopt.ramPen) ELSE StringF(tempstr,'\sNode\d/Playpen',cmds.bbsLoc,node)
 
   IF((fib:=AllocDosObject(DOS_FIB,NIL)))=NIL
     myError(0)
@@ -16480,7 +16593,7 @@ PROC cleanPlayPen()
 
   recFileNames.clear()
 
-  IF(StrLen(sopt.ramPen)>0) THEN StringF(tempstr,'\s/',sopt.ramPen) ELSE StringF(tempstr,'\sNode\d/Playpen/',cmds.bbsLoc,node)
+  IF(StrLen(sopt.ramPen)>0) THEN StrCopy(tempstr,sopt.ramPen) ELSE StringF(tempstr,'\sNode\d/Playpen/',cmds.bbsLoc,node)
 
   IF tempstr[StrLen(tempstr)-1]="/"
     SetStr(tempstr,StrLen(tempstr)-1)
@@ -16596,7 +16709,7 @@ PROC checkOurList(fname: PTR TO CHAR, str: PTR TO CHAR)
 
   WHILE((ReadStr(fp,buff)<>-1)) OR (StrLen(buff)>0)
     /* /X 4 changed this to just use simply text match
-    IF(ParsePatternNoCase(buff,dest,200)<>-1)
+    IF(parsePatternNoCase2(buff,dest,200)<>-1)
       IF(MatchPatternNoCase(dest,str))
         Close(fp)
         RETURN RESULT_FAILURE
@@ -16684,7 +16797,9 @@ PROC doBgCheck()
   DEF bgport
   DEF msg:PTR TO jhMessage
   
-  IF (zModemInfo.currentOperation=ZMODEM_UPLOAD) AND bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
+  IF (zModemInfo.currentOperation=ZMODEM_UPLOAD) AND bgFileCheck AND ((loggedOnUserKeys.userFlags AND USER_BGFILECHECK) OR (checkToolTypeExists(TOOLTYPE_NODE,node,'FORCE_BGFILECHECK')))
+      
+
     StringF(tempstr,'bgCheckPort\d',node)
     IF (bgport:=FindPort(tempstr))
       msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
@@ -16955,7 +17070,7 @@ PROC sysopUpload()
   spacehi,spacelo:=rFreeSpace(destpath)                /* check free space - now in mb instead of bytes */
   IF(spacehi=RESULT_FAILURE) THEN RETURN RESULT_SUCCESS
 
-  IF(StrLen(sopt.ramPen)>0) THEN StringF(path,'\s/',sopt.ramPen) ELSE StringF(path,'\sNode\d/Playpen/',cmds.bbsLoc,node)
+  IF(StrLen(sopt.ramPen)>0) THEN StrCopy(path,sopt.ramPen) ELSE StringF(path,'\sNode\d/Playpen/',cmds.bbsLoc,node)
 
   space2hi,space2lo:=rFreeSpace(path)
 
@@ -17081,7 +17196,7 @@ PROC formatFileSizeForDirList(fsize,fsstr:PTR TO CHAR)
   ENDIF
 ENDPROC
 
-PROC uploadaFile(uLFType,cmd)            -> JOE
+PROC uploadaFile(uLFType,cmd,attach)            -> JOE
   DEF fBlock: fileinfoblock
   DEF fLock
   DEF i,x,x2,x3,cnt,status,moveToLCFILES,hold,cstat,noF,lcfile
@@ -17113,6 +17228,11 @@ PROC uploadaFile(uLFType,cmd)            -> JOE
     RETURN RESULT_FAILURE
   ENDIF
 
+  IF(attach=FALSE)
+    IF displayScreen(SCREEN_NOUPLOADS) THEN RETURN RESULT_SUCCESS
+  ENDIF
+
+
   IF(uLFType=0)
     displayScreen(SCREEN_UPLOAD)
   ENDIF
@@ -17120,7 +17240,7 @@ PROC uploadaFile(uLFType,cmd)            -> JOE
   tFShi,tFSlo:=freeDiskSpace()                /* check free space - now in mb instead of bytes */
   IF(tFShi=RESULT_FAILURE) THEN RETURN RESULT_SUCCESS
 
-  IF(StrLen(sopt.ramPen)>0) THEN StringF(path,'\s/',sopt.ramPen) ELSE StringF(path,'\sNode\d/Playpen/',cmds.bbsLoc,node)
+  IF(StrLen(sopt.ramPen)>0) THEN StrCopy(path,sopt.ramPen) ELSE StringF(path,'\sNode\d/Playpen/',cmds.bbsLoc,node)
 
   fSUploadingHi,fSUploadingLo:=rFreeSpace(path)
 
@@ -17165,7 +17285,7 @@ PROC uploadaFile(uLFType,cmd)            -> JOE
   /* if user used 'rz' it never entered the above loop so gstat never got set */
 
   /* uploading to another device?? */
-  IF(StrLen(sopt.ramPen)>0) THEN StringF(path,'\s/',sopt.ramPen) ELSE StringF(path,'\sNode\d/Playpen/',cmds.bbsLoc,node)
+  IF(StrLen(sopt.ramPen)>0) THEN StrCopy(path,sopt.ramPen) ELSE StringF(path,'\sNode\d/Playpen/',cmds.bbsLoc,node)
 
   dTBT:=0
   tBT:=0
@@ -17203,7 +17323,7 @@ PROC uploadaFile(uLFType,cmd)            -> JOE
     loggedOnUserKeys.oldUpCPS:=pcps
   ENDIF
 
-  IF bgFileCheck AND (loggedOnUserKeys.userFlags AND USER_BGFILECHECK)
+  IF bgFileCheck AND ((loggedOnUserKeys.userFlags AND USER_BGFILECHECK) OR (checkToolTypeExists(TOOLTYPE_NODE,node,'FORCE_BGFILECHECK')))
     IF bgCnt>0
       StringF(tempstr,'\b\n\b\n\d files were checked and posted in the background during upload',bgCnt)
       aePuts(tempstr)
@@ -17472,7 +17592,7 @@ cinpAgain:
           x2:=x2+1
           EXIT (x2>=(max_desclines-1))
         ENDWHILE
-        IF(uaf>0) THEN Close(uaf)
+        Close(uaf)
       ENDIF
 cNext:
       status2:=RESULT_NOT_ALLOWED
@@ -17689,7 +17809,7 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
     readToolType(TOOLTYPE_BBSCONFIG,'','FILEDIZ_SYSCMD',dizSysCmd)
 
     IF(StrLen(sopt.ramPen)>0)
-      StringF(path,'\s/',sopt.ramPen)
+      StrCopy(path,sopt.ramPen)
       StringF(fileName,'\s\s',sopt.ramPen,fname)
     ELSE
       StringF(path,'\sNode\d/Playpen/',cmds.bbsLoc,node)
@@ -17722,7 +17842,7 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
               x2:=x2+1
               EXIT (x2>=(max_desclines-1))
             ENDWHILE
-            IF(fh>0) THEN Close(fh)
+            Close(fh)
           ENDIF
 
           fsize:=getFileSize(fileName)
@@ -23312,7 +23432,7 @@ PROC internalCommandRZ(cmdcode)
   ELSE
     bgFileCheck:=FALSE
   ENDIF
-  uploadaFile(1,cmdcode)
+  uploadaFile(1,cmdcode,FALSE)
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandT()
@@ -23348,7 +23468,7 @@ PROC internalCommandU(cmdcode)
   ELSE
     bgFileCheck:=FALSE
   ENDIF
-  uploadaFile(0,cmdcode)
+  uploadaFile(0,cmdcode,FALSE)
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandUS()
@@ -23381,7 +23501,7 @@ ENDPROC RESULT_SUCCESS
 
 PROC internalCommandVER()
   DEF tempStr[255]:STRING
-  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ©2018-2020 Darren Coles\b\n',expressVer,expressDate)
+  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ©2018-2021 Darren Coles\b\n',expressVer,expressDate)
   aePuts(tempStr)
   aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   StringF(tempStr,'Registered to \s.\b\n',regKey)
@@ -23559,7 +23679,7 @@ PROC internalCommandW()
       aePuts(str)
     ENDIF
 
-    IF(checkToolTypeExists(TOOLTYPE_NODE,node,'BGFILECHECK'))
+    IF(checkToolTypeExists(TOOLTYPE_NODE,node,'BGFILECHECK')) AND (checkToolTypeExists(TOOLTYPE_NODE,node,'FORCE_BGFILECHECK')=FALSE)
       option:=loggedOnUserKeys.userFlags AND USER_BGFILECHECK
       IF option
         StringF(str,'[34m[[0m 16[34m][35m BACKGROUND FILE CHECK... [32mYES[0m\b\n')
@@ -23752,7 +23872,7 @@ PROC internalCommandW()
         IF(stat<0) THEN RETURN stat
       CASE 16
         ->EDIT BACKGROUND FILECHECK
-        IF(checkToolTypeExists(TOOLTYPE_NODE,node,'BGFILECHECK'))
+        IF(checkToolTypeExists(TOOLTYPE_NODE,node,'BGFILECHECK')) AND (checkToolTypeExists(TOOLTYPE_NODE,node,'FORCE_BGFILECHECK')=FALSE)
           loggedOnUserKeys.userFlags:=Eor(loggedOnUserKeys.userFlags,USER_BGFILECHECK)
         ENDIF
     ENDSELECT
@@ -25078,7 +25198,7 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,searchList: PTR TO stringli
         RETURN RESULT_FAILURE,0,0
       ENDIF
 
-      IF (ParsePatternNoCase(tempStr, patternBuf, patBufLen))=-1
+      IF (parsePatternNoCase2(tempStr, patternBuf, patBufLen))=-1
         myError(1)
         Dispose(patternBuf)
         Close(fi)
@@ -25763,7 +25883,7 @@ PROC confScan()
                 ELSE
                   bgFileCheck:=FALSE
                 ENDIF
-                uploadaFile(0,'URG')
+                uploadaFile(0,'URG',FALSE)
               ENDIF
             ELSEIF(mystat=RESULT_ABORT)
               aePuts('\b\n')
@@ -26563,7 +26683,7 @@ PROC processLogon()
   ENDIF
   aePuts(tempStr)
 
-  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018-2020 Darren Coles\b\n',expressVer)
+  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018-2021 Darren Coles\b\n',expressVer)
   aePuts(tempStr)
   aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
@@ -26865,7 +26985,7 @@ PROC processAwait()
 
       StringF(tempstr,'\b\n           [33m© 1992-1995 AmiExpress [37mby[35m Light Speed Technologies Inc.[0m\b\n')
       aePuts(tempstr)
-      StringF(tempstr,'\b\n                           [33m Version 5 ©2018-2020[0m\b\n')
+      StringF(tempstr,'\b\n                           [33m Version 5 ©2018-2021[0m\b\n')
       aePuts(tempstr)
 
       StringF(tempstr,'\b\n                       [37m Programming by: [33m Darren Coles')
@@ -27173,6 +27293,7 @@ jLoop4:
 
   loggedOnUserKeys.baud:=onlineBaud
   loggedOnUserKeys.userFlags:=USER_NEWMSG
+
   aePuts('You want Screen Clears after Messages ? ')
   ch:=checkOnlineStatus()
   IF(ch<0) THEN RETURN ch
@@ -27185,6 +27306,8 @@ jLoop4:
     aePuts('No!\b\n\b\n')
   ENDIF
 
+  IF bgFileCheck AND (checkToolTypeExists(TOOLTYPE_NODE,node,'DEFAULT_BGFILECHECK')) THEN loggedOnUserKeys.userFlags:=loggedOnUserKeys.userFlags OR USER_BGFILECHECK
+  
   StringF(string,'Handle: \s\b\n',loggedOnUser.name)
   aePuts(string)
   StringF(string,'City, St.: \s\b\n',loggedOnUser.location)
@@ -28020,7 +28143,7 @@ PROC main() HANDLE
    'ACS.RELOGON','ACS.ULSTATS','ACS.XPR_RECEIVE','ACS.XPR_SEND','ACS.WILDCARDS','ACS.CONFERENCE_ACCOUNTING','ACS.PRI_MSGFILES','ACS.PUB_MSGFILES','ACS.FULL_EDIT','ACS.CONFFLAGS',
    'ACS.OLM','ACS.HIDE_FILES','ACS.SHOW_PAYMENTS','ACS.CREDIT_ACCESS','ACS.VOTE','ACS.MODIFY_VOTE','ACS.FILE_EXPANSION','ACS.EDIT_REAL_NAME','ACS.EDIT_USER_NAME','ACS.CENSORED',
    'ACS.ACCOUNT_VIEW','ACS.TRANSLATION','ACS.UNKNOWN','ACS.CREATE_CONFERENCE','ACS.LOCAL_DOWNLOADS','ACS.MAX_PAGES','ACS.OVERRIDE_DEFAULTS','ACS.HOLD_ACCESS','ACS.EDIT_EMAIL',
-   'ACS.READ_PRIV_EALL','ACS.READ_PRIV_ALL','ACS.OVERRIDE_TIMELIMIT','ACS.OVERRIDE_CHATLIMIT']
+   'ACS.READ_PRIV_EALL','ACS.READ_PRIV_ALL','ACS.OVERRIDE_TIMELIMIT','ACS.OVERRIDE_CHATLIMIT','ACS.NO_TIMEOUT']
 
 
   StringF(tempstr,'AmiExpress_Node.\d',node)

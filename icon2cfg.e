@@ -60,7 +60,7 @@ PROC main() HANDLE
 
     WriteF('Writing cfg file \s..',destFile)
     fh:=Open(destFile,MODE_NEWFILE)
-    IF fh>0
+    IF fh<>0
       tt:=dobj.tooltypes
       i:=0
       WHILE tt[i]<>0
@@ -98,7 +98,7 @@ PROC main() HANDLE
     fileBuf:=New(getFileSize(fn2)+1)     ->allow an extra char in case file does not end in LF
     IF fileBuf<>NIL
       fh:=Open(sourceFile,MODE_OLDFILE)
-      IF fh>0
+      IF fh<>0
         off:=0
         lineCount:=0
         WHILE(ReadStr(fh,fn2)<>-1) OR (StrLen(fn2)>0)

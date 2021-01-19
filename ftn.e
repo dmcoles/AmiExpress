@@ -218,7 +218,7 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
     ENDIF
     
     fh2:=Open(srcFilename,MODE_OLDFILE)
-    IF fh2>0
+    IF fh2<>0
     
       ReadStr(fh2,fromName)
       IF EstrLen(fromName)>35 THEN SetStr(fromName,35)
@@ -334,7 +334,7 @@ PROC createMessagesBundle(originNode,destNode,originNet,destNet,originZone,destZ
             
             IF fh=0
               fh:=Open(msgFilename,MODE_READWRITE)
-              IF fh>0 THEN Seek(fh,-2,OFFSET_END)
+              IF fh<>0 THEN Seek(fh,-2,OFFSET_END)
             ENDIF
             
             IF fh>0
@@ -529,7 +529,7 @@ PROC processPacketFile(filename:PTR TO CHAR) HANDLE
   StrCopy(lastConfId,'######')
   
   mf:=Open(filename,MODE_OLDFILE)
-  IF mf>0
+  IF mf<>0
     Seek(mf,58,OFFSET_BEGINNING)
     buf:=New(35)
     c:=0
@@ -583,7 +583,7 @@ PROC processPacketFile(filename:PTR TO CHAR) HANDLE
               ms.highMsgNum:=newMsgNum+1
               StringF(fname,'\sMailStats',msgBase)
               fh:=Open(fname,MODE_NEWFILE)
-              IF fh>0
+              IF fh<>0
                 Write(fh,ms,SIZEOF mailStat)
                 Close(fh)
                 fh:=0
@@ -604,7 +604,7 @@ PROC processPacketFile(filename:PTR TO CHAR) HANDLE
               StringF(fname,'\sMailStats',msgBase)
               IF fh>0 THEN Close(fh)
               fh:=Open(fname,MODE_READWRITE)
-              IF fh>0
+              IF fh<>0
                 IF Read(fh,ms,SIZEOF mailStat)=0
                   ms.lowestKey:=1
                   ms.lowestNotDel:=1
@@ -625,7 +625,7 @@ PROC processPacketFile(filename:PTR TO CHAR) HANDLE
               newMsgNum:=ms.highMsgNum-1
               StringF(fname,'\sHeaderFile',msgBase)
               fh:=Open(fname,MODE_READWRITE)
-              IF fh>0
+              IF fh<>0
                 Seek(fh,0,OFFSET_END)
               ELSE
                 WriteF('Error opening HeaderFile\n\n')
@@ -665,7 +665,7 @@ PROC processPacketFile(filename:PTR TO CHAR) HANDLE
             
             StringF(fname,'\s\d',msgBase,newMsgNum)
             fh2:=Open(fname,MODE_NEWFILE)
-            IF fh2>0
+            IF fh2<>0
               i:=n
               n:=0
               WHILE i<bufsz
@@ -738,7 +738,7 @@ PROC processPacketFile(filename:PTR TO CHAR) HANDLE
       ms.highMsgNum:=newMsgNum+1
       StringF(fname,'\sMailStats',msgBase)
       fh:=Open(fname,MODE_NEWFILE)
-      IF fh>0
+      IF fh<>0
         Write(fh,ms,SIZEOF mailStat)
         Close(fh)
         fh:=0
@@ -934,7 +934,7 @@ PROC main() HANDLE
   msgBasePaths:=NEW msgBasePaths.stringlist(100)
 
   fh:=Open(cfgFile,MODE_OLDFILE)
-  IF fh>0
+  IF fh<>0
 
     REPEAT
       ReadStr(fh,tempStr)

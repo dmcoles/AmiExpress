@@ -778,7 +778,7 @@ PROC getToolTypes(filename:PTR TO CHAR)
         fileBuf:=New(len+1)     ->allow an extra char in case file does not end in LF
 
         fh:=Open(fn,MODE_OLDFILE)
-        IF fh>0
+        IF fh<>0
           off:=0
           lineCount:=0
           WHILE(ReadStr(fh,fn)<>-1) OR (StrLen(fn)>0)
@@ -2274,7 +2274,7 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
         trans2.translationText:=New(fsize+4)     ->allocate some memory, two extra bytes for ending colon and space and some in case there is no newline
         
         fh:=Open(fullFileName,MODE_OLDFILE)
-        IF fh>0
+        IF fh<>0
           ->read file into workMem
           outtxt:=workMem
           
@@ -3121,7 +3121,7 @@ PROC runConfig(infile:PTR TO CHAR,outpath:PTR TO CHAR) HANDLE
   jsmn_init(p)
   
   fh:=Open(infile,MODE_OLDFILE)
-  IF fh<1
+  IF fh=0
     myrequest('Could not open json file.')
     RETURN
   ENDIF
@@ -3244,7 +3244,7 @@ PROC loadState()
 
   StringF(stateFile,'\sacp.dat',bbsPath)
   fh:=Open(stateFile,MODE_OLDFILE)
-  IF fh>0
+  IF fh<>0
     FOR i:=0 TO MAX_NODES-1
       FOR j:=0 TO 4
         ReadStr(fh,tempStr)
@@ -3297,7 +3297,7 @@ PROC saveState()
   
   StringF(stateFile,'\sacp.dat',bbsPath)
   fh:=Open(stateFile,MODE_NEWFILE)
-  IF fh>0
+  IF fh<>0
     FOR i:=0 TO MAX_NODES-1
       FOR j:=0 TO 4
         list:=ndUser[i]
@@ -3348,7 +3348,7 @@ PROC loadConnectionList(connList:PTR TO stdlist)
   DEF fh
   StringF(connFile,'\sacpConnections.dat',bbsPath)
   fh:=Open(connFile,MODE_OLDFILE)
-  IF fh>0
+  IF fh<>0
     WHILE (ReadStr(fh,tempStr)<>-1) OR (EstrLen(tempStr)>0)
       connItem:=NEW connItem
       connItem.ipAddr:=Val(tempStr)
@@ -3372,7 +3372,7 @@ PROC saveConnectionList(connList:PTR TO stdlist)
   DEF i,fh
   StringF(connFile,'\sacpConnections.dat',bbsPath)
   fh:=Open(connFile,MODE_NEWFILE)
-  IF fh>0
+  IF fh<>0
     FOR i:=0 TO connList.count()-1
       connItem:=connList.item(i)
      
