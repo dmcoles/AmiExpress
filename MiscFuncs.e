@@ -575,3 +575,24 @@ EXPORT PROC byteSignExtend(n)
   r:=n AND 255
   IF r>127 THEN r:=-(256-r)
 ENDPROC r
+
+EXPORT PROC parsePatternNoCase2(source:PTR TO CHAR,dest:PTR TO CHAR, len)
+  DEF s:PTR TO CHAR
+  DEF t[1]:STRING
+  DEF c,i,r
+  
+  c:=StrLen(source)
+  FOR i:=0 TO c-1
+    StrCopy(t,source+i,1)
+    IF InStr('()|~[]%',t)>=0 THEN c++
+  ENDFOR
+
+  s:=String(c)
+  FOR i:=0 TO StrLen(source)-1
+    StrCopy(t,source+i,1)
+    IF InStr('()|~[]%',t)>=0 THEN strAddChar(s,39)
+    StrAdd(s,t)
+  ENDFOR
+  r:=ParsePatternNoCase(s,dest,len)
+  Dispose(s)
+ENDPROC r

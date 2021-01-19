@@ -87,7 +87,7 @@ PROC main() HANDLE
 	jsmn_init(p)
   
   fh:=Open(infile,MODE_OLDFILE)
-  IF fh<1
+  IF fh=0
 		WriteF('Could not open json file\n\n')
     RETURN
   ENDIF
