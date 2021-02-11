@@ -415,10 +415,13 @@ DEF offHookFlag=TRUE
 
 DEF lastIAC=FALSE
 DEF lastIAC2=FALSE
+DEF nawsMode=0
 
 DEF nodeStart=0
 
 DEF cntr=0
+
+DEF userLineLen=0
 
 DEF fds=NIL:PTR TO LONG
 
@@ -1182,10 +1185,11 @@ PROC checkDoorMsg(mode)
         ENDIF
       CASE DT_LINELENGTH
         IF (servermsg.data)
-          StringF(tempstring,'\d',loggedOnUser.lineLength)
+          StringF(tempstring,'\d',userLineLen)
           strCpy(servermsg.string,tempstring,200)
         ELSE
           loggedOnUser.lineLength:=Val(servermsg.string)
+          userLineLen:=loggedOnUser.lineLength
         ENDIF
       CASE DT_DUMP
         dumpActiveUser(servermsg.string)
@@ -2217,25 +2221,57 @@ PROC readMayGetChar(msgport, checkTelnet, whereto)
       IF (lastIAC=0) AND (temp=255)
         lastIAC:=1
         temp:=-1
-      ELSEIF lastIAC=3
+      ELSEIF lastIAC=5
+        ->poosible end of SB stream
         IF temp=240
+          ->return to normal
           lastIAC:=0
+        ELSE
+          ->continue SB stream
+          lastIAC:=4
         ENDIF
         temp:=-1
+      ELSEIF lastIAC=4
+        ->SB stream ends with 255,240
+        IF nawsMode
+          IF nawsMode=2 THEN userLineLen:=(userLineLen AND $ff) OR (Shl(temp,8))
+          IF nawsMode=1
+            userLineLen:=((userLineLen AND $ff00) OR temp)-1
+            IF userLineLen<10 THEN userLineLen:=10
+          ENDIF
+          nawsMode--
+        ELSEIF (temp=255)
+          lastIAC:=5
+        ENDIF
+        temp:=-1
+      ELSEIF lastIAC=3
+        ->SB mode processing
+        IF temp=31
+          ->SB NAWS
+          nawsMode:=4
+        ENDIF
+        lastIAC:=4
+        temp:=-1
       ELSEIF lastIAC=1
+        ->IAC(255) should be followed by command code 250-255
         IF temp=255
+          ->IAC 255 sends code 255
           lastIAC:=0
         ELSEIF (temp=250)
+          ->IAC SB
           lastIAC:=3
           temp:=-1
         ELSEIF (temp>250) AND (temp<255)
+          ->IAC DO/DONT/WILL/WONT
           lastIAC:=2
           temp:=-1
         ELSE 
+          ->return to normal mode
           lastIAC:=0
           temp:=-1
         ENDIF
       ELSEIF lastIAC=2
+        ->ignore DO/DONT/WILL/WONT parameter code and then return to normal mode
         lastIAC:=0
         temp:=-1
       ELSE
@@ -2835,7 +2871,7 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:P
   
   SELECT MAX_CMD OF msgcmd
     CASE JH_REGISTER
-        msg.command:=IF loggedOnUser<>NIL THEN loggedOnUser.lineLength ELSE 29
+        msg.command:=IF loggedOnUser<>NIL THEN userLineLen ELSE 29
         nodesPtr[]:=nodesPtr[]+1
     CASE JH_WRITE
       IF (transfering=FALSE) AND (doorSilent=FALSE)
@@ -3109,10 +3145,11 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:P
       ENDIF
     CASE DT_LINELENGTH
       IF (msg.data)
-        StringF(tempstring,'\d',loggedOnUser.lineLength)
+        StringF(tempstring,'\d',userLineLen)
         strCpy(msg.string,tempstring,200)
       ELSE
         loggedOnUser.lineLength:=Val(msg.string)
+        userLineLen:=loggedOnUser.lineLength
       ENDIF
     CASE ACTIVE_NODES
         strCpy(msg.string,'                                ',ALL)
@@ -3860,7 +3897,7 @@ PROC runDoor(cmd,type,command,tooltype,params,resident,doorTrap,privcmd,pri=0,st
             ELSEIF(doormsg.data=8)
               doormsg.data:=80
             ELSEIF(doormsg.data=9)
-              doormsg.data:=loggedOnUser.lineLength
+              doormsg.data:=userLineLen
             ENDIF
           CASE PG_US
             IF(doormsg.data=1)
@@ -4280,7 +4317,6 @@ PROC loadMsgPointers(conf,msgBase)
   loggedOnUser.messagesPosted:=cb.messagesPosted
 
   IF(newSinceFlag) THEN cb.newSinceDate:=getSystemTime()
-  -> Last_EMail=it->CB.LastEMail
   lastMsgReadConf:=cb.confYM
   lastNewReadConf:=cb.confRead
 ENDPROC
@@ -4315,7 +4351,6 @@ PROC saveMsgPointers(conf,msgBase)
   cb.messagesPosted:=loggedOnUser.messagesPosted
 
   IF(newSinceFlag) THEN cb.newSinceDate:=getSystemTime()
-  -> Last_EMail=it->CB.LastEMail
 
   IF (lastMsgReadConf=0)
     StringF(debug,'error putting last message read conf \d: value \d',conf,lastMsgReadConf)
@@ -4558,7 +4593,7 @@ PROC checkForPause()
 
   IF loggedOnUser=NIL THEN RETURN RESULT_SUCCESS
   
-  linelen:=loggedOnUser.lineLength
+  linelen:=userLineLen
   IF linelen=0 THEN linelen:=22
 
   IF(nonStopDisplayFlag=FALSE) THEN lineCount++
@@ -7915,7 +7950,8 @@ PROC clearMsgPointers()
       cb.ratioType:=0
       cb.ratio:=0
       cb.messagesPosted:=0
-      cb.lastEMail:=0
+      cb.uploadTracking:=0
+      cb.unused:=0
       cb.confYM:=0
       cb.confRead:=0
       defaultmask:=0
@@ -9430,7 +9466,7 @@ PROC edit(allowFullscreen=TRUE,maxLineLen=75,updatePosted=FALSE)
       editor.editorMaxWidth:=76
       editor.editorFlags:=editor.editorFlags OR ED_ANSI_ALLOWED
       editor.editorTop:=1
-      editor.maxScrLength:=loggedOnUser.lineLength
+      editor.maxScrLength:=userLineLen
       editor.maxFileLength:=100
       IF((checkSecurity(ACS_PRI_MSGFILES) OR checkSecurity(ACS_PUB_MSGFILES)) AND fileattach) THEN editor.editorFlags:=editor.editorFlags OR ED_BATCH_UPLOAD
       IF(checkSecurity(ACS_ATTACH_FILES) AND fileattach) THEN editor.editorFlags:=editor.editorFlags OR ED_ATTACH_FILE
@@ -10584,6 +10620,35 @@ PROC checkIfNameAllowed(name)
   ENDWHILE
 ENDPROC RESULT_SUCCESS
 
+PROC updateLineLen()
+  DEF string[10]:STRING
+  IF loggedOnUser.lineLength=0
+    IF logonType<>LOGON_TYPE_REMOTE
+      IF window<>NIL
+        userLineLen:=Shr(window.height,3)-1
+      ELSE
+        userLineLen:=29
+      ENDIF
+    ELSE
+      userLineLen:=29
+      IF telnetSocket<>-1
+        StringF(string,'\c\c\c',255,253,31)    ->DO NAWS
+        binaryRaw:=TRUE
+        telnetSend(string,3)
+        binaryRaw:=FALSE
+      ENDIF
+    ENDIF
+  ELSE
+    IF telnetSocket<>-1
+      StringF(string,'\c\c\c',255,254,31)    ->DON'T NAWS
+      binaryRaw:=TRUE
+      telnetSend(string,3)
+      binaryRaw:=FALSE
+    ENDIF
+    userLineLen:=loggedOnUser.lineLength
+  ENDIF
+ENDPROC
+
 PROC numberOfLinesTest()
   DEF stat
   DEF str[20]:STRING
@@ -10592,16 +10657,17 @@ PROC numberOfLinesTest()
     StringF(str,' \d\b\n',stat)
     aePuts(str)
   ENDFOR
-  aePuts('\b\nEnter the number you see at the top of your screen: ')
+  aePuts('\b\nEnter the number you see at the top of your screen (or 0 for Auto): ')
   stat:=lineInput('','',3,INPUT_TIMEOUT,str)
   IF(stat<0) THEN RETURN stat
   IF(StrLen(str)=0) THEN RETURN RESULT_SUCCESS
   stat:=Val(str)
 
-  IF((stat < 1) OR (stat > 255)) THEN RETURN RESULT_FAILURE
+  IF((stat < 0) OR (stat > 255)) THEN RETURN RESULT_FAILURE
   loggedOnUser.lineLength:=stat
+  updateLineLen()
+  
 ENDPROC RESULT_SUCCESS
-
 
 PROC chooseComputer()
   DEF stat
@@ -15307,10 +15373,9 @@ PROC zmdupecheck(fname:PTR TO CHAR)
 
   IF dup
     skipdFiles.add(FilePart(fname))
+  ELSE
+    sendMasterUpload(FilePart(fname))
   ENDIF
-  
-  sendMasterUpload(FilePart(fname))
-
 ENDPROC dup
 
 PROC zmflush(buffer,size) IS serPuts(buffer,size,TRUE,TRUE)
@@ -16986,6 +17051,31 @@ PROC displaySysopULStats()
   DEF i,num,num2
   DEF str[100]:STRING,str2[100]:STRING
   DEF fp
+  DEF cb:PTR TO confBase
+
+  IF(checkSecurity(ACS_USER_ULSTATS))
+    FOR i:=1 TO cmds.numConf
+      cb:=confBases.item(getConfIndex(i,1))
+      IF (checkConfAccess(i))
+        num:=0
+        StringF(str,'\sNumULs',getConfLocation(i))
+        IF((fp:=Open(str,MODE_OLDFILE)))<>0
+          ReadStr(fp,str2)
+          Close(fp)
+          num:=Val(str2) AND 65535
+        ENDIF
+        num2:=num-(cb.uploadTracking AND 65535)
+        IF num2<0 THEN num2:=num2+65536
+        cb.uploadTracking:=num
+        IF(num2<>0)
+          StringF(str2,'\b\n\s has \d new file(s) uploaded.\b\n',getConfName(i),num2)
+          aePuts(str2)
+        ENDIF
+      ENDIF
+    ENDFOR
+    
+  ENDIF
+
 
   IF(checkSecurity(ACS_ULSTATS))=FALSE THEN RETURN
 
@@ -17024,6 +17114,27 @@ PROC sysopULStats(holdflag)
   DEF num
   DEF str[256]:STRING,str2[256]:STRING
   DEF ff
+  DEF cb:PTR TO confBase
+
+  IF holdflag=FALSE
+    StringF(str,'\sNumULs',currentConfDir)
+    num:=0
+    IF((ff:=Open(str,MODE_OLDFILE)))<>0
+      ReadStr(ff,str2)
+      num:=Val(str2) AND 65535
+      Close(ff)
+    ENDIF
+    num:=(num+1) AND 65535
+    cb:=confBases.item(getConfIndex(currentConf,1))
+    cb.uploadTracking:=num
+
+    ff:=Open(str,MODE_NEWFILE)
+    IF(ff<>0)
+      StringF(str,'\d\n',num)
+      fileWrite(ff,str)
+      Close(ff)
+    ENDIF
+  ENDIF
 
   StringF(str,'\sSysopStats/NumULs_\d',cmds.bbsLoc,currentConf)
   IF(holdflag) THEN StrAdd(str,'HOLD')
@@ -20390,7 +20501,8 @@ PROC deleteConfAccess(slot)
         t.confYM:=0
         t.bytesDownload:=0
         t.bytesUpload:=0
-        t.lastEMail:=0
+        t.uploadTracking:=0
+        t.unused:=0
         t.dailyBytesDld:=0
         t.upload:=0
         t.downloads:=0
@@ -23592,7 +23704,8 @@ PROC internalCommandW()
       aePuts(str)
     ENDIF
 
-    StringF(str,'[34m[[0m  7[34m][35m LINES PER SCREEN........ [33m\d[0m\b\n',loggedOnUser.lineLength)
+    IF loggedOnUser.lineLength=0 THEN StrCopy(str2,'Auto') ELSE StringF(str2,'\d',loggedOnUser.lineLength)
+    StringF(str,'[34m[[0m  7[34m][35m LINES PER SCREEN........ [33m\s[0m\b\n',str2)
     aePuts(str)
 
     temp:=computerTypes.count()
@@ -25779,7 +25892,7 @@ PROC flagPause(count)
 
   IF(nonStopDisplayFlag=FALSE) THEN lineCount:=lineCount+count
 
-  IF((nonStopDisplayFlag=FALSE) AND (lineCount>=(IF loggedOnUser.lineLength THEN loggedOnUser.lineLength ELSE 22)))
+  IF((nonStopDisplayFlag=FALSE) AND (lineCount>=userLineLen))
     lineCount:=0;
     WHILE TRUE
       aePuts('[32m([33mPause[32m)[34m...[32m([33mf[32m)[36mlags, More[32m([33mY[32m/[33mn[32m/[33mns[32m)[0m? ')
@@ -26218,6 +26331,7 @@ PROC processLoggedOnUser()
     ENDIF
     updateTimeUsed()
 
+    updateLineLen()
     pagesAllowed:=readToolTypeInt(TOOLTYPE_ACCESS,acsLevel,'ACS.MAX_PAGES')
     chatF:=0
     currentConf:=0
@@ -27179,6 +27293,7 @@ ENDPROC stat
 PROC doNewUser()
   DEF ch,i,stat
   DEF string[255]:STRING
+  DEF str2[10]:STRING
 
 jLoop1:
   aePuts('\b\n')
@@ -27316,7 +27431,9 @@ jLoop4:
   aePuts(string)
   StringF(string,'E-Mail   : \s\b\n',loggedOnUserMisc.eMail)
   aePuts(string)
-  StringF(string,'Num Lines: \d\b\n',loggedOnUser.lineLength)
+  
+  IF loggedOnUser.lineLength=0 THEN StrCopy(str2,'Auto') ELSE StringF(str2,'\d',loggedOnUser.lineLength) 
+  StringF(string,'Num Lines: \s\b\n',str2)
   aePuts(string)
   StringF(string,'PassWord : \s\b\n','ENCRYPTED')
   aePuts(string)
@@ -28143,7 +28260,7 @@ PROC main() HANDLE
    'ACS.RELOGON','ACS.ULSTATS','ACS.XPR_RECEIVE','ACS.XPR_SEND','ACS.WILDCARDS','ACS.CONFERENCE_ACCOUNTING','ACS.PRI_MSGFILES','ACS.PUB_MSGFILES','ACS.FULL_EDIT','ACS.CONFFLAGS',
    'ACS.OLM','ACS.HIDE_FILES','ACS.SHOW_PAYMENTS','ACS.CREDIT_ACCESS','ACS.VOTE','ACS.MODIFY_VOTE','ACS.FILE_EXPANSION','ACS.EDIT_REAL_NAME','ACS.EDIT_USER_NAME','ACS.CENSORED',
    'ACS.ACCOUNT_VIEW','ACS.TRANSLATION','ACS.UNKNOWN','ACS.CREATE_CONFERENCE','ACS.LOCAL_DOWNLOADS','ACS.MAX_PAGES','ACS.OVERRIDE_DEFAULTS','ACS.HOLD_ACCESS','ACS.EDIT_EMAIL',
-   'ACS.READ_PRIV_EALL','ACS.READ_PRIV_ALL','ACS.OVERRIDE_TIMELIMIT','ACS.OVERRIDE_CHATLIMIT','ACS.NO_TIMEOUT']
+   'ACS.READ_PRIV_EALL','ACS.READ_PRIV_ALL','ACS.OVERRIDE_TIMELIMIT','ACS.OVERRIDE_CHATLIMIT','ACS.NO_TIMEOUT','ACS.USER_ULSTATS']
 
 
   StringF(tempstr,'AmiExpress_Node.\d',node)

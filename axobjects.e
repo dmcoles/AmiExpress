@@ -137,7 +137,8 @@ EXPORT OBJECT confBase
   confYM: LONG
   bytesDownload: LONG
   bytesUpload: LONG
-  lastEMail: LONG
+  uploadTracking: INT
+  unused: INT
   dailyBytesDld: LONG
   upload: INT
   downloads: INT
