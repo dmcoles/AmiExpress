@@ -103,7 +103,7 @@ DEF rexxmp: PTR TO mp
 DEF serverRP=0:PTR TO mp
 DEF currentStat=0
 DEF rexxPortName[20]:STRING
-DEF resPortName[10]:STRING
+DEF resPortName[12]:STRING
 DEF servercmd=-1
 DEF serverin
 
