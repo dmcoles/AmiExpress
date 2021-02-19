@@ -4664,7 +4664,7 @@ PROC blankLines(n)
   ENDWHILE
 ENDPROC
 
-PROC processMciCmd(mcidata,len,pos)
+PROC processMciCmd(mcidata,len,pos,outdata = NIL)
   DEF cmd[100]:STRING
   DEF num[4]:STRING
   DEF tempstr[255]:STRING
@@ -4717,260 +4717,334 @@ PROC processMciCmd(mcidata,len,pos)
     ELSEIF (StrCmp(cmd,'N',ALL))
       pos:=pos+1+t
       StrCopy(tempstr,loggedOnUser.name)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'UL',ALL))
       pos:=pos+2+t
       StrCopy(tempstr,loggedOnUser.location)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'P',ALL))
       ->do nothing with password
       pos:=pos+1+t
     ELSEIF (StrCmp(cmd,'#',ALL))
       pos:=pos+1+t
       StrCopy(tempstr,loggedOnUser.phoneNumber)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'TC',ALL))
       pos:=pos+2+t
       StringF(tempstr,'\d',loggedOnUser.timesCalled AND $FFFF)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'TT',ALL))
       pos:=pos+2+t
       StringF(tempstr,'\d',getTodaysCalls(loggedOnUser,loggedOnUserKeys))
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'LC',ALL))
       pos:=pos+2+t
       formatLongDateTime(loggedOnUser.timeLastOn,tempstr)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'M',ALL))
       pos:=pos+1+t
       StringF(tempstr,'\d',loggedOnUser.messagesPosted AND $FFFF)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'A',ALL))
       pos:=pos+1+t
       StringF(tempstr,'\d',loggedOnUser.secStatus)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'S',ALL))
       pos:=pos+1+t
       StringF(tempstr,'\d',loggedOnUser.slotNumber)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'CA',ALL))
       pos:=pos+2+t
       StrCopy(tempstr,loggedOnUser.conferenceAccess)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'BR',ALL))
       pos:=pos+2+t
       StringF(tempstr,'\d',onlineBaud)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'HW',ALL))
       pos:=pos+2+t
       StrCopy(tempstr,computerTypes.item(loggedOnUser.secBulletin))
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'TL',ALL))
       pos:=pos+2+t
       StringF(tempstr,'\d',Div(loggedOnUser.timeLimit,60))
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'TR',ALL))
       pos:=pos+2+t
       StringF(tempstr,'\d',Div(timeLimit,60))
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'UB',ALL))
       pos:=pos+2+t
       formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstr)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'DB',ALL))
       pos:=pos+2+t
       formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstr)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'SU',ALL))
       pos:=pos+2+t
       calcSizeText(loggedOnUserMisc.uploadBytesBCD,tempstr)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'SD',ALL))
       pos:=pos+2+t
       calcSizeText(loggedOnUserMisc.downloadBytesBCD,tempstr)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'FU',ALL))
       pos:=pos+2+t
       StringF(tempstr,'\d',loggedOnUser.uploads AND $FFFF)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'FD',ALL))
       pos:=pos+2+t
       StringF(tempstr,'\d',loggedOnUser.downloads AND $FFFF)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'BD',ALL))
       pos:=pos+2+t
       StringF(tempstr,'\d',loggedOnUser.dailyBytesLimit)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'LG',ALL)) OR (StrCmp(cmd,'ON',ALL))
       pos:=pos+2+t
       StringF(tempstr,'\d',node)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'IN',ALL))
       pos:=pos+2+t
       StrCopy(tempstr,loggedOnUserMisc.internetName)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'RN',ALL))
       pos:=pos+2+t
       StrCopy(tempstr,loggedOnUserMisc.realName)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'OD',ALL))
       pos:=pos+2+t
       formatLongDate(logonTime,tempstr)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'OT',ALL))
       pos:=pos+2+t
       formatLongTime(logonTime,tempstr)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'SC',ALL))
       pos:=pos+2+t
       StringF(tempstr,'\d',getCallerCount())
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'VE',ALL))
-      aePuts2(expressVer,maxLen)
+      IF outdata=NIL THEN aePuts2(expressVer,maxLen) ELSE StrAdd(outdata,expressVer,maxLen)
       pos:=pos+2+t
     ELSEIF (StrCmp(cmd,'VD',ALL))
-      aePuts2(expressDate,maxLen)
+      IF outdata=NIL THEN aePuts2(expressDate,maxLen) ELSE StrAdd(outdata,expressDate,maxLen)
       pos:=pos+2+t
+    ELSEIF (StrCmp(cmd,'ND',ALL))
+      StringF(tempstr,'\d',node)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)    
+      pos:=pos+2+t     
+    ELSEIF (StrCmp(cmd,'CF',ALL))
+      StringF(tempstr,'\d',relConfNum)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)    
+      pos:=pos+2+t     
+    ELSEIF (StrCmp(cmd,'CN',ALL))
+      IF outdata=NIL THEN aePuts2(currentConfName,maxLen) ELSE StrAdd(outdata,currentConfName,maxLen)    
+      pos:=pos+2+t     
+    ELSEIF (StrCmp(cmd,'MB',ALL))
+      StringF(tempstr,'\d',currentMsgBase)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)    
+      pos:=pos+2+t     
+    ELSEIF (StrCmp(cmd,'MN',ALL))
+      getMsgBaseName(currentConf,currentMsgBase,tempstr)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)    
+      pos:=pos+2+t     
     ELSEIF (StrCmp(cmd,'AK',ALL))
       pos:=pos+2+t
-      displayKeys()
+      IF outdata=NIL THEN displayKeys()
     ELSEIF (StrCmp(cmd,'CT',ALL))
       pos:=pos+2+t
       formatLongTime(logonTime,tempstr)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'DT',ALL))
       pos:=pos+2+t
       formatLongDate(getSystemTime(),tempstr)
-      aePuts2(tempstr,maxLen)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'FF',ALL))
       pos:=pos+2+t
-      showFlaggedFiles(maxLen)
+      IF outdata=NIL THEN showFlaggedFiles(maxLen)
     ELSEIF (StrCmp(cmd,'FC',ALL))
       pos:=pos+2+t
       StringF(tempstr,'\d',flagFilesList.count())
-      aePuts(tempstr)
+      IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'FL',ALL))
       pos:=pos+2+t
-      FOR i:=0 TO flagFilesList.count()-1
-        item:=flagFilesList.item(i)
-        StringF(tempstr,'                     \s\b\n',item.fileName)
-        aePuts(tempstr)
-      ENDFOR
+      IF outdata=NIL
+        FOR i:=0 TO flagFilesList.count()-1
+          item:=flagFilesList.item(i)
+          StringF(tempstr,'                     \s\b\n',item.fileName)
+          aePuts(tempstr)
+        ENDFOR
+      ENDIF
     ELSEIF (maxLen=-1) AND (StrCmp(cmd,'SP',ALL))
       ->PAUSE
       pos:=pos+2+t
-      res:=doPause()
-      IF res<>RESULT_SUCCESS THEN RETURN res
+      IF outdata=NIL 
+        res:=doPause()
+        IF res<>RESULT_SUCCESS THEN RETURN res
+      ENDIF
     ELSEIF (maxLen=-1) AND (StrCmp(cmd,'CR',ALL))
       ->PAUSE
       pos:=pos+2+t
-      res:=readChar(INPUT_TIMEOUT)
-      IF res<>RESULT_SUCCESS THEN RETURN res
+      IF outdata=NIL 
+        res:=readChar(INPUT_TIMEOUT)
+        IF res<>RESULT_SUCCESS THEN RETURN res
+      ENDIF
     ELSEIF StrCmp(cmd,'f',ALL)
-      sendCLS()
+      IF outdata=NIL THEN sendCLS()
       pos:=pos+1+t
     ELSEIF StrCmp(cmd,'w',ALL)
-      IF maxLen<0 THEN maxLen:=1
-      Delay(maxLen)
+      IF outdata=NIL
+        IF maxLen<0 THEN maxLen:=1
+        Delay(maxLen)
+      ENDIF
       pos:=pos+1+t
     ELSEIF StrCmp(cmd,'x',1)
-      maxLen:=Val(mcidata+pos+1)
-      IF maxLen>=0
-        StringF(tempstr,'[;\dH',maxLen)
-        aePuts(tempstr)
+      IF outdata=NIL
+        maxLen:=Val(mcidata+pos+1)
+        IF maxLen>=0
+          StringF(tempstr,'[;\dH',maxLen)
+          aePuts(tempstr)
+        ENDIF
       ENDIF
       pos:=pos+EstrLen(cmd)+t
     ELSEIF StrCmp(cmd,'y',1)
-      maxLen:=Val(mcidata+pos+1)
-      IF maxLen>=0
-        StringF(tempstr,'[\d;H',maxLen)
-        aePuts(tempstr)
+      IF outdata=NIL
+        maxLen:=Val(mcidata+pos+1)
+        IF maxLen>=0
+          StringF(tempstr,'[\d;H',maxLen)
+          aePuts(tempstr)
+        ENDIF
       ENDIF
       pos:=pos+EstrLen(cmd)+t
     ELSEIF StrCmp(cmd,'SS_',3)
       ->display another file
       pos:=pos+3
-      nval:=EstrLen(cmd)-3
-      midStr2(cmd,mcidata,pos,nval)
-      displayFile(cmd)
+      IF outdata=NIL
+        nval:=EstrLen(cmd)-3
+        midStr2(cmd,mcidata,pos,nval)
+        displayFile(cmd)
+      ENDIF
       pos:=pos+EstrLen(cmd)+t
     ELSEIF StrCmp(cmd,'SX_',3)
       ->sequential file display
       pos:=pos+3
-      nval:=EstrLen(cmd)-3
-      midStr2(cmd,mcidata,pos,nval)
-      nval:=readIntFromFile(cmd)
-      IF nval<>-1
-        nval++
-        StrCopy(tempstr,cmd,FilePart(cmd)-cmd)
-        StringF(filename,'\s\z\r\d[3].\s',tempstr,nval,FilePart(cmd))
-        IF findSecurityScreen(filename,screenfilename)
-          displayFile(screenfilename)
-        ELSE
-          nval:=-1
+      IF outdata=NIL
+        nval:=EstrLen(cmd)-3
+        midStr2(cmd,mcidata,pos,nval)
+        nval:=readIntFromFile(cmd)
+        IF nval<>-1
+          nval++
+          StrCopy(tempstr,cmd,FilePart(cmd)-cmd)
+          StringF(filename,'\s\z\r\d[3].\s',tempstr,nval,FilePart(cmd))
+          IF findSecurityScreen(filename,screenfilename)
+            displayFile(screenfilename)
+          ELSE
+            nval:=-1
+          ENDIF
         ENDIF
-      ENDIF
 
-      IF nval=-1
-        nval:=1
-        StringF(filename,'\s\z\r\d[3].\s',tempstr,nval,FilePart(cmd))
-        IF findSecurityScreen(filename,screenfilename)
-          displayFile(screenfilename)
+        IF nval=-1
+          nval:=1
+          StringF(filename,'\s\z\r\d[3].\s',tempstr,nval,FilePart(cmd))
+          IF findSecurityScreen(filename,screenfilename)
+            displayFile(screenfilename)
+          ENDIF
         ENDIF
+        writeIntToFile(cmd,nval)
       ENDIF
-      writeIntToFile(cmd,nval)
       pos:=pos+EstrLen(cmd)+t
     ELSEIF StrCmp(cmd,'SR_',3)
       ->display random file
       pos:=pos+3
-      nval:=Val(num)
-      StringF(tempstr,'random \d',nval)
-      debugLog(LOG_DEBUG,tempstr)
-      nval:=Rnd(nval)
-      StringF(tempstr,'random result \d',nval)
-      debugLog(LOG_DEBUG,tempstr)
-      maxLen:=EstrLen(cmd)-3
-      -> get full filename
-      midStr2(cmd,mcidata,pos,maxLen)
-      StrCopy(tempstr,cmd,FilePart(cmd)-cmd)
-      StringF(filename,'\z\r\d[3].\s',nval+1,FilePart(cmd),screenfilename)
-      StrAdd(tempstr, filename)
+      IF outdata=NIL
+        nval:=Val(num)
+        StringF(tempstr,'random \d',nval)
+        debugLog(LOG_DEBUG,tempstr)
+        nval:=Rnd(nval)
+        StringF(tempstr,'random result \d',nval)
+        debugLog(LOG_DEBUG,tempstr)
+        maxLen:=EstrLen(cmd)-3
+        -> get full filename
+        midStr2(cmd,mcidata,pos,maxLen)
+        StrCopy(tempstr,cmd,FilePart(cmd)-cmd)
+        StringF(filename,'\z\r\d[3].\s',nval+1,FilePart(cmd),screenfilename)
+        StrAdd(tempstr, filename)
 
-      findSecurityScreen(tempstr,screenfilename)
+        findSecurityScreen(tempstr,screenfilename)
 
-      displayFile(screenfilename)
+        displayFile(screenfilename)
+      ENDIF
       pos:=pos+EstrLen(cmd)+t
     ELSEIF StrCmp(cmd,'CC_',3)
       ->run a command
       pos:=pos+3
-      nval:=EstrLen(cmd)-3
-      midStr2(cmd,mcidata,pos,nval)
-      processSysCommand(cmd,TRUE)
+      IF outdata=NIL
+        nval:=EstrLen(cmd)-3
+        midStr2(cmd,mcidata,pos,nval)
+        processSysCommand(cmd,TRUE)
+      ENDIF
       pos:=pos+EstrLen(cmd)+t
     ELSEIF StrCmp(cmd,'CR_',3)
       ->promted keypress
       pos:=pos+3
-      nval:=EstrLen(cmd)-3
-      midStr2(cmd,mcidata,pos,nval)
-      aePuts(cmd)
-      res:=readChar(INPUT_TIMEOUT)
-      IF res<>RESULT_SUCCESS THEN RETURN res
+      IF outdata=NIL
+        nval:=EstrLen(cmd)-3
+        midStr2(cmd,mcidata,pos,nval)
+        aePuts(cmd)
+        res:=readChar(INPUT_TIMEOUT)
+        IF res<>RESULT_SUCCESS THEN RETURN res
+      ENDIF
       pos:=pos+nval+t
     ELSEIF StrCmp(cmd,'q',ALL)
       pos:=pos+1+t
-      aePuts('[0m')
+      IF outdata=NIL THEN aePuts('[0m')
     ELSEIF StrCmp(cmd,'h',ALL)
       pos:=pos+1+t
-      sendBackspace()
+      IF outdata=NIL THEN sendBackspace()
     ELSEIF StrCmp(cmd,'CL',ALL)
       pos:=pos+2+t
-      num:=0
-      FOR nval:=1 TO cmds.numConf
-        IF((checkConfAccess(nval)=TRUE) OR (sopt.toggles[TOGGLES_CONFRELATIVE]=FALSE))
-          num++
-          StringF(tempstr,'                     [32m\d[3][33m) [35m',num)
+      IF outdata=NIL
+        num:=0
+        FOR nval:=1 TO cmds.numConf
+          IF((checkConfAccess(nval)=TRUE) OR (sopt.toggles[TOGGLES_CONFRELATIVE]=FALSE))
+            num++
+            StringF(tempstr,'                     [32m\d[3][33m) [35m',num)
+            aePuts(tempstr)
+            getConfName(nval,tempstr)
+            res:=StrLen(tempstr)
+            WHILE(res<30)
+              aePuts(' ')
+              res++
+            ENDWHILE
+            StringF(tempstr2,'[36m\s[0m\b\n',tempstr)
+            aePuts(tempstr2)
+          ENDIF
+        ENDFOR
+      ENDIF
+    ELSEIF StrCmp(cmd,'CD',ALL)
+      pos:=pos+2+t
+      IF outdata=NIL
+        num:=0
+        FOR nval:=1 TO cmds.numConf
+          IF((checkConfAccess(nval)=TRUE) OR (sopt.toggles[TOGGLES_CONFRELATIVE]=FALSE))
+            num++
+            StringF(tempstr,'   [34m[[0m\r\z\d[3][34m] [0m\l\s[30]',num,getConfName(nval))
+            aePuts(tempstr)
+            IF (num AND 1)=0 THEN aePuts('\b\n')
+          ENDIF
+        ENDFOR
+      ENDIF
+    ELSEIF StrCmp(cmd,'ML',ALL)
+      pos:=pos+2+t
+      IF outdata=NIL
+        num:=getConfMsgBaseCount(currentConf)
+        FOR nval:=1 TO num
+          StringF(tempstr,'                     [32m\d[3][33m) [35m',nval)
           aePuts(tempstr)
-          getConfName(nval,tempstr)
+          getMsgBaseName(currentConf,nval,tempstr)
+          IF (num=1) AND (StrLen(tempstr)=0) THEN StrCopy(tempstr,'Default')
           res:=StrLen(tempstr)
           WHILE(res<30)
             aePuts(' ')
@@ -4978,134 +5052,111 @@ PROC processMciCmd(mcidata,len,pos)
           ENDWHILE
           StringF(tempstr2,'[36m\s[0m\b\n',tempstr)
           aePuts(tempstr2)
-        ENDIF
-      ENDFOR
-    ELSEIF StrCmp(cmd,'CD',ALL)
-      pos:=pos+2+t
-      num:=0
-      FOR nval:=1 TO cmds.numConf
-        IF((checkConfAccess(nval)=TRUE) OR (sopt.toggles[TOGGLES_CONFRELATIVE]=FALSE))
-          num++
-          StringF(tempstr,'   [34m[[0m\r\z\d[3][34m] [0m\l\s[30]',num,getConfName(nval))
-          aePuts(tempstr)
-          IF (num AND 1)=0 THEN aePuts('\b\n')
-        ENDIF
-      ENDFOR
-    ELSEIF StrCmp(cmd,'ML',ALL)
-      pos:=pos+2+t
-      num:=getConfMsgBaseCount(currentConf)
-      FOR nval:=1 TO num
-        StringF(tempstr,'                     [32m\d[3][33m) [35m',nval)
-        aePuts(tempstr)
-        getMsgBaseName(currentConf,nval,tempstr)
-        IF (num=1) AND (StrLen(tempstr)=0) THEN StrCopy(tempstr,'Default')
-        res:=StrLen(tempstr)
-        WHILE(res<30)
-          aePuts(' ')
-          res++
-        ENDWHILE
-        StringF(tempstr2,'[36m\s[0m\b\n',tempstr)
-        aePuts(tempstr2)
-      ENDFOR
+        ENDFOR
+      ENDIF
     ELSEIF StrCmp(cmd,'MD',ALL)
       pos:=pos+2+t
-      num:=getConfMsgBaseCount(currentConf)
-      FOR nval:=1 TO num
-        getMsgBaseName(currentConf,nval,tempstr2)
-        IF (num=1) AND (StrLen(tempstr2)=0) THEN StrCopy(tempstr2,'Default')
-        StringF(tempstr,'   [34m[[0m\r\z\d[3][34m] [0m\l\s[30]',nval,tempstr2)
-        aePuts(tempstr)
-        IF (nval AND 1)=0 THEN aePuts('\b\n')
-      ENDFOR
+      IF outdata=NIL
+        num:=getConfMsgBaseCount(currentConf)
+        FOR nval:=1 TO num
+          getMsgBaseName(currentConf,nval,tempstr2)
+          IF (num=1) AND (StrLen(tempstr2)=0) THEN StrCopy(tempstr2,'Default')
+          StringF(tempstr,'   [34m[[0m\r\z\d[3][34m] [0m\l\s[30]',nval,tempstr2)
+          aePuts(tempstr)
+          IF (nval AND 1)=0 THEN aePuts('\b\n')
+        ENDFOR
+      ENDIF
     ELSEIF StrCmp(cmd,'c0',ALL)
-      aePuts('[30m')
+      IF outdata=NIL THEN aePuts('[30m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'c1',ALL)
-      aePuts('[31m')
+      IF outdata=NIL THEN aePuts('[31m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'c2',ALL)
-      aePuts('[32m')
+      IF outdata=NIL THEN aePuts('[32m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'c3',ALL)
-      aePuts('[33m')
+      IF outdata=NIL THEN aePuts('[33m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'c4',ALL)
-      aePuts('[34m')
+      IF outdata=NIL THEN aePuts('[34m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'c5',ALL)
-      aePuts('[35m')
+      IF outdata=NIL THEN aePuts('[35m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'c6',ALL)
-      aePuts('[36m')
+      IF outdata=NIL THEN aePuts('[36m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'c7',ALL)
-      aePuts('[37m')
+      IF outdata=NIL THEN aePuts('[37m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'b0',ALL) OR StrCmp(cmd,'z0',ALL)
-      aePuts('[40m')
+      IF outdata=NIL THEN aePuts('[40m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'b1',ALL) OR StrCmp(cmd,'z1',ALL)
-      aePuts('[41m')
+      IF outdata=NIL THEN aePuts('[41m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'b2',ALL) OR StrCmp(cmd,'z2',ALL)
-      aePuts('[42m')
+      IF outdata=NIL THEN aePuts('[42m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'b3',ALL) OR StrCmp(cmd,'z3',ALL)
-      aePuts('[43m')
+      IF outdata=NIL THEN aePuts('[43m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'b4',ALL) OR StrCmp(cmd,'z4',ALL)
-      aePuts('[44m')
+      IF outdata=NIL THEN aePuts('[44m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'b5',ALL) OR StrCmp(cmd,'z5',ALL)
-      aePuts('[45m')
+      IF outdata=NIL THEN aePuts('[45m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'b6',ALL) OR StrCmp(cmd,'z6',ALL)
-      aePuts('[46m')
+      IF outdata=NIL THEN aePuts('[46m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'b7',ALL) OR StrCmp(cmd,'z7',ALL)
-      aePuts('[47m')
+      IF outdata=NIL THEN aePuts('[47m')
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'n1',ALL)
-      blankLines(1)
+      IF outdata=NIL THEN blankLines(1)
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'n2',ALL)
-      blankLines(2)
+      IF outdata=NIL THEN blankLines(2)
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'n3',ALL)
-      blankLines(3)
+      IF outdata=NIL THEN blankLines(3)
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'n4',ALL)
-      blankLines(4)
+      IF outdata=NIL THEN blankLines(4)
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'n5',ALL)
-      blankLines(5)
+      IF outdata=NIL THEN blankLines(5)
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'n6',ALL)
-      blankLines(6)
+      IF outdata=NIL THEN blankLines(6)
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'n7',ALL)
-      blankLines(7)
+      IF outdata=NIL THEN blankLines(7)
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'n8',ALL)
-      blankLines(8)
+      IF outdata=NIL THEN blankLines(8)
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'n9',ALL)
-      blankLines(9)
+      IF outdata=NIL THEN blankLines(9)
       pos:=pos+2+t
     ELSEIF StrCmp(cmd,'SMO',3)
-      slowmo:=1
-      slowmoCount:=slowmoCount+(60*slowmo)      
       pos:=pos+3
-      nval:=EstrLen(cmd)-3
-      midStr2(cmd,mcidata,pos,nval)
-      slowmo:=Val(cmd)
-      IF (slowmo<1) OR (slowmo>5) THEN slowmo:=1
+      IF outdata=NIL
+        slowmo:=1
+        slowmoCount:=slowmoCount+(60*slowmo)      
+        nval:=EstrLen(cmd)-3
+        midStr2(cmd,mcidata,pos,nval)
+        slowmo:=Val(cmd)
+        IF (slowmo<1) OR (slowmo>5) THEN slowmo:=1
+      ENDIF
       pos:=pos+nval+t
     ELSEIF StrCmp(cmd,'SMC',ALL)
-      slowmo:=0
+      IF outdata=NIL THEN slowmo:=0
       pos:=pos+3+t
     ELSEIF StrCmp(cmd,'NS',ALL)
-      nonStopDisplayFlag:=TRUE
+      IF outdata=NIL THEN nonStopDisplayFlag:=TRUE
       pos:=pos+2+t
     ELSEIF (StrCmp(cmd,'D',1))
       ->this needs to be near the end otherwise it might pick up other commands starting with D
@@ -5114,185 +5165,33 @@ PROC processMciCmd(mcidata,len,pos)
       StrCopy(mciterminator,cmd)
       pos:=pos+StrLen(cmd)
     ELSEIF StrCmp(cmd,'~',1)
-      aePuts(cmd)
+      IF outdata=NIL THEN aePuts(cmd) ELSE StrAdd(outdata,cmd)
       pos:=pos+EstrLen(cmd)+t
     ELSEIF StrLen(cmd)=0
       pos:=pos+t
     ELSE
       ->unknown mci
-      aePuts('~')
-      aePuts(num)
+      IF outdata=NIL
+        aePuts('~')
+        aePuts(num)
+      ELSE
+        StrAdd(outdata,'~')
+        StrAdd(outdata,num)
+      ENDIF
     ENDIF
   ENDIF
 
 ENDPROC pos
 
-PROC processMciCmd2(mcidata,len,pos,outdata)
-  DEF cmd[100]:STRING
-  DEF num[4]:STRING
-  DEF tempstr[255]:STRING
-  DEF nval,maxLen,t=0
-
-  IF (mcidata[pos]="~")
-    pos:=pos+1
-
-    WHILE (EstrLen(num)<3) AND (pos<len) AND (mcidata[pos]>="0") AND (mcidata[pos]<="9")
-      StrAdd(num,' ')
-      num[EstrLen(num)-1]:=mcidata[pos]
-      pos:=pos+1
-    ENDWHILE
-
-    nval:=InStr(mcidata,' ',pos)
-    IF nval<0 THEN nval:=len
-    maxLen:=InStr(mcidata,mciterminator,pos)
-    IF maxLen<0 THEN maxLen:=len ELSE t:=1
-    IF nval<maxLen
-      maxLen:=nval
-      t:=0
-    ENDIF
-
-    midStr2(cmd,mcidata,pos,maxLen-pos)
-    IF EstrLen(num)>0 THEN maxLen:=Val(num) ELSE maxLen:=-1
-
-    IF (StrCmp(cmd,'',ALL))
-      pos:=pos+t
-    ELSEIF (StrCmp(cmd,'N',ALL))
-      pos:=pos+1+t
-      StrCopy(tempstr,loggedOnUser.name)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'UL',ALL))
-      pos:=pos+2+t
-      StrCopy(tempstr,loggedOnUser.location)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'P',ALL))
-      ->do nothing with password
-      pos:=pos+1+t
-    ELSEIF (StrCmp(cmd,'#',ALL))
-      pos:=pos+1+t
-      StrCopy(tempstr,loggedOnUser.phoneNumber)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'TC',ALL))
-      pos:=pos+2+t
-      StringF(tempstr,'\d',loggedOnUser.timesCalled AND $FFFF)
-      StrAdd(outdata,tempstr,maxLen)     
-    ELSEIF (StrCmp(cmd,'TT',ALL))
-      pos:=pos+2+t
-      StringF(tempstr,'\d',getTodaysCalls(loggedOnUser,loggedOnUserKeys))
-      aePuts2(tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'LC',ALL))
-      pos:=pos+2+t
-      formatLongDateTime(loggedOnUser.timeLastOn,tempstr)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'M',ALL))
-      pos:=pos+1+t
-      StringF(tempstr,'\d',loggedOnUser.messagesPosted AND $FFFF)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'A',ALL))
-      pos:=pos+1+t
-      StringF(tempstr,'\d',loggedOnUser.secStatus)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'S',ALL))
-      pos:=pos+1+t
-      StringF(tempstr,'\d',loggedOnUser.slotNumber)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'CA',ALL))
-      pos:=pos+2+t
-      StrCopy(tempstr,loggedOnUser.conferenceAccess)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'BR',ALL))
-      pos:=pos+2+t
-      StringF(tempstr,'\d',onlineBaud)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'HW',ALL))
-      pos:=pos+2+t
-      StrCopy(tempstr,computerTypes.item(loggedOnUser.secBulletin))
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'TL',ALL))
-      pos:=pos+2+t
-      StringF(tempstr,'\d',Div(loggedOnUser.timeLimit,60))
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'TR',ALL))
-      pos:=pos+2+t
-      StringF(tempstr,'\d',Div(timeLimit,60))
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'UB',ALL))
-      pos:=pos+2+t
-      formatBCD(loggedOnUserMisc.uploadBytesBCD,tempstr)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'DB',ALL))
-      pos:=pos+2+t
-      formatBCD(loggedOnUserMisc.downloadBytesBCD,tempstr)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'SU',ALL))
-      pos:=pos+2+t
-      calcSizeText(loggedOnUserMisc.uploadBytesBCD,tempstr)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'SD',ALL))
-      pos:=pos+2+t
-      calcSizeText(loggedOnUserMisc.downloadBytesBCD,tempstr)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'FU',ALL))
-      pos:=pos+2+t
-      StringF(tempstr,'\d',loggedOnUser.uploads AND $FFFF)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'FD',ALL))
-      pos:=pos+2+t
-      StringF(tempstr,'\d',loggedOnUser.downloads AND $FFFF)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'BD',ALL))
-      pos:=pos+2+t
-      StringF(tempstr,'\d',loggedOnUser.dailyBytesLimit)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'LG',ALL)) OR (StrCmp(cmd,'ON',ALL))
-      pos:=pos+2+t
-      StringF(tempstr,'\d',node)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'IN',ALL))
-      pos:=pos+2+t
-      StrCopy(tempstr,loggedOnUserMisc.internetName)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'RN',ALL))
-      pos:=pos+2+t
-      StrCopy(tempstr,loggedOnUserMisc.realName)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'OD',ALL))
-      pos:=pos+2+t
-      formatLongDate(logonTime,tempstr)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'OT',ALL))
-      pos:=pos+2+t
-      formatLongTime(logonTime,tempstr)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'SC',ALL))
-      pos:=pos+2+t
-      StringF(tempstr,'\d',getCallerCount())
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'CT',ALL))
-      pos:=pos+2+t
-      formatLongTime(logonTime,tempstr)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'DT',ALL))
-      pos:=pos+2+t
-      formatLongDate(getSystemTime(),tempstr)
-      StrAdd(outdata,tempstr,maxLen)
-    ELSEIF (StrCmp(cmd,'D',1))
-      pos:=pos+2+t
-      MidStr(cmd,mcidata,pos,ALL)
-      StrCopy(mciterminator,cmd)
-      pos:=pos+StrLen(cmd)
-    ELSE
-      ->unknown mci
-      StrAdd(outdata,'~')
-      StrAdd(outdata,num)
-    ENDIF
-  ENDIF
-
-ENDPROC pos
-
-PROC processMci(mcidata)
+->process mci string and either output to outdata or send to screen/serial if outdata=NIL
+PROC processMci(mcidata,outdata=NIL)
   DEF pos=0,cmdpos,len
 
-  IF (mciViewSafe=FALSE) AND ((checkSecurity(ACS_MCI_MSG)=FALSE) OR (sopt.toggles[TOGGLES_NOMCIMSGS]=TRUE)) THEN RETURN
+  IF outdata=NIL
+    IF (mciViewSafe=FALSE) AND ((checkSecurity(ACS_MCI_MSG)=FALSE) OR (sopt.toggles[TOGGLES_NOMCIMSGS]=TRUE)) THEN RETURN
+  ELSE
+    StrCopy(outdata,'')
+  ENDIF
 
   len:=EstrLen(mcidata)
   IF len=0
@@ -5308,29 +5207,6 @@ PROC processMci(mcidata)
       aePuts2(mcidata+pos,cmdpos-pos)
       pos:=pos+(cmdpos-pos)
       pos:=processMciCmd(mcidata,len,pos)
-    ENDIF
-  ENDWHILE
-ENDPROC
-
-PROC processMci2(mcidata,outdata)
-  DEF pos=0,cmdpos,len
-
-  StrCopy(outdata,'')
-
-  len:=EstrLen(mcidata)
-  IF len=0
-    RETURN
-  ENDIF
-
-  WHILE (pos>=0) AND (pos<len)
-    IF reqState<>REQ_STATE_NONE THEN RETURN
-    IF (cmdpos:=InStr(mcidata,'~',pos))<0
-      StrAdd(outdata, mcidata+pos)
-      pos:=EstrLen(mcidata)
-    ELSE
-      StrAdd(outdata, mcidata+pos,cmdpos-pos)
-      pos:=pos+(cmdpos-pos)
-      pos:=processMciCmd2(mcidata,len,pos,outdata)
     ENDIF
   ENDWHILE
 ENDPROC
@@ -6759,14 +6635,14 @@ go3:
 
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_CONNECT',tempstr))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
-      processMci2(tempstr,tempstr2)
+      processMci(tempstr,tempstr2)
       SystemTagList(tempstr2,filetags)
       END filetags
     ENDIF
 
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_CONNECT',tempstr))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
-      processMci2(tempstr,tempstr2)
+      processMci(tempstr,tempstr2)
       SystemTagList(tempstr2,filetags)
       END filetags
     ENDIF
@@ -7562,14 +7438,14 @@ PROC processLoggingOff()
 
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_LOGOFF',tempstr))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
-      processMci2(tempstr,tempstr2)
+      processMci(tempstr,tempstr2)
       SystemTagList(tempstr2,filetags)
       END filetags
     ENDIF
 
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_LOGOFF',tempstr))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
-      processMci2(tempstr,tempstr2)
+      processMci(tempstr,tempstr2)
       SystemTagList(tempstr2,filetags)
       END filetags
     ENDIF
@@ -10073,13 +9949,13 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
     IF (tempUser.slotNumber=1)
       IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_SYSOP_COMMENT',tempStr))
         filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
-        processMci2(tempStr,tempStr2)
+        processMci(tempStr,tempStr2)
         SystemTagList(tempStr2,filetags)
         END filetags
       ENDIF
       IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_SYSOP_COMMENT',tempStr))
         filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
-        processMci2(tempStr,tempStr2)
+        processMci(tempStr,tempStr2)
         SystemTagList(tempStr2,filetags)
         END filetags
       ENDIF
@@ -17453,13 +17329,13 @@ PROC uploadaFile(uLFType,cmd,attach)            -> JOE
     udLog(str)
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_UPLOAD',str))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
-      processMci2(str,string)
+      processMci(str,string)
       SystemTagList(string,filetags)
       END filetags
     ENDIF
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_UPLOAD',str))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
-      processMci2(str,string)
+      processMci(str,string)
       SystemTagList(string,filetags)
       END filetags
     ENDIF
@@ -22143,13 +22019,13 @@ PROC sysopPaged()
 
   IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_SYSOP_PAGE',tempstring))
     filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
-    processMci2(tempstring,tempstring2)
+    processMci(tempstring,tempstring2)
     SystemTagList(tempstring2,filetags)
     END filetags
   ENDIF
   IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_SYSOP_PAGE',tempstring))
     filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
-    processMci2(tempstring,tempstring2)
+    processMci(tempstring,tempstring2)
     SystemTagList(tempstring2,filetags)
     END filetags
   ENDIF
@@ -24282,7 +24158,12 @@ PROC asciiZoomConf(confNum,msgBaseNum,confNameType)
   cb:=confBases.item(getConfIndex(confNum,msgBaseNum))
 
   IF cb.handle[0] AND ZOOM_SCAN_MASK
-    StringF(tempstr,'[32mZooming Conference[33m: [0m  \s   ',getConfName(confNum))
+    IF getConfMsgBaseCount(confNum)>1
+      getMsgBaseName(confNum,msgBaseNum,tempstr2)
+      StringF(tempstr,'[32mZooming Conference[33m: [0m  \s [\s]  ',getConfName(confNum),tempstr2)
+    ELSE     
+      StringF(tempstr,'[32mZooming Conference[33m: [0m  \s   ',getConfName(confNum))
+    ENDIF
     aePuts(tempstr)
     mystat:=0
 
@@ -24487,7 +24368,12 @@ PROC qwkZoomConf(confNum,msgBaseNum,recNum,confNameType)
   cb:=confBases.item(getConfIndex(confNum,msgBaseNum))
 
   IF cb.handle[0] AND ZOOM_SCAN_MASK
-    StringF(tempstr,'[32mZooming Conference[33m: [0m  \s    ',getConfName(confNum))
+    IF getConfMsgBaseCount(confNum)>1
+      getMsgBaseName(confNum,msgBaseNum,tempstr2)
+      StringF(tempstr,'[32mZooming Conference[33m: [0m  \s [\s]  ',getConfName(confNum),tempstr2)
+    ELSE     
+      StringF(tempstr,'[32mZooming Conference[33m: [0m  \s   ',getConfName(confNum))
+    ENDIF
     aePuts(tempstr)
     mystat:=0
 
@@ -26261,13 +26147,21 @@ ENDPROC
 
 PROC displayMenuPrompt()
   DEF mPrompt[255]:STRING
+  DEF msgBaseName[255]:STRING
+  DEF tempstr[30]:STRING
 
   IF StrLen(menuPrompt)>0
     aePuts('[0m')
     processMci(menuPrompt)
     aePuts(' ')
   ELSE
-    StringF(mPrompt,'[0m[35m\s [0m[[36m\d[34m:[36m\s[0m] Menu ([33m\d[0m mins. left): ',cmds.bbsName,relConfNum,currentConfName,Div((loggedOnUser.timeTotal-loggedOnUser.timeUsed),60))
+    IF getConfMsgBaseCount(currentConf)>1
+      getMsgBaseName(currentConf,currentMsgBase,msgBaseName)
+      StringF(tempstr,'\s - \s',currentConfName,msgBaseName)
+      StringF(mPrompt,'[0m[35m\s [0m[[36m\d[34m:[36m\s[0m] Menu ([33m\d[0m mins. left): ',cmds.bbsName,relConfNum,tempstr,Div((loggedOnUser.timeTotal-loggedOnUser.timeUsed),60))
+    ELSE
+      StringF(mPrompt,'[0m[35m\s [0m[[36m\d[34m:[36m\s[0m] Menu ([33m\d[0m mins. left): ',cmds.bbsName,relConfNum,currentConfName,Div((loggedOnUser.timeTotal-loggedOnUser.timeUsed),60))
+    ENDIF
     aePuts(mPrompt)
   ENDIF
 ENDPROC
@@ -27015,14 +26909,14 @@ logonLoop:
   IF logonType>=LOGON_TYPE_REMOTE
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_LOGON',tempStr))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
-      processMci2(tempStr,tempStr2)
+      processMci(tempStr,tempStr2)
       SystemTagList(tempStr2,filetags)
       END filetags
     ENDIF
 
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_LOGON',tempStr))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
-      processMci2(tempStr,tempStr2)
+      processMci(tempStr,tempStr2)
       SystemTagList(tempStr2,filetags)
       END filetags
     ENDIF
@@ -27269,14 +27163,14 @@ PROC newUserAccount(userName: PTR TO CHAR)
 
   IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_NEW_USER',tempStr2))
     filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
-    processMci2(tempStr2,tempStr)
+    processMci(tempStr2,tempStr)
     SystemTagList(tempStr,filetags)
     END filetags
   ENDIF
 
   IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_NEW_USER',tempStr2))
     filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
-    processMci2(tempStr2,tempStr)
+    processMci(tempStr2,tempStr)
     SystemTagList(tempStr,filetags)
     END filetags
   ENDIF
@@ -28356,7 +28250,7 @@ PROC main() HANDLE
   ENDIF
 
   IF readToolType(TOOLTYPE_NODE,node,'FIRSTCOMMAND',tempstr)
-    processMci2(tempstr,tempstr2)
+    processMci(tempstr,tempstr2)
     Execute(tempstr2,NIL,NIL)
   ENDIF
 
