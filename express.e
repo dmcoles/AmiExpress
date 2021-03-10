@@ -14027,7 +14027,7 @@ ENDPROC
 
 PROC updateZDisplay()
   DEF tempstr[255]:STRING
-  DEF xpos,tags2,vi
+  DEF xpos,tags2:PTR TO LONG,vi
   DEF v1,v2
   IF netMailTransfer
     IF zModemInfo.currentOperation=ZMODEM_DOWNLOAD
@@ -15379,7 +15379,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   DEF xprio=NIL: PTR TO xprIO
   DEF time1,time2
   DEF oldshared,bgport
-  DEF msg:PTR TO jhMessage,tags=NIL
+  DEF msg:PTR TO jhMessage,tags=NIL:PTR TO LONG
   DEF proc:PTR TO process
   DEF ftpPorts:PTR TO LONG,ftpDataPorts:PTR TO LONG,httpPorts:PTR TO LONG
   DEF protocol[255]:STRING
