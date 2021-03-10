@@ -273,8 +273,8 @@ PROC openSocket(sb,port, reuseable,httpData:PTR TO httpData)
       StringF(tempStr,'/XHTTP: error setting socket options SO_LINGER, error=\d\b\n',errno(sb))
       aePuts(httpData,tempStr)
     ENDIF
-    END optval
-    END optlen
+    END optval[2]
+    END optlen[1]
 
   ENDIF
   
@@ -557,7 +557,7 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
 ENDPROC
 
 
-EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sCheckInputPtr, httpFileStartPtr, httpFileEndPtr, httpFileProgressPtr, httpDupeCheckPtr, httpCheckConnection, uploadMode, fileList:PTR TO stdlist)
+EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, readCharPtr, sCheckInputPtr, httpFileStartPtr, httpFileEndPtr, httpFileProgressPtr, httpDupeCheckPtr, httpCheckConnection, uploadMode, fileList:PTR TO stdlist)
   DEF r,http_s,http_c,sb
   DEF temp[255]:STRING
   DEF httpData:PTR TO httpData
@@ -570,6 +570,7 @@ EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sChe
   DEF fh,buff,l,t,t2,lastpos,pos,cps
   DEF p,contentLength
   DEF connected=TRUE
+  DEF i,port
   
   httpData:=NEW httpData
   httpData.rest:=0
@@ -589,21 +590,28 @@ EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sChe
   httpData.hostName:=String(255)
 
   StrCopy(httpData.hostName,httphost)
-  httpData.port:=httpport
   StrCopy(httpData.workingPath,httppath)
 
   asynciobase:=OpenLibrary('asyncio.library',0)
   
 	sb:=OpenLibrary('bsdsocket.library',2)
 	IF (sb)
-    StringF(temp,'\b\nHTTP processor started on \s port \d...\b\n',httpData.hostName,httpData.port)
-    aePuts(httpData,temp)
-    aePuts(httpData,'Use Ctrl-C to continue when transfers are complete\b\n\b\n')
   
-    r,http_s:=openSocket(sb,httpport,1,httpData)
+    i:=0
+    REPEAT
+      port:=httpports[i]
+      r,http_s:=openSocket(sb,port,1,httpData)
+      i++
+    UNTIL (r OR (i>=ListLen(httpports)))
+  
+    httpData.port:=port
 
     flg:=FALSE
     IF r
+      StringF(temp,'\b\nHTTP processor started on \s port \d...\b\n',httpData.hostName,port)
+      aePuts(httpData,temp)
+      aePuts(httpData,'Use Ctrl-C to continue when transfers are complete\b\n\b\n')
+      
       ioctlSocket(sb,http_s,FIONBIO,[1])
       rchar:=0
       WHILE (rchar<>3) AND connected

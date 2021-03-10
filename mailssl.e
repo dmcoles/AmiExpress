@@ -422,7 +422,7 @@ ENDPROC
 
 /* Open and initialize AmiSSL */
 EXPORT PROC initssl(createctx) HANDLE
-  DEF tags
+  DEF tags:PTR TO LONG
 
   sslerrno:=0
   ctx:=0
@@ -454,11 +454,11 @@ EXPORT PROC initssl(createctx) HANDLE
 
   tags:=NEW [AMISSL_ERRNOPTR,{sslerrno},AMISSL_SOCKETBASE,socketbase,0]
   IF (InitAmiSSLA(tags) <> 0)
-    END tags
+    END tags[5]
     WriteF('Couldn''t initialize AmiSSL!\n');
     Raise(ERR_SSL)
   ENDIF
-  END tags
+  END tags[5]
 
   /* Basic intialization. Next few steps (up to SSL_new()) need
    * to be done only once per AmiSSL opener.

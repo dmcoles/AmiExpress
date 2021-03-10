@@ -36,13 +36,13 @@ OBJECT mailHeader
 ENDOBJECT
 
 PROC exec(fileName:PTR TO CHAR)
-  DEF tags,r
+  DEF tags:PTR TO LONG,r
   tags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
   r:=SystemTagList(fileName,tags)
   IF r=-1
     WriteF('Error executing \s\n\n',fileName)
   ENDIF
-  END tags
+  END tags[7]
 ENDPROC r
 
 PROC replacestr(sourcestring,searchtext,replacetext)
@@ -708,7 +708,7 @@ PROC processPacketFile(filename:PTR TO CHAR) HANDLE
               IF StrLen(lineBuff)>0
                 writeMailLine(fh2,lineBuff)
               ENDIF
-              Dispose(lineBuff)
+              DisposeLink(lineBuff)
               Close(fh2)
               fh2:=0
             ELSE

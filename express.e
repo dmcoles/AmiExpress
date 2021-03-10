@@ -435,6 +435,14 @@ RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
       ERR_ASL  IF AllocAslRequest()=NIL
 
+PROC countTags(tags:PTR TO LONG)
+  DEF n=0
+  WHILE tags[n]<>TAG_DONE
+    n:=n+2
+  ENDWHILE
+  n++
+ENDPROC
+
 PROC configFileExists(fname:PTR TO CHAR)
   DEF lh
   DEF fn[255]:STRING
@@ -1509,7 +1517,7 @@ ENDPROC
 
 PROC asl(s: PTR TO CHAR,slines=NIL:PTR TO stringlist) HANDLE
   DEF fr:PTR TO filerequester
-  DEF src[100]:STRING,tags=NIL
+  DEF src[100]:STRING,tags=NIL:PTR TO LONG
   DEF flags,x
   DEF frargs: PTR TO wbarg
 
@@ -1524,7 +1532,7 @@ PROC asl(s: PTR TO CHAR,slines=NIL:PTR TO stringlist) HANDLE
                       ASL_PATTERN,'#?',
                       ASL_FUNCFLAGS, flags,
                       ASL_DIR,cmds.bbsLoc,
-                      NIL]
+                      TAG_DONE]
 
   fr:=AllocAslRequest(ASL_FILEREQUEST,tags)
 
@@ -1548,7 +1556,7 @@ PROC asl(s: PTR TO CHAR,slines=NIL:PTR TO stringlist) HANDLE
   ENDIF
 EXCEPT DO
   IF fr THEN FreeAslRequest(fr)
-  IF tags THEN END tags
+  IF tags THEN END tags[countTags(tags)]
   IF aslbase THEN CloseLibrary(aslbase)
   SELECT exception
     CASE ERR_ASL
@@ -2796,7 +2804,7 @@ PROC higherAccess()
 ENDPROC
 
 PROC startProcess(exestring, stacksize, priority, async, doorTrap)
-  DEF filetags
+  DEF filetags:PTR TO LONG
   DEF task,temp
   DEF doorTrapFH=0
   DEF processOutFile[255]:STRING
@@ -2813,9 +2821,9 @@ PROC startProcess(exestring, stacksize, priority, async, doorTrap)
     doorTrapFH:=Open(processOutFile,MODE_NEWFILE)
   ENDIF
   
-  filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,doorTrapFH,SYS_ASYNCH,async,NP_STACKSIZE,stacksize,NP_PRIORITY,priority,0]
+  filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,doorTrapFH,SYS_ASYNCH,async,NP_STACKSIZE,stacksize,NP_PRIORITY,priority,TAG_DONE]
   temp:=SystemTagList(exestring,filetags)
-  END filetags
+  END filetags[countTags(filetags)]
  
   IF (byteSignExtend(cmds.taskPri)<=priority)
     SetTaskPri(task,cmds.taskPri)
@@ -3589,6 +3597,12 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:P
     CASE DT_SIZEDOWNLOAD
       calcSizeText(loggedOnUserMisc.downloadBytesBCD,tempstring)
       strCpy(msg.string,tempstring,200)          
+    CASE CON_CURSOR
+      IF (msg.data)
+        conPuts('[ p') /* turn console cursor on */
+      ELSE
+        conPuts('[0 p'); /* turn console cursor off */
+      ENDIF
     CASE DT_CONFACCESS2
       StrCopy(tempstring,'')
       IF msg.data
@@ -3749,6 +3763,8 @@ PROC runDoor(cmd,type,command,tooltype,params,resident,doorTrap,privcmd,pri=0,st
   ENDSELECT
 
   IF type=DOORTYPE_AIM THEN type:=DOORTYPE_XIM
+
+
 
   IF type=DOORTYPE_XIM
     StringF(doorPort,'\s\d','AEDoorPort',node)
@@ -4061,6 +4077,9 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
   DEF access=0
   DEF stat
   DEF resident,doorTrap
+  DEF lk
+  DEF fi:PTR TO fileinfoblock
+  DEF flags
 
   IF cmdtype=CMDTYPE_BBSCMD
     getNodeFile(TOOLTYPE_CONFCMD,cmd,commandfile)
@@ -4204,6 +4223,24 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
   readToolType(tooltype,cmd,'MIMICVER',mimicVersion)
   
   inputLogging:=checkToolTypeExists(TOOLTYPE_NODE,node,'LOG_INPUTS')
+
+  IF (commandTypeCode=DOORTYPE_SIM)
+    ->option automatically set script flag when calling SIM doors
+    IF checkToolTypeExists(tooltype,cmd,'SCRIPTCHECK')
+      lk:=Lock(commandfile,ACCESS_READ)
+      IF lk<>0
+        fi:=AllocDosObject(DOS_FIB,NIL)
+        IF fi<>0
+          Examine(lk,fi)
+          flags:=fi.protection
+          FreeDosObject(DOS_FIB,fi)
+          IF (flags AND FIBF_SCRIPT)=0 THEN SetProtection(cmd,flags OR FIBF_SCRIPT)
+        ENDIF
+        UnLock(lk)
+      ENDIF
+    ENDIF
+  ENDIF
+
   
   runDoor(commandfile,commandTypeCode,cmd,tooltype,params,resident,doorTrap,privcmd,pri,stacksize)
   
@@ -6362,7 +6399,7 @@ PROC closeAEStats()
 ENDPROC
 
 PROC toggleStatusDisplay()
-  DEF dp,bp,sz,tags
+  DEF dp,bp,sz,tags:PTR TO LONG
   DEF pub=FALSE
   DEF pubScreen[255]:STRING
   DEF pubLock=0:PTR TO screen
@@ -6425,8 +6462,8 @@ PROC toggleStatusDisplay()
          WA_HEIGHT,sz,
          WA_DETAILPEN,dp,
          WA_BLOCKPEN,bp,
-         WA_FLAGS,
-         WFLG_SIMPLE_REFRESH,NIL]
+         WA_FLAGS,WFLG_SIMPLE_REFRESH,
+         TAG_DONE]
     ELSE
       tags:=NEW [WA_CUSTOMSCREEN,screen,
          WA_LEFT,0,
@@ -6435,8 +6472,8 @@ PROC toggleStatusDisplay()
          WA_HEIGHT,sz,
          WA_DETAILPEN,dp,
          WA_BLOCKPEN,bp,
-         WA_FLAGS,
-         WFLG_SIMPLE_REFRESH,NIL]
+         WA_FLAGS,WFLG_SIMPLE_REFRESH,
+         TAG_DONE]
     ENDIF
     IF(( windowStat:=OpenWindowTagList(NIL,tags))<>NIL)
 
@@ -6453,7 +6490,7 @@ PROC toggleStatusDisplay()
       ENDIF
       statChatFlag()
     ENDIF
-    END tags
+    END tags[countTags(tags)]
     IF pubLock THEN UnlockPubScreen(NIL,pubLock)
   ENDIF
 ENDPROC
@@ -6525,7 +6562,7 @@ PROC checkIncomingCall()
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
   DEF stat,n,isConnected=FALSE
-  DEF filetags,r
+  DEF filetags:PTR TO LONG,r
   DEF peeraddr: sockaddr_in
   DEF hostent: PTR TO hostent
   DEF s
@@ -6634,17 +6671,17 @@ go3:
     IF(cmds.acLvl[LVL_VARYING_LINK_RATE]=1) THEN setBaud(onlineBaud)
 
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_CONNECT',tempstr))
-      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,TAG_DONE]:LONG
       processMci(tempstr,tempstr2)
       SystemTagList(tempstr2,filetags)
-      END filetags
+      END filetags[countTags(filetags)]
     ENDIF
 
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_CONNECT',tempstr))
-      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,TAG_DONE]:LONG
       processMci(tempstr,tempstr2)
       SystemTagList(tempstr2,filetags)
-      END filetags
+      END filetags[countTags(filetags)]
     ENDIF
 
     conCLS()
@@ -7364,7 +7401,7 @@ ENDPROC RESULT_SUCCESS
 PROC processLoggingOff()
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
-  DEF filetags
+  DEF filetags:PTR TO LONG
 
   pagedFlag:=FALSE
   chatFlag:=FALSE
@@ -7437,17 +7474,17 @@ PROC processLoggingOff()
     saveAccount(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc,0,0) /* Reseave users account after logoff */
 
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_LOGOFF',tempstr))
-      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,TAG_DONE]:LONG
       processMci(tempstr,tempstr2)
       SystemTagList(tempstr2,filetags)
-      END filetags
+      END filetags[countTags(filetags)]
     ENDIF
 
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_LOGOFF',tempstr))
-      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,TAG_DONE]:LONG
       processMci(tempstr,tempstr2)
       SystemTagList(tempstr2,filetags)
-      END filetags
+      END filetags[countTags(filetags)]
     ENDIF
 
     IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_LOGOFF')) AND (StrLen(mailOptions.sysopEmail)>0)
@@ -8466,7 +8503,7 @@ PROC remoteShell() HANDLE
   DEF n,ch
   DEF bufptr:PTR TO CHAR
   DEF temp[255]:STRING
-  DEF tags
+  DEF tags:PTR TO LONG
 
   runFifoHandler()
 
@@ -8519,9 +8556,9 @@ PROC remoteShell() HANDLE
 
 
   StringF(temp,'newshell fifo:\s/rwkecs',fifoName)
-  tags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,1,0]
+  tags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,1,TAG_DONE]
   SystemTagList(temp,tags)
-  END tags
+  END tags[countTags(tags)]
 
   pmask:=Shl(1,ioSink.sigbit)
 
@@ -9876,7 +9913,7 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
   DEF string[255]:STRING
   DEF tempStr[255]:STRING
   DEF tempStr2[255]:STRING
-  DEF filetags
+  DEF filetags:PTR TO LONG
 
   mh.recv:=0
   mh.msgDate:=getSystemTime()
@@ -9948,16 +9985,16 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
 
     IF (tempUser.slotNumber=1)
       IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_SYSOP_COMMENT',tempStr))
-        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,TAG_DONE]:LONG
         processMci(tempStr,tempStr2)
         SystemTagList(tempStr2,filetags)
-        END filetags
+        END filetags[countTags(filetags)]
       ENDIF
       IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_SYSOP_COMMENT',tempStr))
-        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,TAG_DONE]:LONG
         processMci(tempStr,tempStr2)
         SystemTagList(tempStr2,filetags)
-        END filetags
+        END filetags[countTags(filetags)]
       ENDIF
       IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_SYSOP_COMMENT')) AND (StrLen(mailOptions.sysopEmail)>0)
         StringF(tempStr,'\s: Ami-Express sysop message notification',cmds.bbsName)
@@ -11678,11 +11715,11 @@ PROC addFlagToList(s:PTR TO CHAR, confNum = -1)
     stat:=isInFlaggedList(fileName,confNum)
     IF(stat=FALSE)
       addFlagItem(flagFilesList,confNum,fileName)
-      Dispose(fileName)
+      DisposeLink(fileName)
       RETURN 2
     ENDIF
   ENDIF
-  Dispose(fileName)
+  DisposeLink(fileName)
 ENDPROC 0
 
 PROC removeFlagFromList(s: PTR TO CHAR, c=-1)
@@ -12403,7 +12440,7 @@ PROC createRexxPort()
 
   Forbid()
   IF FindPort(rexxPortName)=FALSE
-    NEW rexxmp
+    rexxmp:= NEW rexxmp
     rexxmp.sigtask:=FindTask(0)
     rexxmp.flags:=PA_SIGNAL
     rexxmp::ln.name:=rexxPortName
@@ -14031,11 +14068,11 @@ PROC updateZDisplay()
 
     IF (gadtoolsbase:=OpenLibrary('gadtools.library',0))<>NIL
       vi:=GetVisualInfoA(screen, [NIL])
-      tags2:=NEW [GT_VISUALINFO,vi,0]
+      tags2:=NEW [GT_VISUALINFO,vi,TAG_DONE]
 
       DrawBevelBoxA(windowZmodem.rport,10,135,315,10,tags2)
       FreeVisualInfo(vi)
-      END tags2
+      END tags2[countTags(tags2)]
       CloseLibrary(gadtoolsbase)
     ENDIF
 
@@ -14143,7 +14180,7 @@ PROC downloadFile(str: PTR TO CHAR,forceZmodem=FALSE)
   END tempstringlist
 ENDPROC res
 
-PROC httpUpload(uploadFolder: PTR TO CHAR,httpPort)
+PROC httpUpload(uploadFolder: PTR TO CHAR,httpPorts)
   DEF tempstr[100]:STRING
   DEF oldSerCache
 
@@ -14157,11 +14194,11 @@ PROC httpUpload(uploadFolder: PTR TO CHAR,httpPort)
     StrCopy(tempstr,'localhost')
   ENDIF
   
-  doHttpd(node,tempstr,httpPort,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},TRUE,NIL)
+  doHttpd(node,tempstr,httpPorts,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},TRUE,NIL)
   serialCacheEnabled:=oldSerCache
 ENDPROC
 
-PROC httpDownload(fileList: PTR TO stdlist, pupdateDownloadStats,httpPort)
+PROC httpDownload(fileList: PTR TO stdlist, pupdateDownloadStats,httpPorts)
   DEF i
   DEF dirLock
   DEF tempstr[255]:STRING
@@ -14205,7 +14242,7 @@ PROC httpDownload(fileList: PTR TO stdlist, pupdateDownloadStats,httpPort)
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
-  doHttpd(node,tempstr,httpPort,tempDir,{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},FALSE,fileList)
+  doHttpd(node,tempstr,httpPorts,tempDir,{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},FALSE,fileList)
   serialCacheEnabled:=oldSerCache
  
   ->clean up ram links
@@ -14335,7 +14372,7 @@ PROC updateDownloadStats(fileItem:PTR TO flagFileItem)
   ENDIF
 ENDPROC
 
-PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPort,ftpDataPort)
+PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPorts,ftpDataPorts)
   DEF tempstr[100]:STRING
   DEF oldSerCache
 
@@ -14352,11 +14389,11 @@ PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPort,ftpDataPort)
     StrCopy(tempstr,'localhost')
   ENDIF
 
-  doftp(node,tempstr,ftpPort,ftpDataPort,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},TRUE)
+  doftp(node,tempstr,ftpPorts,ftpDataPorts,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},TRUE)
   serialCacheEnabled:=oldSerCache
 ENDPROC
 
-PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort,ftpDataPort)
+PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataPorts)
   DEF i
   DEF dirLock
   DEF tempstr[255]:STRING
@@ -14401,7 +14438,7 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPort,ftpDataPo
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
-  doftp(node,tempstr,ftpPort,ftpDataPort,tempDir,{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},FALSE)
+  doftp(node,tempstr,ftpPorts,ftpDataPorts,tempDir,{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},FALSE)
   serialCacheEnabled:=oldSerCache
  
   ->clean up ram links
@@ -14417,7 +14454,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   DEF result
   DEF time1,time2
   DEF oldshared
-  DEF ftpPort,ftpDataPort,httpPort
+  DEF ftpPorts:PTR TO LONG,ftpDataPorts:PTR TO LONG,httpPorts:PTR TO LONG
   DEF zm=NIL: PTR TO zmodem_t
   DEF xym=NIL: PTR TO xymodem_t
   DEF ext=TRUE
@@ -14466,7 +14503,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
     ext:=FALSE
   ENDIF
 
-IF(strCmpi(protocol,'INTERNAL',ALL)) THEN ext:=FALSE
+  IF(strCmpi(protocol,'INTERNAL',ALL)) THEN ext:=FALSE
 
   IF (strCmpi(protocol,'XPRZM',ALL))
     StrCopy(protocol,'INTERNAL')
@@ -14478,26 +14515,35 @@ IF(strCmpi(protocol,'INTERNAL',ALL)) THEN ext:=FALSE
   zModemInfo.needUpdateDownloadStats:=FALSE
 
   IF (strCmpi(protocol,'FTP',ALL))
-    ftpPort:=readToolTypeInt(TOOLTYPE_NODE,node,'FTPPORT')
-    ftpDataPort:=readToolTypeInt(TOOLTYPE_NODE,node,'FTPDATAPORT')
-    IF ftpPort=-1 THEN ftpPort:=10000+(node*2)
-    IF ftpDataPort=-1 THEN ftpDataPort:=10001+(node*2)
+    readToolType(TOOLTYPE_NODE,node,'FTPPORT',tempstr)
+    ftpPorts:=makeIntList(tempstr)
+
+    readToolType(TOOLTYPE_NODE,node,'FTPDATAPORT',tempstr)
+    ftpDataPorts:=makeIntList(tempstr)
+
+    IF ListLen(ftpPorts)=0 THEN listAdd2(ftpPorts,10000+(node*2))
+    IF ListLen(ftpDataPorts)=0 THEN listAdd2(ftpDataPorts,10001+(node*2))
     IF scropen
       openZmodemStat()
     ENDIF
-    result:=ftpDownload(fileList,updateDownloadStats,ftpPort,ftpDataPort)
+    result:=ftpDownload(fileList,updateDownloadStats,ftpPorts,ftpDataPorts)
     closezModemStats()
+    DisposeLink(ftpPorts)
+    DisposeLink(ftpDataPorts)
     RETURN result
   ENDIF
 
   IF (strCmpi(protocol,'HTTP',ALL))
-    httpPort:=readToolTypeInt(TOOLTYPE_NODE,node,'HTTPPORT')
-    IF httpPort=-1 THEN httpPort:=20000+node
+    readToolType(TOOLTYPE_NODE,node,'HTTPPORT',tempstr)
+    httpPorts:=makeIntList(tempstr)
+
+    IF ListLen(httpPorts)=0 THEN listAdd2(httpPorts,20000+node)
     IF scropen
       openZmodemStat()
     ENDIF
-    result:=httpDownload(fileList,updateDownloadStats,httpPort)
+    result:=httpDownload(fileList,updateDownloadStats,httpPorts)
     closezModemStats()
+    DisposeLink(httpPorts)
     RETURN result
   ENDIF
 
@@ -15335,7 +15381,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   DEF oldshared,bgport
   DEF msg:PTR TO jhMessage,tags=NIL
   DEF proc:PTR TO process
-  DEF ftpPort,ftpDataPort,httpPort
+  DEF ftpPorts:PTR TO LONG,ftpDataPorts:PTR TO LONG,httpPorts:PTR TO LONG
   DEF protocol[255]:STRING
   
   DEF zm=NIL: PTR TO zmodem_t
@@ -15379,13 +15425,19 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     RETURN RESULT_FAILURE
   ELSEIF (strCmpi(protocol,'FTP',ALL))
 
-    ftpPort:=readToolTypeInt(TOOLTYPE_NODE,node,'FTPPORT')
-    ftpDataPort:=readToolTypeInt(TOOLTYPE_NODE,node,'FTPDATAPORT')
-    IF ftpPort=-1 THEN ftpPort:=10000+(node*2)
-    IF ftpDataPort=-1 THEN ftpDataPort:=10001+(node*2)
+    readToolType(TOOLTYPE_NODE,node,'FTPPORT',tempstr)
+    ftpPorts:=makeIntList(tempstr)
+
+    readToolType(TOOLTYPE_NODE,node,'FTPDATAPORT',tempstr)
+    ftpDataPorts:=makeIntList(tempstr)
+
+    IF ListLen(ftpPorts)=0 THEN listAdd2(ftpPorts,10000+(node*2))
+    IF ListLen(ftpDataPorts)=0 THEN listAdd2(ftpDataPorts,10001+(node*2))
     
     IF scropen THEN openZmodemStat()
-    ftpUpload(file,ftpPort,ftpDataPort)
+    ftpUpload(file,ftpPorts,ftpDataPorts)
+    DisposeLink(ftpPorts)
+    DisposeLink(ftpDataPorts)
     closezModemStats()
     checkOffhookFlag()
     receivePlayPen(TRUE)
@@ -15397,11 +15449,14 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     RETURN 1
   ELSEIF (strCmpi(protocol,'HTTP',ALL))
 
-    httpPort:=readToolTypeInt(TOOLTYPE_NODE,node,'HTTPPORT')
-    IF httpPort=-1 THEN httpPort:=20000+node
+    readToolType(TOOLTYPE_NODE,node,'HTTPPORT',tempstr)
+    httpPorts:=makeIntList(tempstr)
+
+    IF ListLen(httpPorts)=0 THEN listAdd2(httpPorts,20000+node)
     
     IF scropen THEN openZmodemStat()
-    httpUpload(file,httpPort)
+    httpUpload(file,httpPorts)
+    DisposeLink(httpPorts)
     closezModemStats()
     checkOffhookFlag()
     receivePlayPen(TRUE)
@@ -15560,10 +15615,10 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
       bgStack:=readToolTypeInt(TOOLTYPE_NODE,node,'BGFILECHECKSTACK')
       IF bgStack<=0 THEN bgStack:=20000
 
-      tags:=NEW [NP_ENTRY,{backgroundFileCheckThread},NP_STACKSIZE,bgStack,0]:LONG
+      tags:=NEW [NP_ENTRY,{backgroundFileCheckThread},NP_STACKSIZE,bgStack,TAG_DONE]:LONG
       Forbid()
       proc:=CreateNewProc(tags)
-      END tags
+      END tags[countTags(tags)]
       saveA4thread(proc.task)
       Permit()     
     ENDIF
@@ -16151,7 +16206,7 @@ PROC batchasl(where: PTR TO CHAR) HANDLE
   DEF dest[102]:STRING
   DEF debugstr[255]:STRING
   DEF aslDir[255]:STRING
-  DEF x,tags=NIL
+  DEF x,tags=NIL:PTR TO LONG
   DEF returnval
 
   StrCopy(aslDir,cmds.bbsLoc)
@@ -16169,7 +16224,7 @@ PROC batchasl(where: PTR TO CHAR) HANDLE
      ASL_PATTERN,'#?',
      ASL_FUNCFLAGS, FILF_MULTISELECT OR FILF_PATGAD,
      ASL_DIR,aslDir,
-     NIL]
+     TAG_DONE]
   fr:=AllocAslRequest(ASL_FILEREQUEST,tags)
 
   returnval:=0
@@ -16218,7 +16273,7 @@ PROC batchasl(where: PTR TO CHAR) HANDLE
   ENDIF
 EXCEPT DO
   IF fr THEN FreeAslRequest(fr)
-  IF tags THEN END tags
+  IF tags THEN END tags[countTags(tags)]
   IF aslbase THEN CloseLibrary(aslbase)
   SELECT exception
     CASE ERR_ASL
@@ -16806,7 +16861,7 @@ PROC checkFileExternal(temp: PTR TO CHAR, checkFile: PTR TO CHAR)
   DEF s[255]:STRING
   DEF i
   DEF fileName[256]:STRING,options[256]:STRING, image[256]:STRING
-  DEF filetags
+  DEF filetags:PTR TO LONG
   DEF stack,pri
 
   stat:=RESULT_SUCCESS
@@ -16838,9 +16893,9 @@ PROC checkFileExternal(temp: PTR TO CHAR, checkFile: PTR TO CHAR)
   StrAdd(options,checkFile)
   StringF(fileName,'\sOutPut_Of_Test',nodeWorkDir)
   IF((fi:=Open(fileName,MODE_NEWFILE)))<>0
-    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,fi,NP_STACKSIZE,stack,NP_PRIORITY,pri,NIL]:LONG
+    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,fi,NP_STACKSIZE,stack,NP_PRIORITY,pri,TAG_DONE]:LONG
     SystemTagList(options,filetags)
-    END filetags
+    END filetags[countTags(filetags)]
     Close(fi)
 
     displayOutPutofTest()
@@ -16848,10 +16903,10 @@ PROC checkFileExternal(temp: PTR TO CHAR, checkFile: PTR TO CHAR)
     IF(readToolType(TOOLTYPE_FCHECK,temp,'SCRIPT',s))
       StrAdd(s,' ')
       IF(fi:=Open('NIL:',MODE_NEWFILE))<>0
-        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,fi,NP_STACKSIZE,stack,NP_PRIORITY,pri,NIL]:LONG
+        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,fi,NP_STACKSIZE,stack,NP_PRIORITY,pri,TAG_DONE]:LONG
         StringF(options,'\s \s \s \d',s,checkFile,FilePart(checkFile),node)
         SystemTagList(options,filetags)
-        END filetags
+        END filetags[countTags(filetags)]
         Close(fi)
       ENDIF
     ENDIF
@@ -17198,7 +17253,7 @@ PROC uploadaFile(uLFType,cmd,attach)            -> JOE
   DEF uaf,f
   DEF foundDupe=0
   DEF mstat      /* check for carrier. trying to stop upload guru from parcial upload */
-  DEF filetags
+  DEF filetags:PTR TO LONG
   DEF fsstr[11]:STRING
   DEF tempsize,bgCnt,bgBytes
 
@@ -17328,16 +17383,16 @@ PROC uploadaFile(uLFType,cmd,attach)            -> JOE
     callersLog(str)
     udLog(str)
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_UPLOAD',str))
-      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,TAG_DONE]:LONG
       processMci(str,string)
       SystemTagList(string,filetags)
-      END filetags
+      END filetags[countTags(filetags)]
     ENDIF
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_UPLOAD',str))
-      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,TAG_DONE]:LONG
       processMci(str,string)
       SystemTagList(string,filetags)
-      END filetags
+      END filetags[countTags(filetags)]
     ENDIF
 
     IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_UPLOAD')) AND (StrLen(mailOptions.sysopEmail)>0)
@@ -22015,19 +22070,19 @@ ENDPROC
 PROC sysopPaged()
   DEF tempstring[255]:STRING
   DEF tempstring2[255]:STRING
-  DEF filetags
+  DEF filetags:PTR TO LONG
 
   IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_SYSOP_PAGE',tempstring))
-    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,TAG_DONE]:LONG
     processMci(tempstring,tempstring2)
     SystemTagList(tempstring2,filetags)
-    END filetags
+      END filetags[countTags(filetags)]
   ENDIF
   IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_SYSOP_PAGE',tempstring))
-    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,TAG_DONE]:LONG
     processMci(tempstring,tempstring2)
     SystemTagList(tempstring2,filetags)
-    END filetags
+      END filetags[countTags(filetags)]
   ENDIF
   IF(checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_SYSOP_PAGE')) AND (StrLen(mailOptions.sysopEmail)>0)
     StringF(tempstring,'\s: Ami-Express page notification',cmds.bbsName)
@@ -26655,7 +26710,7 @@ PROC processLogon()
   DEF newUser
   DEF userNum
   DEF stat
-  DEF filetags
+  DEF filetags:PTR TO LONG
 
   ripMode:=FALSE
   confNameType:=NAME_TYPE_USERNAME
@@ -26908,17 +26963,17 @@ logonLoop:
 
   IF logonType>=LOGON_TYPE_REMOTE
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_LOGON',tempStr))
-      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,TAG_DONE]:LONG
       processMci(tempStr,tempStr2)
       SystemTagList(tempStr2,filetags)
-      END filetags
+      END filetags[countTags(filetags)]
     ENDIF
 
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_LOGON',tempStr))
-      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+      filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,TAG_DONE]:LONG
       processMci(tempStr,tempStr2)
       SystemTagList(tempStr2,filetags)
-      END filetags
+      END filetags[countTags(filetags)]
     ENDIF
 
     IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_LOGON')) AND (StrLen(mailOptions.sysopEmail)>0)
@@ -27075,7 +27130,7 @@ ENDPROC
 PROC newUserAccount(userName: PTR TO CHAR)
   DEF tempStr[100]:STRING,tempStr2[255]:STRING
   DEF stat,tries=0
-  DEF filetags
+  DEF filetags:PTR TO LONG
 
   IF displayScreen(SCREEN_NONEWUSERS) THEN RETURN RESULT_SLEEP_LOGOFF
 
@@ -27162,17 +27217,17 @@ PROC newUserAccount(userName: PTR TO CHAR)
   masterSavePointers(loggedOnUser)
 
   IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_NEW_USER',tempStr2))
-    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
+    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,TAG_DONE]:LONG
     processMci(tempStr2,tempStr)
     SystemTagList(tempStr,filetags)
-    END filetags
+    END filetags[countTags(filetags)]
   ENDIF
 
   IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ASYNC_ON_NEW_USER',tempStr2))
-    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NIL]:LONG
+    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,TAG_DONE]:LONG
     processMci(tempStr2,tempStr)
     SystemTagList(tempStr,filetags)
-    END filetags
+    END filetags[countTags(filetags)]
   ENDIF
 
   IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_NEW_USER')) AND (StrLen(mailOptions.sysopEmail)>0)
@@ -27545,19 +27600,14 @@ PROC findFreeSlot()
 
   slot:=0
   REPEAT
-   stat:=Read(fh,tempUser,SIZEOF user)
-   slot++
-     IF stat<>0
-       IF(stat<>SIZEOF user)
-         Close(fh)
-         RETURN 0
-       ENDIF
-       IF (tempUser.slotNumber=0)
-         Close(fh)
-         RETURN slot
-       ENDIF
-     ENDIF
+    stat:=Read(fh,tempUser,SIZEOF user)
+    slot++
+    IF (stat=SIZEOF user) AND (tempUser.slotNumber=0)
+      Close(fh)
+      RETURN slot
+    ENDIF
   UNTIL stat<>SIZEOF user
+  Close(fh)
 ENDPROC slot
 
 PROC expressToFront()
@@ -27600,7 +27650,7 @@ PROC closezModemStats()
 ENDPROC
 
 PROC openZmodemStat() 
-  DEF tags,tags2,vi
+  DEF tags:PTR TO LONG,tags2:PTR TO LONG,vi
   DEF tempstr[255]:STRING
   DEF pubScreen[255]:STRING
   DEF pubLock=0
@@ -27657,7 +27707,8 @@ PROC openZmodemStat()
           WA_TITLE,
           zModemInfo.titleBar,
           WA_IDCMP,IDCMP_CLOSEWINDOW,
-          WA_FLAGS,WFLG_ACTIVATE,NIL]
+          WA_FLAGS,WFLG_ACTIVATE,
+          TAG_DONE]
   ELSE
     tags:=NEW [WA_CLOSEGADGET,1,
           WA_CUSTOMSCREEN,screen,
@@ -27672,7 +27723,8 @@ PROC openZmodemStat()
           WA_TITLE,
           zModemInfo.titleBar,
           WA_IDCMP,IDCMP_CLOSEWINDOW,
-          WA_FLAGS,WFLG_ACTIVATE,NIL]
+          WA_FLAGS,WFLG_ACTIVATE,
+          TAG_DONE]
   ENDIF
   IF (windowZmodem=NIL) AND (scropen)
     windowZmodem:=OpenWindowTagList(NIL,tags)
@@ -27683,15 +27735,15 @@ PROC openZmodemStat()
 
     IF (gadtoolsbase:=OpenLibrary('gadtools.library',0))<>NIL
       vi:=GetVisualInfoA(screen, [NIL])
-      tags2:=NEW [GT_VISUALINFO,vi,0]
+      tags2:=NEW [GT_VISUALINFO,vi,TAG_DONE]
 
       DrawBevelBoxA(windowZmodem.rport,10,125,315,10,tags2)
       FreeVisualInfo(vi)
-      END tags2
+      END tags2[countTags(tags2)]
       CloseLibrary(gadtoolsbase)
     ENDIF
   ENDIF
-  END tags
+  END tags[countTags(tags)]
 
 ENDPROC
 
@@ -27702,8 +27754,9 @@ PROC openExpressScreen()
   DEF debugstr[255]:STRING
   DEF pub=FALSE
   DEF pubLock=NIL
-  DEF opentags,temp
+  DEF opentags:PTR TO LONG,temp
   DEF pens: PTR TO INT, cols:PTR TO INT
+  DEF pensize,colsize
   DEF statePtr:PTR TO awaitState
 
   IF scropen THEN RETURN
@@ -27751,6 +27804,7 @@ PROC openExpressScreen()
       IF (bitPlanes<3) OR (KickVersion(40)=FALSE)
         ->colour 1 = white, colour 7 = red
         pens:=NEW [0,1,1,1,6,4,1,0,4,1,4,1,-1]:INT
+        pensize:=13
         IF (bitPlanes>3)
           cols:=NEW [0,0,0,0,
              1,12,12,12,
@@ -27769,13 +27823,16 @@ PROC openExpressScreen()
              14,0,15,15,
              15,15,0,0,
              -1,0,0,0]:INT
+          colsize:=68
         ELSE
           cols:=NEW [0,0,0,0,1,15,15,15,2,0,15,0,3,15,15,0,4,0,0,15,5,15,0,15,6,0,15,15,7,15,0,0,-1,0,0,0]:INT
+          colsize:=36
         ENDIF
 
       ELSE
         ->colour 1 = red, colour 7 = white
         pens:=NEW [0,7,7,7,6,4,7,0,4,7,4,7,-1]:INT
+        pensize:=13
         IF (bitPlanes>3)
           cols:=NEW [0,0,0,0,
            1,12,0,0,
@@ -27794,8 +27851,10 @@ PROC openExpressScreen()
            14,0,15,15,
            15,15,15,15,
            -1,0,0,0]:INT
+          colsize:=68
         ELSE
           cols:=NEW [0,0,0,0,1,15,0,0,2,0,15,0,3,15,15,0,4,0,0,15,5,15,0,15,6,0,15,15,7,15,15,15,-1,0,0,0]:INT
+          colsize:=36
         ENDIF
       ENDIF
   
@@ -27819,18 +27878,19 @@ PROC openExpressScreen()
               SA_PENS,pens,
               SA_INTERLEAVED,1,
               SA_FONT,defaultfontattr,
-              SA_COLORS,cols,NIL]
+              SA_COLORS,cols,
+              TAG_DONE]
       screen:=OpenScreenTagList(NIL,opentags)
-      END opentags
+      END opentags[countTags(opentags)]
+
+      END pens[pensize]
+      END cols[colsize]
 
       IF (screen) AND (StrLen(pubScreen)>0)
         PubScreenStatus(screen,0)
         pubLock:=LockPubScreen(pubScreen)
         IF pubLock<>FALSE THEN pub:=TRUE
       ENDIF
-
-      END pens
-      END cols
     ENDIF
 
     IF screen=NIL THEN RETURN ERR_SCREEN
@@ -27843,9 +27903,10 @@ PROC openExpressScreen()
          WA_HEIGHT,screen.wbortop+screen.font.ysize+1,
          ->WA_DETAILPEN,0,
          ->WA_BLOCKPEN,blockpen,
-       WA_IDCMP,IDCMP_CLOSEWINDOW,NIL]
+       WA_IDCMP,IDCMP_CLOSEWINDOW,
+       TAG_DONE]
       windowClose:=OpenWindowTagList(NIL,opentags)
-      END opentags
+      END opentags[countTags(opentags)]
     ENDIF
 
     IF windowClose=NIL THEN RETURN ERR_WINDOW
@@ -27869,9 +27930,10 @@ PROC openExpressScreen()
         ->WA_DETAILPEN,0,
         ->WA_BLOCKPEN,blockpen,
         WA_IDCMP,IDCMP_CLOSEWINDOW,
-        WA_FLAGS,WFLG_ACTIVATE,NIL]
+        WA_FLAGS,WFLG_ACTIVATE,
+        TAG_DONE]
       window:=OpenWindowTagList(NIL,opentags)
-      END opentags
+      END opentags[countTags(opentags)]
       IF (window) AND (fontHandle<>NIL) THEN SetFont(window.rport,fontHandle)
     ELSE
       opentags:=NEW [WA_BORDERLESS,1,WA_CUSTOMSCREEN,screen,
@@ -27881,9 +27943,10 @@ PROC openExpressScreen()
         WA_HEIGHT,height-(screen.wbortop+screen.font.ysize+1),
         ->WA_DETAILPEN,0,
         ->WA_BLOCKPEN,blockpen,
-        WA_FLAGS,WFLG_ACTIVATE,NIL]
+        WA_FLAGS,WFLG_ACTIVATE,
+        TAG_DONE]
       window:=OpenWindowTagList(NIL,opentags)
-      END opentags
+      END opentags[countTags(opentags)]
     ENDIF
   ENDIF
 
@@ -28632,7 +28695,7 @@ PROC main() HANDLE
 
  EXCEPT DO
   IF fds<>NIL
-    END fds
+    END fds[32]
   ENDIF
   
   IF proc<>NIL

@@ -2423,7 +2423,7 @@ zsendcont2:
   chr(type,tempstr)
   StringF(tempstr2,'Transfer failed on receipt of: \s', tempstr)
 	lprintf(zm,ZM_LOG_WARNING,tempstr2)
-  END zfile_frame
+  END zfile_frame[5]
   doClose(zm,fp)
 ENDPROC FALSE
 

@@ -71,6 +71,34 @@ EXPORT PROC checkPathSlash(path)
   ENDIF
 ENDPROC 
 
+EXPORT PROC makeIntList(src:PTR TO CHAR)
+  DEF res
+  DEF m=0
+  DEF tmp,i
+  
+  tmp:=String(StrLen(src))
+  
+  FOR i:=0 TO StrLen(src)-1
+    IF src[]=',' THEN m++
+  ENDFOR
+  
+  res:=List(m)
+  FOR i:=0 TO StrLen(src)-1
+    IF src[i]=','
+      listAdd2(res,Val(tmp))
+      StrCopy(tmp,'')
+    ELSE
+      strAddChar(tmp,src[i])
+    ENDIF
+  ENDFOR
+  IF StrLen(tmp)>0
+    listAdd2(res,Val(tmp))
+  ENDIF
+  
+  DisposeLink(tmp)
+  
+ENDPROC res
+
 EXPORT PROC strCmpi(test1: PTR TO CHAR, test2: PTR TO CHAR, len)
   /* case insensitive string compare */
   DEF i,l1,l2
@@ -210,12 +238,10 @@ PROC asmputchar()
 ENDPROC
 
 EXPORT PROC formatUnsignedLong(val,outStr)
-  DEF outputTxt
+  DEF outputTxt[10]:ARRAY OF CHAR
   
-  outputTxt:=NEW [0,0,0,0,0,0,0,0,0,0]:CHAR
   RawDoFmt('%lu',{val},{asmputchar},outputTxt)
   StrCopy(outStr,outputTxt)
-  END outputTxt
 EXPORT ENDPROC
 
 EXPORT PROC formatLongDate(cDateVal,outDateStr)
@@ -594,5 +620,5 @@ EXPORT PROC parsePatternNoCase2(source:PTR TO CHAR,dest:PTR TO CHAR, len)
     StrAdd(s,t)
   ENDFOR
   r:=ParsePatternNoCase(s,dest,len)
-  Dispose(s)
+  DisposeLink(s)
 ENDPROC r

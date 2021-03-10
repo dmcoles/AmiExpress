@@ -32,7 +32,7 @@ OBJECT ftpData
   workingPath:PTR TO CHAR
   uploadMode:LONG
   port:LONG
-  dataPort:LONG
+  dataPorts:PTR TO LONG
   restPos:LONG
   sockId:LONG
   aePuts:LONG
@@ -308,8 +308,8 @@ PROC openSocket(sb,port, reuseable,ftpData:PTR TO ftpData)
       StringF(tempStr,'/XFTP: error setting socket options SO_LINGER, error=\d\b\n',errno(sb))
       aePuts(ftpData,tempStr)
     ENDIF
-    END optval
-    END optlen
+    END optval[2]
+    END optlen[1]
 
   ENDIF
   
@@ -319,8 +319,8 @@ PROC openSocket(sb,port, reuseable,ftpData:PTR TO ftpData)
   servaddr.sin_addr:=INADDR_ANY
 
 	IF(bind(sb,server_s, servaddr, SIZEOF sockaddr_in) < 0)
-		StringF(tempStr,'/XFTP: Error calling bind() for port \d, error=\d\b\n',port,errno(sb));
-    aePuts(ftpData,tempStr)
+		->StringF(tempStr,'/XFTP: Error calling bind() for port \d, error=\d\b\n',port,errno(sb));
+    ->aePuts(ftpData,tempStr)
     closeSocket(sb,server_s)
     END servaddr
 		RETURN FALSE,-1
@@ -434,6 +434,7 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF addr: PTR TO LONG
   DEF hostEnt: PTR TO hostent
   DEF r,data_c,data_s
+  DEF i,port
 	 
   hostEnt:=getHostByName(sb,serverHost)
   addr:=hostEnt.h_addr_list[]
@@ -441,13 +442,19 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
   
   ftpData.rest:=0  
 
-  r,data_s:=openSocket(sb,ftpData.dataPort,1,ftpData)
+  i:=0
+  REPEAT
+    port:=ftpData.dataPorts[i]
+    r,data_s:=openSocket(sb,port,1,ftpData)
+    i++
+  UNTIL (r OR (i>=ListLen(ftpData.dataPorts)))
+
   IF r=FALSE 
     writeLineEx(sb,ftp_c, '425 Can''t open data connection\b\n')
     RETURN -1,-1
   ENDIF
   
-  StringF(temp,'227 Entering Passive Mode (\d,\d,\d,\d,\d,\d)\b\n',Shr(addr[] AND $FF000000,24)AND $FF,Shr(addr[] AND $FF0000,16) AND $FF,Shr(addr[] AND $FF00,8) AND $FF,addr[] AND $FF,Shr(ftpData.dataPort,8) AND $FF,ftpData.dataPort AND $FF)
+  StringF(temp,'227 Entering Passive Mode (\d,\d,\d,\d,\d,\d)\b\n',Shr(addr[] AND $FF000000,24)AND $FF,Shr(addr[] AND $FF0000,16) AND $FF,Shr(addr[] AND $FF00,8) AND $FF,addr[] AND $FF,Shr(port,8) AND $FF,port AND $FF)
   ->WriteF(temp)
   writeLineEx(sb,ftp_c, temp)
   ftpData.restPos:=0
@@ -460,7 +467,7 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
     RETURN -1,-1
   ELSE
     ftpData.scount:=ftpData.scount+1
-    /*StringF(temp,'Data connection at port \d accepted\b\n', ftpData.dataPort)
+    /*StringF(temp,'Data connection at port \d accepted\b\n', port)
     aePuts(ftpData,temp)*/
     RETURN data_s,data_c
   ENDIF      
@@ -1043,7 +1050,7 @@ ENDPROC pa
 
 
 PROC createThread(num,node,sockid,ftpData:PTR TO ftpData)
-  DEF tags,proc:PTR TO process
+  DEF tags:PTR TO LONG,proc:PTR TO process
   DEF name[255]:STRING
   
   StringF(name,'ftpThread\d-\d',node,num)
@@ -1055,16 +1062,17 @@ PROC createThread(num,node,sockid,ftpData:PTR TO ftpData)
   proc:=CreateNewProc(tags)
   saveA4(proc,ftpData,node)
   Permit()
- END tags
+ END tags[7]
 ENDPROC
 
-EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, ftpDupeCheckPtr,ftpCheckConnection,uploadMode)
+EXPORT PROC doftp(node,ftphost,ftpports:PTR TO LONG,ftpdataports:PTR TO LONG,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, ftpDupeCheckPtr,ftpCheckConnection,uploadMode)
   DEF r,ftp_s,ftp_c,s,sb
   DEF temp[255]:STRING
   DEF ftpData:PTR TO ftpData
   DEF flg,rchar
   DEF tcount=0,i,t
   DEF connected=TRUE
+  DEF port
   
   ftpData:=NEW ftpData
   ftpData.rest:=0
@@ -1082,23 +1090,29 @@ EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPt
   ftpData.fileDupeCheck:=ftpDupeCheckPtr
   ftpData.workingPath:=String(255)
   ftpData.hostName:=String(255)
-  ftpData.dataPort:=ftpdataport
+  ftpData.dataPorts:=ftpdataports
 
 
   StrCopy(ftpData.hostName,ftphost)
-  ftpData.port:=ftpport
+  
   StrCopy(ftpData.workingPath,ftppath)
   
 	sb:=OpenLibrary('bsdsocket.library',2)
 	IF (sb)
-    StringF(temp,'\b\nFTP processor started on \s port \d...\b\n',ftpData.hostName,ftpData.port)
-    aePuts(ftpData,temp)
-    aePuts(ftpData,'Transfer will finish on CTRL-C or when all connections are closed\b\n\b\n')
-  
-    r,ftp_s:=openSocket(sb,ftpport,1,ftpData)
-
+    i:=0
+    REPEAT
+      port:=ftpports[i]
+      r,ftp_s:=openSocket(sb,port,1,ftpData)
+      i++
+    UNTIL (r OR (i>=ListLen(ftpports)))
+    
     flg:=FALSE
     IF r
+      ftpData.port:=port
+      StringF(temp,'\b\nFTP processor started on \s port \d...\b\n',ftpData.hostName,ftpData.port)
+      aePuts(ftpData,temp)
+      aePuts(ftpData,'Transfer will finish on CTRL-C or when all connections are closed\b\n\b\n')
+
       ioctlSocket(sb,ftp_s,FIONBIO,[1])
       WHILE ((flg=FALSE) OR (ftpData.tcount<>0))
         Delay(10)
@@ -1131,20 +1145,21 @@ EXPORT PROC doftp(node,ftphost,ftpport,ftpdataport,ftppath,aePutsPtr, readCharPt
       ENDWHILE
       ftpData.scount:=ftpData.scount-1
       r:=closeSocket(sb,ftp_s)
-    ENDIF
-    IF flg THEN aePuts(ftpData,'\b\n')
-    IF (rchar=3) OR (connected=FALSE)
-      StringF(temp,'\s detected, FTP transfer aborted\b\n',IF rchar=3 THEN 'CTRL-C' ELSE 'Disconnect')
-      aePuts(ftpData,temp)
-      FOR i:=0 TO tcount-1
-        StringF(temp,'ftpThread\d-\d',node,i)
-        Forbid()
-        t:=FindTask(temp)
-        IF t<>NIL THEN Signal(t,SIGBREAKF_CTRL_C)
-        Permit()       
-      ENDFOR
-    ELSE
-      aePuts(ftpData,'FTP transfers complete, all ftp connections closed\b\n')
+
+      IF flg THEN aePuts(ftpData,'\b\n')
+      IF (rchar=3) OR (connected=FALSE)
+        StringF(temp,'\s detected, FTP transfer aborted\b\n',IF rchar=3 THEN 'CTRL-C' ELSE 'Disconnect')
+        aePuts(ftpData,temp)
+        FOR i:=0 TO tcount-1
+          StringF(temp,'ftpThread\d-\d',node,i)
+          Forbid()
+          t:=FindTask(temp)
+          IF t<>NIL THEN Signal(t,SIGBREAKF_CTRL_C)
+          Permit()       
+        ENDFOR
+      ELSE
+        aePuts(ftpData,'FTP transfers complete, all ftp connections closed\b\n')
+      ENDIF
     ENDIF
     CloseLibrary(sb)
 	ENDIF
