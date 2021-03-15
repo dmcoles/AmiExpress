@@ -52,13 +52,11 @@ OBJECT mailHeader
 ENDOBJECT
 
 PROC exec(fileName:PTR TO CHAR)
-  DEF tags:PTR TO LONG,r
-  tags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
-  r:=SystemTagList(fileName,tags)
+  DEF r
+  r:=SystemTagList(fileName,[SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG)
   IF r=-1
     WriteF('Error executing \s\n\n',fileName)
   ENDIF
-  END tags[7]
 ENDPROC r
 
 PROC replacestr(sourcestring,searchtext,replacetext)
@@ -431,6 +429,7 @@ PROC main() HANDLE
   DEF cfgFile[255]:STRING
   DEF needToSave
   DEF myargs:PTR TO LONG,rdargs
+  DEF eof=FALSE
 
   DEF category[255]:STRING
   DEF optionName[255]:STRING
@@ -456,7 +455,7 @@ PROC main() HANDLE
   IF fh<>0
   
     REPEAT
-      ReadStr(fh,tempStr)
+      eof:=(ReadStr(fh,tempStr)=-1) AND (StrLen(tempStr)=0)
       processConfigLine(tempStr,category,optionName,optionValue)
 
       IF StrCmp('MAIN',category) AND StrCmp('MODE',optionName) THEN StrCopy(mode,optionValue)
@@ -476,8 +475,14 @@ PROC main() HANDLE
       IF StrCmp('MAIN',category) AND StrCmp('MSGFILE',optionName) THEN StrCopy(qwkRepMessageFilename,optionValue)
       IF StrCmp('MAIN',category) AND StrCmp('REPFILE',optionName) THEN StrCopy(qwkOutputFilename,optionValue)
 
-    UNTIL StrCmp(category,'CONFS')
+    UNTIL StrCmp(category,'CONFS') OR eof
     UpperStr(mode)
+
+    IF StrCmp(category,'CONFS')=FALSE
+      WriteF('Error reading CONFS data in Qwk.cfg\n\n')
+      Raise(ERR_NOCFG)
+    ENDIF
+
 
     replacestr(qwkGetCommand,'{bbsid}',bbsId)
     replacestr(qwkPutCommand,'{bbsid}',bbsId)

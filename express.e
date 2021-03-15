@@ -1862,6 +1862,10 @@ PROC checkInput()
   IF servercmd=SV_UNICONIFY
     servercmd:=-1
     IF scropen THEN expressToFront() ELSE openExpressScreen()
+  ENDIF
+
+  IF(logonType>=LOGON_TYPE_REMOTE)
+    IF(checkCarrier()=FALSE) THEN RETURN TRUE
   ENDIF 
 ENDPROC ((checkCon() OR checkSer() OR checkTelnetData()))
 
@@ -5238,12 +5242,20 @@ PROC processMci(mcidata,outdata=NIL)
   WHILE (pos>=0) AND (pos<len)
     IF reqState<>REQ_STATE_NONE THEN RETURN
     IF (cmdpos:=InStr(mcidata,'~',pos))<0
-      aePuts(mcidata+pos)
+      IF outdata=NIL
+        aePuts(mcidata+pos)
+      ELSE
+        StrAdd(outdata,mcidata+pos)
+      ENDIF
       pos:=EstrLen(mcidata)
     ELSE
-      aePuts2(mcidata+pos,cmdpos-pos)
+      IF outdata=NIL
+        aePuts2(mcidata+pos,cmdpos-pos)
+      ELSE
+        StrAdd(outdata,mcidata+pos,cmdpos-pos)
+      ENDIF
       pos:=pos+(cmdpos-pos)
-      pos:=processMciCmd(mcidata,len,pos)
+      pos:=processMciCmd(mcidata,len,pos,outdata)
     ENDIF
   ENDWHILE
 ENDPROC

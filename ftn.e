@@ -36,13 +36,11 @@ OBJECT mailHeader
 ENDOBJECT
 
 PROC exec(fileName:PTR TO CHAR)
-  DEF tags:PTR TO LONG,r
-  tags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
-  r:=SystemTagList(fileName,tags)
+  DEF r
+  r:=SystemTagList(fileName,[SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG)
   IF r=-1
     WriteF('Error executing \s\n\n',fileName)
   ENDIF
-  END tags[7]
 ENDPROC r
 
 PROC replacestr(sourcestring,searchtext,replacetext)
@@ -359,24 +357,12 @@ PROC createMessagesBundle(originNode,destNode,originNet,destNet,originZone,destZ
   ENDIF
 ENDPROC
 
-PROC fileWriteLn(fh,str: PTR TO CHAR)
-  DEF stat
-  IF (stat:=fileWrite(fh,str))<>RESULT_SUCCESS THEN RETURN stat
-ENDPROC fileWrite(fh,'\n')
-
-PROC fileWrite(fh,str: PTR TO CHAR)
-  DEF s
-
-  s:=Write(fh,str,StrLen(str))
-  IF s<>StrLen(str) THEN RETURN RESULT_FAILURE
-ENDPROC RESULT_SUCCESS
-
 PROC formatLongDateTime2(cDateVal,outDateStr,seperatorChar)
   DEF d : PTR TO datestamp
   DEF dt : datetime
   DEF datestr[10]:STRING
   DEF timestr[10]:STRING
-  DEF r,dateVal
+  DEF dateVal
 
   dateVal:=cDateVal-21600
 
@@ -514,7 +500,7 @@ PROC processPacketFile(filename:PTR TO CHAR) HANDLE
   DEF buf=0:PTR TO CHAR
   DEF buf2=0:PTR TO CHAR,bufsz
   DEF mf=0,fh=0,fh2=0
-  DEF n,c,i,i2
+  DEF n,c,i
   DEF tempStr[255]:STRING
   DEF lineBuff:PTR TO CHAR
   DEF newMsgNum
@@ -895,19 +881,16 @@ PROC main() HANDLE
   DEF ftnUnpackCommand[255]:STRING
   
   DEF tempDir[255]:STRING
-  
-  DEF cmdCopy[255]:STRING
-  
+ 
+ 
   DEF pktPass[8]:STRING
   
   DEF cfgFile[255]:STRING
   DEF myargs:PTR TO LONG,rdargs
   
-  DEF fh,lock
+  DEF fh
   DEF tempStr[255]:STRING
-  DEF msgBundleFilename[255]:STRING
   DEF msgPacketFilename[255]:STRING
-  DEF dow[3]:STRING
   
   DEF category[255]:STRING
   DEF optionName[255]:STRING
@@ -917,6 +900,8 @@ PROC main() HANDLE
   DEF tearLine[255]:STRING
   DEF originLine[255]:STRING
   DEF tzOffset[10]:STRING
+  
+  DEF eof=FALSE
 
   WriteF('Ami-Express FTN file processor Copyright 2020 Darren Coles\n')
   
@@ -937,7 +922,7 @@ PROC main() HANDLE
   IF fh<>0
 
     REPEAT
-      ReadStr(fh,tempStr)
+      eof:=(ReadStr(fh,tempStr)=-1) AND (StrLen(tempStr)=0)
       processConfigLine(tempStr,category,optionName,optionValue)
 
       IF StrCmp('MAIN',category) AND StrCmp('MODE',optionName) THEN StrCopy(mode,optionValue)
@@ -963,8 +948,13 @@ PROC main() HANDLE
       IF StrCmp('MISC',category) AND StrCmp('TEAR',optionName) THEN StrCopy(tearLine,optionValue)
       IF StrCmp('MISC',category) AND StrCmp('ORIGIN',optionName) THEN StrCopy(originLine,optionValue)
       IF StrCmp('MISC',category) AND StrCmp('TZOFFSET',optionName) THEN StrCopy(tzOffset,optionValue)
-    UNTIL StrCmp(category,'CONFS')
+    UNTIL StrCmp(category,'CONFS') OR eof
     UpperStr(mode)
+
+    IF StrCmp(category,'CONFS')=FALSE
+      WriteF('Error reading CONFS data in FTN.cfg\n\n')
+      Raise(ERR_NOCFG)
+    ENDIF
 
     WHILE(ReadStr(fh,tempStr)<>-1) OR (StrLen(tempStr)>0)
       confNames.add(tempStr)
