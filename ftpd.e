@@ -42,6 +42,8 @@ OBJECT ftpData
   fileEnd:LONG
   fileProgress:LONG
   fileDupeCheck:LONG
+  ftpAuth:LONG
+  authUser[255]:ARRAY OF CHAR
 ENDOBJECT
  
 
@@ -258,6 +260,20 @@ PROC readChar(ftpData:PTR TO ftpData)
   CLR.L -(A7)
   r:=rdChar()
   ADDQ.L #8,A7
+ENDPROC r
+
+PROC doAuth(ftpData:PTR TO ftpData,userName:PTR TO CHAR,password:PTR TO CHAR)
+  DEF fAuth,r
+  
+  fAuth:=ftpData.ftpAuth
+  IF fAuth<>NIL
+    MOVE.L userName,-(A7)
+    MOVE.L password,-(A7)
+    r:=fAuth()
+    ADDQ.L #8,A7
+  ELSE
+    r:=TRUE
+  ENDIF
 ENDPROC r
 
 PROC fastSystemTime()
@@ -520,14 +536,19 @@ PROC myDir(sb,data_c, path: PTR TO CHAR)
 ENDPROC TRUE
 
 
-PROC cmdUser(sb,ftp_c,params:PTR TO CHAR)
+PROC cmdUser(sb,ftp_c,params:PTR TO CHAR,ftpData:PTR TO ftpData)
   ->WriteF('user=\s\b\n',params)
   writeLineEx(sb,ftp_c, '331 user accepted\b\n')
+  AstrCopy(ftpData.authUser,params,255)
 ENDPROC
 
-PROC cmdPass(sb,ftp_c,params)
+PROC cmdPass(sb,ftp_c,params,ftpData:PTR TO ftpData)
   ->WriteF('pass=\s\b\n',params)
-  writeLineEx(sb,ftp_c, '230 password accepted\b\n')
+  IF doAuth(ftpData,ftpData.authUser,params)
+    writeLineEx(sb,ftp_c, '230 password accepted\b\n')
+  ELSE
+    writeLineEx(sb,ftp_c, '430 Invalid username or password\b\n')
+  ENDIF
 ENDPROC
 
 PROC cmdPwd(sb,ftp_c)
@@ -935,9 +956,9 @@ PROC ftpThread()
   WHILE((readLine(sb,ftp_c, request, MAX_LINE-1) > 0) AND (StrCmp(request, 'QUIT', 4)=FALSE)) AND (CtrlC()=FALSE)
     
     IF(StrCmp(request, 'USER ', 5))
-      cmdUser(sb,ftp_c,request+5)
+      cmdUser(sb,ftp_c,request+5,ftpData)
     ELSEIF(StrCmp(request, 'PASS ', 5))
-      cmdPass(sb,ftp_c,request+5)
+      cmdPass(sb,ftp_c,request+5,ftpData)
     ELSEIF(StrCmp(request, 'LIST', 4))
       cmdList(sb,ftp_c,data_s,data_c,ftpData)
       data_c:=-1
@@ -1065,7 +1086,7 @@ PROC createThread(num,node,sockid,ftpData:PTR TO ftpData)
  END tags[7]
 ENDPROC
 
-EXPORT PROC doftp(node,ftphost,ftpports:PTR TO LONG,ftpdataports:PTR TO LONG,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, ftpDupeCheckPtr,ftpCheckConnection,uploadMode)
+EXPORT PROC doftp(node,ftphost,ftpports:PTR TO LONG,ftpdataports:PTR TO LONG,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, ftpDupeCheckPtr,ftpCheckConnection,ftpAuthPtr,uploadMode)
   DEF r,ftp_s,ftp_c,s,sb
   DEF temp[255]:STRING
   DEF ftpData:PTR TO ftpData
@@ -1091,7 +1112,7 @@ EXPORT PROC doftp(node,ftphost,ftpports:PTR TO LONG,ftpdataports:PTR TO LONG,ftp
   ftpData.workingPath:=String(255)
   ftpData.hostName:=String(255)
   ftpData.dataPorts:=ftpdataports
-
+  ftpData.ftpAuth:=ftpAuthPtr
 
   StrCopy(ftpData.hostName,ftphost)
   

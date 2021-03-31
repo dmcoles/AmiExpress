@@ -17,7 +17,6 @@ any missing Door port commands
     DT_LANGUAGE(set),SETOVERIDE,FULLEDIT (not implemented in /X3 or 4)
     607 - get/set something that isnt used anywhere else in the code (not yet implemented)
     612 - get MemConf address (not yet implemented)
-    621 - interpret mci string (not yet implemented)
     631 - get or set unknown thing ??? (skips messages during download)    (not yet implemented)
 
 node tooltypes
@@ -161,7 +160,6 @@ DEF callerNum=0
 DEF currentConfName[255]:STRING
 DEF currentConfDir[255]:STRING    ->shared with tooltypes.e
 DEF msgBaseLocation[255]:STRING
-DEF uploadLocation[255]:STRING
 DEF userDataFile[255]:STRING
 DEF userKeysFile[255]:STRING
 DEF userMiscFile[255]:STRING
@@ -430,6 +428,11 @@ DEF zModemBufferSize=65536
 DEF bufferedBytes=0
 DEF bufferReadOffset=0
 DEF lastCarrierCheck=0
+
+DEF cmdShortcuts=FALSE
+DEF shortcuts:PTR TO stringlist
+DEF currentMenuName[255]:STRING
+DEF menuPause=TRUE
 
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
@@ -1863,6 +1866,9 @@ PROC checkInput()
     servercmd:=-1
     IF scropen THEN expressToFront() ELSE openExpressScreen()
   ENDIF
+  
+  processWindowMessage(-1)
+  processCommodityMessage(-1)
 
   IF(logonType>=LOGON_TYPE_REMOTE)
     IF(checkCarrier()=FALSE) THEN RETURN TRUE
@@ -1925,6 +1931,7 @@ PROC getMsgBaseLocation(confNum,msgBaseNum,outMsgBaseLocationString)
   num:=readToolTypeInt(TOOLTYPE_MSGBASE,confNum,'NMSGBASES') 
   IF (msgBaseNum>num) OR (msgBaseNum<1) OR (num=-1)
     StringF(outMsgBaseLocationString,'\sMsgBase/',getConfLocation(confNum))
+    checkPathSlash(outMsgBaseLocationString)
     RETURN
   ENDIF
   StringF(toolTypeName,'LOCATION.\d',msgBaseNum)
@@ -1936,6 +1943,7 @@ PROC getMsgBaseLocation(confNum,msgBaseNum,outMsgBaseLocationString)
   ELSE
     StringF(outMsgBaseLocationString,'\s\s',getConfLocation(confNum),location)
   ENDIF
+  checkPathSlash(outMsgBaseLocationString)
 ENDPROC
 
 PROC getConfLocation(confNum,outConfLocationString=NIL)
@@ -1944,11 +1952,15 @@ ENDPROC confDirs.item(confNum-1)
 
 PROC setConfLocation(confNum,newconfLocation)
   DEF p : PTR TO CHAR
+  DEF tempstr[255]:STRING
 
-  confDirs.setItem(confNum-1,newconfLocation)
+  StrCopy(tempstr,newconfLocation)
+  checkPathSlash(tempstr)
+  
+  confDirs.setItem(confNum-1,tempstr)
   IF confNum<11
     p:=cmds.conf1Loc
-    strCpy(p+((confNum-1)*60),newconfLocation,ALL)
+    strCpy(p+((confNum-1)*60),tempstr,ALL)
   ENDIF
 ENDPROC
 
@@ -2797,10 +2809,10 @@ PROC findAcsLevel()
   REPEAT
     getNodeFile(TOOLTYPE_ACCESS,level,ttfile)
     found:=configFileExists(ttfile)
-    IF (found=FALSE) THEN level:=level-5
-  UNTIL (level=0) OR (found)
+    IF (found=FALSE) AND (level>0) THEN level:=level-5
+  UNTIL (level<=0) OR (found)
 
-  IF (found=FALSE) THEN level:=-1
+  IF (found=FALSE) THEN level:=0
 ENDPROC level
 
 PROC higherAccess()
@@ -3322,7 +3334,10 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:P
       StrCopy(tempstring,msg.string)
         temp:=Val(tempstring)
           strCpy(cmds.conf1Loc+(temp*54),tempstring+40,54)
-        IF(temp=(currentConf-1)) THEN StrCopy(currentConfDir,tempstring+40)
+        IF(temp=(currentConf-1)) 
+          StrCopy(currentConfDir,tempstring+40)
+          checkPathSlash(currentConfDir)
+        ENDIF
         tempstring[39]:=0
         stripReturn(tempstring)
           strCpy(cmds.conf1Name+(temp*54),tempstring+2,54)
@@ -3464,6 +3479,7 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:P
         strCpy(msg.string,msgBaseLocation,26)
       ELSE
         StrCopy(msgBaseLocation,msg.string,26)
+        checkPathSlash(msgBaseLocation)
       ENDIF
     CASE GET_CUSTOM_MSGBASE_MENUCMD
       strCpy(msg.string,customMsgCmd,200)
@@ -3526,7 +3542,8 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:P
     CASE SET_FILEATTACH
       fileattach:=(msg.data<>0)
     CASE INTERPRET_MCI
-        debugLog(LOG_WARN,'INTERPRET_MCI not yet implemented')
+      processMci(msg.string,tempstring)
+      strCpy(msg.string,tempstring,200)
     CASE GET_XIMPORT
       msg.data:=ximPort
     CASE GET_MENU_COMMAND_CHAR
@@ -4439,6 +4456,7 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
   
   getConfName(conf,currentConfName)
   getConfLocation(conf,currentConfDir)
+  checkPathSlash(currentConfDir)
 
   maxDirs:=readToolTypeInt(TOOLTYPE_CONF,conf,'NDIRS')
 
@@ -4448,7 +4466,6 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
   readToolType(TOOLTYPE_CONF,conf,'MENU_PROMPT',menuPrompt)
 
   getMsgBaseLocation(conf,msgBaseNum,msgBaseLocation)
-  StringF(uploadLocation,'\sUpload/',currentConfDir)
 
   confNameType:=NAME_TYPE_USERNAME
   StringF(namestr1,'REALNAME.\d',msgBaseNum)
@@ -4487,8 +4504,10 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
 
   StrCopy(confScreenDir,currentConfDir)
   readToolType(TOOLTYPE_CONF,conf,'SCREENS',confScreenDir)
+  checkPathSlash(confScreenDir)
 
   IF(confScan=FALSE)
+    StrCopy(currentMenuName,'')
     IF displayScreen(SCREEN_CONF_BULL)
       temp:=doPause()
       IF(temp<0) THEN RETURN temp
@@ -5038,6 +5057,13 @@ PROC processMciCmd(mcidata,len,pos,outdata = NIL)
         IF res<>RESULT_SUCCESS THEN RETURN res
       ENDIF
       pos:=pos+nval+t
+    ELSEIF StrCmp(cmd,'SM_',3)
+      pos:=pos+3
+      IF outdata=NIL
+        nval:=EstrLen(cmd)-3
+        midStr2(currentMenuName,mcidata,pos,nval)
+      ENDIF
+      pos:=pos+EstrLen(currentMenuName)+t
     ELSEIF StrCmp(cmd,'q',ALL)
       pos:=pos+1+t
       IF outdata=NIL THEN aePuts('[0m')
@@ -6015,8 +6041,21 @@ PROC displayScreen(screenType)
       StringF(screencheck,'\s\s',confScreenDir,'BULL')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
     CASE SCREEN_MENU
-      StringF(screencheck,'\s\s',confScreenDir,'MENU')
+      IF StrLen(currentMenuName)=0
+        StringF(screencheck,'\s\s',confScreenDir,'MENU')
+      ELSE
+        StringF(screencheck,'\s\s',confScreenDir,currentMenuName)
+      ENDIF
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
+      cmdShortcuts:=FALSE
+      shortcuts.clear()
+      IF res
+        StrAdd(screenfile,'.keys')
+        IF fileExists(screenfile)
+          loadShortcuts(screenfile)
+          cmdShortcuts:=TRUE        
+        ENDIF      
+      ENDIF
     CASE SCREEN_LOGON
       StringF(screencheck,'\s\s',nodeScreenDir,'LOGON')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
@@ -6031,6 +6070,9 @@ PROC displayScreen(screenType)
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
     CASE SCREEN_JOINCONF
       StringF(screencheck,'\s\s',nodeScreenDir,'JoinConf')
+      IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
+    CASE SCREEN_CONF_JOINMSGBASE
+      StringF(screencheck,'\s\s',confScreenDir,'JoinMsgBase')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
     CASE SCREEN_JOINMSGBASE
       StringF(screencheck,'\s\s',nodeScreenDir,'JoinMsgBase')
@@ -7415,6 +7457,8 @@ PROC processLoggingOff()
   DEF tempstr2[255]:STRING
   DEF filetags:PTR TO LONG
 
+  cmdShortcuts:=FALSE
+  shortcuts.clear()
   pagedFlag:=FALSE
   chatFlag:=FALSE
   blockOLM:=FALSE
@@ -11991,6 +12035,7 @@ c1:
     IF(z=0)
 
       IF readToolType(TOOLTYPE_CONF,checkConfNum,tempstr,path)
+        checkPathSlash(path)
         pstat:=1 /* shouldnt this be 251 ?*/
       ELSE
         pstat:=0
@@ -14340,6 +14385,12 @@ PROC ftpDupeCheck(fileName:PTR TO CHAR)
   IF dup THEN skipdFiles.add(FilePart(fileName))
 ENDPROC dup
 
+PROC ftpAuth(userName:PTR TO CHAR,password:PTR TO CHAR)
+  IF strCmpi(userName,loggedOnUser.name,31)=FALSE THEN RETURN FALSE
+  IF calcPasswordHash(password)<>loggedOnUser.pwdHash THEN RETURN FALSE
+ENDPROC TRUE
+
+
 PROC updateDownloadStats(fileItem:PTR TO flagFileItem)
   DEF tempsize
   DEF cb:PTR TO confBase
@@ -14387,6 +14438,9 @@ ENDPROC
 PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPorts,ftpDataPorts)
   DEF tempstr[100]:STRING
   DEF oldSerCache
+  DEF authPtr=NIL
+
+  IF checkToolTypeExists(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPAUTH') THEN authPtr:={ftpAuth}
 
   zModemInfo.current:=0
   zModemInfo.fileList:=NIL
@@ -14401,7 +14455,7 @@ PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPorts,ftpDataPorts)
     StrCopy(tempstr,'localhost')
   ENDIF
 
-  doftp(node,tempstr,ftpPorts,ftpDataPorts,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},TRUE)
+  doftp(node,tempstr,ftpPorts,ftpDataPorts,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},authPtr,TRUE)
   serialCacheEnabled:=oldSerCache
 ENDPROC
 
@@ -14413,6 +14467,9 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
   DEF linkStr[255]:STRING
   DEF item:PTR TO flagFileItem
   DEF oldSerCache
+  DEF authPtr=NIL
+
+  IF checkToolTypeExists(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPAUTH') THEN authPtr:={ftpAuth}
 
   IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPHOST',tempstr)=FALSE
     StrCopy(tempstr,'localhost')
@@ -14450,7 +14507,7 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
-  doftp(node,tempstr,ftpPorts,ftpDataPorts,tempDir,{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},FALSE)
+  doftp(node,tempstr,ftpPorts,ftpDataPorts,tempDir,{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},{ftpAuth},FALSE)
   serialCacheEnabled:=oldSerCache
  
   ->clean up ram links
@@ -14461,6 +14518,7 @@ ENDPROC
 ->this returns 0 = fail, 1 = success unlike most of the routines
 PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FALSE)
   DEF tempstr[255]:STRING
+  DEF tempstr2[255]:STRING
   DEF debugstr[255]:STRING
   DEF xprio: PTR TO xprIO
   DEF result
@@ -14527,10 +14585,16 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   zModemInfo.needUpdateDownloadStats:=FALSE
 
   IF (strCmpi(protocol,'FTP',ALL))
-    readToolType(TOOLTYPE_NODE,node,'FTPPORT',tempstr)
+    readToolType(TOOLTYPE_BBSCONFIG,'','FTPPORT',tempstr)
+    readToolType(TOOLTYPE_NODE,node,'FTPPORT',tempstr2)
+    IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
+    StrAdd(tempstr,tempstr2)
+    
     ftpPorts:=makeIntList(tempstr)
 
-    readToolType(TOOLTYPE_NODE,node,'FTPDATAPORT',tempstr)
+    readToolType(TOOLTYPE_BBSCONFIG,'','FTPDATAPORT',tempstr)
+    readToolType(TOOLTYPE_NODE,node,'FTPDATAPORT',tempstr2)
+    IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
     ftpDataPorts:=makeIntList(tempstr)
 
     IF ListLen(ftpPorts)=0 THEN listAdd2(ftpPorts,10000+(node*2))
@@ -14546,7 +14610,9 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   ENDIF
 
   IF (strCmpi(protocol,'HTTP',ALL))
-    readToolType(TOOLTYPE_NODE,node,'HTTPPORT',tempstr)
+    readToolType(TOOLTYPE_BBSCONFIG,'','HTTPPORT',tempstr)
+    readToolType(TOOLTYPE_NODE,node,'HTTPPORT',tempstr2)
+    IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
     httpPorts:=makeIntList(tempstr)
 
     IF ListLen(httpPorts)=0 THEN listAdd2(httpPorts,20000+node)
@@ -14954,6 +15020,7 @@ PROC moveFile(filename,filesize)
   pathnum++
 
   WHILE(readToolType(TOOLTYPE_CONF,currentConf,tempstr3,tempstr3))
+    checkPathSlash(tempstr3)
     spacehi,spacelo:=rFreeSpace(tempstr3)
     IF(StrLen(sopt.ramPen)>0) THEN StringF(tempstr,'\s\s',sopt.ramPen,filename) ELSE StringF(tempstr,'\sNode\d/Playpen/\s',cmds.bbsLoc,node,filename)
     StringF(tempstr2,'\s\s',tempstr3,filename)
@@ -15386,7 +15453,7 @@ PROC zmfirstfile(fname:PTR TO CHAR) IS xprffirst2(fname)
 PROC zmnextfile(fname:PTR TO CHAR) IS xprfnext2(fname)
 
 PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
-  DEF tempstr[255]:STRING,debugstr[255]:STRING
+  DEF tempstr[255]:STRING,tempstr2[255]:STRING,debugstr[255]:STRING
   DEF result
   DEF xprio=NIL: PTR TO xprIO
   DEF time1,time2
@@ -15437,10 +15504,15 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     RETURN RESULT_FAILURE
   ELSEIF (strCmpi(protocol,'FTP',ALL))
 
-    readToolType(TOOLTYPE_NODE,node,'FTPPORT',tempstr)
+    readToolType(TOOLTYPE_BBSCONFIG,'','FTPPORT',tempstr)
+    readToolType(TOOLTYPE_NODE,node,'FTPPORT',tempstr2)
+    IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
+
     ftpPorts:=makeIntList(tempstr)
 
-    readToolType(TOOLTYPE_NODE,node,'FTPDATAPORT',tempstr)
+    readToolType(TOOLTYPE_BBSCONFIG,'','FTPDATAPORT',tempstr)
+    readToolType(TOOLTYPE_NODE,node,'FTPDATAPORT',tempstr2)
+    IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
     ftpDataPorts:=makeIntList(tempstr)
 
     IF ListLen(ftpPorts)=0 THEN listAdd2(ftpPorts,10000+(node*2))
@@ -15461,7 +15533,9 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     RETURN 1
   ELSEIF (strCmpi(protocol,'HTTP',ALL))
 
-    readToolType(TOOLTYPE_NODE,node,'HTTPPORT',tempstr)
+    readToolType(TOOLTYPE_BBSCONFIG,'','HTTPPORT',tempstr)
+    readToolType(TOOLTYPE_NODE,node,'HTTPPORT',tempstr2)
+    IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
     httpPorts:=makeIntList(tempstr)
 
     IF ListLen(httpPorts)=0 THEN listAdd2(httpPorts,20000+node)
@@ -16367,7 +16441,7 @@ PROC receivePlayPen(log)
   tBT:=0
   recFileNames.clear()
 
-  IF(StrLen(sopt.ramPen)>0) THEN StrCopy(tempstr,sopt.ramPen) ELSE StringF(tempstr,'\sNode\d/Playpen',cmds.bbsLoc,node)
+  IF(StrLen(sopt.ramPen)>0) THEN StrCopy(tempstr,sopt.ramPen) ELSE StringF(tempstr,'\sNode\d/Playpen/',cmds.bbsLoc,node)
 
   IF((fib:=AllocDosObject(DOS_FIB,NIL)))=NIL
     myError(0)
@@ -16755,6 +16829,7 @@ PROC checkForFile(fn: PTR TO CHAR)
   StringF(path,'DLPATH.\d',x)
   x++
   WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,final))
+    checkPathSlash(final)
     StrAdd(final,fn)
     IF fileExists(final) THEN RETURN RESULT_FAILURE
     StringF(path,'DLPATH.\d',x)
@@ -16765,6 +16840,7 @@ PROC checkForFile(fn: PTR TO CHAR)
   StringF(path,'ULPATH.\d',x)
   x++
   WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,final))
+    checkPathSlash(final)
     StrAdd(final,fn)
     IF fileExists(final) THEN RETURN RESULT_FAILURE
     StringF(path,'ULPATH.\d',x)
@@ -18687,7 +18763,7 @@ skipMe:
 
   StringF(path,'DLPATH.\d',drivenum++)
   WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path))
-
+    checkPathSlash(path)
     StrCopy(final,path)
     StrAdd(final,fn)
 skipit:
@@ -20917,11 +20993,12 @@ PROC conferenceMaintenance()
           num:=1
           StringF(path,'DLPATH.\d',num++)
           WHILE(readToolType(TOOLTYPE_CONF,conf,path,path))
-          
+            checkPathSlash(path)
             num2:=1
             match:=FALSE
             StringF(path2,'ULPATH.\d',num2++)
             WHILE (match=FALSE) AND (readToolType(TOOLTYPE_CONF,conf,path2,path2))
+              checkPathSlash(path2)
               IF strCmpi(path,path2,ALL) THEN match:=TRUE
               StringF(path2,'ULPATH.\d',num2++)
             ENDWHILE
@@ -21345,7 +21422,7 @@ ENDPROC
 
 PROC bulkAccountEditor()
   DEF flag,command
-  DEF settings[15]:ARRAY OF LONG
+  DEF settings[16]:ARRAY OF LONG
   DEF areaName[255]:STRING
   DEF secLevel[3]:STRING
   DEF i,v,v2,r,p
@@ -21356,7 +21433,7 @@ PROC bulkAccountEditor()
 
   displayBulkScreen()
 
-  FOR i:=0 TO 14
+  FOR i:=0 TO 15
     settings[i]:=String(15)
   ENDFOR
   StrCopy(areaName,'')
@@ -21462,6 +21539,14 @@ PROC bulkAccountEditor()
         lineInput('',settings[12],15,INPUT_TIMEOUT,settings[12])
         v,r:=Val(settings[12])
         IF r=0 THEN StrCopy(settings[12],'') ELSE StringF(settings[12],'\d',v)
+      CASE "*"
+        IF StrLen(settings[15])=0
+         StrCopy(settings[15],'1')
+        ELSEIF StrCmp(settings[15],'1')
+         StrCopy(settings[15],'0')
+        ELSE
+         StrCopy(settings[15],'')
+        ENDIF
       CASE "1" /* select area Name */
         aePuts('[19;26H          [19;26H')
         lineInput('',areaName,10,INPUT_TIMEOUT,areaName)
@@ -21523,6 +21608,8 @@ PROC displayBulkScreen()
 
   aePuts('[13;1H[33mR> [32mTime Total ....[36m:')
   aePuts('[13;39H[33mU> [32mTime Limit ....[36m:')
+  aePuts('[15;39H[33m*> [32mActive ........[36m:')
+
   aePuts('[14;1H[33mY> [32mChat Limit ....[36m:')
   aePuts('[15;1H[33m#> [32mTimes Called ..[36m:')
 
@@ -21577,6 +21664,8 @@ PROC displayBulkSettings(settings:PTR TO LONG, areaName:PTR TO CHAR, secLevel:PT
   aePuts(tempStr)
   StringF(tempStr,'[7;20H[0m \s',IF StrLen(settings[14])=0 THEN 'Leave Unchanged' ELSE settings[14])
   aePuts(tempStr)
+  StringF(tempStr,'[15;58H[0m \s',IF StrLen(settings[15])=0 THEN 'Leave Unchanged' ELSE IF Val(settings[15])=0 THEN 'Deactivate     ' ELSE 'Activate       ')
+  aePuts(tempStr)
 
   i,tot:=calcAffected(areaName,secLevel)
 
@@ -21598,6 +21687,7 @@ ENDPROC
 PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO CHAR)
   DEF fh,fh2,fh3,v,p
   DEF stat,stat2,stat3,match
+  DEF sn=1
 
   IF((fh:=Open(userDataFile,MODE_OLDFILE)))=0 THEN RETURN RESULT_FAILURE
 
@@ -21690,14 +21780,22 @@ PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO 
         IF StrLen(settings[12])>0 THEN tempUser.timesCalled:=Val(settings[12])
         IF StrLen(settings[13])>0 THEN strCpy(tempUser.conferenceAccess,settings[13],10)
         IF StrLen(settings[14])>0 THEN tempUser.secStatus:=Val(settings[14])
+        IF StrLen(settings[15])>0 
+          IF Val(settings[15])=0 THEN tempUser.slotNumber:=0 ELSE tempUser.slotNumber:=sn
+          tempUserKeys.number:=tempUser.slotNumber
+        ENDIF
 
         Seek(fh,-SIZEOF user,OFFSET_CURRENT)
         Write(fh,tempUser,SIZEOF user)
 
         Seek(fh2,-SIZEOF userMisc,OFFSET_CURRENT)
         Write(fh2,tempUserMisc,SIZEOF userMisc)
+
+        Seek(fh3,-SIZEOF userKeys,OFFSET_CURRENT)
+        Write(fh3,tempUserKeys,SIZEOF userKeys)
       ENDIF
     ENDIF
+    sn++
   UNTIL (stat2=0) OR (stat=0) OR (stat3=0)
 
   Close(fh)
@@ -23043,7 +23141,9 @@ PROC internalCommandJ(params)
   cnt:=getConfMsgBaseCount(newConf)
 
   IF (newMsgBase<1) OR (newMsgBase>cnt)
-    displayScreen(SCREEN_JOINMSGBASE)
+    IF displayScreen(SCREEN_CONF_JOINMSGBASE)=FALSE
+      displayScreen(SCREEN_JOINMSGBASE)
+    ENDIF
     StringF(tempStr,'Message Base Number (1-\d): ',cnt)
     stat:=lineInput(tempStr,'',5,INPUT_TIMEOUT,newStr)
     IF stat<>RESULT_SUCCESS THEN RETURN stat
@@ -23092,7 +23192,9 @@ PROC internalCommandJM(params)
   cnt:=getConfMsgBaseCount(currentConf)
 
   IF (newMsgBase<1) OR (newMsgBase>cnt)
-    displayScreen(SCREEN_JOINMSGBASE)
+    IF displayScreen(SCREEN_CONF_JOINMSGBASE)=FALSE
+      displayScreen(SCREEN_JOINMSGBASE)
+    ENDIF
     StringF(tempStr,'Message Base Number (1-\d): ',cnt)
     stat:=lineInput(tempStr,'',5,INPUT_TIMEOUT,newStr)
     IF stat<>RESULT_SUCCESS THEN RETURN stat
@@ -24836,6 +24938,7 @@ PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,match
         drivenum:=1
         StringF(path,'DLPATH.\d',drivenum++)
         WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path))
+          checkPathSlash(path)
           StrAdd(path,fname)
           DeleteFile(path)
           StringF(path,'DLPATH.\d',drivenum++)
@@ -25065,6 +25168,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
           StringF(path,'ULPATH.\d',drivenum)
 
           IF((readToolType(TOOLTYPE_CONF,destConf,path,tempstr))=FALSE) OR (filemoved=FALSE)
+            checkPathSlash(tempstr)
             DeleteFile(dirname)
 
             ->put the old file back
@@ -25108,6 +25212,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
           ELSE
             StringF(path,'DLPATH.\d',drivenum++)
             WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path)) AND (filemoved=FALSE)
+              checkPathSlash(path)
               IF strCmpi(path,tempstr,ALL)=FALSE
                 StrAdd(path,fname)
 
@@ -25128,6 +25233,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
                         drivenum2++
                         StringF(path,'ULPATH.\d',drivenum2)
                         IF(readToolType(TOOLTYPE_CONF,destConf,path,tempstr))
+                          checkPathSlash(tempstr)
                           StringF(destFile,'\s\s',tempstr,fname)
                         ELSE
                           ->no more paths to try
@@ -26242,6 +26348,54 @@ PROC getTodaysCalls(user:PTR TO user, userKeys:PTR TO userKeys)
   IF currDay<>lastDay THEN RETURN 0
 ENDPROC userKeys.timesOnToday AND $FFFF
 
+PROC translateShortcut(key,outString)
+  DEF i,p,sh:PTR TO CHAR
+  DEF shkey[255]:STRING
+  DEF shval[255]:STRING
+  DEF keyStr[10]:STRING
+  
+  StrCopy(keyStr,'0')
+  SELECT key
+    CASE 13
+      StrCopy(keyStr,'RET')
+    CASE CHAR_DELETE
+      StrCopy(keyStr,'DEL')
+    CASE CHAR_BACKSPACE
+      StrCopy(keyStr,'BACK')
+    CASE CHAR_TAB
+      StrCopy(keyStr,'TAB')
+    CASE 27
+      StrCopy(keyStr,'ESC')
+    CASE 32
+      StrCopy(keyStr,'SPACE')
+    DEFAULT
+      keyStr[0]:=key
+  ENDSELECT
+  FOR i:=0 TO shortcuts.count()-1
+    sh:=shortcuts.item(i)
+    IF (p:=InStr(sh,'='))
+      StrCopy(shkey,sh,p)
+      StrCopy(shval,sh+p+1)
+      IF strCmpi(keyStr,shkey,ALL)
+        StrCopy(outString,shval)
+      ENDIF
+    ENDIF
+  ENDFOR
+ENDPROC
+
+PROC loadShortcuts(file:PTR TO CHAR)
+  DEF fh
+  DEF tempStr[255]:STRING
+  shortcuts.clear()
+  fh:=Open(file,MODE_OLDFILE)
+  IF fh<>0
+    WHILE((ReadStr(fh,tempStr)<>-1) OR (StrLen(tempStr)>0))
+      shortcuts.add(tempStr)
+    ENDWHILE
+    Close(fh)
+  ENDIF
+ENDPROC
+
 PROC processLoggedOnUser()
   DEF subState: PTR TO loggedOnState
   DEF string[255]:STRING
@@ -26331,11 +26485,11 @@ PROC processLoggedOnUser()
     loadFlagged()
     IF StrLen(historyFolder)>0 THEN loadHistory()
     blockOLM:=FALSE
-
+    menuPause:=TRUE
     subState.subState:=SUBSTATE_DISPLAY_MENU
   ELSEIF subState.subState=SUBSTATE_DISPLAY_MENU
-    IF (loggedOnUser.expert="N") AND (doorExpertMode=FALSE)
-      doPause()
+    IF ((loggedOnUser.expert="N") AND (doorExpertMode=FALSE)) OR (checkToolTypeExists(TOOLTYPE_CONF,currentConf,'FORCE_MENUS'))
+      IF (menuPause) THEN doPause()
       checkScreenClear()
       displayScreen(SCREEN_MENU)
     ENDIF
@@ -26348,8 +26502,29 @@ PROC processLoggedOnUser()
 
     setEnvStat(ENV_IDLE)
     displayMenuPrompt()
-    subState.subState:=SUBSTATE_READ_COMMAND
+    IF cmdShortcuts=FALSE
+      subState.subState:=SUBSTATE_READ_COMMAND
+    ELSE
+      subState.subState:=SUBSTATE_READ_SHORTCUTS
+    ENDIF
     StrCopy(commandText,'',ALL)
+  ELSEIF subState.subState=SUBSTATE_READ_SHORTCUTS
+    temp:=readChar(INPUT_TIMEOUT)
+    IF(temp<0)
+      IF timeoutLC THEN lostCarrier:=TRUE
+      aePuts('Input timeout\b\n')
+      aePuts('Goodbye\b\n\b\n')
+      aePuts('Disconnecting..\b\n')
+      saveFlagged()
+      IF StrLen(historyFolder)>0 THEN saveHistory()
+      quickFlag:=TRUE
+      IF reqState=REQ_STATE_NONE THEN reqState:=REQ_STATE_LOGOFF
+    ENDIF
+    IF state=STATE_SHUTDOWN THEN RETURN
+    translateShortcut(temp,string)
+    processMci(string)    
+    menuPause:=FALSE
+    subState.subState:=SUBSTATE_DISPLAY_MENU
   ELSEIF subState.subState=SUBSTATE_READ_COMMAND
     temp:=rawArrow
     rawArrow:=FALSE
@@ -26376,6 +26551,7 @@ PROC processLoggedOnUser()
 
     UpperStr(commandText)
     processCommand(commandText)
+    menuPause:=TRUE
     subState.subState:=SUBSTATE_DISPLAY_MENU
   ENDIF
 
@@ -28250,6 +28426,8 @@ PROC main() HANDLE
 
   attachedFiles:=NEW attachedFiles.stringlist(5)
 
+  shortcuts:=NEW shortcuts.stringlist(20)
+
   historyBuf:=NEW historyBuf.stringlist(20)
   historyNum:=0
   historyCycle:=0
@@ -28537,6 +28715,7 @@ PROC main() HANDLE
 
     StringF(tempstr,'LOCATION.\d',i)
     readToolType(TOOLTYPE_CONFCONFIG,'',tempstr,tempstr2)
+    checkPathSlash(tempstr2)
     confDirs.add(tempstr2)
     IF i<11
       p:=cmds.conf1Loc
@@ -28736,6 +28915,8 @@ PROC main() HANDLE
   unloadTranslators()
 
   END attachedFiles
+
+  END shortcuts
 
   END scomment
   END parsedParams
