@@ -4667,7 +4667,7 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
   DEF string[255]:STRING,tempstr[255]:STRING
   DEF namestr1[255]:STRING
   DEF namestr2[255]:STRING
-  DEF quietRejoin
+  DEF quietJoin
   DEF mystat, temp
 
   IF (checkConfAccess(conf)=FALSE) THEN conf:=1
@@ -4686,7 +4686,7 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
 
   maxDirs:=readToolTypeInt(TOOLTYPE_CONF,conf,'NDIRS')
 
-  quietRejoin:=checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'QUIET_REJOIN')
+  quietJoin:=checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'QUIET_JOIN')
 
   IF checkToolTypeExists(TOOLTYPE_CONF,conf,'FREEDOWNLOADS') THEN freeDownloads:=TRUE ELSE freeDownloads:=FALSE
 
@@ -4743,7 +4743,7 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
 
     relConfNum:=relConf(conf)
 
-    aePuts('\b\n')
+    IF quietJoin=FALSE THEN aePuts('\b\n')
     IF (auto)
       scanHoldDesc()
       processSysCommand('S')
@@ -4753,24 +4753,24 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
       ELSE
         StringF(string,'Conference \d: \s Auto-ReJoined',relConfNum,currentConfName)
       ENDIF
-      IF quietRejoin=FALSE THEN aePuts(string)
+      IF quietJoin=FALSE THEN aePuts(string)
     ELSE
       IF getConfMsgBaseCount(conf)>1
         getMsgBaseName(conf,msgBaseNum,tempstr)
         StringF(string,'[32mJoining Conference[33m:[0m \s [\s]',currentConfName,tempstr)
-        aePuts(string)
+        IF quietJoin=FALSE THEN aePuts(string)
         StringF(string,'\s [\s] (\d) Conference Joined',currentConfName,tempstr,conf)
       ELSE
         StringF(string,'[32mJoining Conference[33m:[0m \s',currentConfName)
-        aePuts(string)
+        IF quietJoin=FALSE THEN aePuts(string)
         StringF(string,'\s (\d) Conference Joined',currentConfName,conf)
       ENDIF
     ENDIF
-    aePuts('\b\n')
+    IF quietJoin=FALSE THEN aePuts('\b\n')
     StringF(tempstr,'\t\s',string)
     callersLog(tempstr)
 
-    IF (auto=FALSE) OR (quietRejoin=FALSE)
+    IF (quietJoin=FALSE)
       IF checkToolTypeExists(TOOLTYPE_CONF,conf,'CUSTOM')=FALSE
         IF(mailStat.lowestKey>1)
 
