@@ -2827,13 +2827,15 @@ PROC telnetConnect(host:PTR TO CHAR,port)
   DEF socketLibWasOpen=FALSE
   DEF tv:timeval
   DEF e,n,s,readBuffer:PTR TO CHAR,b
-  DEF ch[1]:ARRAY OF CHAR
+  DEF ibuf:PTR TO CHAR
   DEF done=FALSE
   DEF timeout=10
   DEF yield
   DEF tlastIAC=FALSE
   DEF tlastIAC2=FALSE
   DEF c,c2
+  DEF wont[3]:ARRAY OF CHAR
+  DEF cmd1,cmd2
 
   IF (socketbase=NIL)
     socketbase:=OpenLibrary('bsdsocket.library', 2)
@@ -2911,21 +2913,46 @@ PROC telnetConnect(host:PTR TO CHAR,port)
   readBuffer:=New(8193)
   conPuts('[ p') /* turn console cursor on */
 
+  ibuf:=New(255)
+
+  rawArrow:=TRUE
   REPEAT
     IF yield THEN Delay(1)
     yield:=TRUE   
    
     IF checkInput()
       c:=0
-      WHILE checkInput()
-        ch[c]:=readRawChar(1)
+      WHILE (checkInput()) AND (c<100)
+        ibuf[c]:=readChar(1)
+        IF (ibuf[c]=UPARROW) AND (c<97)
+          ibuf[c]:=27
+          ibuf[c+1]:="["
+          ibuf[c+2]:="A"
+          c:=c+2
+        ELSEIF (ibuf[c]=DOWNARROW) AND (c<97)
+          ibuf[c]:=27
+          ibuf[c+1]:="["
+          ibuf[c+2]:="B"
+          c:=c+2
+        ELSEIF (ibuf[c]=RIGHTARROW) AND (c<97)
+          ibuf[c]:=27
+          ibuf[c+1]:="["
+          ibuf[c+2]:="C"
+          c:=c+2
+        ELSEIF (ibuf[c]=LEFTARROW) AND (c<97)
+          ibuf[c]:=27
+          ibuf[c+1]:="["
+          ibuf[c+2]:="D"
+          c:=c+2
+        ENDIF
         c++
       ENDWHILE
+      conPuts('[ p') /* turn console cursor on */
 
-      IF (c=1) AND (ch[0]=27)
+      IF (c=1) AND (ibuf[0]=27)
         done:=TRUE
       ELSE
-        Send(s,ch,c,0)
+        Send(s,ibuf,c,0)
       ENDIF
       yield:=FALSE
     ENDIF
@@ -2941,9 +2968,18 @@ PROC telnetConnect(host:PTR TO CHAR,port)
       c2:=0
       REPEAT
         IF lastIAC2
-          StringF(tempstr,'code: \d',readBuffer[c])
+          cmd2:=readBuffer[c]
+          StringF(tempstr,'code: \d',cmd2)
           debugLog(LOG_DEBUG,tempstr)
           ->expecting an IAC parameter byte - just skip it
+          IF (cmd1=253)
+            wont[0]:=255
+            wont[1]:=252
+            wont[2]:=cmd2
+            IoctlSocket(s,FIONBIO,[0])
+            Send(s,wont,3,0)
+            IoctlSocket(s,FIONBIO,[1])
+          ENDIF
           tlastIAC2:=FALSE
         ELSEIF (readBuffer[c]=255) OR (tlastIAC)
           IF (tlastIAC=FALSE) THEN c++
@@ -2955,14 +2991,24 @@ PROC telnetConnect(host:PTR TO CHAR,port)
               readBuffer[c2]:=255
               c2++
             ELSEIF (readBuffer[c]>=250) AND (readBuffer[c]<255)
-              StringF(tempstr,'known iac code: \d',readBuffer[c])
+              cmd1:=readBuffer[c]
+              StringF(tempstr,'known iac code: \d',cmd1)
               debugLog(LOG_DEBUG,tempstr)
               c++
               IF (c>=b)
                 tlastIAC2:=TRUE
               ELSE
-                StringF(tempstr,'code: \d',readBuffer[c])
+                cmd2:=readBuffer[c]
+                StringF(tempstr,'code: \d',cmd2)
                 debugLog(LOG_DEBUG,tempstr)
+                IF (cmd1=253)
+                  wont[0]:=255
+                  wont[1]:=252
+                  wont[2]:=cmd2
+                  IoctlSocket(s,FIONBIO,[0])
+                  Send(s,wont,3,0)
+                  IoctlSocket(s,FIONBIO,[1])
+                ENDIF
               ENDIF
             ELSE
               StringF(tempstr,'unknown iac code: \d',readBuffer[c])
@@ -2974,6 +3020,7 @@ PROC telnetConnect(host:PTR TO CHAR,port)
           c2++
         ENDIF
         c++
+        
       UNTIL c>=b
       
       aePuts2(readBuffer,c2)
@@ -2981,9 +3028,11 @@ PROC telnetConnect(host:PTR TO CHAR,port)
     
     IF((logonType>=LOGON_TYPE_REMOTE) AND (checkCarrier()=FALSE)) THEN done:=TRUE
   UNTIL done
+  rawArrow:=FALSE
   
   aePuts('\b\nDisconnected.\b\n')
   Dispose(readBuffer)
+  Dispose(ibuf)
   
   CloseSocket(s)
   IF socketLibWasOpen=FALSE 
@@ -4618,6 +4667,7 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
   DEF string[255]:STRING,tempstr[255]:STRING
   DEF namestr1[255]:STRING
   DEF namestr2[255]:STRING
+  DEF quietRejoin
   DEF mystat, temp
 
   IF (checkConfAccess(conf)=FALSE) THEN conf:=1
@@ -4635,6 +4685,8 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
   checkPathSlash(currentConfDir)
 
   maxDirs:=readToolTypeInt(TOOLTYPE_CONF,conf,'NDIRS')
+
+  quietRejoin:=checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'QUIET_REJOIN')
 
   IF checkToolTypeExists(TOOLTYPE_CONF,conf,'FREEDOWNLOADS') THEN freeDownloads:=TRUE ELSE freeDownloads:=FALSE
 
@@ -4701,7 +4753,7 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
       ELSE
         StringF(string,'Conference \d: \s Auto-ReJoined',relConfNum,currentConfName)
       ENDIF
-      aePuts(string)
+      IF quietRejoin=FALSE THEN aePuts(string)
     ELSE
       IF getConfMsgBaseCount(conf)>1
         getMsgBaseName(conf,msgBaseNum,tempstr)
@@ -4718,25 +4770,27 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
     StringF(tempstr,'\t\s',string)
     callersLog(tempstr)
 
-    IF checkToolTypeExists(TOOLTYPE_CONF,conf,'CUSTOM')=FALSE
-      IF(mailStat.lowestKey>1)
+    IF (auto=FALSE) OR (quietRejoin=FALSE)
+      IF checkToolTypeExists(TOOLTYPE_CONF,conf,'CUSTOM')=FALSE
+        IF(mailStat.lowestKey>1)
 
-        StringF(string,'[32mMessages range from [33m( [0m\d [32m- [0m\d [33m)[0m\b\n',
-                   mailStat.lowestKey,mailStat.highMsgNum-1)
+          StringF(string,'[32mMessages range from [33m( [0m\d [32m- [0m\d [33m)[0m\b\n',
+                     mailStat.lowestKey,mailStat.highMsgNum-1)
+        ELSE
+          StringF(string,'\b\n[32mTotal messages           [33m:[0m \d\b\n',mailStat.highMsgNum-1)
+        ENDIF
+        aePuts(string)
+
+        temp:=lastNewReadConf-1
+        IF(temp<0) THEN temp:=1
+        StringF(string,'\b\n[32mLast message auto scanned[33m:[0m \d\b\n',temp)
+        aePuts(string)
+
+        StringF(string,'[32mLast message read        [33m:[0m \d\b\n',lastMsgReadConf)
+        aePuts(string)
       ELSE
-        StringF(string,'\b\n[32mTotal messages           [33m:[0m \d\b\n',mailStat.highMsgNum-1)
+        customMsgbaseCmd(4,0,0)
       ENDIF
-      aePuts(string)
-
-      temp:=lastNewReadConf-1
-      IF(temp<0) THEN temp:=1
-      StringF(string,'\b\n[32mLast message auto scanned[33m:[0m \d\b\n',temp)
-      aePuts(string)
-
-      StringF(string,'[32mLast message read        [33m:[0m \d\b\n',lastMsgReadConf)
-      aePuts(string)
-    ELSE
-      customMsgbaseCmd(4,0,0)
     ENDIF
 
     IF (auto) THEN displaySysopULStats()
@@ -26886,7 +26940,7 @@ PROC checkPassword()
       IF(tries>2)
         aePuts('\b\nExcessive Password Failure\b\n')
 
-        IF checkToolTypeExists(TOOLTYPE_BBSCONFIG,'','MAIL_ON_PWD_FAIL') AND (StrLen(mailOptions.smtpHost)>0) AND (StrLen(loggedOnUserMisc.eMail)>0)
+        IF checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_PWD_FAIL') AND (StrLen(mailOptions.smtpHost)>0) AND (StrLen(loggedOnUserMisc.eMail)>0)
 
           aePuts('\b\nDo you want to send a reset code to your email address ')
           stat:=yesNo(1)
