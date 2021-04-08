@@ -2819,6 +2819,180 @@ PROC higherAccess()
   aePuts('\b\nCommand requires higher access.\b\n')
 ENDPROC
 
+PROC telnetConnect(host:PTR TO CHAR,port)
+  DEF sa=0:PTR TO sockaddr_in
+  DEF addr: PTR TO LONG
+  DEF hostEnt: PTR TO hostent
+  DEF tempstr[255]:STRING
+  DEF socketLibWasOpen=FALSE
+  DEF tv:timeval
+  DEF e,n,s,readBuffer:PTR TO CHAR,b
+  DEF ch[1]:ARRAY OF CHAR
+  DEF done=FALSE
+  DEF timeout=10
+  DEF yield
+  DEF tlastIAC=FALSE
+  DEF tlastIAC2=FALSE
+  DEF c,c2
+
+  IF (socketbase=NIL)
+    socketbase:=OpenLibrary('bsdsocket.library', 2)
+    IF socketbase=NIL
+      aePuts('\b\nUnable to open bsdsocket library.\b\n')
+      RETURN
+    ENDIF
+  ELSE
+    socketLibWasOpen:=TRUE
+  ENDIF
+
+  IF port=0 THEN port:=23
+
+  hostEnt:=GetHostByName(host)
+  IF hostEnt=NIL
+    StringF(tempstr,'\b\nUnable to determine IP address for \s.\b\n',host)
+    aePuts(tempstr)
+    IF socketLibWasOpen=FALSE THEN CloseLibrary(socketbase)
+    RETURN
+  ENDIF
+  
+  addr:=hostEnt.h_addr_list[]
+  addr:=addr[]
+
+  NEW sa
+
+  sa.sin_len:=SIZEOF sockaddr_in
+  sa.sin_family:=2
+  sa.sin_port:=port
+  sa.sin_addr:=addr[]
+
+  s:=Socket(AF_INET,SOCK_STREAM,0)
+  IF s<0
+    END sa
+    StringF(tempstr,'\b\nUnable to create socket, error \d .\b\n',Errno())
+    aePuts(tempstr)
+    IF socketLibWasOpen=FALSE 
+      CloseLibrary(socketbase)
+      socketbase:=NIL
+    ENDIF
+    RETURN
+  ENDIF
+  
+  StringF(tempstr,'\b\nTrying \s(\d)...\b\n\b\n',host,port)
+  aePuts(tempstr)
+
+  IoctlSocket(s,FIONBIO,[1])
+  setSingleFDS(s)
+
+  Connect(s,sa,SIZEOF sockaddr_in)
+    
+  tv.secs:=timeout
+  tv.micro:=0
+  
+  n:=WaitSelect(s+1,NIL,fds,NIL,tv,NIL)
+ 
+  IF (n<=0)
+    END sa
+    CloseSocket(s)
+    StringF(tempstr,'Unable to connect to \s, timed outa fter \d seconds.\b\n',host,timeout)
+    aePuts(tempstr)
+    IF socketLibWasOpen=FALSE 
+      CloseLibrary(socketbase)
+      socketbase:=NIL
+    ENDIF
+    RETURN
+  ENDIF
+  
+  END sa
+  
+  StringF(tempstr,'Connected to \s.\b\n',host)
+  aePuts(tempstr)
+  aePuts('Escape character is ''^]''.\b\n\b\n')
+
+  readBuffer:=New(8193)
+  conPuts('[ p') /* turn console cursor on */
+
+  REPEAT
+    IF yield THEN Delay(1)
+    yield:=TRUE   
+   
+    IF checkInput()
+      c:=0
+      WHILE checkInput()
+        ch[c]:=readRawChar(1)
+        c++
+      ENDWHILE
+
+      IF (c=1) AND (ch[0]=27)
+        done:=TRUE
+      ELSE
+        Send(s,ch,c,0)
+      ENDIF
+      yield:=FALSE
+    ENDIF
+    
+    b:=Recv(s,readBuffer,8192,0)
+    IF b=-1
+      e:=Errno()
+      IF e<>35 THEN done:=TRUE
+    ELSEIF b>0
+      yield:=FALSE
+      
+      c:=0
+      c2:=0
+      REPEAT
+        IF lastIAC2
+          StringF(tempstr,'code: \d',readBuffer[c])
+          debugLog(LOG_DEBUG,tempstr)
+          ->expecting an IAC parameter byte - just skip it
+          tlastIAC2:=FALSE
+        ELSEIF (readBuffer[c]=255) OR (tlastIAC)
+          IF (tlastIAC=FALSE) THEN c++
+          tlastIAC:=FALSE
+          IF c>=b
+            tlastIAC:=TRUE
+          ELSE
+            IF readBuffer[c]=255
+              readBuffer[c2]:=255
+              c2++
+            ELSEIF (readBuffer[c]>=250) AND (readBuffer[c]<255)
+              StringF(tempstr,'known iac code: \d',readBuffer[c])
+              debugLog(LOG_DEBUG,tempstr)
+              c++
+              IF (c>=b)
+                tlastIAC2:=TRUE
+              ELSE
+                StringF(tempstr,'code: \d',readBuffer[c])
+                debugLog(LOG_DEBUG,tempstr)
+              ENDIF
+            ELSE
+              StringF(tempstr,'unknown iac code: \d',readBuffer[c])
+              debugLog(LOG_DEBUG,tempstr)
+            ENDIF
+          ENDIF
+        ELSE
+          readBuffer[c2]:=readBuffer[c]
+          c2++
+        ENDIF
+        c++
+      UNTIL c>=b
+      
+      aePuts2(readBuffer,c2)
+    ENDIF
+    
+    IF((logonType>=LOGON_TYPE_REMOTE) AND (checkCarrier()=FALSE)) THEN done:=TRUE
+  UNTIL done
+  
+  aePuts('\b\nDisconnected.\b\n')
+  Dispose(readBuffer)
+  
+  CloseSocket(s)
+  IF socketLibWasOpen=FALSE 
+    CloseLibrary(socketbase)
+    socketbase:=NIL
+  ENDIF
+  
+ENDPROC
+
 PROC startProcess(exestring, stacksize, priority, async, doorTrap)
   DEF filetags:PTR TO LONG
   DEF task,temp
@@ -3624,6 +3798,8 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:P
       ELSE
         conPuts('[0 p'); /* turn console cursor off */
       ENDIF
+    CASE TELNET_CONNECT
+      telnetConnect(msg.string,msg.data)
     CASE DT_CONFACCESS2
       StrCopy(tempstring,'')
       IF msg.data
@@ -6210,12 +6386,28 @@ PROC displayFile(filename, allowMCI=TRUE, resetNonStop=TRUE, resetLineCount=TRUE
       IF translatorMode<>TRANS_NONE
         translateText(linedata)
       ENDIF
+      stat:=RESULT_SUCCESS
       IF allowMCI
         processMci(linedata)
       ELSE
-        aePuts(linedata)
+        IF (InStr(linedata,'')>=0) OR (StrLen(linedata)<80)
+          aePuts(linedata)
+        ELSE
+          WHILE StrLen(linedata)>0
+            IF StrLen(linedata)>79
+              aePuts2(linedata,79)
+              StrCopy(linedata,linedata+79)
+            ELSE
+              aePuts(linedata)
+              StrCopy(linedata,'')
+            ENDIF
+            IF StrLen(linedata)>0
+              aePuts('\b\n')
+              stat:=checkForPause()
+            ENDIF
+          ENDWHILE
+        ENDIF
       ENDIF
-      stat:=RESULT_SUCCESS
       IF (ripMode=FALSE) OR (ripFile=FALSE)
         IF lf
           aePuts('\b\n')
@@ -18693,7 +18885,7 @@ PROC viewAFile(cmdcode,params)
   DEF path[255]:STRING, final[255]:STRING, fn[100]:STRING, clog[100]:STRING
   DEF f,ft=NIL
   DEF drivenum=1
-  DEF tempStr[255]:STRING
+  DEF tempStr[999]:STRING
 
   nonStopDisplayFlag:=FALSE
   lineCount:=0
@@ -18786,7 +18978,27 @@ skipit:
           aePuts('\b\nThis file is not a text file.\b\n\b\n')
           RETURN RESULT_FAILURE
         ENDIF
-        aePuts(tempStr)
+        IF (InStr(tempStr,'')>=0) OR (StrLen(tempStr)<80)
+          aePuts(tempStr)
+        ELSE
+          WHILE StrLen(tempStr)>0
+            IF StrLen(tempStr)>79
+              aePuts2(tempStr,79)
+              StrCopy(tempStr,tempStr+79)
+            ELSE
+              aePuts(tempStr)
+              StrCopy(tempStr,'')
+            ENDIF
+            IF StrLen(tempStr)>0
+              aePuts('\b\n')
+              IF(stat:=checkForPause())
+                Close(ft)
+                aePuts('\b\n')
+                RETURN stat
+              ENDIF
+            ENDIF
+          ENDWHILE
+        ENDIF
         aePuts('\b\n')
         IF(stat:=checkForPause())
           Close(ft)
@@ -19578,13 +19790,8 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
           aePuts(tempStr)
 
           hoozer.newUser:=0
-          hoozer.confRJoin:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.CONFRJOIN')
-          hoozer.msgBaseRJoin:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.MSGBASERJOIN')
-          hoozer.secStatus:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.ACCESS')
-          hoozer.secLibrary:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.RATIO')
-          hoozer.timeLimit:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.TIME_LIMIT')
-          hoozer.secBoard:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.RATIO_TYPE')
-          hoozer.dailyBytesLimit:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.DAILY_BYTE_LIMIT')
+          applyPreset(hoozer,TOOLTYPE_PRESET,preset)
+          
           hoozer.timeUsed:=0
           hoozer.timeTotal:=hoozer.timeLimit
           hoozer2.oldUpCPS:=0
@@ -22047,13 +22254,7 @@ PROC applyBulkPresetChanges(preset:LONG,allConf:LONG,areaName:PTR TO CHAR,secLev
           strCpy(tempUser.conferenceAccess,tempStr,10)
 
           tempUser.newUser:=0
-          tempUser.confRJoin:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.CONFRJOIN')
-          tempUser.msgBaseRJoin:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.MSGBASERJOIN')
-          tempUser.secStatus:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.ACCESS')
-          tempUser.secLibrary:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.RATIO')
-          tempUser.timeLimit:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.TIME_LIMIT')
-          tempUser.secBoard:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.RATIO_TYPE')
-          tempUser.dailyBytesLimit:=readToolTypeInt(TOOLTYPE_PRESET,preset,'PRESET.DAILY_BYTE_LIMIT')
+          applyPreset(tempUser,TOOLTYPE_PRESET,preset)
           tempUser.timeTotal:=tempUser.timeLimit
           IF allConf THEN applyConfPresets(tempUser,preset)
         ENDIF
@@ -26201,7 +26402,7 @@ ENDPROC processInternalCommand(cmdcode,cmdparams,TRUE)
 
 PROC processInternalCommand(cmdcode,cmdparams,privcmd=FALSE)
   DEF res=RESULT_SUCCESS
-
+  
   IF (StrCmp(cmdcode,'0'))
     res:=internalCommand0()
   ELSEIF (StrCmp(cmdcode,'1'))
@@ -26888,6 +27089,22 @@ PROC doSystemPassword()
   aePuts('\b\n')
 ENDPROC RESULT_SUCCESS
 
+PROC applyPreset(userData:PTR TO user,presetType,presetNum)
+  DEF tempStr[255]:STRING
+  IF readToolType(presetType,presetNum,'PRESET.AREA',tempStr)
+    userData.secStatus:=readToolTypeInt(presetType,presetNum,'PRESET.ACCESS')
+    userData.secBoard:=readToolTypeInt(presetType,presetNum,'PRESET.RATIO_TYPE')
+    userData.secLibrary:=readToolTypeInt(presetType,presetNum,'PRESET.RATIO')
+    userData.timeLimit:=readToolTypeInt(presetType,presetNum,'PRESET.TIME_LIMIT')
+    userData.confRJoin:=readToolTypeInt(presetType,presetNum,'PRESET.CONFRJOIN')
+    userData.msgBaseRJoin:=readToolTypeInt(presetType,presetNum,'PRESET.MSGBASERJOIN')
+    userData.dailyBytesLimit:=readToolTypeInt(presetType,presetNum,'PRESET.DAILY_BYTE_LIMIT')
+    readToolType(presetType,presetNum,'PRESET.AREA',tempStr)
+    strCpy(userData.conferenceAccess,tempStr,10)
+  ENDIF
+ENDPROC
+
+
 PROC processLogon()
   DEF tempStr[255]:STRING
   DEF tempStr2[255]:STRING
@@ -26899,6 +27116,7 @@ PROC processLogon()
   DEF userNum
   DEF stat
   DEF filetags:PTR TO LONG
+  DEF hrs,calcHrs,autovalPreset
 
   ripMode:=FALSE
   confNameType:=NAME_TYPE_USERNAME
@@ -27053,6 +27271,12 @@ logonLoop:
 
   IF newUser
     IF newUserAccount(userName)<>RESULT_SUCCESS
+      END loggedOnUser
+      END loggedOnUserKeys
+      END loggedOnUserMisc
+      loggedOnUser:=NIL
+      loggedOnUserKeys:=NIL
+      loggedOnUserMisc:=NIL
       state:=STATE_LOGGING_OFF
       RETURN
     ENDIF
@@ -27074,6 +27298,24 @@ logonLoop:
     ENDIF
   ENDIF
 
+  IF loggedOnUser.newUser
+    IF readToolType(TOOLTYPE_NODE,node,'AUTOVAL_DELAY',tempStr)
+      hrs:=Val(tempStr)
+      
+      IF hrs>0
+        calcHrs:=Div(getSystemTime()-loggedOnUser.accountDate,3600)
+        IF (calcHrs>=hrs)
+          readToolType(TOOLTYPE_NODE,node,'AUTOVAL_PRESET',tempStr)
+          IF StrLen(tempStr)>0
+            autovalPreset:=Val(tempStr)
+            applyPreset(loggedOnUser,TOOLTYPE_PRESET,autovalPreset)
+            loggedOnUser.newUser:=0
+          ENDIF
+        ENDIF
+      ENDIF
+    ENDIF
+  ENDIF
+    
   setEnvStat(ENV_LOGGINGON)
   sendQuietFlag(quietFlag)
 
@@ -27319,6 +27561,7 @@ PROC newUserAccount(userName: PTR TO CHAR)
   DEF tempStr[100]:STRING,tempStr2[255]:STRING
   DEF stat,tries=0
   DEF filetags:PTR TO LONG
+  DEF autovalPreset
 
   IF displayScreen(SCREEN_NONEWUSERS) THEN RETURN RESULT_SLEEP_LOGOFF
 
@@ -27367,11 +27610,35 @@ PROC newUserAccount(userName: PTR TO CHAR)
 
   strCpy(loggedOnUser.name,userName,31)
 
-
   IF displayScreen(SCREEN_JOIN) THEN doPause()
 
   stat:=doNewUser()
   IF stat<>RESULT_SUCCESS THEN RETURN RESULT_SLEEP_LOGOFF
+
+  IF readToolType(TOOLTYPE_NODE,node,'AUTOVAL_PASSWORD',tempStr)
+    tries:=5
+    WHILE tries
+      stat:=lineInput('Enter the auto-validation password (if known): ','',30,INPUT_TIMEOUT,tempStr2)
+      IF StrLen(tempStr2)>0
+        IF(strCmpi(tempStr,tempStr2,ALL))
+          aePuts('\b\nAuto-validation password accepted.\b\n')
+          readToolType(TOOLTYPE_NODE,node,'AUTOVAL_PRESET',tempStr)
+          IF StrLen(tempStr)>0
+            autovalPreset:=Val(tempStr)
+            applyPreset(loggedOnUser,TOOLTYPE_PRESET,autovalPreset)
+            loggedOnUser.newUser:=0
+          ENDIF
+          tries:=0
+        ELSE
+          tries--
+          IF tries>0 THEN aePuts('\b\nIncorrect password, try again or leave blank if not known.\b\n\b\n')
+          
+        ENDIF
+      ELSE
+        tries:=0
+      ENDIF
+    ENDWHILE
+  ENDIF
 
   IF (loggedOnUser.dailyBytesLimit<>0)
     bytesADL:=loggedOnUser.dailyBytesLimit
@@ -27698,6 +27965,7 @@ ENDPROC RESULT_SUCCESS
 PROC memClear(data:PTR TO CHAR,size)
   WHILE (size>0)
     data[]:=0
+    data++
     size--
   ENDWHILE
 ENDPROC
@@ -27711,23 +27979,9 @@ PROC initNewUser(userData:PTR TO user,userKeys: PTR TO userKeys,userMisc: PTR TO
 
   StringF(ttdata,'\sNode\d/Preset.1',cmds.bbsLoc,node)
   IF configFileExists(ttdata)
-    userData.secStatus:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.ACCESS')
-    userData.secBoard:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.RATIO_TYPE')
-    userData.secLibrary:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.RATIO')
-    userData.timeLimit:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.TIME_LIMIT')
-    userData.confRJoin:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.CONFRJOIN')
-    userData.msgBaseRJoin:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.MSGBASERJOIN')
-    userData.dailyBytesLimit:=readToolTypeInt(TOOLTYPE_NODE_PRESET,1,'PRESET.DAILY_BYTE_LIMIT')
-    readToolType(TOOLTYPE_NODE_PRESET,1,'PRESET.AREA',ttdata)
+    applyPreset(userData,TOOLTYPE_NODE_PRESET,1)
   ELSE
-    userData.secStatus:=readToolTypeInt(TOOLTYPE_PRESET,1,'PRESET.ACCESS')
-    userData.secBoard:=readToolTypeInt(TOOLTYPE_PRESET,1,'PRESET.RATIO_TYPE')
-    userData.secLibrary:=readToolTypeInt(TOOLTYPE_PRESET,1,'PRESET.RATIO')
-    userData.timeLimit:=readToolTypeInt(TOOLTYPE_PRESET,1,'PRESET.TIME_LIMIT')
-    userData.confRJoin:=readToolTypeInt(TOOLTYPE_PRESET,1,'PRESET.CONFRJOIN')
-    userData.msgBaseRJoin:=readToolTypeInt(TOOLTYPE_PRESET,1,'PRESET.MSGBASERJOIN')
-    userData.dailyBytesLimit:=readToolTypeInt(TOOLTYPE_PRESET,1,'PRESET.DAILY_BYTE_LIMIT')
-    readToolType(TOOLTYPE_PRESET,1,'PRESET.AREA',ttdata)
+    applyPreset(userData,TOOLTYPE_PRESET,1)
   ENDIF
 
   userData.newUser:=1
@@ -27738,7 +27992,6 @@ PROC initNewUser(userData:PTR TO user,userKeys: PTR TO userKeys,userMisc: PTR TO
   userData.accountDate:=getSystemTime()
   userData.expert:="N"
 
-  strCpy(userData.conferenceAccess,ttdata,10)
   strCpy(userData.location,' ',ALL)
 
   userData.slotNumber:=slotNumber
