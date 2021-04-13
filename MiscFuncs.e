@@ -3,7 +3,7 @@
   OPT MODULE
 
   MODULE 'dos/dos','dos/dosextens','dos/datetime'
-  MODULE '*axenums','*axconsts','*errors'
+  MODULE '*axenums','*axconsts','*axobjects','*errors'
 
 EXPORT PROC getFileSize(s: PTR TO CHAR)
 /* returns the file size of a given file or 8192 if an error occured */
@@ -622,3 +622,67 @@ EXPORT PROC parsePatternNoCase2(source:PTR TO CHAR,dest:PTR TO CHAR, len)
   r:=ParsePatternNoCase(s,dest,len)
   DisposeLink(s)
 ENDPROC r
+
+EXPORT PROC stripAnsi(s: PTR TO CHAR, d: PTR TO CHAR, resetit, strip, ansi:PTR TO ansi)
+  DEF i,j,k,p,c
+  IF resetit
+    ansi.ansicode:=0
+    RETURN
+  ENDIF
+
+  i:=StrLen(s)
+  j:=0
+  k:=0
+  WHILE(j<i)
+    c:=s[j]
+    IF((c=13) AND (strip<>0))
+      j++
+      ansi.ansicode:=0
+    ELSEIF((ansi.ansicode=0) AND (c<>""))
+      d[k]:=c
+      j++
+      k++
+    ELSE
+      IF(ansi.ansicode)
+        ansi.buf[ansi.ansicode]:=c
+        IF((ansi.ansicode=1) AND (c<>"["))
+          ansi.ansicode:=ansi.ansicode+1
+
+          p:=0
+          ansi.buf[ansi.ansicode]:=0
+          WHILE(ansi.buf[p]<>0)
+            d[k]:=ansi.buf[p]
+            k++
+            p++
+          ENDWHILE
+          ansi.ansicode:=0
+        ELSE
+          SELECT c
+            CASE "m"
+              ansi.ansicode:=0
+            DEFAULT
+              ansi.ansicode:=ansi.ansicode+1
+              IF(((c>="A") AND (c<="Z")) OR ((c>="a") AND (c<="z")) OR (ansi.ansicode>30))
+                p:=0
+                ansi.buf[ansi.ansicode]:=0
+                WHILE(ansi.buf[p]<>0)
+                  d[k]:=ansi.buf[p]
+                  k++
+                  p++
+                ENDWHILE
+                ansi.ansicode:=0
+              ENDIF
+          ENDSELECT
+        ENDIF
+      ELSEIF(c="")
+        ansi.buf[0]:=""
+        ansi.ansicode:=1
+      ENDIF
+      j++
+    ENDIF
+  ENDWHILE
+  d[k]:=0
+
+  ->ensure estring length is updated
+  SetStr(d,StrLen(d))
+ENDPROC

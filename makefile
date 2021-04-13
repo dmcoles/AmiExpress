@@ -49,7 +49,7 @@ xymodem.m:		xymodem.e
 stringlist.m:	stringlist.e
 							$(compiler) stringlist $(options)
 
-miscfuncs.m:	miscfuncs.e axconsts.m axenums.m errors.m
+miscfuncs.m:	miscfuncs.e axconsts.m axenums.m axobjects.m errors.m
 							$(compiler) miscfuncs $(options)
 
 errors.m:			errors.e
