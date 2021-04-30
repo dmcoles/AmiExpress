@@ -73,18 +73,18 @@ ENDPROC
 
 EXPORT PROC makeIntList(src:PTR TO CHAR)
   DEF res
-  DEF m=0
+  DEF m=1
   DEF tmp,i
   
   tmp:=String(StrLen(src))
   
   FOR i:=0 TO StrLen(src)-1
-    IF src[]=',' THEN m++
+    IF src[i]="," THEN m++
   ENDFOR
   
   res:=List(m)
   FOR i:=0 TO StrLen(src)-1
-    IF src[i]=','
+    IF src[i]=","
       listAdd2(res,Val(tmp))
       StrCopy(tmp,'')
     ELSE
