@@ -28768,8 +28768,6 @@ PROC main() HANDLE
   cmds.numConf:=readToolTypeInt(TOOLTYPE_CONFCONFIG,'','NCONFS')
   IF cmds.numConf<1 THEN cmds.numConf:=1
 
-  sysopAvail:=checkToolTypeExists(TOOLTYPE_NODE,node,'CHAT_ON')
-
   StrCopy(historyFolder,'')
   readToolType(TOOLTYPE_BBSCONFIG,'','HISTORY',historyFolder)
 

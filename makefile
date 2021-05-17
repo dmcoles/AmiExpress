@@ -4,7 +4,7 @@ options=DEBUG IGNORECACHE NILCHECK
 compiler=EC
 expprogramname=AmiExpress
 acpprogramname=ACP
-version=5.4.0-beta
+version=5.4.0
 
 all:					acp express5 jsonimport icon2cfg qwk ftn
 
