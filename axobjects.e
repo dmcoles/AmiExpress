@@ -1,4 +1,4 @@
--> EXPORT EXPORT OBJECTs for express
+  -> EXPORT EXPORT OBJECTs for express
 
   OPT MODULE
 
@@ -121,8 +121,11 @@ EXPORT OBJECT zModem
   lastUpdate: LONG
   currentOperation: LONG
   freeDFlag: LONG
+  fileList:PTR TO stdlist
   current: LONG
   total: LONG
+  shouldUpdateDownloadStats: CHAR
+  needUpdateDownloadStats: CHAR
 ENDOBJECT
 
 EXPORT OBJECT confBase
@@ -134,7 +137,8 @@ EXPORT OBJECT confBase
   confYM: LONG
   bytesDownload: LONG
   bytesUpload: LONG
-  lastEMail: LONG
+  uploadTracking: INT
+  unused: INT
   dailyBytesDld: LONG
   upload: INT
   downloads: INT
@@ -273,12 +277,6 @@ EXPORT OBJECT diskObjectCacheItem
   fileName:PTR TO CHAR
   diskObject: LONG
   ownsToolTypes: CHAR
-ENDOBJECT
-
-EXPORT OBJECT xprData
-  currentFile:LONG
-  fileList:PTR TO stdlist
-  updateDownloadStats: LONG
 ENDOBJECT
 
 EXPORT OBJECT flagFileItem

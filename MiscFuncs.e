@@ -3,7 +3,7 @@
   OPT MODULE
 
   MODULE 'dos/dos','dos/dosextens','dos/datetime'
-  MODULE '*axenums','*axconsts','*errors'
+  MODULE '*axenums','*axconsts','*axobjects','*errors'
 
 EXPORT PROC getFileSize(s: PTR TO CHAR)
 /* returns the file size of a given file or 8192 if an error occured */
@@ -70,6 +70,34 @@ EXPORT PROC checkPathSlash(path)
     StrAdd(path,'/')
   ENDIF
 ENDPROC 
+
+EXPORT PROC makeIntList(src:PTR TO CHAR)
+  DEF res
+  DEF m=1
+  DEF tmp,i
+  
+  tmp:=String(StrLen(src))
+  
+  FOR i:=0 TO StrLen(src)-1
+    IF src[i]="," THEN m++
+  ENDFOR
+  
+  res:=List(m)
+  FOR i:=0 TO StrLen(src)-1
+    IF src[i]=","
+      listAdd2(res,Val(tmp))
+      StrCopy(tmp,'')
+    ELSE
+      strAddChar(tmp,src[i])
+    ENDIF
+  ENDFOR
+  IF StrLen(tmp)>0
+    listAdd2(res,Val(tmp))
+  ENDIF
+  
+  DisposeLink(tmp)
+  
+ENDPROC res
 
 EXPORT PROC strCmpi(test1: PTR TO CHAR, test2: PTR TO CHAR, len)
   /* case insensitive string compare */
@@ -210,12 +238,10 @@ PROC asmputchar()
 ENDPROC
 
 EXPORT PROC formatUnsignedLong(val,outStr)
-  DEF outputTxt
+  DEF outputTxt[10]:ARRAY OF CHAR
   
-  outputTxt:=NEW [0,0,0,0,0,0,0,0,0,0]:CHAR
   RawDoFmt('%lu',{val},{asmputchar},outputTxt)
   StrCopy(outStr,outputTxt)
-  END outputTxt
 EXPORT ENDPROC
 
 EXPORT PROC formatLongDate(cDateVal,outDateStr)
@@ -575,3 +601,88 @@ EXPORT PROC byteSignExtend(n)
   r:=n AND 255
   IF r>127 THEN r:=-(256-r)
 ENDPROC r
+
+EXPORT PROC parsePatternNoCase2(source:PTR TO CHAR,dest:PTR TO CHAR, len)
+  DEF s:PTR TO CHAR
+  DEF t[1]:STRING
+  DEF c,i,r
+  
+  c:=StrLen(source)
+  FOR i:=0 TO c-1
+    StrCopy(t,source+i,1)
+    IF InStr('()|~[]%',t)>=0 THEN c++
+  ENDFOR
+
+  s:=String(c)
+  FOR i:=0 TO StrLen(source)-1
+    StrCopy(t,source+i,1)
+    IF InStr('()|~[]%',t)>=0 THEN strAddChar(s,39)
+    StrAdd(s,t)
+  ENDFOR
+  r:=ParsePatternNoCase(s,dest,len)
+  DisposeLink(s)
+ENDPROC r
+
+EXPORT PROC stripAnsi(s: PTR TO CHAR, d: PTR TO CHAR, resetit, strip, ansi:PTR TO ansi)
+  DEF i,j,k,p,c
+  IF resetit
+    ansi.ansicode:=0
+    RETURN
+  ENDIF
+
+  i:=StrLen(s)
+  j:=0
+  k:=0
+  WHILE(j<i)
+    c:=s[j]
+    IF((c=13) AND (strip<>0))
+      j++
+      ansi.ansicode:=0
+    ELSEIF((ansi.ansicode=0) AND (c<>""))
+      d[k]:=c
+      j++
+      k++
+    ELSE
+      IF(ansi.ansicode)
+        ansi.buf[ansi.ansicode]:=c
+        IF((ansi.ansicode=1) AND (c<>"["))
+          ansi.ansicode:=ansi.ansicode+1
+
+          p:=0
+          ansi.buf[ansi.ansicode]:=0
+          WHILE(ansi.buf[p]<>0)
+            d[k]:=ansi.buf[p]
+            k++
+            p++
+          ENDWHILE
+          ansi.ansicode:=0
+        ELSE
+          SELECT c
+            CASE "m"
+              ansi.ansicode:=0
+            DEFAULT
+              ansi.ansicode:=ansi.ansicode+1
+              IF(((c>="A") AND (c<="Z")) OR ((c>="a") AND (c<="z")) OR (ansi.ansicode>30))
+                p:=0
+                ansi.buf[ansi.ansicode]:=0
+                WHILE(ansi.buf[p]<>0)
+                  d[k]:=ansi.buf[p]
+                  k++
+                  p++
+                ENDWHILE
+                ansi.ansicode:=0
+              ENDIF
+          ENDSELECT
+        ENDIF
+      ELSEIF(c="")
+        ansi.buf[0]:=""
+        ansi.ansicode:=1
+      ENDIF
+      j++
+    ENDIF
+  ENDWHILE
+  d[k]:=0
+
+  ->ensure estring length is updated
+  SetStr(d,StrLen(d))
+ENDPROC

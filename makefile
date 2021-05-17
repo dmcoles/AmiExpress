@@ -4,7 +4,7 @@ options=DEBUG IGNORECACHE NILCHECK
 compiler=EC
 expprogramname=AmiExpress
 acpprogramname=ACP
-version=5.3.2
+version=5.4.0
 
 all:					acp express5 jsonimport icon2cfg qwk ftn
 
@@ -14,7 +14,7 @@ release:				acp express5 jsonimport icon2cfg qwk ftn
 acp:					acp.e acpversion.m axcommon.m jsonparser.m jsoncreate.m stringlist.m 
 							$(compiler) acp $(options)
 
-express5:			express.e expversion.m axcommon.m axconsts.m miscfuncs.m axobjects.m axenums.m stringlist.m errors.m mailssl.m ftpd.m httpd.m zmodem.m tooltypes.m pwdhash.m bcd.m
+express5:			express.e expversion.m axcommon.m axconsts.m miscfuncs.m axobjects.m axenums.m stringlist.m errors.m mailssl.m ftpd.m httpd.m xymodem.m zmodem.m tooltypes.m pwdhash.m bcd.m
 							$(compiler) express $(options)
 							copy express express5
 							delete express
@@ -43,10 +43,13 @@ jsoncreate.m: jsoncreate.e miscfuncs.m jsonparser.m
 zmodem.m:			zmodem.e
 							$(compiler) zmodem $(options)
 
+xymodem.m:		xymodem.e
+							$(compiler) xymodem $(options)
+
 stringlist.m:	stringlist.e
 							$(compiler) stringlist $(options)
 
-miscfuncs.m:	miscfuncs.e axconsts.m axenums.m errors.m
+miscfuncs.m:	miscfuncs.e axconsts.m axenums.m axobjects.m errors.m
 							$(compiler) miscfuncs $(options)
 
 errors.m:			errors.e
@@ -95,7 +98,7 @@ httpd.m:			httpd.e axcommon.m stringlist.m
 							$(compiler) httpd $(options)
 
 clean:
-							delete expversion.e acpversion.e delete express verinfogen express5 acp qwk ftn jsonimport icon2cfg miscfuncs.m stringlist.m errors.m mailssl.m jsoncreate.m jsonparser.m axcommon.m ftpd.m httpd.m axconsts.m axobjects.m axenums.m zmodem.m bcd.m expversion.m acpversion.m pwdhash.m tooltypes.m
+							delete expversion.e acpversion.e delete express verinfogen express5 acp qwk ftn jsonimport icon2cfg miscfuncs.m stringlist.m errors.m mailssl.m jsoncreate.m jsonparser.m axcommon.m ftpd.m httpd.m axconsts.m axobjects.m axenums.m zmodem.m xymodem.m bcd.m expversion.m acpversion.m pwdhash.m tooltypes.m
               
 .PHONY: 			expversion.e
               

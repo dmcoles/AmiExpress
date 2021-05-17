@@ -547,15 +547,11 @@ PROC trimStr(src:PTR TO CHAR, dest:PTR TO CHAR)
 ENDPROC
 
 PROC myrequest(s:PTR TO CHAR)
-  DEF myES
+  DEF myES:PTR TO LONG
   
-  myES:=NEW [20,0,'ACP Notification',s,'Continue']
-  EasyRequestArgs(NIL,myES,NIL,NIL)
-  END myES
-ENDPROC
-
-PROC strcpy(dest,src)
-  AstrCopy(dest,src,ALL)
+  myES:=NEW [20,0,'ACP Notification',s,'Continue']:LONG
+  EasyRequestArgs(NIL,myES,NIL,NIL) 
+  END myES[5]
 ENDPROC
 
 PROC menunum(n)
@@ -668,10 +664,10 @@ ENDPROC
 PROC clearUsers()
   DEF i
   FOR i:=0 TO MAX_NODES-1
-    strcpy(users[i].user,'')
-    strcpy(users[i].location,'')
-    strcpy(users[i].action,'')
-    strcpy(users[i].baud,'       ')
+    AstrCopy(users[i].user,'')
+    AstrCopy(users[i].location,'')
+    AstrCopy(users[i].action,'')
+    AstrCopy(users[i].baud,'       ')
     users[i].active:=0
   ENDFOR
 ENDPROC
@@ -778,7 +774,7 @@ PROC getToolTypes(filename:PTR TO CHAR)
         fileBuf:=New(len+1)     ->allow an extra char in case file does not end in LF
 
         fh:=Open(fn,MODE_OLDFILE)
-        IF fh>0
+        IF fh<>0
           off:=0
           lineCount:=0
           WHILE(ReadStr(fh,fn)<>-1) OR (StrLen(fn)>0)
@@ -855,7 +851,7 @@ PROC getFileName(path:PTR TO CHAR,buf:PTR TO CHAR)
   IF(ExNext(pdir,dir_info))
     IF(dir_info.direntrytype < 0)
       returnval:=1
-      strcpy(buf,dir_info.filename)
+      AstrCopy(buf,dir_info.filename)
     ENDIF
   ENDIF
   
@@ -1337,7 +1333,6 @@ PROC handleEditGadget(im:PTR TO intuimessage,ig)
   ELSE
     id:=ig
   ENDIF
-      
   SELECT id
     CASE GAD_NRAMS
       IF(button)
@@ -1632,15 +1627,15 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
   
   IF(a<>SV_NEWMSG) AND (a<>ENV_DOORS)
     StringF(tempstr,'\l\s[22]',name)
-    strcpy(users[node].user,tempstr)
+    AstrCopy(users[node].user,tempstr)
     StringF(tempstr,'\l\s[22]',location)
-    strcpy(users[node].location,tempstr)
+    AstrCopy(users[node].location,tempstr)
   ENDIF
 
-  strcpy(users[node].action,action2)
+  AstrCopy(users[node].action,action2)
   
   StringF(tempstr,'\r\s[7]',baud)
-  strcpy(users[node].baud,tempstr)
+  AstrCopy(users[node].baud,tempstr)
   
   users[node].active:=1
   
@@ -1744,7 +1739,7 @@ PROC maddItem(type,label:PTR TO CHAR,commKey:PTR TO CHAR,flags,mutual,userData)
      t:=eWinMenu+(maddItemi*(SIZEOF newmenu))
      t.type:=type
      s:=AllocMem(80,MEMF_PUBLIC OR MEMF_CLEAR)
-     IF(label) THEN strcpy(s,label) ELSE strcpy(s,'')
+     IF(label) THEN AstrCopy(s,label) ELSE AstrCopy(s,'')
      t.label:=s
      t.commkey:=commKey
      t.flags:=flags
@@ -1995,7 +1990,7 @@ PROC checkMasterSig(signals)
   IF(signals AND masterSig)
     WHILE((cpymsg:=GetMsg(mp)))             
       IF(cpymsg.command=SV_START)
-        strcpy(cpymsg.user,mybbslocation)
+        AstrCopy(cpymsg.user,mybbslocation)
         cpymsg.myCmds:=cmds[cpymsg.node]
         cpymsg.sopt:=sopts[cpymsg.node]
         IF activeNodes[cpymsg.node]=FALSE
@@ -2143,7 +2138,7 @@ PROC createSemaphores()
   Forbid()
   IF((semiNodes:=FindSemaphore(multiName)))=FALSE
     semiNodes:=AllocMem(SIZEOF multiPort,MEMF_PUBLIC OR MEMF_CLEAR)
-    strcpy(semiNodes.semiName,multiName)
+    AstrCopy(semiNodes.semiName,multiName)
     semiNodes.semi.ln.pri:=0
     semiNodes.semi.ln.name:=semiNodes.semiName
     newList(semiNodes.list)
@@ -2162,7 +2157,7 @@ PROC initSemaSemiNodes(s:PTR TO multiPort)
   DEF i=0
   DEF j
   WHILE(i<MAX_NODES)
-    strcpy(s.myNode[i].handle,'')
+    AstrCopy(s.myNode[i].handle,'')
     FOR j:=0 TO MAX_NODES-1
       s.myNode[i].stats[j].info:=0
       s.myNode[i].stats[j].status:=CHAT_NONE
@@ -2178,14 +2173,14 @@ PROC initSemaSemiNodes(s:PTR TO multiPort)
     singleNode:=FindSemaphore(singleName)
     IF(singleNode=FALSE)
       singleNode:=AllocMem(SIZEOF singlePort,MEMF_PUBLIC OR MEMF_CLEAR)
-      strcpy(singleNode.semiName,singleName)
+      AstrCopy(singleNode.semiName,singleName)
       singleNode.semi.ln.pri:=0
       singleNode.semi.ln.name:=singleNode.semiName
       singleNode.multiCom:=s
-      strcpy(singleNode.handle,'')
-      strcpy(singleNode.location,'')
-      strcpy(singleNode.misc1,'')
-      strcpy(singleNode.misc2,'')
+      AstrCopy(singleNode.handle,'')
+      AstrCopy(singleNode.location,'')
+      AstrCopy(singleNode.misc1,'')
+      AstrCopy(singleNode.misc2,'')
       singleNode.status:=-1
       newList(singleNode.list)
       InitSemaphore(singleNode)
@@ -2194,10 +2189,10 @@ PROC initSemaSemiNodes(s:PTR TO multiPort)
     ELSE
       ObtainSemaphore(singleNode)
       singleNode.multiCom:=s
-      strcpy(singleNode.handle,'')
-      strcpy(singleNode.location,'')
-      strcpy(singleNode.misc1,'')
-      strcpy(singleNode.misc2,'')
+      AstrCopy(singleNode.handle,'')
+      AstrCopy(singleNode.location,'')
+      AstrCopy(singleNode.misc1,'')
+      AstrCopy(singleNode.misc2,'')
       singleNode.status:=-1
       ReleaseSemaphore(singleNode)
     ENDIF
@@ -2274,7 +2269,7 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
         trans2.translationText:=New(fsize+4)     ->allocate some memory, two extra bytes for ending colon and space and some in case there is no newline
         
         fh:=Open(fullFileName,MODE_OLDFILE)
-        IF fh>0
+        IF fh<>0
           ->read file into workMem
           outtxt:=workMem
           
@@ -2416,11 +2411,11 @@ PROC getIconNodeInfo(i)
     dobj,cfg:=getToolTypes(basis)
     IF(dobj)
       oldtooltypes:=dobj.tooltypes
-      IF(s:=FindToolType(oldtooltypes,'MODEM.INIT')) THEN strcpy(cmd.mInit,s)
-      IF(s:=FindToolType(oldtooltypes,'MODEM.RESET')) THEN strcpy(cmd.mReset1-1,s)
-      IF(s:=FindToolType(oldtooltypes,'MODEM.RING')) THEN strcpy(cmd.mRing,s)
-      IF(s:=FindToolType(oldtooltypes,'MODEM.ANSWER')) THEN strcpy(cmd.mAnswer1-1,s)
-      IF(s:=FindToolType(oldtooltypes,'MODEM.OFFHOOK')) THEN strcpy(sopt.offHook,s)
+      IF(s:=FindToolType(oldtooltypes,'MODEM.INIT')) THEN AstrCopy(cmd.mInit,s)
+      IF(s:=FindToolType(oldtooltypes,'MODEM.RESET')) THEN AstrCopy(cmd.mReset1-1,s)
+      IF(s:=FindToolType(oldtooltypes,'MODEM.RING')) THEN AstrCopy(cmd.mRing,s)
+      IF(s:=FindToolType(oldtooltypes,'MODEM.ANSWER')) THEN AstrCopy(cmd.mAnswer1-1,s)
+      IF(s:=FindToolType(oldtooltypes,'MODEM.OFFHOOK')) THEN AstrCopy(sopt.offHook,s)
       IF(s:=FindToolType(oldtooltypes,'MODEM.CALLERID-1')) THEN sopt.toggles[TOGGLES_CALLERID]:=1
       IF(s:=FindToolType(oldtooltypes,'MODEM.CALLERID-2')) THEN sopt.toggles[TOGGLES_CALLERIDNAME]:=1
       freeToolTypes(dobj,cfg)
@@ -2436,7 +2431,7 @@ PROC getIconNodeInfo(i)
       oldtooltypes:=dobj.tooltypes
       IF(s:=FindToolType(oldtooltypes,'SERIAL.UNIT')) THEN cmd.serDevUnit:=Val(s)
       IF(s:=FindToolType(oldtooltypes,'SERIAL.BAUD')) THEN cmd.openingBaud:=Val(s)
-      IF(s:=FindToolType(oldtooltypes,'SERIAL.DRIVER')) THEN strcpy(cmd.serDev1-1,s)
+      IF(s:=FindToolType(oldtooltypes,'SERIAL.DRIVER')) THEN AstrCopy(cmd.serDev1-1,s)
       IF(s:=FindToolType(oldtooltypes,'SERIAL.A2232_PATCH')) THEN sopt.a2232:=TRUE
       IF(s:=FindToolType(oldtooltypes,'SERIAL.NO_PURGELINE')) THEN sopt.toggles[TOGGLES_NOPURGE]:=1
       IF(s:=FindToolType(oldtooltypes,'SERIAL.REPURGE')) THEN sopt.toggles[TOGGLES_REPURGE]:=1
@@ -2481,15 +2476,15 @@ PROC getIconNodeInfo(i)
   dobj,cfg:=getToolTypes(fileName)
   IF(dobj)
     oldtooltypes:=dobj.tooltypes
-    IF(s:=FindToolType(oldtooltypes,'SYSTEM_PASSWORD')) THEN strcpy(cmd.sysPass,s)
-    IF(s:=FindToolType(oldtooltypes,'REMOTE_PASSWORD')) THEN strcpy(cmd.remotePass1-1,s)
-    IF(s:=FindToolType(oldtooltypes,'NEWUSER_PASSWORD')) THEN strcpy(cmd.newUserPw1-1,s)
+    IF(s:=FindToolType(oldtooltypes,'SYSTEM_PASSWORD')) THEN AstrCopy(cmd.sysPass,s)
+    IF(s:=FindToolType(oldtooltypes,'REMOTE_PASSWORD')) THEN AstrCopy(cmd.remotePass1-1,s)
+    IF(s:=FindToolType(oldtooltypes,'NEWUSER_PASSWORD')) THEN AstrCopy(cmd.newUserPw1-1,s)
     IF(s:=FindToolType(oldtooltypes,'PRIORITY')) THEN cmd.taskPri:=Val(s)
     IF(s:=FindToolType(oldtooltypes,'QUIETNODE')) THEN sopt.toggles[TOGGLES_QUIETSTART]:=TRUE
     IF(s:=FindToolType(oldtooltypes,'NODESTART')) 
-      strcpy(basis,s)
+      StrCopy(basis,s)
       StringF(fileName,'\s \d',basis,i)
-      strcpy(startNode[i],fileName)
+      StrCopy(startNode[i],fileName)
       startUp:=TRUE
     ENDIF
       
@@ -2498,7 +2493,7 @@ PROC getIconNodeInfo(i)
     IF(s:=FindToolType(oldtooltypes,'PLAYPEN')) 
       StrCopy(temp,s)
       checkPathSlash(temp)
-      strcpy(sopt.ramPen,temp)
+      AstrCopy(sopt.ramPen,temp)
     ENDIF
     IF(s:=FindToolType(oldtooltypes,'SENTBY_FILES')) THEN cmd.acLvl[LVL_SENTBY_FILES]:=1
     IF(s:=FindToolType(oldtooltypes,'CHAT_ON')) THEN cmd.acLvl[LVL_DEFAULT_CHAT_ON]:=1
@@ -2516,14 +2511,14 @@ PROC getIconNodeInfo(i)
     ->IF(s:=FindToolType(oldtooltypes,'BREAK_CHAT')) THEN sopt.toggles[TOGGLES_BREAK_CHAT]:=1   NOT USED ANYMORE!!
     IF(s:=FindToolType(oldtooltypes,'NO_WILDCARD_EXPANSION')) THEN sopt.toggles[TOGGLES_USEWILDCARDS]:=0 ELSE sopt.toggles[TOGGLES_USEWILDCARDS]:=1
     IF(s:=FindToolType(oldtooltypes,'DISABLE_QUICK_LOGONS')) THEN sopt.qLogon:=1
-    IF(s:=FindToolType(oldtooltypes,'FILESNOTALLOWED')) THEN strcpy(sopt.filesNot,s)
+    IF(s:=FindToolType(oldtooltypes,'FILESNOTALLOWED')) THEN AstrCopy(sopt.filesNot,s)
     IF(s:=FindToolType(oldtooltypes,'SCREENS')) 
       StrCopy(temp,s)
       checkPathSlash(temp)
-      strcpy(sopt.nodeScreens,temp)
+      AstrCopy(sopt.nodeScreens,temp)
     ELSE
        StringF(temp,'\sNode\d/',cmd.bbsLoc,i)
-       strcpy(sopt.nodeScreens,temp)
+       AstrCopy(sopt.nodeScreens,temp)
     ENDIF
     
     IF(s:=FindToolType(oldtooltypes,'TELNET')) THEN telnetNode[i]:=1
@@ -2698,16 +2693,16 @@ PROC getCmds(i)
     sopt.singleSemi:=NIL
   ENDIF
 
-  strcpy(sopt.cycleLock,'')
-  strcpy(sopt.logoff,'')
-  strcpy(sopt.shutDown,'')
-  strcpy(sopt.ramPen,'')
-  strcpy(sopt.namePrompt,'')
-  strcpy(sopt.filesNot,'')
-  strcpy(sopt.userData,'')
-  strcpy(sopt.userKey,'')
-  strcpy(sopt.offHook,'')
-  strcpy(sopt.nodeScreens,'')
+  AstrCopy(sopt.cycleLock,'')
+  AstrCopy(sopt.logoff,'')
+  AstrCopy(sopt.shutDown,'')
+  AstrCopy(sopt.ramPen,'')
+  AstrCopy(sopt.namePrompt,'')
+  AstrCopy(sopt.filesNot,'')
+  AstrCopy(sopt.userData,'')
+  AstrCopy(sopt.userKey,'')
+  AstrCopy(sopt.offHook,'')
+  AstrCopy(sopt.nodeScreens,'')
 ENDPROC
 
 PROC readStartUp(s:PTR TO CHAR)
@@ -2729,8 +2724,8 @@ PROC readStartUp(s:PTR TO CHAR)
   ENDFOR
 
   FOR i:=0 TO 16
-    strcpy(buttons[i].text,'')
-    strcpy(buttons[i].command,'')
+    AstrCopy(buttons[i].text,'')
+    AstrCopy(buttons[i].command,'')
   ENDFOR
   
   dobj,cfg:=getToolTypes(s)
@@ -2805,26 +2800,26 @@ PROC readStartUp(s:PTR TO CHAR)
   j:=1
   StringF(image,'BUTTON_NAME.\d',j++)
   WHILE(t:=FindToolType(oldtooltypes,image))
-    strcpy(buttons[buttonnum++].text,t)
+    AstrCopy(buttons[buttonnum++].text,t)
     StringF(image,'BUTTON_NAME.\d',j++)
   ENDWHILE
   j:=1
   StringF(image,'BUTTON_COMMAND.\d',j++)
   WHILE(t:=FindToolType(oldtooltypes,image))
-    strcpy(buttons[buttontitle++].command,t)
+    AstrCopy(buttons[buttontitle++].command,t)
     StringF(image,'BUTTON_COMMAND.\d',j++)
   ENDWHILE
   j:=1
   StringF(image,'NUTTON_NAME.\d',j++)
   WHILE(t:=FindToolType(oldtooltypes,image))
-    strcpy(buttons[buttonnum++].text,t)
+    AstrCopy(buttons[buttonnum++].text,t)
     StringF(image,'NUTTON_NAME.\d',j++)
   ENDWHILE
   j:=1
   StringF(image,'NUTTON_COMMAND.\d',j++)
 
   WHILE(t:=FindToolType(oldtooltypes,image))
-    strcpy(buttons[buttontitle].command,t)
+    AstrCopy(buttons[buttontitle].command,t)
     buttons[buttontitle++].type:=TRUE
     StringF(image,'NUTTON_COMMAND.\d',j++)
   ENDWHILE
@@ -2835,7 +2830,7 @@ PROC readStartUp(s:PTR TO CHAR)
   IF(t:=FindToolType(oldtooltypes,'BBS_NAME'))
     FOR i:=0 TO nodeCount-1
       cmd:=cmds[i]
-      strcpy(cmd.bbsName1-1,t)      
+      AstrCopy(cmd.bbsName1-1,t)      
     ENDFOR
   ENDIF
   
@@ -2845,7 +2840,7 @@ PROC readStartUp(s:PTR TO CHAR)
     checkPathSlash(bbsPath)
     FOR i:=0 TO nodeCount-1
       cmd:=cmds[i]
-      strcpy(cmd.bbsLoc,bbsPath)
+      AstrCopy(cmd.bbsLoc,bbsPath)
     ENDFOR
   ENDIF
 
@@ -2856,7 +2851,7 @@ PROC readStartUp(s:PTR TO CHAR)
   IF(t:=FindToolType(oldtooltypes,'SYSOP_NAME'))
     FOR i:=0 TO nodeCount-1
       cmd:=cmds[i]
-      strcpy(cmd.sysopName1-1,t)
+      AstrCopy(cmd.sysopName1-1,t)
     ENDFOR
   ENDIF
 
@@ -2892,17 +2887,17 @@ PROC readStartUp(s:PTR TO CHAR)
     cmd:=cmds[i]
     StringF(image,'NODE\d_SYSOP',i)
     IF(t:=FindToolType(oldtooltypes,image))
-      strcpy(cmd.sysopName1-1,t)
+      AstrCopy(cmd.sysopName1-1,t)
     ENDIF
 
     StringF(image,'NODE\d_NAME',i)
     IF(t:=FindToolType(oldtooltypes,image))
-      strcpy(cmd.bbsName1-1,t)
+      AstrCopy(cmd.bbsName1-1,t)
     ENDIF
 
     StringF(image,'NODE\d_LOCATION',i)
     IF(t:=FindToolType(oldtooltypes,image))
-      strcpy(cmd.bbsLoc,t)
+      AstrCopy(cmd.bbsLoc,t)
     ENDIF
   ENDFOR
   ->else { myrequest('ERROR, missing BBS_LOCATION tooltype\nWait for all Disk Activity to Complete\nand reset') }
@@ -3121,7 +3116,7 @@ PROC runConfig(infile:PTR TO CHAR,outpath:PTR TO CHAR) HANDLE
   jsmn_init(p)
   
   fh:=Open(infile,MODE_OLDFILE)
-  IF fh<1
+  IF fh=0
     myrequest('Could not open json file.')
     RETURN
   ENDIF
@@ -3244,7 +3239,7 @@ PROC loadState()
 
   StringF(stateFile,'\sacp.dat',bbsPath)
   fh:=Open(stateFile,MODE_OLDFILE)
-  IF fh>0
+  IF fh<>0
     FOR i:=0 TO MAX_NODES-1
       FOR j:=0 TO 4
         ReadStr(fh,tempStr)
@@ -3297,7 +3292,7 @@ PROC saveState()
   
   StringF(stateFile,'\sacp.dat',bbsPath)
   fh:=Open(stateFile,MODE_NEWFILE)
-  IF fh>0
+  IF fh<>0
     FOR i:=0 TO MAX_NODES-1
       FOR j:=0 TO 4
         list:=ndUser[i]
@@ -3348,7 +3343,7 @@ PROC loadConnectionList(connList:PTR TO stdlist)
   DEF fh
   StringF(connFile,'\sacpConnections.dat',bbsPath)
   fh:=Open(connFile,MODE_OLDFILE)
-  IF fh>0
+  IF fh<>0
     WHILE (ReadStr(fh,tempStr)<>-1) OR (EstrLen(tempStr)>0)
       connItem:=NEW connItem
       connItem.ipAddr:=Val(tempStr)
@@ -3372,7 +3367,7 @@ PROC saveConnectionList(connList:PTR TO stdlist)
   DEF i,fh
   StringF(connFile,'\sacpConnections.dat',bbsPath)
   fh:=Open(connFile,MODE_NEWFILE)
-  IF fh>0
+  IF fh<>0
     FOR i:=0 TO connList.count()-1
       connItem:=connList.item(i)
      
@@ -4026,7 +4021,7 @@ PROC main() HANDLE
   ENDFOR
   
 EXCEPT DO
-  IF fds<>NIL THEN END fds
+  IF fds<>NIL THEN END fds[32]
   IF appicon THEN do_appicon(myappport)
   
   shutDownMaster()
