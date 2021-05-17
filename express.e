@@ -10401,9 +10401,6 @@ skipAll:
 ENDPROC RESULT_SUCCESS
 
 PROC replyPrompt(gfh)
-  DEF tempUser: PTR TO user
-  DEF tempUserKeys: PTR TO userKeys
-  DEF tempUserMisc: PTR TO userMisc
   DEF unum, helplist
   DEF str[255]:STRING
   DEF string[255]:STRING
