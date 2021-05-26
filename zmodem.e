@@ -504,6 +504,19 @@ ENDPROC crc*/
   b:=Shr(crc,8) AND $ffffff
 ENDPROC Eor(a,b)*/
 
+EXPORT PROC crc32str(str:PTR TO CHAR,len)
+  DEF crctbl:PTR TO LONG
+  DEF crc,i,ch
+  DEF tstr[255]:STRING
+  StrCopy(tstr,str,len)
+  crctbl:={crc32tbl}
+  crc:=-1
+  FOR i:=0 TO len-1
+    ch:=str[i]
+    crc:=Eor(crctbl[(Eor(crc,ch)) AND 255],Shr(crc,8) AND $ffffff)
+  ENDFOR
+ENDPROC  crc
+
 PROC ucrc32(zm:PTR TO zmodem_t,ch,crc) IS Eor(zm.crc32tbl[(Eor(crc,ch)) AND 255],Shr(crc,8) AND $ffffff)
 
 ->#define ucrc32(ch,crc) (crc32tbl[(crc^(ch))&$ff]^(crc>>8))

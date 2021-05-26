@@ -357,6 +357,9 @@ DEF cntr=0
 
 DEF userLineLen=0
 
+DEF iemsiUsername[255]:STRING
+DEF iemsiPassword[255]:STRING
+
 DEF fds=NIL:PTR TO LONG
 
 DEF zmodemBuffer=0
@@ -1334,7 +1337,15 @@ PROC getPass2(prompt: PTR TO CHAR,password:PTR TO CHAR,pwdhash:LONG, max:LONG,ou
     aePuts(prompt)
     j:=0
     REPEAT
-      c:=readChar(INPUT_TIMEOUT)
+      IF StrLen(iemsiPassword)>0
+        IF j=StrLen(iemsiPassword)
+          c:=13
+        ELSE
+          c:=iemsiPassword[j]
+        ENDIF
+      ELSE
+        c:=readChar(INPUT_TIMEOUT)
+      ENDIF
       IF((c=RESULT_NO_CARRIER) OR (c=RESULT_TIMEOUT)) THEN RETURN c
       IF(c=CHAR_BACKSPACE)
         IF j<>0
@@ -1355,7 +1366,9 @@ PROC getPass2(prompt: PTR TO CHAR,password:PTR TO CHAR,pwdhash:LONG, max:LONG,ou
         ENDIF
       ENDIF
     UNTIL (c=13) OR (c=12) OR (j>=30)
-
+    
+    StrCopy(iemsiPassword,'')
+    
     SetStr(pass,j)
     IF (outstr<>NIL) THEN StrCopy(outstr,pass)
 
@@ -1941,148 +1954,148 @@ PROC lineInput(promptText,defaultOutput,maxLen,timeout,outputString,allowHistory
   curpos:=StrLen(outputString)
 
   conCursorOn()
-
-  REPEAT
+    
+    REPEAT
 redoinput:
-    wasControl,ch:=processInputMessage(timeout)
-    IF (ch=RESULT_ABORT) OR (ch=RESULT_NO_CARRIER)
+      wasControl,ch:=processInputMessage(timeout)
+      IF (ch=RESULT_ABORT) OR (ch=RESULT_NO_CARRIER)
       StrCopy(outputString,'')
-      result:=ch
-      ch:=RESULT_ABORT
-    ENDIF
-
-    timedout:=(ch=RESULT_TIMEOUT)
-    IF timedout AND (warning=FALSE)
-      sendBELL()
-      timeout:=60
-      timedout:=FALSE
-      warning:=TRUE
-      JUMP redoinput
-    ENDIF
-
-    IF timedout=FALSE
-      warning:=FALSE
-      timeout:=originalTimeout
-      IF (allowHistory) AND (ch=2) AND (wasControl=0)  -> CTRL B
-        historyBuf.clear()
-        historyNum:=0
-        historyCycle:=0
-        wasControl:=TRUE
+        result:=ch
+        ch:=RESULT_ABORT
       ENDIF
 
-      IF (ch=24) AND (wasControl=0)   -> CTRL X
-        StrCopy(tempstr,'')
+      timedout:=(ch=RESULT_TIMEOUT)
+      IF timedout AND (warning=FALSE)
+        sendBELL()
+        timeout:=60
+        timedout:=FALSE
+        warning:=TRUE
+        JUMP redoinput
+      ENDIF
+
+      IF timedout=FALSE
+        warning:=FALSE
+        timeout:=originalTimeout
+        IF (allowHistory) AND (ch=2) AND (wasControl=0)  -> CTRL B
+          historyBuf.clear()
+          historyNum:=0
+          historyCycle:=0
+          wasControl:=TRUE
+        ENDIF
+
+        IF (ch=24) AND (wasControl=0)   -> CTRL X
+          StrCopy(tempstr,'')
         FOR i:=curpos TO StrLen(outputString)-1
-          StrAdd(tempstr,'[1C')
-        ENDFOR
+            StrAdd(tempstr,'[1C')
+          ENDFOR
         FOR i:=1 TO StrLen(outputString)
-          strAddChar(tempstr,8)
-          StrAdd(tempstr,' ')
-          strAddChar(tempstr,8)
-        ENDFOR
-        aePuts(tempstr)
+            strAddChar(tempstr,8)
+            StrAdd(tempstr,' ')
+            strAddChar(tempstr,8)
+          ENDFOR
+          aePuts(tempstr)
         StrCopy(outputString,'')
-        curpos:=0
-      ENDIF
+          curpos:=0
+        ENDIF
 
-      IF (rawArrow=FALSE)
-        IF (allowHistory) AND (ch=UPARROW) AND (historyBuf.count()>0)
-          StrCopy(tempstr,'')
+        IF (rawArrow=FALSE)
+          IF (allowHistory) AND (ch=UPARROW) AND (historyBuf.count()>0)
+            StrCopy(tempstr,'')
           FOR i:=curpos TO StrLen(outputString)-1
-            StrAdd(tempstr,'[1C')
-          ENDFOR
+              StrAdd(tempstr,'[1C')
+            ENDFOR
           FOR i:=1 TO StrLen(outputString)
-            strAddChar(tempstr,8)
-            StrAdd(tempstr,' ')
-            strAddChar(tempstr,8)
-          ENDFOR
+              strAddChar(tempstr,8)
+              StrAdd(tempstr,' ')
+              strAddChar(tempstr,8)
+            ENDFOR
           StrCopy(outputString,historyBuf.item(historyCycle),maxLen)
-          historyCycle--
-          IF historyCycle<0 THEN historyCycle:=historyBuf.count()-1
-          aePuts(tempstr)
+            historyCycle--
+            IF historyCycle<0 THEN historyCycle:=historyBuf.count()-1
+            aePuts(tempstr)
           aePuts(outputString)
           curpos:=StrLen(outputString)
-        ENDIF
-        IF (allowHistory) AND (ch=DOWNARROW) AND (historyBuf.count()>0)
-          StrCopy(tempstr,'')
+          ENDIF
+          IF (allowHistory) AND (ch=DOWNARROW) AND (historyBuf.count()>0)
+            StrCopy(tempstr,'')
           FOR i:=curpos TO StrLen(outputString)-1
-            StrAdd(tempstr,'[1C')
-          ENDFOR
+              StrAdd(tempstr,'[1C')
+            ENDFOR
           FOR i:=1 TO StrLen(outputString)
-            strAddChar(tempstr,8)
-            StrAdd(tempstr,' ')
-            strAddChar(tempstr,8)
-          ENDFOR
+              strAddChar(tempstr,8)
+              StrAdd(tempstr,' ')
+              strAddChar(tempstr,8)
+            ENDFOR
           StrCopy(outputString,historyBuf.item(historyCycle),maxLen)
-          historyCycle++
-          IF historyCycle>=historyBuf.count() THEN historyCycle:=0
-          aePuts(tempstr)
+            historyCycle++
+            IF historyCycle>=historyBuf.count() THEN historyCycle:=0
+            aePuts(tempstr)
           aePuts(outputString)
           curpos:=StrLen(outputString)
-        ENDIF
-        IF ((ch=LEFTARROW) AND (curpos>0))
-          curpos--
-          aePuts('[1D')
-        ENDIF
-        IF ((ch=RIGHTARROW) AND (curpos<(StrLen(outputString))))
-          curpos++
-          aePuts('[1C')
-        ENDIF
-      ENDIF
-
-      IF (wasControl=FALSE)
-        cmdCharString[0]:=ch
-        IF (ch=CHAR_BACKSPACE)
-          StrCopy(tempstr,'')
-          IF curpos>0
-            strAddChar(tempstr,ch)
+          ENDIF
+          IF ((ch=LEFTARROW) AND (curpos>0))
             curpos--
+            aePuts('[1D')
+          ENDIF
+        IF ((ch=RIGHTARROW) AND (curpos<(StrLen(outputString))))
+            curpos++
+            aePuts('[1C')
+          ENDIF
+        ENDIF
+
+        IF (wasControl=FALSE)
+          cmdCharString[0]:=ch
+          IF (ch=CHAR_BACKSPACE)
+          StrCopy(tempstr,'')
+            IF curpos>0
+            strAddChar(tempstr,ch)
+              curpos--
             FOR i:=curpos TO StrLen(outputString)-2
               outputString[i]:=outputString[i+1]
               strAddChar(tempstr,outputString[i+1])
-            ENDFOR
+              ENDFOR
             StrAdd(tempstr,' ')
             FOR i:=curpos TO StrLen(outputString)-1
-              StrAdd(tempstr,'[1D')
-            ENDFOR
+                StrAdd(tempstr,'[1D')
+              ENDFOR
 
             SetStr(outputString,EstrLen(outputString)-1)
-            aePuts(tempstr)
-          ENDIF
-        ELSEIF (ch=CHAR_DELETE)
+              aePuts(tempstr)
+            ENDIF
+          ELSEIF (ch=CHAR_DELETE)
           StrCopy(tempstr,'')
           IF curpos<(StrLen(outputString))
             FOR i:=curpos TO StrLen(outputString)-2
               outputString[i]:=outputString[i+1]
               strAddChar(tempstr,outputString[i+1])
-            ENDFOR
+              ENDFOR
             StrAdd(tempstr,' ')
             FOR i:=curpos TO StrLen(outputString)-1
-              StrAdd(tempstr,'[1D')
-            ENDFOR
+                StrAdd(tempstr,'[1D')
+              ENDFOR
             SetStr(outputString,EstrLen(outputString)-1)
-            aePuts(tempstr)
-          ENDIF
+              aePuts(tempstr)
+            ENDIF
         ELSEIF (ch>31) AND (EstrLen(outputString)<maxLen)
-          StrCopy(tempstr,'')
+            StrCopy(tempstr,'')
           StrAdd(outputString,'#')
           FOR i:=StrLen(outputString)-1 TO curpos+1 STEP -1
             outputString[i]:=outputString[i-1]
           ENDFOR
           outputString[curpos]:=ch
           aePuts(cmdCharString)
-          curpos++
+            curpos++
           FOR i:=curpos TO StrLen(outputString)-1
             strAddChar(tempstr,outputString[i])
-          ENDFOR
+            ENDFOR
           FOR i:=curpos TO StrLen(outputString)-1
-            StrAdd(tempstr,'[1D')
-          ENDFOR
-          aePuts(tempstr)
+              StrAdd(tempstr,'[1D')
+            ENDFOR
+            aePuts(tempstr)
+          ENDIF
         ENDIF
       ENDIF
-    ENDIF
-  UNTIL (ch=13) OR (ch=RESULT_ABORT) OR (timedout) OR (reqState<>REQ_STATE_NONE)
+    UNTIL (ch=13) OR (ch=RESULT_ABORT) OR (timedout) OR (reqState<>REQ_STATE_NONE)
 
   conCursorOff()
 
@@ -2111,14 +2124,14 @@ ENDPROC result
 
 PROC readMayGetChar(msgport, checkTelnet, whereto)
   DEF temp, readreq:PTR TO iostd
-  temp:=-1
+  temp:=0
   
   IF checkTelnet AND (telnetSocket>=0)
     IF Recv(telnetSocket,whereto,1,0)=1
       temp:=whereto[]
       IF (lastIAC=0) AND (temp=255)
         lastIAC:=1
-        temp:=-1
+        temp:=0
       ELSEIF lastIAC=5
         ->poosible end of SB stream
         IF temp=240
@@ -2128,7 +2141,7 @@ PROC readMayGetChar(msgport, checkTelnet, whereto)
           ->continue SB stream
           lastIAC:=4
         ENDIF
-        temp:=-1
+        temp:=0
       ELSEIF lastIAC=4
         ->SB stream ends with 255,240
         IF nawsMode
@@ -2141,7 +2154,7 @@ PROC readMayGetChar(msgport, checkTelnet, whereto)
         ELSEIF (temp=255)
           lastIAC:=5
         ENDIF
-        temp:=-1
+        temp:=0
       ELSEIF lastIAC=3
         ->SB mode processing
         IF temp=31
@@ -2149,7 +2162,7 @@ PROC readMayGetChar(msgport, checkTelnet, whereto)
           nawsMode:=4
         ENDIF
         lastIAC:=4
-        temp:=-1
+        temp:=0
       ELSEIF lastIAC=1
         ->IAC(255) should be followed by command code 250-255
         IF temp=255
@@ -2158,20 +2171,20 @@ PROC readMayGetChar(msgport, checkTelnet, whereto)
         ELSEIF (temp=250)
           ->IAC SB
           lastIAC:=3
-          temp:=-1
+          temp:=0
         ELSEIF (temp>250) AND (temp<255)
           ->IAC DO/DONT/WILL/WONT
           lastIAC:=2
-          temp:=-1
+          temp:=0
         ELSE 
           ->return to normal mode
           lastIAC:=0
-          temp:=-1
+          temp:=0
         ENDIF
       ELSEIF lastIAC=2
         ->ignore DO/DONT/WILL/WONT parameter code and then return to normal mode
         lastIAC:=0
-        temp:=-1
+        temp:=0
       ELSE
         lastIAC:=0
       ENDIF
@@ -8228,36 +8241,6 @@ ENDPROC TrimStr(teststring)-teststring
 PROC firstCharValue(teststring)
   IF StrLen(teststring)=0 THEN RETURN 0
 ENDPROC teststring[0]
-
-PROC stringCompare(nam: PTR TO CHAR,pat: PTR TO CHAR)
-  DEF p,loop=TRUE
-
-  WHILE loop
-    IF charToLower(nam[0])=charToLower(pat[0])
-      IF nam[0]=0 THEN RETURN RESULT_SUCCESS
-      nam++
-      pat++
-    ELSEIF (pat[0]="?") AND (nam[0]<>0)
-      nam++
-      pat++
-    ELSE
-      loop:=FALSE
-    ENDIF
-  ENDWHILE
-
-  IF pat[0]<>"*" THEN RETURN RESULT_FAILURE
-
-  WHILE pat[0]="*"
-    pat++
-    IF pat[0]=0 THEN RETURN RESULT_SUCCESS
-  ENDWHILE
-
-  FOR p:=StrLen(nam)-1 TO 0 STEP -1
-    IF charToLower(nam[p]) = charToLower(pat[0])
-      IF stringCompare(nam+p,pat) = RESULT_SUCCESS THEN RETURN RESULT_SUCCESS
-    ENDIF
-  ENDFOR
-ENDPROC RESULT_FAILURE
 
 PROC listMSGs(gfh)
   DEF tempStr[255]:STRING
@@ -26958,6 +26941,88 @@ PROC applyPreset(userData:PTR TO user,presetType,presetNum)
 ENDPROC
 
 
+PROC handleIemsi()
+  DEF ch
+  DEF iemsiDone=0
+  DEF s,i
+  DEF tempStr
+  DEF tempStr2[255]:STRING
+  DEF iemsiData[255]:STRING
+  DEF bracketCount=0
+  DEF crc,checkcrc,checklen
+  
+  tempStr:=String(2048)
+  
+  ch:="*"
+  REPEAT
+    IF (ch>31) THEN strAddChar(tempStr,ch)
+    WHILE (ch<>13) AND (ch>0)
+      ch:=readChar(1)
+      IF ch<0
+        DisposeLink(tempStr)
+        RETURN
+      ENDIF
+      
+      IF (ch>31) THEN strAddChar(tempStr,ch)
+      IF ((s:=StrLen(tempStr))<8) AND (StrCmp(tempStr,'**EMSI_',s)=FALSE)
+        DisposeLink(tempStr)        
+        RETURN
+      ENDIF
+    ENDWHILE
+    IF (ch=13) AND (InStr(tempStr,'**EMSI_ICI')=0)   
+     
+      crc:=crc32str(tempStr+2,StrLen(tempStr)-10)
+      
+      StringF(tempStr2,'$\s',tempStr+StrLen(tempStr)-8)
+      checkcrc:=Val(tempStr2)
+      StringF(tempStr2,'$\s[4]',tempStr+10)
+      checklen:=Val(tempStr2)+22
+    
+      IF (crc<>checkcrc) OR (checklen<>StrLen(tempStr))
+        serPuts('**EMSI_NAKEEC3\b')
+      ELSE
+        StrCopy(iemsiData,tempStr)
+        StringF(tempStr,'{Ami-Express,\s}{\s}{\s}{\s}{\r\z\h[8]}{}{\\0}{}',expressVer,cmds.bbsName,mybbsLoc,cmds.sysopName,getSystemTime()-21600)
+        StringF(tempStr,'**EMSI_ISI\r\z\h[4]\s',StrLen(tempStr),tempStr)
+        crc:=crc32str(tempStr+2,StrLen(tempStr)-2)
+        
+        StringF(tempStr,'\s\r\z\h[8]\b',tempStr,crc)     
+        serPuts(tempStr)
+        iemsiDone:=1
+      ENDIF
+    ENDIF
+    IF (iemsiDone AND (InStr(tempStr,'**EMSI_ACKA490')=0))
+      iemsiDone++
+    ENDIF
+    IF iemsiDone<>3
+      IF (InStr(tempStr,'**EMSI_NAKEEC3')=0)
+        StrCopy(iemsiData,'')
+        iemsiDone:=0
+      ENDIF
+    
+      StrCopy(tempStr,'')
+      ch:=readChar(1)
+    ENDIF
+  UNTIL (iemsiDone=3) OR (ch<0)
+  bracketCount:=0
+  StrCopy(tempStr,'')
+  FOR i:=0 TO StrLen(iemsiData)-1
+    IF bracketCount>0
+      IF iemsiData[i]<>"}"
+        strAddChar(tempStr,iemsiData[i])
+      ELSE
+        IF bracketCount=1 THEN StrCopy(iemsiUsername,tempStr)
+        IF bracketCount=6 THEN StrCopy(iemsiPassword,tempStr)
+      ENDIF
+    ENDIF
+    IF iemsiData[i]="{"
+      bracketCount++
+      StrCopy(tempStr,'')
+    ENDIF
+  ENDFOR
+  DisposeLink(tempStr)
+ENDPROC
+
 PROC processLogon()
   DEF tempStr[255]:STRING
   DEF tempStr2[255]:STRING
@@ -26967,7 +27032,7 @@ PROC processLogon()
   DEF userFound
   DEF newUser
   DEF userNum
-  DEF stat
+  DEF stat,ch
   DEF filetags:PTR TO LONG
   DEF hrs,calcHrs,autovalPreset
 
@@ -26995,6 +27060,17 @@ PROC processLogon()
 
   aePuts(connectString)
   aePuts('\b\n')
+  
+  StrCopy(iemsiUsername,'')
+  StrCopy(iemsiPassword,'')
+  IF (Not(checkToolTypeExists(TOOLTYPE_NODE,node,'DISABLE_IEMSI')))
+    aePuts('**EMSI_IRQ8E08\b\n')
+    ch:=readChar(1)
+    WHILE (ch>=0) AND (ch<>"*")
+      ch:=readChar(1)
+    ENDWHILE
+    IF ch="*" THEN handleIemsi()
+  ENDIF
 
   IF (serialCache<>NIL) THEN serialCacheEnabled:=TRUE
 
@@ -27064,7 +27140,17 @@ logonLoop:
   REPEAT
 
   StringF(tempStr,'\b\n\s ',namePrompt)
-  stat:=lineInput(tempStr,'',28,INPUT_TIMEOUT/2,userName)
+  
+  IF StrLen(iemsiUsername)>0
+    StrAdd(tempStr,iemsiUsername)
+    StrAdd(tempStr,'\b\n')
+    aePuts(tempStr)
+    stat:=RESULT_SUCCESS
+    StrCopy(userName,iemsiUsername)
+    StrCopy(iemsiUsername,'')
+  ELSE
+    stat:=lineInput(tempStr,'',28,INPUT_TIMEOUT/2,userName)
+  ENDIF
   IF stat<>RESULT_SUCCESS
     state:=STATE_LOGGING_OFF
     RETURN

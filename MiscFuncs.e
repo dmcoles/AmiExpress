@@ -133,6 +133,36 @@ EXPORT PROC charToUpper(c)
   UpperStr(str)
 ENDPROC str[0]
 
+EXPORT PROC stringCompare(nam: PTR TO CHAR,pat: PTR TO CHAR)
+  DEF p,loop=TRUE
+
+  WHILE loop
+    IF charToLower(nam[0])=charToLower(pat[0])
+      IF nam[0]=0 THEN RETURN RESULT_SUCCESS
+      nam++
+      pat++
+    ELSEIF (pat[0]="?") AND (nam[0]<>0)
+      nam++
+      pat++
+    ELSE
+      loop:=FALSE
+    ENDIF
+  ENDWHILE
+
+  IF pat[0]<>"*" THEN RETURN RESULT_FAILURE
+
+  WHILE pat[0]="*"
+    pat++
+    IF pat[0]=0 THEN RETURN RESULT_SUCCESS
+  ENDWHILE
+
+  FOR p:=StrLen(nam)-1 TO 0 STEP -1
+    IF charToLower(nam[p]) = charToLower(pat[0])
+      IF stringCompare(nam+p,pat) = RESULT_SUCCESS THEN RETURN RESULT_SUCCESS
+    ENDIF
+  ENDFOR
+ENDPROC RESULT_FAILURE
+
 /* trim spaces from both ends of a string and puts it in the destination estring*/
 EXPORT PROC fullTrim(src:PTR TO CHAR,dest:PTR TO CHAR)
   DEF n,v=0
