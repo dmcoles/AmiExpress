@@ -1,4 +1,4 @@
-OPT LARGE,MODULE,REG=5
+OPT LARGE,MODULE
 
  MODULE 'dos/dos'
 
@@ -1164,7 +1164,13 @@ PROC zmodem_recv_raw(zm: PTR TO zmodem_t)
   p:=zm.zm_recv_byte
 
   FOR attempt:=0 TO zm.recv_timeout
-    c:=p(1 /* second timeout */)
+    c:=p(1 /* second timeout */)    
+   
+    IF (c>=0) AND (c<>CAN)
+      zm.n_cans:=0
+      RETURN c
+    ENDIF
+    
     EXIT c>=0
     IF(is_cancelled(zm)) THEN RETURN ZCAN
 
@@ -1206,7 +1212,7 @@ EXPORT PROC zmodem_rx(zm: PTR TO zmodem_t)
 	 * will be received.
 	 */
 
-	WHILE((is_connected(zm)) AND (is_cancelled(zm)=FALSE)) 
+  REPEAT
 
 		REPEAT
       c:=zmodem_recv_raw(zm)
@@ -1224,6 +1230,7 @@ EXPORT PROC zmodem_rx(zm: PTR TO zmodem_t)
         IF((zm.escape_ctrl_chars AND (c >= 0) AND ((c AND $60)=0)))
           chr(c,tempstr)
           StringF(tempstr2,'rx: dropping unescaped ctrl char: \s',tempstr)
+          lprintf(zm,ZM_LOG_WARNING,tempstr2)
         ELSE
           /*
           * normal character; return it.
@@ -1239,7 +1246,7 @@ EXPORT PROC zmodem_rx(zm: PTR TO zmodem_t)
 		 */
 
     loop:=TRUE
-		WHILE((is_cancelled(zm))=FALSE) AND loop
+    REPEAT
       c:=zmodem_recv_raw(zm)
       IF  (c=XON) OR (c=(XON OR $80)) OR (c=XOFF) OR (c=(XOFF OR $80)) OR (c=ZDLE)
         chr(c,tempstr)
@@ -1284,8 +1291,8 @@ EXPORT PROC zmodem_rx(zm: PTR TO zmodem_t)
           loop:=FALSE
         ENDIF
 			ENDIF
-		ENDWHILE
-	ENDWHILE
+		UNTIL (is_cancelled(zm) OR (loop=FALSE))
+	UNTIL ((is_connected(zm)=FALSE) OR is_cancelled(zm))
 
 	/*
 	 * not reached (unless cancelled).
@@ -1321,7 +1328,7 @@ PROC zmodem_recv_data32(zm: PTR TO zmodem_t, p: PTR TO CHAR, maxlen, l: PTR TO L
 	crc:=$ffffffff
 
   n:=0
-	WHILE 1
+	LOOP
 		c:=zmodem_rx(zm)
 
 		IF(c < 0) THEN RETURN c
@@ -1333,7 +1340,7 @@ PROC zmodem_recv_data32(zm: PTR TO zmodem_t, p: PTR TO CHAR, maxlen, l: PTR TO L
     p[]:=c
     p++
     n++
-	ENDWHILE
+	ENDLOOP
   l[]:=l[]+n
 
 	subpkt_type:=c AND $ff
@@ -1375,7 +1382,7 @@ PROC zmodem_recv_data16(zm: PTR TO zmodem_t, p:PTR TO CHAR,  maxlen, l: PTR TO L
 	crc:=0
 
   n:=0
-	WHILE 1
+	LOOP
 		c:=zmodem_rx(zm)
 
 		IF(c < 0) THEN RETURN c
@@ -1383,12 +1390,11 @@ PROC zmodem_recv_data16(zm: PTR TO zmodem_t, p:PTR TO CHAR,  maxlen, l: PTR TO L
 		EXIT (c > $ff)
 
 		IF(n >= maxlen) THEN RETURN SUBPKTOVERFLOW
-		->crc:=ucrc16(zm,c,crc)
+		crc:=ucrc16(zm,c,crc)
 		p[]:=c
     p++
     n++
-    l[]:=l[]+1
-	ENDWHILE
+	ENDLOOP
   l[]:=l[]+n
 
 	subpkt_type:= c AND $ff
@@ -2275,7 +2281,7 @@ PROC zmodem_send_file(zm: PTR TO zmodem_t, fname: PTR TO CHAR, request_init,sent
 	p:=p+StrLen(p) + 1
 
   attempts:=0
-  WHILE 1
+  LOOP
 zsendcont1:
     attempts++
 
@@ -2349,7 +2355,7 @@ zsendignore:
     ENDIF
 
 		EXIT type = ZRPOS
-	ENDWHILE
+	ENDLOOP
 
 	IF(zmodem_handle_zrpos(zm, {pos}))=FALSE
     doClose(zm,fp)
@@ -2481,7 +2487,7 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
 			lprintf(zm,ZM_LOG_DEBUG,tempstr)
 
 			IF(dupe_check(zm,fpath))
-        lprintf(zm,ZM_LOG_WARNING,'dupe check triggered')
+        lprintf(zm,ZM_LOG_DEBUG,'dupe check triggered')
         brk:=TRUE
         JUMP zreccont1
       ENDIF
@@ -2631,7 +2637,7 @@ zreccont1:
     UNTIL (loop=FALSE) OR (brk=TRUE)
 		/* finally */
 		IF(skip) 
-			lprintf(zm,ZM_LOG_WARNING,'Skipping file')
+			lprintf(zm,ZM_LOG_DEBUG,'Skipping file')
 			zmodem_send_zskip(zm)
 		ENDIF
 		zm.current_file_num:=zm.current_file_num+1
@@ -2819,12 +2825,12 @@ PROC zmodem_recv_file_data(zm: PTR TO zmodem_t, fp, offset)
 
 		IF(type=ENDOFFRAME)
       StringF(tempstr,'Received complete frame at offset: \d', pos)
-			lprintf(zm,ZM_LOG_ERR,tempstr)
+			lprintf(zm,ZM_LOG_DEBUG,tempstr)
 		ELSE
 			IF((type>0) AND (zm.local_abort=FALSE))
         chr(type,tempstr)
         StringF(tempstr2,'Received \s at offset: \d', tempstr, pos)
-				lprintf(zm,ZM_LOG_ERR,tempstr2)
+				lprintf(zm,ZM_LOG_DEBUG,tempstr2)
       ENDIF
 			errors++
 		ENDIF
@@ -2855,7 +2861,7 @@ PROC zmodem_recv_file_frame(zm: PTR TO zmodem_t, fp,pos:PTR TO LONG)
 	 */
 
   attempt:=0
-  WHILE 1
+  LOOP
 		IF(attempt>=zm.max_errors) THEN RETURN TIMEOUT
 
 		type:=zmodem_recv_header(zm)
@@ -2883,7 +2889,7 @@ PROC zmodem_recv_file_frame(zm: PTR TO zmodem_t, fp,pos:PTR TO LONG)
 recframecont:
 
     attempt++
-	ENDWHILE
+	ENDLOOP
 
 	IF(zm.rxd_header_pos<>pos[])
     StringF(tempstr,'Received wrong ZDATA frame (\d vs \d)"',zm.rxd_header_pos, pos[])

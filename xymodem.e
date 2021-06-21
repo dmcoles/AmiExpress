@@ -1,4 +1,4 @@
-OPT LARGE,MODULE,REG=5
+OPT LARGE,MODULE
 
  MODULE 'dos/dos'
 
@@ -400,7 +400,7 @@ PROC xmodem_get_block(xym:PTR TO xymodem_t, block:PTR TO CHAR, expected_block_nu
 
     block_inv:=i
     calc_crc:=0
-    calc_chksum=0
+    calc_chksum:=0
     
     b:=0
     WHILE((b<xym.block_size) AND (is_connected(xym)))

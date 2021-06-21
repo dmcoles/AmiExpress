@@ -1,14 +1,14 @@
 # Compile ACP and EXPRESS and any dependencies
 
-options=DEBUG IGNORECACHE NILCHECK
-compiler=EC
+options=DEBUG IGNORECACHE NILCHECK OPTI
+compiler=GEC
 expprogramname=AmiExpress
 acpprogramname=ACP
 version=5.5.0-dev
 
 all:					acp express5 jsonimport icon2cfg qwk ftn
 
-release:				options = IGNORECACHE 
+release:				options = IGNORECACHE OPTI
 release:				acp express5 jsonimport icon2cfg qwk ftn
 
 acp:					acp.e acpversion.m axcommon.m jsonparser.m jsoncreate.m stringlist.m 

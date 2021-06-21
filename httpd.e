@@ -11,8 +11,6 @@ CONST EWOULDBLOCK=35
 CONST MAX_LINE=255
 CONST FIONBIO=$8004667e
 
-DEF zModemInfo
-
 MODULE	'socket',
         'net/netdb',
         'net/in',

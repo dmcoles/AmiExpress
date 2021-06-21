@@ -1,6 +1,6 @@
 -> ACP v5
 
-  OPT LARGE,REG=5,OSVERSION=37
+  OPT LARGE,OSVERSION=37
 
   MODULE 'workbench/startup',
        'exec/ports',
@@ -3860,7 +3860,7 @@ PROC main() HANDLE
                     f:=FALSE
 
                     ->WILL=251, WONT=252, DO=253, DONT=254
-
+                  
                     IF telnetSend(telnetSocket,'\b\n/X Native Telnet:  Searching for free node...\b\n')=FALSE THEN f:=TRUE
         
                     IF f=FALSE

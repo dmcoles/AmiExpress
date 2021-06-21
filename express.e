@@ -1,5 +1,5 @@
 -> Ami Express 5 
-OPT LARGE,REG=5,OSVERSION=37
+OPT LARGE,OSVERSION=37
 
 /*
 
@@ -1889,7 +1889,7 @@ PROC yesNo(flag)
     ENDIF
   ENDIF
 
-  WHILE(TRUE)
+  LOOP
     ch:=readChar(INPUT_TIMEOUT)
     IF(ch<0) THEN RETURN ch
     IF(ch=13)     ->  removed ((ch=13) OR (ch=10))
@@ -1904,7 +1904,7 @@ PROC yesNo(flag)
       aePuts('No\b\n')
       RETURN 0
     ENDIF
-  ENDWHILE
+  ENDLOOP
 ENDPROC
 
 PROC addToHistory(text)
@@ -9565,7 +9565,7 @@ bEG_IN:
     ENDIF
     aePuts(str)
 
-    WHILE TRUE
+    LOOP
 next2:
 
       c:=readChar(INPUT_TIMEOUT)
@@ -9745,7 +9745,7 @@ next2:
         aePuts('\b\n')
         JUMP brk
       ENDIF
-    ENDWHILE
+    ENDLOOP
 brk:
     lines++
     ->IF((lines=(msgBuf.maxSize()-2)) AND (bkFlag=0)) THEN aePuts('\b\nWarning two lines remaining.\b\n\b\n')   ->no limit on list size now
@@ -10302,7 +10302,7 @@ skipBegin:
           aePuts(str)
           EXIT stat:=checkForPause()
         ENDFOR
-        WHILE TRUE
+        LOOP
           aePuts('\b\n Enter Startline,Endline or (*=ALL, A=Abort): ')
           stat:=lineInput('','',6,INPUT_TIMEOUT,str)
           IF(stat<0)
@@ -10330,7 +10330,7 @@ skipBegin:
 
           EXIT (((i>0) AND (i<=lines)) AND ((i2>0) AND (i2<=lines)) AND (i<=i2))
 
-        ENDWHILE
+        ENDLOOP
         IF(i<>(-1))
           FOR i3:=0 TO i2-i
             msgBuf.setItem(i3,msgBuf.item(i+i3-1))
@@ -10390,7 +10390,7 @@ PROC replyPrompt(gfh)
   DEF stat,i
 
   helplist:=0
-  WHILE TRUE
+  LOOP
 contloop:
     fwdFlag:=0
     IF(helplist=0)
@@ -10598,7 +10598,7 @@ contloop:
       ENDIF
     ENDIF
     aePuts('No such command!!\b\n')
-  ENDWHILE
+  ENDLOOP
 
 ENDPROC RESULT_SUCCESS
 
@@ -10870,7 +10870,7 @@ PROC findUserFromName(start,nameType,name, hoozer: PTR TO user, hoozer2: PTR TO 
   Seek(fh2,start*SIZEOF userMisc,OFFSET_BEGINNING)
 
   slot:=0
-  REPEAT
+  LOOP
     stat:=Read(fh,hoozer2,SIZEOF userKeys)
     IF(stat<>SIZEOF userKeys)
       Throw(ERR_EXCEPT,0)
@@ -10896,7 +10896,7 @@ PROC findUserFromName(start,nameType,name, hoozer: PTR TO user, hoozer2: PTR TO 
           Throw(ERR_EXCEPT,start+slot)
         ENDIF
     ENDSELECT
-  UNTIL FALSE
+  ENDLOOP
   Close(fh)
   Close(fh2)
 EXCEPT
@@ -11301,7 +11301,7 @@ PROC readMSG(gfh)
     ENDIF
   ENDIF
 
-  WHILE TRUE
+  LOOP
   cont:
     IF(fwdFlag=1) THEN StringF(str,'\d\c\d',msgNum,fwdDir,mailStat.highMsgNum-1) ELSE StringF(str,'\d\c\d',msgNum,fwdDir,mailStat.lowestKey)
 
@@ -11570,7 +11570,7 @@ PROC readMSG(gfh)
     ENDIF
 nextMenu:
     aePuts('\b\n')
-  ENDWHILE
+  ENDLOOP
 ENDPROC RESULT_SUCCESS
 
 PROC noMorePlus()
@@ -13538,7 +13538,7 @@ PROC xprsread()
 
     queueSerialRead(buf,bsize)
 
-    WHILE(TRUE)
+    LOOP
       signals:=Wait(serialsig OR timersig)
 
       /* Receive buffer filled? */
@@ -13626,7 +13626,7 @@ PROC xprsread()
           JUMP sreaddone
         ENDIF
       ENDIF
-    ENDWHILE
+    ENDLOOP
   ELSE
     i:=0
   ENDIF
@@ -14750,7 +14750,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
       xymodem_init(xym, 0,
             {zmlputs},
             {zmprogress},
-            {zmrecvbyte},
+            IF telnetSocket>=0 THEN {zmrecvbyteTelnet} ELSE {zmrecvbyteSerial},
             {zmisconnected},
             {zmiscancelled},
             {zmdatawaiting},
@@ -14774,7 +14774,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
       zmodem_init(zm, 0,
             {zmlputs},
             {zmprogress},
-            {zmrecvbyte},
+            IF telnetSocket>=0 THEN {zmrecvbyteTelnet} ELSE {zmrecvbyteSerial},
             {zmisconnected},
             {zmiscancelled},
             {zmdatawaiting},
@@ -15200,32 +15200,25 @@ PROC zmprogress(pos,filesize,s1,s2,errors,startpos,filename:PTR TO CHAR,newfile,
   ENDIF
 ENDPROC
 
-PROC zmrecvbyte(timeout)
-  DEF res
-  IF telnetSocket>=0
-    res:=zmrecvbyteTelnet(timeout)
-  ELSE
-    res:=zmrecvbyteSerial(timeout)
-  ENDIF
-ENDPROC res
-
 PROC zmrecvbyteTelnet(timeout)
   DEF res
   DEF temp
-  DEF recvd,n,r
+  DEF n,r
   DEF tv:timeval
   DEF sysTime
   
-  recvd:=FALSE
   REPEAT
 redo1:
     IF (bufferReadOffset<bufferedBytes)
       REPEAT
         res:=zmodemBuffer[bufferReadOffset]
+        bufferReadOffset++
+        IF (lastIAC=0) AND (res<>255) THEN RETURN res
+        
         IF lastIAC=1
           IF res=255
-            recvd:=TRUE
             lastIAC:=0
+            RETURN res
           ELSEIF (res>=250) AND (res<255)
             lastIAC:=2        
           ELSE
@@ -15236,15 +15229,33 @@ redo1:
           lastIAC:=0
         ELSEIF res=255
           lastIAC:=1
-        ELSE
-          recvd:=TRUE
         ENDIF
-        bufferReadOffset++
      
-      UNTIL (bufferReadOffset>=bufferedBytes) OR (recvd)
-      IF recvd=FALSE THEN JUMP redo1
+      UNTIL (bufferReadOffset>=bufferedBytes)
+      JUMP redo1
     ELSE
-      temp,n:=checkTelnetData()
+      tv.secs:=timeout
+      tv.micro:=0
+      setSingleFDS(telnetSocket)
+      res:=WaitSelect(telnetSocket+1,fds,NIL,NIL,tv,NIL)
+
+      bufferReadOffset:=0
+      bufferedBytes:=0
+      n:=zModemBufferSize     
+      REPEAT
+        IF (r:=Recv(telnetSocket,zmodemBuffer+bufferedBytes,n,0))<>-1
+          bufferedBytes:=bufferedBytes+r
+        ENDIF
+        n:=(zModemBufferSize-bufferedBytes)     
+      UNTIL (r=-1) OR (n=0)
+        
+      IF ((lastCarrierCheck+5)<sysTime)
+        IF checkCarrier()=FALSE THEN RETURN -1
+        lastCarrierCheck:=sysTime
+      ENDIF
+
+
+      /*temp,n:=checkTelnetData()
       IF n=0
         tv.secs:=timeout
         tv.micro:=0
@@ -15267,22 +15278,18 @@ redo1:
         ENDWHILE
         
         IF ((lastCarrierCheck+5)<sysTime)
+          IF checkCarrier()=FALSE THEN RETURN -1
           lastCarrierCheck:=sysTime
-          IF checkCarrier() THEN JUMP redo1
-          res:=0
-        ELSE
-          JUMP redo1
         ENDIF
       ELSE
         IF ((lastCarrierCheck+5)<sysTime)
-          IF checkCarrier()=FALSE THEN res:=0
+          IF checkCarrier()=FALSE THEN RETURN -1
           lastCarrierCheck:=sysTime
         ENDIF
-      ENDIF
+      ENDIF*/
     ENDIF
-  UNTIL (res=0) OR (recvd) OR (timeout=0)
-  IF recvd=FALSE THEN res:=-1
-ENDPROC res
+  UNTIL (timeout=0)
+ENDPROC -1
 
 PROC zmrecvbyteSerial(timeout)
   DEF serialsig,signals,timersig=0,res
@@ -15644,7 +15651,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
       xymodem_init(xym, 0,
             {zmlputs},
             {zmprogress},
-            {zmrecvbyte},
+            IF telnetSocket>=0 THEN {zmrecvbyteTelnet} ELSE {zmrecvbyteSerial},
             {zmisconnected},
             {zmiscancelled},
             {zmdatawaiting},
@@ -15668,7 +15675,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
       zmodem_init(zm, 0,
             {zmlputs},
             {zmprogress},
-            {zmrecvbyte},
+            IF telnetSocket>=0 THEN {zmrecvbyteTelnet} ELSE {zmrecvbyteSerial},
             {zmisconnected},
             {zmiscancelled},
             {zmdatawaiting},
@@ -16027,7 +16034,7 @@ PROC partUploadOK(option)
         aePuts('There are some incompleted uploads of yours\b\n')
         IF(option=FALSE) THEN aePuts('Would you like to leave anyway (Y/N)? ')
 
-        WHILE TRUE
+        LOOP
           ch:=checkOnlineStatus()
           IF(ch<0)
             rts_stat:=ch
@@ -16053,7 +16060,7 @@ PROC partUploadOK(option)
           IF((ch="N") OR (ch="n"))
             IF(option=FALSE) THEN aePuts('No!   View them (Y/N)? ') ELSE aePuts('View them (Y/N)? ')
             purgeLine()
-            WHILE TRUE
+            LOOP
               ch:=checkOnlineStatus()
               IF(ch<0)
                 rts_stat:=ch
@@ -16070,13 +16077,13 @@ PROC partUploadOK(option)
                 JUMP outoh
               ENDIF
               EXIT ((ch="Y") OR (ch="y"))
-            ENDWHILE
+            ENDLOOP
             ->// AEPutStr("Yes..\b\n");
             rts_stat:=RESULT_FAILURE
             JUMP outoh
           ENDIF   /* end if ch == 'n' */
           EXIT ((ch="Y") OR (ch="y"))
-        ENDWHILE          /* end forever */
+        ENDLOOP          /* end forever */
         JUMP outoh
       ENDIF
       ->//AEPutStr("Yes..\b\n");
@@ -16099,7 +16106,7 @@ PROC uploadDesc()
   aePuts('\b\nUnlimited files.  Blank Line to start transfer.\b\n')
 
   count:=0
-  WHILE(TRUE)
+  LOOP
 updesccont:
     count++
     StringF(str,'\b\nFileName \d: ',count)
@@ -16198,7 +16205,7 @@ updesccont:
     UNTIL ((StrLen(str2)=0) OR (x>=(max_desclines-1)))
     Close(udf)
 
-  ENDWHILE
+  ENDLOOP
 
   aePuts('\b\n')
   REPEAT
@@ -16596,7 +16603,7 @@ PROC resumeStuff()
         StringF(string,'Resume \s[12] [\d] (Y/N)? ',str,fBlock.size)
       ENDIF
       aePuts(string)
-      WHILE(TRUE)
+      LOOP
         ch:=checkOnlineStatus()
         IF(ch<0)
           FreeDosObject(DOS_FIB,fBlock)
@@ -16616,7 +16623,7 @@ PROC resumeStuff()
         IF((ch="N") OR (ch="n"))
           IF removeAll=FALSE THEN aePuts('No!   Delete (Y/N/All)? ')
           purgeLine()
-          WHILE (TRUE)
+          LOOP
             IF removeAll
               ch:="Y"
             ELSE
@@ -16644,7 +16651,7 @@ PROC resumeStuff()
               ch:="Y"
             ENDIF
             EXIT ((ch="Y") OR (ch="y"))
-          ENDWHILE        /* end first forever */
+          ENDLOOP        /* end first forever */
           IF removeAll
             aePuts('All.. Deleted!\b\n')
           ELSE
@@ -16658,7 +16665,7 @@ PROC resumeStuff()
         ENDIF  /* end if ch == 'n */
 
         EXIT (ch="Y") OR (ch="y")
-      ENDWHILE   /* end 2nd forever */
+      ENDLOOP   /* end 2nd forever */
       aePuts('Yes..\b\n')
       StringF(string,'\b\nResuming upload: \s\b\n\b\n',str)
       aePuts(string)      /* filename */
@@ -18382,7 +18389,7 @@ arestart1:
 
 arestart:
 
-  WHILE TRUE
+  LOOP
     tsec:=Div(dtfsize,estDlCPS)
     min:=tsec/60
     IF(((Div(timeLimit,60))-min)<0) AND (checkSecurity(ACS_OVERRIDE_TIMELIMIT)=FALSE)
@@ -18529,7 +18536,7 @@ arestart:
     IF((status=RESULT_FAILURE) OR (status=11) OR (status=10))
       Throw(ERR_EXCEPT,RESULT_SUCCESS)
     ENDIF
-  ENDWHILE
+  ENDLOOP
 
 astart:
 
@@ -20613,7 +20620,7 @@ PROC editAccounts(f6)
   setEnvStat(ENV_ACCOUNT)
   IF runSysCommand('ACCOUNTS','')=FALSE
 
-    WHILE TRUE
+    LOOP
         IF includeDeact
           aePuts('\b\nI>nactive accounts: Include')
         ELSE
@@ -20652,7 +20659,7 @@ PROC editAccounts(f6)
         stat:=checkNEdit(which,f6)
         IF stat<0 THEN JUMP returnf
       ENDIF
-    ENDWHILE
+    ENDLOOP
 returnf:
     aePuts('\b\n')
   ENDIF
@@ -23099,7 +23106,7 @@ PROC internalCommandUpHat(params)
   DEF ch
 
   StringF(tempstr,'\shelp/\s',cmds.bbsLoc,params)
-  WHILE TRUE
+  LOOP
     IF findSecurityScreen(tempstr,screen)
       displayFile(screen)
       ch:=doPause()
@@ -23114,7 +23121,7 @@ PROC internalCommandUpHat(params)
         RETURN RESULT_SUCCESS
       ENDIF
     ENDIF
-  ENDWHILE
+  ENDLOOP
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandJ(params)
@@ -23298,7 +23305,7 @@ PROC internalCommandNM()
 
   setEnvStat(ENV_SYSOP)
 
-  REPEAT
+  LOOP
     who(0)
     aePuts('\b\n')
 
@@ -23374,7 +23381,7 @@ PROC internalCommandNM()
       ENDIF
     ENDIF
 
-  UNTIL FALSE
+  ENDLOOP
 
 ENDPROC RESULT_SUCCESS
 
@@ -23723,7 +23730,7 @@ PROC internalCommandW()
   IF checkSecurity(ACS_EDIT_USER_INFO)=FALSE THEN RETURN RESULT_NOT_ALLOWED
 
   setEnvStat(ENV_STATS)
-  WHILE (TRUE)
+  LOOP
     IF(logonType>=LOGON_TYPE_REMOTE)
       stat:=checkCarrier()
       IF(stat=FALSE) THEN RETURN RESULT_SLEEP_LOGOFF
@@ -24073,7 +24080,7 @@ PROC internalCommandW()
     ENDSELECT
 
 cant:
-  ENDWHILE
+  ENDLOOP
 ENDPROC RESULT_SUCCESS
 
 PROC internalCommandWHO()
@@ -25522,7 +25529,7 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
       ENDIF
       IF(found)
         found:=1
-        WHILE(1)
+        LOOP
           current:=myzip+Shl(found,8)+1    ->ln(1,found)
           EXIT (current[0]=0) OR (found>=99)
           aePuts(current)
@@ -25534,7 +25541,7 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
             FreeMem(myzip,25600)
             RETURN gi1
           ENDIF
-        ENDWHILE
+        ENDLOOP
       ENDIF
       found:=0
       x:=1
@@ -25553,7 +25560,7 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
   current[0]:=0
   IF(found)
     found:=1
-    WHILE(1)
+    LOOP
       current:=myzip+Shl(found,8)+1   ->  ln(1,found)
       EXIT current[0]=0
       aePuts(current)
@@ -25565,7 +25572,7 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
         FreeMem(myzip,25600)
         RETURN gi1
       ENDIF
-    ENDWHILE
+    ENDLOOP
   ENDIF
 
   Close(fi)
@@ -25990,7 +25997,7 @@ PROC flagPause(count)
 
   IF((nonStopDisplayFlag=FALSE) AND (lineCount>=userLineLen))
     lineCount:=0;
-    WHILE TRUE
+    LOOP
       aePuts('[32m([33mPause[32m)[34m...[32m([33mf[32m)[36mlags, More[32m([33mY[32m/[33mn[32m/[33mns[32m)[0m? ')
       moreStat:=lineInput('','',190,INPUT_TIMEOUT,str)
       IF(moreStat<0) THEN RETURN moreStat
@@ -26016,7 +26023,7 @@ PROC flagPause(count)
         ->if(AnsiColor)
         aePuts('[A[K')
       ENDIF
-    ENDWHILE
+    ENDLOOP
 fpbrk:
     aePuts('[1A[K')
   ENDIF
@@ -26713,7 +26720,7 @@ PROC checkPassword()
   DEF tempStr2[255]:STRING
   DEF resetCode[25]:STRING
   DEF resetChars[62]:STRING
-  WHILE TRUE
+  LOOP
 
     displayUserToCallersLog(0)
 
@@ -26829,7 +26836,7 @@ PROC checkPassword()
       aePuts('UUCP access has been denied!\b\n\b\n')
     ENDIF
     RETURN RESULT_SUCCESS
-  ENDWHILE
+  ENDLOOP
 logoffErr:
   callersLog('\t* Password Failure *')
 ENDPROC RESULT_FAILURE
@@ -27788,7 +27795,7 @@ jLoop4:
   purgeLine()
   aePuts('Is the above Correct? ')
 
-  WHILE TRUE
+  LOOP
     ch:=checkOnlineStatus()
     IF(ch<0) THEN RETURN ch
       ch:=readChar(INPUT_TIMEOUT)
@@ -27798,7 +27805,7 @@ jLoop4:
       JUMP jLoop1
     ENDIF
     EXIT ((ch="Y") OR (ch="y"))
-  ENDWHILE
+  ENDLOOP
   aePuts('Yes..\b\n\b\n')
 
 ENDPROC
@@ -27870,7 +27877,7 @@ qAgain:
 
   aePuts('Is the above Correct? ')
 
-  WHILE TRUE
+  LOOP
     ch:=checkOnlineStatus()
       IF(ch<0) THEN RETURN ch
     ch:=readChar(INPUT_TIMEOUT)
@@ -27880,7 +27887,7 @@ qAgain:
        JUMP qAgain
     ENDIF
     IF((ch="Y") OR (ch="y")) THEN JUMP qbreak
-  ENDWHILE
+  ENDLOOP
 qbreak:
   aePuts('Yes..\b\n\b\n')
 
@@ -27892,10 +27899,10 @@ qbreak:
 
   StringF(string,'\sNode\d/TempAns',cmds.bbsLoc,node)
   IF((fp2:=Open(string,MODE_OLDFILE)))<>0
-    WHILE(TRUE)
+    LOOP
       EXIT ((ReadStr(fp2,c))=-1) AND (StrLen(c)=0)
       fileWriteLn(fp1,c)
-    ENDWHILE
+    ENDLOOP
     Close(fp1)
     Close(fp2)
   ENDIF
@@ -29328,3 +29335,5 @@ threadtasksA4:
 regA4:
     LONG NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL
     LONG NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL,NIL
+
+
