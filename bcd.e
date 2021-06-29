@@ -1,6 +1,5 @@
 ->BCD helper methods
 
-OPT OSVERSION=37
 OPT MODULE
 
    MODULE '*axobjects'
