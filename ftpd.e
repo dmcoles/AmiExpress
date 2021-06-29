@@ -364,22 +364,17 @@ PROC readLine(sb,sockd, vptr:PTR TO CHAR, maxlen)
   FOR n:=0 TO maxlen-1 
     rc:=recv(sb,sockd, c, 1,0)
 		IF ( rc = 1 )
-			IF(c[] = "\b") THEN JUMP next
-			IF (c[] = "\n") THEN JUMP brk
+			CONT c[] = "\b"
+			EXIT c[] = "\n"
 			buffer[]++:=c[]
 		ELSEIF ( rc = 0 )
-			IF ( n = 1 )
-				RETURN 0
-			ELSE
-				JUMP brk
-      ENDIF
+			IF ( n = 1 ) THEN RETURN 0
+      EXIT TRUE
 		ELSE
-			IF ( errno(sb) = EINTR ) THEN JUMP next
+			CONT errno(sb) = EINTR
 			RETURN -1
 		ENDIF
-next:
   ENDFOR
-brk:
   buffer[]:=0
 ENDPROC n
 

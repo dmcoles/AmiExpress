@@ -99,7 +99,7 @@ EXPORT PROC makeIntList(src:PTR TO CHAR)
   
 ENDPROC res
 
-EXPORT PROC strCmpi(test1: PTR TO CHAR, test2: PTR TO CHAR, len)
+EXPORT PROC strCmpi(test1: PTR TO CHAR, test2: PTR TO CHAR, len = ALL)
   /* case insensitive string compare */
   DEF i,l1,l2
 
@@ -205,7 +205,7 @@ EXPORT PROC findAssign(name: PTR TO CHAR)
   Forbid()
   WHILE(devicelist.next)
     bStrC(devicelist.name,temp2)
-    IF(strCmpi(temp2,temp,ALL)/* && devicelist->dl_Type!=DLT_DEVICE*/)
+    IF(strCmpi(temp2,temp)/* && devicelist->dl_Type!=DLT_DEVICE*/)
       Permit()
       RETURN 0
     ENDIF 
@@ -482,11 +482,11 @@ EXPORT PROC fileWrite(fh,str: PTR TO CHAR)
   IF s<>StrLen(str) THEN RETURN RESULT_FAILURE
 ENDPROC RESULT_SUCCESS
 
-EXPORT PROC strCpy(dest: PTR TO CHAR, source: PTR TO CHAR, len)
+EXPORT PROC strCpy(dest: PTR TO CHAR, source: PTR TO CHAR, len=ALL)
   DEF c,endfound=FALSE
   DEF i
   IF len=ALL
-    AstrCopy(dest,source,ALL)
+    AstrCopy(dest,source)
   ELSE
     FOR i:=0 TO len-1
       c:=source[i]

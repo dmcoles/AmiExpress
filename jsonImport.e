@@ -30,8 +30,8 @@ PROC main() HANDLE
 
   fr:=NIL
 
-  AstrCopy(infile,'',ALL)
-  AstrCopy(outpath,'',ALL)
+  AstrCopy(infile,'')
+  AstrCopy(outpath,'')
 
   myargs:=[0,0,0]:LONG
   IF rdargs:=ReadArgs('CONFIG/K,WRITEPATH/K,CFGFILES/S',myargs,NIL)

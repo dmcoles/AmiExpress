@@ -3420,8 +3420,8 @@ PROC updateVersion(expVer:PTR TO CHAR,expDate:PTR TO CHAR)
     d:=Val(tmp)
     StringF(expDate,'\d[2]-\s[3]-\d[4]',d,'JanFebMarAprMayJunJulAugSepOctNovDec'+((m-1)*3),y)
   ELSE
-    StrCopy(expVer,v,ALL)
-    StrCopy(expDate,'',ALL)
+    StrCopy(expVer,v)
+    StrCopy(expDate,'')
   ENDIF
 ENDPROC
 

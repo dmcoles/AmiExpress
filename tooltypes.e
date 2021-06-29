@@ -160,7 +160,7 @@ EXPORT PROC readToolType(toolType,tooltypeSelector,key,outValue)
   do:=getOrCreateCacheItem(nodeFile)
   IF (do)
     tooltypes:=do.tooltypes
-    IF (s:=FindToolType(tooltypes,key)) THEN StrCopy(outValue,s,ALL)
+    IF (s:=FindToolType(tooltypes,key)) THEN StrCopy(outValue,s)
   ENDIF
   IF diskObjectCache=NIL THEN FreeDiskObject(do)
 ENDPROC s<>NIL
@@ -227,7 +227,7 @@ EXPORT PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
     i:=0
     WHILE (i<cnt) AND (found=FALSE)
       IF (cacheObj:=diskObjectCache.item(i))
-        IF strCmpi(fileName,cacheObj.fileName,ALL)
+        IF strCmpi(fileName,cacheObj.fileName)
           do:=cacheObj.diskObject
           found:=TRUE
         ENDIF

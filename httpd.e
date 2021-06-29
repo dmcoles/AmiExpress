@@ -470,7 +470,7 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
     WHILE((readMemLine(lineBuff,sb,socket,buff,{readSize},{pos},255,bufsize,{contentLength})) > 0)
     IF (p:=InStr(lineBuff,'filename="'))>=0
         StrCopy(fname,httpData.workingPath)
-        StrAdd(fname,lineBuff+p+10,ALL)
+        StrAdd(fname,lineBuff+p+10)
         p:=InStr(fname,'"')
         SetStr(fname,p)
     ENDIF
@@ -651,7 +651,7 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
           
           IF StrLen(getCmd)>0
             IF (spcPos:=InStr(getCmd,' '))>=0 THEN SetStr(getCmd,spcPos)
-            IF StrCmp(getCmd,'/',ALL)
+            IF StrCmp(getCmd,'/')
               generatePage(sb,http_c,httppath,node,uploadMode,fileList)
               
             ELSEIF (StrCmp(getCmd,'/',1))
@@ -725,7 +725,7 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
           
           IF StrLen(postCmd)>0
             IF (spcPos:=InStr(postCmd,' '))>=0 THEN SetStr(postCmd,spcPos)
-            IF StrCmp(postCmd,'/',ALL)
+            IF StrCmp(postCmd,'/')
               extractFileData(sb,http_c,httpData,boundary,contentLength)
               generatePage(sb,http_c,httppath,node,uploadMode,fileList)
             ENDIF
