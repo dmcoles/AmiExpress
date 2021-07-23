@@ -7,19 +7,24 @@ stuff to do:
 cache msgscan ?
 
 any missing Door port commands
-    DT_LANGUAGE(set),SETOVERIDE,FULLEDIT (not implemented in /X3 or 4)
-    607 - get/set something that isnt used anywhere else in the code (not yet implemented)
-    612 - get MemConf address (not yet implemented)
-    631 - get or set unknown thing ??? (skips messages during download)    (not yet implemented)
+    FULLEDIT (not implemented in /X3 or 4)
 
 node tooltypes
-  FREE_RESUMING  - see /X4 docs (LVL_ALLOW_FREE_RESUMING & ACS_ALLOW_FREE_RESUMING)
+  FREE_RESUMING  - see /X4 docs (LVL_ALLOW_FREE_RESUMING & ACS_ALLOW_FREE_RESUMING) - not implemented in /X3 or 4
   RIPSCRIPT  - unknown (cant see any code that uses this value)
   NODBLBUFFER  - don't allow double buffer size during serial xfer
   HDTRANSBUFFER - see /X4 docs
 
 door tooltypes
- PASS_PARAMETERS=<res>- options 3 and 4
+ PASS_PARAMETERS=<res>- options 2,3
+pass_parameters = 1, do not run command at all (ignore)
+pass_parameters = 2, find command from next level
+pass_parameters = 3, find command at this level
+pass_parameters = 4, find command as internal
+pass_parameters = 5, search for command anywhere
+RETURNCOMMAND2 - run command afterwards from anywhere
+RETURNCOMMAND - run command afterwards as internal
+
 
 */
 
@@ -290,6 +295,7 @@ DEF broker=NIL, broker_mp=NIL:PTR TO mp, cxsigflag=0
 
 DEF securityNames
 DEF securityFlags[255]:STRING
+DEF secOverride[255]:STRING
 DEF shutDownMsg[255]:STRING
 DEF shutDownFlag=0
 
@@ -366,13 +372,17 @@ DEF zmodemBuffer=0
 DEF zModemBufferSize=65536
 DEF bufferedBytes=0
 DEF bufferReadOffset=0
-DEF lastCarrierCheck=0
+->DEF lastCarrierCheck=0
 
 DEF cmdShortcuts=FALSE
 DEF shortcuts:PTR TO stringlist
 DEF currentMenuName[255]:STRING
 DEF defaultMenuName[255]:STRING
 DEF menuPause=TRUE
+
+DEF quietDownload=FALSE
+DEF unknownValue=0
+DEF memConf=0:PTR TO LONG ->shared with tooltypes.e
 
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
@@ -1519,7 +1529,7 @@ PROC flushSerialCache()
 ENDPROC
 
 PROC telnetSend(string:PTR TO CHAR, putlen)
-  DEF i,c,e,offs,n
+  DEF i,c,offs
   DEF buf2
 
   IF binaryRaw
@@ -3083,6 +3093,7 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:P
     CASE JH_SHUTDOWN
         nodesPtr[]:=nodesPtr[]-1
          IF(nodesPtr[]=0)
+            quietDownload:=FALSE
             rawArrow:=FALSE
             exitPtr[]:=TRUE
          ENDIF
@@ -3506,7 +3517,7 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:P
       IF(rawArrow) THEN rawArrow:=FALSE ELSE rawArrow:=TRUE
     CASE PRV_COMMAND
       StrCopy(tempstring,msg.string)
-      processCommand(tempstring,FALSE,TRUE)
+      processCommand(tempstring,TRUE)
     CASE PRV_GROUP
       StrCopy(tempstring,msg.string)
         temp:=Val(tempstring)
@@ -3581,7 +3592,11 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:P
           ENDIF
         ENDIF
       ELSE
-        debugLog(LOG_WARN,'DT_LANGUAGE set yet implemented')
+        IF loggedOnUser<>NIL
+          FOR i:=0 TO screenTypeExt.count()-1
+            IF strCmpi(msg.string,screenTypeExt.item(i)) THEN loggedOnUser.screenType:=i;
+          ENDFOR
+        ENDIF
       ENDIF
 
     CASE DT_QUICKFLAG
@@ -3638,7 +3653,7 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:P
     CASE SENTBY
        msg.data:=cmds.acLvl[LVL_SENTBY_FILES]
     CASE SETOVERIDE
-        debugLog(LOG_WARN,'SETOVERIDE not yet implemented')
+      setOverride(msg.data)
     CASE FULLEDIT
         debugLog(LOG_WARN,'FULLEDIT not yet implemented')
     CASE SETMCIOFF
@@ -3698,7 +3713,11 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:P
         ENDIF
       ENDIF
     CASE MEMCONF
-        debugLog(LOG_WARN,'MEMCONF not yet implemented')
+      ->ensure all conf info files are loaded
+      FOR i:=1 TO cmds.numConf
+        readToolTypeInt(TOOLTYPE_CONF,i,'NDIRS')
+      ENDFOR
+      msg.filler1:=memConf
     CASE SET_SERSHARED
       serShared:=msg.data
     CASE CONF_ACCESS
@@ -3870,6 +3889,19 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,command,privcmd,params,nodesPtr:P
     CASE SIG_LI
       getPass2(msg.string,NIL,0,msg.data,tempstring)
       strCpy(msg.string,tempstring,200)
+    CASE UNKNOWN4
+      IF (msg.data)
+        StringF(tempstring,'\d',unknownValue)
+        strCpy(msg.string,tempstring,200)
+      ELSE
+        unknownValue:=Val(msg.string)
+      ENDIF 
+    CASE QUIET_DOWNLOAD
+      IF (msg.string[0])
+        quietDownload:=msg.data
+      ELSE
+        msg.data:=quietDownload
+      ENDIF 
     DEFAULT
       StringF(tempstring,'currently not implemented msg request: \d',msgcmd)
       debugLog(LOG_WARN,tempstring)
@@ -3889,7 +3921,6 @@ PROC runDoor(cmd,type,command,tooltype,params,resident,doorTrap,privcmd,pri=0,st
   DEF doormsg: PTR TO doorMsg
   DEF temp
   DEF async,ch
-  DEF i
   DEF nodes = 0,msgcmd
   DEF tempstring[255]:STRING
   DEF runOnExit[255]:STRING
@@ -3900,7 +3931,7 @@ PROC runDoor(cmd,type,command,tooltype,params,resident,doorTrap,privcmd,pri=0,st
 
   StringF(tempstring,'run door: \s',cmd)
   debugLog(LOG_DEBUG,tempstring)
-  
+  aePuts('[0m')
 
   IF serShared=FALSE THEN purgeLine()
 
@@ -4181,6 +4212,7 @@ PROC runDoor(cmd,type,command,tooltype,params,resident,doorTrap,privcmd,pri=0,st
   IF alreadyActive=FALSE THEN deletePort(mp)
 
   doorLog(type,'')
+  aePuts('[0m')
 
   IF resetSerOut
     ioFlags[IOFLAG_SER_IN]:=0
@@ -4189,7 +4221,7 @@ PROC runDoor(cmd,type,command,tooltype,params,resident,doorTrap,privcmd,pri=0,st
   ENDIF
 
   IF (StrLen(runOnExit)>0)
-    processCommand(runOnExit,TRUE)
+    processCommand(runOnExit,FALSE,SUBTYPE_INTCMD)
   ENDIF
   IF (StrLen(runOnExit2)>0)
     processCommand(runOnExit2)
@@ -4264,13 +4296,12 @@ PROC getExpressMajorVer(outExpressVer)
   ENDIF
 ENDPROC
 
-PROC runCommand(cmdtype,cmd,params,privcmd)
+PROC runCommand(cmdtype,cmd,params,privcmd,subtype=-1)
   DEF commandfile[255]:STRING
   DEF passwordstr[255]:STRING
   DEF bannerScreen[255]:STRING
   DEF doorname[255]:STRING
   DEF commandTypeCode
-  DEF cmdfound = FALSE
   DEF tooltype,pri,stacksize
   DEF acsLevel
   DEF passparams=-1
@@ -4283,36 +4314,42 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
 
   IF cmdtype=CMDTYPE_BBSCMD
     getNodeFile(TOOLTYPE_CONFCMD,cmd,commandfile)
-    IF configFileExists(commandfile)
+    IF (subtype<=SUBTYPE_CONFCMD) AND configFileExists(commandfile)
       tooltype:=TOOLTYPE_CONFCMD
+      subtype:=SUBTYPE_CONFCMD
     ELSE
       getNodeFile(TOOLTYPE_NODECMD,cmd,commandfile)
-      IF configFileExists(commandfile)
+      IF (subtype<=SUBTYPE_NODECMD) AND configFileExists(commandfile)
         tooltype:=TOOLTYPE_NODECMD
+        subtype:=SUBTYPE_NODECMD
       ELSE
         getNodeFile(TOOLTYPE_BBSCMD,cmd,commandfile)
-        IF configFileExists(commandfile)
+        IF (subtype<=SUBTYPE_CMD) AND configFileExists(commandfile)
           tooltype:=TOOLTYPE_BBSCMD
+          subtype:=SUBTYPE_CMD
         ELSE
-          RETURN FALSE
+          RETURN RESULT_FAILURE
         ENDIF
       ENDIF
     ENDIF
 
   ELSEIF cmdtype=CMDTYPE_SYSCMD
     getNodeFile(TOOLTYPE_CONFSYSCMD,cmd,commandfile)
-    IF configFileExists(commandfile)
+    IF (subtype<=SUBTYPE_CONFCMD) AND configFileExists(commandfile)
       tooltype:=TOOLTYPE_CONFSYSCMD
+      subtype:=SUBTYPE_CONFCMD
     ELSE
       getNodeFile(TOOLTYPE_NODESYSCMD,cmd,commandfile)
-      IF configFileExists(commandfile)
+      IF (subtype<=SUBTYPE_NODECMD) AND configFileExists(commandfile)
         tooltype:=TOOLTYPE_NODESYSCMD
+        subtype:=SUBTYPE_NODECMD
       ELSE
         getNodeFile(TOOLTYPE_SYSCMD,cmd,commandfile)
-        IF configFileExists(commandfile)
+        IF (subtype<=SUBTYPE_CMD) AND configFileExists(commandfile)
           tooltype:=TOOLTYPE_SYSCMD
+          subtype:=SUBTYPE_CMD
         ELSE
-          RETURN FALSE
+          RETURN RESULT_FAILURE
         ENDIF
       ENDIF
     ENDIF
@@ -4320,8 +4357,9 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
     getNodeFile(TOOLTYPE_CONFCMD2,cmd,commandfile)
     IF configFileExists(commandfile)
       tooltype:=TOOLTYPE_CONFCMD2
+      subtype:=SUBTYPE_CONFCMD
     ELSE
-      RETURN FALSE
+      RETURN RESULT_FAILURE
     ENDIF
   ENDIF
 
@@ -4350,7 +4388,7 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
   IF access=0 THEN RETURN TRUE
   IF (access>acsLevel)
     IF privcmd=FALSE THEN higherAccess()
-    RETURN FALSE
+    RETURN RESULT_NOT_ALLOWED
   ENDIF
 
   setEnvStat(ENV_DOORS)
@@ -4378,26 +4416,28 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
 
   IF checkToolTypeExists(tooltype,cmd,'INTERNAL')
     passparams:=readToolTypeInt(tooltype,cmd,'PASS_PARAMETERS')
-    IF passparams=1 THEN RETURN TRUE
+    IF passparams=1 THEN RETURN RESULT_SUCCESS
 
     readToolType(tooltype,cmd,'INTERNAL',commandfile)
-    IF passparams=2
+    IF passparams
       ->pass in the original params
       StrAdd(commandfile,' ')
       StrAdd(commandfile,params)
     ENDIF
 
-    RETURN (processCommand(commandfile,TRUE)=RESULT_SUCCESS)
+    IF passparams=2 THEN subtype++
+    IF (passparams=4) THEN subtype:=SUBTYPE_INTCMD
+    IF (passparams=5) THEN subtype:=SUBTYPE_ANYCMD
+    
+    RETURN processCommand(commandfile,(passparams=5) AND (cmdtype=CMDTYPE_SYSCMD),subtype)
   ENDIF
 
   getNodeFile(tooltype,cmd,commandfile)
   readToolType(tooltype,cmd,'LOCATION',commandfile)
 
-  IF commandTypeCode=-1 THEN RETURN FALSE
+  IF commandTypeCode=-1 THEN RETURN RESULT_FAILURE
 
   IF (checkToolTypeExists(tooltype,cmd,'QUICKMODE')) AND (quickFlag) THEN RETURN TRUE
-
-  cmdfound:=TRUE
 
   pri:=0
   stacksize:=20000
@@ -4447,19 +4487,19 @@ PROC runCommand(cmdtype,cmd,params,privcmd)
   inputLogging:=FALSE
   doorSilent:=FALSE
   StrCopy(mimicVersion,'')
-ENDPROC cmdfound
+ENDPROC RESULT_SUCCESS
 
-PROC runBbsCommand(cmd,params,privcmd=FALSE)
+PROC runBbsCommand(cmd,params,privcmd=FALSE,subtype=-1)
   DEF debugstr[255]:STRING
   StringF(debugstr,'execute bbscmd: \s \s',cmd,params)
   debugLog(LOG_DEBUG,debugstr)
-ENDPROC runCommand(CMDTYPE_BBSCMD,cmd,params,privcmd)
+ENDPROC runCommand(CMDTYPE_BBSCMD,cmd,params,privcmd,subtype)
 
-PROC runSysCommand(cmd,params,privcmd=TRUE)
+PROC runSysCommand(cmd,params,privcmd=TRUE,subtype=-1)
   DEF debugstr[255]:STRING
   StringF(debugstr,'execute syscmd: \s \s',cmd,params)
   debugLog(LOG_DEBUG,debugstr)
-ENDPROC runCommand(CMDTYPE_SYSCMD,cmd,params,privcmd)
+ENDPROC runCommand(CMDTYPE_SYSCMD,cmd,params,privcmd,subtype)
 
 PROC loadConfDB(account,confNum,msgBase,addr,force=FALSE)
   DEF bi, confLoc[255]:STRING
@@ -7931,9 +7971,24 @@ PROC clearTempSecurityFlags(securityFlag)
   securityFlags[securityFlag]:="F"
 ENDPROC
 
+PROC clearOverride()
+  StrCopy(secOverride,'')
+ENDPROC
+
+PROC setOverride(securityFlag)
+ WHILE StrLen(secOverride)<=securityFlag
+    StrAdd(secOverride,'F')
+  ENDWHILE
+  secOverride[securityFlag]:="T"
+ENDPROC
+
 PROC checkSecurity(securityFlag)
   IF (loggedOnUser=NIL) THEN RETURN FALSE
 
+  IF (StrLen(secOverride)>securityFlag)
+    IF secOverride[securityFlag]="T" THEN RETURN FALSE
+  ENDIF
+  
   IF (StrLen(securityFlags)>securityFlag)
     IF securityFlags[securityFlag]<>"?" THEN RETURN (securityFlags[securityFlag]="T")
   ENDIF
@@ -9563,7 +9618,7 @@ PROC edit(allowFullscreen=TRUE,maxLineLen=75,updatePosted=FALSE)
       IF((checkSecurity(ACS_PRI_MSGFILES) OR checkSecurity(ACS_PUB_MSGFILES)) AND fileattach) THEN editor.editorFlags:=editor.editorFlags OR ED_BATCH_UPLOAD
       IF(checkSecurity(ACS_ATTACH_FILES) AND fileattach) THEN editor.editorFlags:=editor.editorFlags OR ED_ATTACH_FILE
 
-      IF(runSysCommand('FULLEDIT','',1))
+      IF(runSysCommand('FULLEDIT','',1)=RESULT_SUCCESS)
         IF(loadMsg(editorFileName))
           IF updatePosted THEN loggedOnUser.messagesPosted:=loggedOnUser.messagesPosted+1
 
@@ -11542,7 +11597,7 @@ PROC readMSG(gfh)
         sendCLS()
         callersLog('\tAccount editing from mail.')
         StrCopy(str,'\d',tempUser.slotNumber)
-        IF runSysCommand('ACCOUNTS',str)=FALSE THEN editInfo(uNum,tempUser,tempUserKeys,tempUserMisc,FALSE)
+        IF runSysCommand('ACCOUNTS',str)<>RESULT_SUCCESS THEN editInfo(uNum,tempUser,tempUserKeys,tempUserMisc,FALSE)
         sendCLS()
         stat:=displayMessage(gfh)
         IF(stat<0) THEN RETURN stat
@@ -14029,7 +14084,6 @@ ENDPROC xprfnext2(buffer)
 
 PROC xprfnext2(buffer:PTR TO CHAR)
   DEF fileItem:PTR TO flagFileItem
-  DEF debuglog[255]:STRING
 
   zModemInfo.current:=zModemInfo.current+1
 
@@ -15175,7 +15229,7 @@ PROC zmlputs(level, str:PTR TO CHAR)
   ENDSELECT
 ENDPROC
 
-PROC zmprogress(pos,filesize,s1,s2,errors,startpos,filename:PTR TO CHAR,newfile,blocksize)
+PROC zmprogress(pos,cnt,filesize,s1,s2,errors,startpos,filename:PTR TO CHAR,newfile,blocksize)
   DEF t1,t2,t,n
   DEF h,m,s
   DEF tempStr[255]:STRING
@@ -15184,14 +15238,14 @@ PROC zmprogress(pos,filesize,s1,s2,errors,startpos,filename:PTR TO CHAR,newfile,
   t1,t2:=getZmSystemTime()
   t:=Mul((t1-s1),50)+t2-s2
   
-  IF t>0
-    IF pos>40000000
-      n:=Div(pos,Div(t,50)) 
+  IF (t>50)
+    IF (cnt>40000000)
+      n:=Div(cnt,Div(t,50)) 
     ELSE
-      n:=Div(Mul(pos,50),t) 
+      n:=Div(Mul(cnt,50),t) 
     ENDIF
   ELSE
-    n:=pos
+    n:=cnt
   ENDIF
   t:=Div(t,50)
   
@@ -15264,12 +15318,96 @@ ENDPROC
 
 PROC zmrecvbyteTelnet(timeout)
   DEF res
-  DEF temp
   DEF n,r
   DEF tv:timeval
-  DEF sysTime
+  ->DEF sysTime
   
+  MOVE.L bufferReadOffset,A0
+  MOVE.L bufferedBytes,A1
+  MOVE.L zmodemBuffer,A2
+repbuff:
+  CMPA.L A1,A0
+  BGE buffempty
+  ADD.L A2,A0
+  CLR.L D0
+  MOVE.B (A0)+,D0
+  SUB.L A2,A0
+  
+  MOVE.L lastIAC,D2
+  BNE.S testiac
+  CMP.B #255,D0
+  BEQ.S testiac
+  MOVE.L A0,bufferReadOffset
+  BRA recret
+  
+testiac:
+  CMP.B #1,D2
+  BNE.S testiac2
+
+  CMP.B #255,D0
+  BNE.S test1
+
+  CLR.L D2
+  MOVE.L D2,lastIAC
+  MOVE.L A0,bufferReadOffset
+  BRA recret
+
+test1:
+  CMP.B #250,D0
+  BCC.S test2
+
+  MOVEQ.L #2,D2
+  MOVE.L D2,lastIAC
+  BRA repbuff
+  
+test2:
+  MOVEQ.L #2,D2
+  MOVE.L D2,lastIAC
+  BRA repbuff
+  
+testiac2:
+  CMP.B #2,D2
+  BNE.S testiac3
+  
+  CLR.L D2
+  MOVE.L D2,lastIAC
+  BRA repbuff
+  
+testiac3:
+  CMP.B #255,D0
+  BNE repbuff
+  MOVEQ.L #1,D2
+  MOVE.L D2,lastIAC
+  BRA repbuff
+  
+buffempty:
+  tv.secs:=timeout
+  tv.micro:=0
+  setSingleFDS(telnetSocket)
+  res:=WaitSelect(telnetSocket+1,fds,NIL,NIL,tv,NIL)
+
+  bufferReadOffset:=0
+  bufferedBytes:=0
+  n:=zModemBufferSize     
   REPEAT
+    IF (r:=Recv(telnetSocket,zmodemBuffer+bufferedBytes,n,0))<>-1
+      bufferedBytes:=bufferedBytes+r
+    ENDIF
+    n:=(zModemBufferSize-bufferedBytes)     
+  UNTIL (r=-1) OR (n=0)
+    
+  IF r<=0
+    IF checkCarrier()=FALSE THEN RETURN -1
+  ENDIF
+  
+  IF timeout
+    SUB.L A0,A0
+    MOVE.L bufferedBytes,A1
+    MOVE.L zmodemBuffer,A2
+    JUMP repbuff
+  ENDIF
+  
+  /*REPEAT
 redo1:
     IF (bufferReadOffset<bufferedBytes)
       REPEAT
@@ -15315,43 +15453,11 @@ redo1:
         IF checkCarrier()=FALSE THEN RETURN -1
         lastCarrierCheck:=sysTime
       ENDIF
-
-
-      /*temp,n:=checkTelnetData()
-      IF n=0
-        tv.secs:=timeout
-        tv.micro:=0
-        setSingleFDS(telnetSocket)
-        res:=WaitSelect(telnetSocket+1,fds,NIL,NIL,tv,NIL)
-        temp,n:=checkTelnetData()
-      ENDIF
-
-      bufferReadOffset:=0
-      bufferedBytes:=0
-      sysTime:=getSystemTime()
-      IF n>0
-        IF n>(zModemBufferSize-bufferedBytes) THEN n:=(zModemBufferSize-bufferedBytes)
-        WHILE n>0
-          IF (r:=Recv(telnetSocket,zmodemBuffer+bufferedBytes,n,0))<>-1
-            bufferedBytes:=bufferedBytes+r
-          ENDIF
-          temp,n:=checkTelnetData()
-          IF n>(zModemBufferSize-bufferedBytes) THEN n:=(zModemBufferSize-bufferedBytes)
-        ENDWHILE
-        
-        IF ((lastCarrierCheck+5)<sysTime)
-          IF checkCarrier()=FALSE THEN RETURN -1
-          lastCarrierCheck:=sysTime
-        ENDIF
-      ELSE
-        IF ((lastCarrierCheck+5)<sysTime)
-          IF checkCarrier()=FALSE THEN RETURN -1
-          lastCarrierCheck:=sysTime
-        ENDIF
-      ENDIF*/
     ENDIF
-  UNTIL (timeout=0)
-ENDPROC -1
+  UNTIL (timeout=0)*/
+  MOVE.L #-1,D0
+recret:
+ENDPROC D0
 
 PROC zmrecvbyteSerial(timeout)
   DEF serialsig,signals,timersig=0,res
@@ -15454,8 +15560,11 @@ PROC zmdatawaiting(timeout)
 
 ENDPROC recvd
  
-PROC zmuploadcompleted(fname:PTR TO CHAR) 
+PROC zmuploadcompleted(fname:PTR TO CHAR,filesize) 
   IF loggedOnUserKeys<>NIL
+    tBT:=addWO(tBT,filesize)
+    recFileNames.add(FilePart(fname))
+    onlineNFiles++
     doBgCheck()
   ENDIF
 ENDPROC
@@ -15865,7 +15974,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
 
   checkOffhookFlag()
 
-  receivePlayPen(FALSE)
+  IF ext THEN receivePlayPen(FALSE)
   
   IF (tBT>0) AND (tTTM>0)
     tTEFF:=Div(Mul(Div(tBT,tTTM),100),Div(onlineBaud,10))
@@ -17137,7 +17246,7 @@ PROC testFile(str: PTR TO CHAR, path: PTR TO CHAR)
   stat:=RESULT_NOT_ALLOWED
 
   StringF(temp2,'FILECHECK \s',str)
-  IF processSysCommand(temp2) AND (aeGoodFile<>RESULT_NOT_TESTED)
+  IF (processSysCommand(temp2)=RESULT_SUCCESS) AND (aeGoodFile<>RESULT_NOT_TESTED)
     RETURN aeGoodFile
   ENDIF
 
@@ -17747,7 +17856,7 @@ inpAgain:
       
       readToolType(TOOLTYPE_BBSCONFIG,'','FILEDIZ_SYSCMD',dizSysCmd)
 
-      IF runSysCommand('EXAMINE',str2)
+      IF runSysCommand('EXAMINE',str2)=RESULT_SUCCESS
         i:=1       
         REPEAT
           ->exit the background check if we just ran the file diz door and no diz was found
@@ -17755,7 +17864,7 @@ inpAgain:
           IF exitLoop=FALSE
             StringF(tempstr,'EXAMINE\d',i)
             i++
-            exitLoop:=(runSysCommand(tempstr,str2)=FALSE)
+            exitLoop:=(runSysCommand(tempstr,str2)<>RESULT_SUCCESS)
           ENDIF
         UNTIL(exitLoop)
         
@@ -18061,7 +18170,7 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
     IF fileExists(fileName)
       StringF(tempstr,'\s\s',nodeWorkDir,fname)
       StrCopy(tempstr2,'EXAMINE')
-      IF runSysCommand(tempstr2,fileName)
+      IF runSysCommand(tempstr2,fileName)=RESULT_SUCCESS
         i:=1
         REPEAT
           ->exit the background check if we just ran the file diz door and no diz was found
@@ -18069,7 +18178,7 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
           IF exitLoop=FALSE
             StringF(tempstr2,'EXAMINE\d',i)
             i++
-            exitLoop:=(runSysCommand(tempstr2,fileName)=FALSE)
+            exitLoop:=(runSysCommand(tempstr2,fileName)<>RESULT_SUCCESS)
           ENDIF
         UNTIL(exitLoop)
         
@@ -18329,9 +18438,11 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params) HANDLE
     RETURN RESULT_FAILURE
   ENDIF
 
-  IF (displayScreen(SCREEN_DOWNLOAD))
-    doPause()
-    aePuts('\b\n')
+  IF (quietDownload=FALSE)
+    IF (displayScreen(SCREEN_DOWNLOAD))
+      doPause()
+      aePuts('\b\n')
+    ENDIF
   ENDIF
 
   IF loggedOnUserMisc.lastDlCPS<>0
@@ -18391,10 +18502,12 @@ PROC downloadAFile(cmdcode: PTR TO CHAR, params) HANDLE
     aePuts('Download to Upload Ratio : Disabled.\b\n')
   ENDIF
 
-  aePuts('Space between filenames.  ')
-  IF checkSecurity(ACS_FILE_EXPANSION)=FALSE THEN aePuts('No ')
-  aePuts('Wildcards permitted.\b\n')
-  ->AEPutStr("      Zmodem Uploading & Downloading only\b\n")
+  IF (quietDownload=FALSE)
+    aePuts('Space between filenames.  ')
+    IF checkSecurity(ACS_FILE_EXPANSION)=FALSE THEN aePuts('No ')
+    aePuts('Wildcards permitted.\b\n')
+    ->AEPutStr("      Zmodem Uploading & Downloading only\b\n")
+  ENDIF
 
   tempList:=NEW tempList.stdlist(flagFilesList.count()+1)
   sysopdl:=FALSE
@@ -18562,16 +18675,20 @@ arestart:
       IF((nad=freeDFlag) AND ((loggedOnUser.secLibrary<>0) AND (loggedOnUser.secBoard>0))) THEN JUMP astart
     ENDIF
 
-    IF((loggedOnUser.secLibrary=0) OR (creditAccountEnabled(loggedOnUser)))
-      StringF(tempStr,'\b\n\d mins, (Ratio Disabled), Filespec(\d): ',(Div(timeLimit,60))-min,(numFiles+1))
+    IF (quietDownload=FALSE)
+      IF((loggedOnUser.secLibrary=0) OR (creditAccountEnabled(loggedOnUser)))
+        StringF(tempStr,'\b\n\d mins, (Ratio Disabled), Filespec(\d): ',(Div(timeLimit,60))-min,(numFiles+1))
+      ELSE
+        downloadPrompt(loggedOnUser.secBoard,(Div(timeLimit,60))-min,tbad-tempsize,(numFiles+1),nad-freeDFlag,tempStr)
+      ENDIF
+      aePuts(tempStr)
+      
+      status:=lineInput('','',200,INPUT_TIMEOUT,tempStr2)
+      fullTrim(tempStr2,tempStr)
     ELSE
-      downloadPrompt(loggedOnUser.secBoard,(Div(timeLimit,60))-min,tbad-tempsize,(numFiles+1),nad-freeDFlag,tempStr)
+      StrCopy(tempStr,'')
     ENDIF
-    aePuts(tempStr)
 
-    status:=lineInput('','',200,INPUT_TIMEOUT,tempStr2)
-    fullTrim(tempStr2,tempStr)
-    
     IF(status<0)
       Throw(ERR_EXCEPT,RESULT_NO_CARRIER)
     ENDIF
@@ -18761,7 +18878,7 @@ PROC ccom()
 
   conPuts('\b\nF1 Toggles chat\b\n',-1)
 
-  IF (runSysCommand('PAGER','')=FALSE)
+  IF (runSysCommand('PAGER','')<>RESULT_SUCCESS)
     /* show our page sign to user */
     StringF(buff,'\s\b\n\b\nPaging \s (CTRL-C to Abort). .',display_time,cmds.sysopName)
     aePuts(buff)
@@ -20139,7 +20256,7 @@ PROC onlineEditor(f6)
   temp:=loggedOnUser.timeLimit
 
   StrCopy(str,'\d',loggedOnUser.slotNumber)
-  IF runSysCommand('ACCOUNTS',str)=FALSE
+  IF runSysCommand('ACCOUNTS',str)<>RESULT_SUCCESS
     t:=1
     editInfo(loggedOnUser.slotNumber,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc,f6)
   ENDIF
@@ -20695,7 +20812,7 @@ PROC editAccounts(f6)
   includeDeact:=FALSE
   
   setEnvStat(ENV_ACCOUNT)
-  IF runSysCommand('ACCOUNTS','')=FALSE
+  IF runSysCommand('ACCOUNTS','')<>RESULT_SUCCESS
 
     LOOP
         IF includeDeact
@@ -26270,10 +26387,10 @@ PROC captureRealAndInternetNames(conf,msgbase)
 
 ENDPROC RESULT_SUCCESS
 
-PROC processCommand(cmdtext,internalOnly=FALSE, allowsyscmd=FALSE)
+PROC processCommand(cmdtext,allowsyscmd=FALSE, subtype=-1)
   DEF cmdcode[255]:STRING
   DEF cmdparams[255]:STRING
-  DEF spacepos
+  DEF spacepos,res
 
   IF EstrLen(cmdtext)=0 THEN RETURN RESULT_SUCCESS
 
@@ -26289,18 +26406,22 @@ PROC processCommand(cmdtext,internalOnly=FALSE, allowsyscmd=FALSE)
   UpperStr(cmdcode)
 
   -> try running it as a bbscommand first
-  IF (internalOnly=FALSE)
-    IF allowsyscmd THEN IF runSysCommand(cmdcode,cmdparams) THEN RETURN RESULT_SUCCESS
-    IF runBbsCommand(cmdcode,cmdparams) THEN RETURN RESULT_SUCCESS
+  IF (subtype<SUBTYPE_INTCMD)
+    IF allowsyscmd
+      IF (res:=runSysCommand(cmdcode,cmdparams,TRUE,subtype))=RESULT_SUCCESS THEN RETURN RESULT_SUCCESS
+      IF res=RESULT_NOT_ALLOWED THEN RETURN res
+    ENDIF
+    IF (res:=runBbsCommand(cmdcode,cmdparams,TRUE,subtype))=RESULT_SUCCESS THEN RETURN RESULT_SUCCESS
+    IF res=RESULT_NOT_ALLOWED THEN RETURN res
   ENDIF
 ENDPROC processInternalCommand(cmdcode,cmdparams)
 
 PROC processSysCommand(cmdtext, allowBBSCmd=FALSE)
   DEF cmdcode[255]:STRING
   DEF cmdparams[255]:STRING
-  DEF spacepos
+  DEF spacepos,res
 
-  IF EstrLen(cmdtext)=0 THEN RETURN
+  IF EstrLen(cmdtext)=0 THEN RETURN RESULT_SUCCESS
 
   IF (spacepos:=InStr(cmdtext,' '))>=0
     midStr2(cmdcode,cmdtext,0,spacepos)
@@ -26311,11 +26432,13 @@ PROC processSysCommand(cmdtext, allowBBSCmd=FALSE)
   ENDIF
 
   -> try running it as a syscommand first
-  IF runSysCommand(cmdcode,cmdparams) THEN RETURN TRUE
+  IF (res:=runSysCommand(cmdcode,cmdparams))=RESULT_SUCCESS THEN RETURN RESULT_SUCCESS
+  IF res=RESULT_NOT_ALLOWED THEN RETURN res
 
   IF allowBBSCmd
     -> try running it as a bbscommand next
-    IF runBbsCommand(cmdcode,cmdparams,TRUE) THEN RETURN TRUE
+    IF (res:=runBbsCommand(cmdcode,cmdparams,TRUE)=RESULT_SUCCESS) THEN RETURN RESULT_SUCCESS
+    IF res=RESULT_NOT_ALLOWED THEN RETURN res
   ENDIF
 
 ENDPROC processInternalCommand(cmdcode,cmdparams,TRUE)
@@ -26437,7 +26560,7 @@ PROC processInternalCommand(cmdcode,cmdparams,privcmd=FALSE)
 
   IF ((res=RESULT_NOT_ALLOWED) AND (privcmd=FALSE)) THEN higherAccess()
 
-ENDPROC
+ENDPROC res
 
 PROC displayMenuPrompt()
   DEF mPrompt[255]:STRING
@@ -27182,7 +27305,7 @@ PROC processLogon()
   runSysCommand('FRONTEND','')
 
   IF readToolType(TOOLTYPE_NODE,node,'FORCE_ANSI',tempStr)=FALSE
-    IF (runSysCommand('ANSI','')=FALSE)
+    IF (runSysCommand('ANSI','')<>RESULT_SUCCESS)
       aePuts('ANSI, RIP or No graphics (A/r/n)? ')
 
       stat:=lineInput('','',10,INPUT_TIMEOUT/2,tempStr,FALSE)
@@ -27942,7 +28065,7 @@ qAgain:
   fileWriteLn(fp1,temp1)
   Close(fp1)
 
-  IF (runSysCommand('SCRIPT','')=FALSE)
+  IF (runSysCommand('SCRIPT','')<>RESULT_SUCCESS)
 
     fp2:=Open(filename,MODE_OLDFILE)
     IF(fp2=0) THEN RETURN RESULT_SUCCESS
@@ -28602,7 +28725,7 @@ PROC setSingleFDS(socketVal)
 ENDPROC
 
 PROC setFDS(socketVal)
-  DEF i,n
+  DEF n
   
   n:=(socketVal/32)
   IF (n<0) OR (n>=32) THEN Raise(ERR_FDSRANGE)
@@ -29011,9 +29134,11 @@ PROC main() HANDLE
   StrCopy(consoleInputDeviceName,'console.device')
   readToolType(TOOLTYPE_NODE,node,'CONSOLE_INPUT_DEVICE',consoleInputDeviceName)
 
+  memConf:=List(cmds.numConf+1)
   confNames:=NEW confNames.stringlist(cmds.numConf)
   confDirs:=NEW confDirs.stringlist(cmds.numConf)
   FOR i:=1 TO cmds.numConf
+    ListAdd(memConf,[0])
     StringF(tempstr,'NAME.\d',i)
     readToolType(TOOLTYPE_CONFCONFIG,'',tempstr,tempstr2)
     confNames.add(tempstr2)
@@ -29031,6 +29156,7 @@ PROC main() HANDLE
       strCpy(p+((i-1)*54),tempstr2,54)
     ENDIF
   ENDFOR
+  ListAdd(memConf,[0])
 
   confBases:=NEW confBases.stdlist(countMsgBases())
   FOR i:=1 TO confBases.maxSize()
@@ -29136,6 +29262,8 @@ PROC main() HANDLE
   tidyPlayPen()
   clearUser()
 
+  clearOverride()
+
   sysopAvail:=IF cmds.acLvl[LVL_DEFAULT_CHAT_ON] THEN TRUE ELSE FALSE
   updateTitle(NIL)
 
@@ -29169,6 +29297,8 @@ PROC main() HANDLE
 
   state:=STATE_AWAIT
   reqState:=REQ_STATE_NONE
+  debugLog(LOG_DEBUG,'Node ready')
+
 
   WHILE state<>STATE_SHUTDOWN
     IF state=STATE_AWAIT THEN processAwait()
@@ -29243,6 +29373,7 @@ PROC main() HANDLE
 
   END recFileNames
 
+  DisposeLink(memConf)
   END confNames
   END confDirs
   END olmBuf

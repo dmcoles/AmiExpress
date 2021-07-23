@@ -1,6 +1,6 @@
 OPT LARGE,MODULE
 
- MODULE 'dos/dos'
+ MODULE 'dos/dos','socket'
 
 /*
 way to update errors, error/resume position
@@ -484,25 +484,11 @@ EXPORT OBJECT zmodem_t
 	->void		(*flush)(void*)
 ENDOBJECT
 
-->#define ucrc16(ch,crc) (crc16tbl[((crc>>8)&0xff)^(unsigned char)ch]^(crc << 8))
-PROC ucrc16(zm:PTR TO zmodem_t,ch,crc) IS Eor(zm.crc16tbl[Eor(Shr(crc,8) AND $ff,ch)],Shl(crc,8)) AND $ffff
+->PROC ucrc16(zm:PTR TO zmodem_t,ch,crc) IS Eor(zm.crc16tbl[Eor(Shr(crc,8) AND $ff,ch)],Shl(crc,8)) AND $ffff
+#define ucrc16(ch,crc) Eor(zm.crc16tbl[Eor(Shr(crc,8) AND $ff,ch)],Shl(crc,8)) AND $ffff
 
-/*PROC crc16(zm:PTR TO zmodem_t,data: PTR TO CHAR,len)
-	DEF crc=0
-	DEF l
-	IF((len=0) AND (data<>NIL)) THEN len:=StrLen(data)
-	FOR l:=0 TO len-1
-		crc:=ucrc16(zm,data[l],crc)
-  ENDFOR
-ENDPROC crc*/
-
-/*PROC ucrc32(ch,crc)
-  DEF a,b
-  a:= Eor(crc,ch)
-  a:= a AND 255
-  a:=crc32tbl[a]
-  b:=Shr(crc,8) AND $ffffff
-ENDPROC Eor(a,b)*/
+->PROC ucrc32(zm:PTR TO zmodem_t,ch,crc) IS Eor(zm.crc32tbl[(Eor(crc,ch)) AND 255],Shr(crc,8) AND $ffffff)
+#define ucrc32(ch,crc) Eor(zm.crc32tbl[(Eor(crc,ch)) AND 255],Shr(crc,8) AND $ffffff)
 
 EXPORT PROC crc32str(str:PTR TO CHAR,len)
   DEF crctbl:PTR TO LONG
@@ -517,23 +503,24 @@ EXPORT PROC crc32str(str:PTR TO CHAR,len)
   ENDFOR
 ENDPROC  crc
 
-PROC ucrc32(zm:PTR TO zmodem_t,ch,crc) IS Eor(zm.crc32tbl[(Eor(crc,ch)) AND 255],Shr(crc,8) AND $ffffff)
-
-->#define ucrc32(ch,crc) (crc32tbl[(crc^(ch))&$ff]^(crc>>8))
-
 PROC fcrc32(zm:PTR TO zmodem_t,fp,  len)
-	DEF	ch[1]:ARRAY OF CHAR
 	DEF crc=$ffffffff
 	DEF rl
+  DEF i,n,n2: PTR TO CHAR
 
   doSeek(zm,fp,0,OFFSET_BEGINNING)
+  n:=New(32768)
+  IF n=0 THEN RETURN $ffffffff
+  
   REPEAT
-    rl:=doRead(zm,fp,ch,1)
-    IF rl=1
-      crc:=ucrc32(zm,ch,crc)
-    ENDIF   
-    len--
+    rl:=doRead(zm,fp,n,IF len>32768 THEN 32768 ELSE len)
+    n2:=n
+    FOR i:=1 TO rl
+      crc:=ucrc32(n2[]++,crc)
+    ENDFOR
+    len:=len-rl
 	UNTIL (rl=0) OR (len=0)
+  Dispose(n)
 ENDPROC Not(crc)
 
 
@@ -555,17 +542,19 @@ ENDPROC TRUE
 
 PROC is_cancelled(zm: PTR TO zmodem_t)
   DEF p
+  IF zm.cancelled THEN RETURN TRUE
+  
   p:=zm.zm_is_cancelled
 	IF(p<>NIL) 
     zm.cancelled:=zm.cancelled OR p()
     RETURN zm.cancelled
   ENDIF
-ENDPROC zm.cancelled
+ENDPROC FALSE
 
-PROC upload_completed(zm:PTR TO zmodem_t,fname:PTR TO CHAR)
+PROC upload_completed(zm:PTR TO zmodem_t,fname:PTR TO CHAR,filebytes)
   DEF p
   p:=zm.zm_upload_completed
-  IF (p<>NIL) THEN p(fname)
+  IF (p<>NIL) THEN p(fname,filebytes)
 ENDPROC
 
 PROC upload_failed(zm:PTR TO zmodem_t,fname:PTR TO CHAR)
@@ -905,7 +894,7 @@ PROC zmodem_send_hex_header(zm:PTR TO zmodem_t, p: PTR TO CHAR)
 
 	FOR i:=0 TO HDRLEN-1
     zmodem_send_hex(zm, p[])
-		crc:=ucrc16(zm,p[], crc)
+		crc:=ucrc16(p[], crc)
 		p++
 	ENDFOR
 
@@ -958,7 +947,7 @@ PROC zmodem_send_bin32_header(zm:PTR TO zmodem_t, p: PTR TO CHAR)
 	FOR i:=0 TO HDRLEN-1
     pp:=p[]
     p++
-		crc:=ucrc32(zm,pp,crc)
+		crc:=ucrc32(pp,crc)
     zmodem_tx(zm, pp)
 	ENDFOR
 
@@ -988,7 +977,7 @@ PROC zmodem_send_bin16_header(zm:PTR TO zmodem_t, p: PTR TO CHAR)
 	crc:=0
 
 	FOR i:=0 TO HDRLEN-1
-		crc:=ucrc16(zm,p[],crc)
+		crc:=ucrc16(p[],crc)
     tmp:=p[]
     p++
     zmodem_tx(zm,tmp)
@@ -1027,11 +1016,11 @@ PROC zmodem_send_data32(zm: PTR TO zmodem_t, subpkt_type, p: PTR TO CHAR, l)
 	crc:=$ffffffff
 
 	WHILE((l--) >=0)
-		crc:=ucrc32(zm,p[],crc)
+		crc:=ucrc32(p[],crc)
     zmodem_tx(zm, p[]++)
 	ENDWHILE
 
-	crc:=ucrc32(zm,subpkt_type, crc)
+	crc:=ucrc32(subpkt_type, crc)
 
   zmodem_send_raw(zm, ZDLE)
   zmodem_send_raw(zm, subpkt_type)
@@ -1048,7 +1037,7 @@ PROC zmodem_send_data16(zm: PTR TO zmodem_t, subpkt_type,p: PTR TO CHAR, l)
 	DEF crc
   ->DEF tempstr[255]:STRING
   ->DEF tempstr2[255]:STRING
-  DEF tmp
+  ->DEF tmp
 
   ->chr(subpkt_type,tempstr)
   ->StringF(tempstr2,'send_data16: \s (\d bytes)', tempstr,l)
@@ -1057,11 +1046,11 @@ PROC zmodem_send_data16(zm: PTR TO zmodem_t, subpkt_type,p: PTR TO CHAR, l)
 	crc:=0
 
 	WHILE((l--) >= 0)
-		crc:=ucrc16(zm,p[],crc)
+		crc:=ucrc16(p[],crc)
     zmodem_tx(zm, p[]++)
 	ENDWHILE
 
-	crc:=ucrc16(zm,subpkt_type,crc)
+	crc:=ucrc16(subpkt_type,crc)
 
   zmodem_send_raw(zm, ZDLE)
   zmodem_send_raw(zm, subpkt_type)
@@ -1160,24 +1149,25 @@ PROC zmodem_recv_raw(zm: PTR TO zmodem_t)
   DEF c
 	DEF attempt
   DEF p
-  
+ 
   p:=zm.zm_recv_byte
 
   FOR attempt:=0 TO zm.recv_timeout
     c:=p(1 /* second timeout */)    
-   
-    IF (c>=0) AND (c<>CAN)
+    BLT noret  
+    CMP.L #$18,c
+    BEQ noret
+    ->IF (c>=0) AND (c<>CAN)
       zm.n_cans:=0
       RETURN c
-    ENDIF
-    
-    EXIT c>=0
-    IF(is_cancelled(zm)) THEN RETURN ZCAN
+    ->ENDIF
+noret:
+    IF(is_cancelled(zm)) THEN RETURN ABORTED
 
     IF(is_connected(zm)=FALSE) THEN RETURN ABORTED
+    EXIT c>=0
   ENDFOR
   IF(attempt>zm.recv_timeout) THEN RETURN TIMEOUT
-
 
 	IF(c = CAN) 
 		zm.n_cans:=zm.n_cans+1
@@ -1199,6 +1189,81 @@ ENDPROC c
  * of overhead. at least like this the path for a normal character
  * is relatively short.
  */
+
+PROC zmodem_rx2(zm: PTR TO zmodem_t)
+  DEF tempstr[255]:STRING
+  DEF tempstr2[255]:STRING
+	DEF c
+  DEF loop = TRUE
+
+  REPEAT
+    c:=zmodem_recv_raw(zm)
+    BLT chkabort
+    
+    CMP.L #$18,c
+    BEQ iszdle
+    
+    RETURN c
+    
+chkabort:
+    IF is_cancelled(zm) THEN RETURN ABORTED
+    RETURN c
+    ->IF (c<>ZDLE) THEN RETURN c
+iszdle:
+    loop:=TRUE
+    REPEAT
+      c:=zmodem_recv_raw(zm)
+      IF (c=ZCRCE) OR (c=ZCRCG) OR (c=ZCRCQ) OR (c=ZCRCW)
+				 /* these four are really nasty.
+				 * for convenience we just change them into 
+				 * special characters by setting a bit outside the
+				 * first 8. that way they can be recognized and still
+				 * be processed as characters by the rest of the code.
+				 */
+        ->chr(c,tempstr)
+        ->StringF(tempstr2,'x: encoding data subpacket type: \s',tempstr)
+        ->lprintf(zm,ZM_LOG_DEBUG,tempstr2)
+				RETURN (c OR ZDLEESC)
+      ELSEIF (c=ZRUB0)
+				RETURN $7f
+      ELSEIF (c=ZRUB1)
+				RETURN $ff
+      ELSEIF  (c=XON) OR (c=(XON OR $80)) OR (c=XOFF) OR (c=(XOFF OR $80)) OR (c=ZDLE)
+        chr(c,tempstr)
+        StringF(tempstr2,'"rx: dropping escaped flow ctrl char: \s',tempstr)
+				lprintf(zm,ZM_LOG_WARNING,tempstr2)
+      ELSE
+				IF(c < 0) THEN RETURN c
+
+				IF(zm.escape_ctrl_chars AND ((c AND $60) = 0)) 
+						/*
+						 * a not escaped control character; probably
+						 * something from a network. just drop it.
+						 */
+            ->chr(c,tempstr)
+            ->StringF(tempstr2,'rx: dropping unescaped ctrl char: \s',tempstr)
+						->lprintf(zm,ZM_LOG_WARNING,tempstr2)
+						->JUMP rxcont
+				ELSE
+					/*
+					 * legitimate escape sequence.
+					 * rebuild the orignal and return it.
+					 */
+					IF((c AND $60) = $40)  THEN RETURN Eor(c,$40)
+          ->chr(c,tempstr)
+          ->StringF(tempstr2,'"rx: illegal sequence: ZDLE \s',tempstr)
+					->lprintf(zm,ZM_LOG_WARNING,tempstr2)
+          loop:=FALSE
+        ENDIF
+			ENDIF
+		UNTIL (is_cancelled(zm) OR (loop=FALSE))
+	UNTIL ((is_connected(zm)=FALSE) OR is_cancelled(zm))
+
+	/*
+	 * not reached (unless cancelled).
+	 */
+
+ENDPROC ABORTED
 
 EXPORT PROC zmodem_rx(zm: PTR TO zmodem_t)
   DEF tempstr[255]:STRING
@@ -1329,14 +1394,13 @@ PROC zmodem_recv_data32(zm: PTR TO zmodem_t, p: PTR TO CHAR, maxlen, l: PTR TO L
 
   n:=0
 	LOOP
-		c:=zmodem_rx(zm)
-
-		IF(c < 0) THEN RETURN c
+		c:=zmodem_rx2(zm)
 
     EXIT (c > $ff)
+		IF(c < 0) THEN RETURN c
 
 		IF(n >= maxlen) THEN RETURN SUBPKTOVERFLOW
-		crc:=ucrc32(zm,c,crc)
+		crc:=ucrc32(c,crc)
     p[]:=c
     p++
     n++
@@ -1345,7 +1409,7 @@ PROC zmodem_recv_data32(zm: PTR TO zmodem_t, p: PTR TO CHAR, maxlen, l: PTR TO L
 
 	subpkt_type:=c AND $ff
 
-	crc:=ucrc32(zm,subpkt_type,crc)
+	crc:=ucrc32(subpkt_type,crc)
 
 	crc:= Not(crc)
 
@@ -1390,7 +1454,7 @@ PROC zmodem_recv_data16(zm: PTR TO zmodem_t, p:PTR TO CHAR,  maxlen, l: PTR TO L
 		EXIT (c > $ff)
 
 		IF(n >= maxlen) THEN RETURN SUBPKTOVERFLOW
-		crc:=ucrc16(zm,c,crc)
+		crc:=ucrc16(c,crc)
 		p[]:=c
     p++
     n++
@@ -1399,7 +1463,7 @@ PROC zmodem_recv_data16(zm: PTR TO zmodem_t, p:PTR TO CHAR,  maxlen, l: PTR TO L
 
 	subpkt_type:= c AND $ff
 
-	crc:=ucrc16(zm,subpkt_type,crc)
+	crc:=ucrc16(subpkt_type,crc)
 
 	rxd_crc:=Shl(zmodem_rx(zm),8)
 	rxd_crc:=rxd_crc OR zmodem_rx(zm)
@@ -1565,7 +1629,7 @@ PROC zmodem_recv_bin16_header(zm: PTR TO zmodem_t)
 			lprintf(zm,ZM_LOG_WARNING,tempstr2)
 			RETURN FALSE
 		ENDIF
-		crc:=ucrc16(zm,c,crc)
+		crc:=ucrc16(c,crc)
 		zm.rxd_header[n]:= c
 	ENDFOR
 
@@ -1597,7 +1661,7 @@ PROC zmodem_recv_hex_header(zm: PTR TO zmodem_t)
 	FOR i:=0 TO HDRLEN-1
 		c:=zmodem_recv_hex(zm)
 		IF(c<0) THEN RETURN FALSE
-		crc:=ucrc16(zm,c,crc)
+		crc:=ucrc16(c,crc)
 
 		zm.rxd_header[i]:=c
 	ENDFOR
@@ -1656,7 +1720,7 @@ PROC zmodem_recv_bin32_header(zm: PTR TO zmodem_t)
 		c:=zmodem_rx(zm)
 		IF(c < 0) THEN RETURN TRUE
 
-		crc:=ucrc32(zm,c,crc)
+		crc:=ucrc32(c,crc)
 		zm.rxd_header[n]:=c
 	ENDFOR
 
@@ -1976,7 +2040,10 @@ PROC zmodem_send_from(zm: PTR TO zmodem_t, fp, pos,sent: PTR TO LONG)
 	DEF rx_type
 	DEF c
   DEF p
+  DEF startfrom
 
+
+  startfrom:=pos
   IF doSeek(zm,fp,pos,OFFSET_BEGINING)=-1 
     StringF(tempstr,'ERROR \d seeking to file offset \d',IoErr(), pos)
 		lprintf(zm,ZM_LOG_ERR,tempstr)
@@ -2033,7 +2100,7 @@ PROC zmodem_send_from(zm: PTR TO zmodem_t, fp, pos,sent: PTR TO LONG)
 		subpkts_sent++
 
     p:=zm.zm_progress
-		IF(p<>NIL) THEN p(zm.current_file_pos,zm.current_file_size,zm.transfer_start_time1,zm.transfer_start_time2,zm.errors,zm.transfer_start_pos,zm.current_file_name,zm.new_file,zm.block_size)
+		IF(p<>NIL) THEN p(zm.current_file_pos,zm.current_file_pos-startfrom,zm.current_file_size,zm.transfer_start_time1,zm.transfer_start_time2,zm.errors,zm.transfer_start_pos,zm.current_file_name,zm.new_file,zm.block_size)
     zm.new_file:=FALSE 
 
 		IF((type = ZCRCW) OR (type = ZCRCE)) 
@@ -2064,7 +2131,7 @@ PROC zmodem_send_from(zm: PTR TO zmodem_t, fp, pos,sent: PTR TO LONG)
 
       ->send a progress update at end of file just to be safe
       p:=zm.zm_progress
-      IF(p<>NIL) THEN p(zm.current_file_size,zm.current_file_size,zm.transfer_start_time1,zm.transfer_start_time2,zm.errors,zm.transfer_start_pos,zm.current_file_name,zm.new_file,zm.block_size)
+      IF(p<>NIL) THEN p(zm.current_file_size,zm.current_file_size-startfrom,zm.current_file_size,zm.transfer_start_time1,zm.transfer_start_time2,zm.errors,zm.transfer_start_pos,zm.current_file_name,zm.new_file,zm.block_size)
       
 			RETURN zmodem_recv_header(zm)	/* If this is ZRINIT, Success */
 		ENDIF
@@ -2607,7 +2674,7 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
 					lprintf(zm,ZM_LOG_INFO,tempstr)
         ENDIF
 			ELSE
-				IF(l<>bytes)
+				IF(l<bytes)
           StringF(tempstr,'Incomplete download \d bytes received, expected \d',l,bytes)
 					lprintf(zm,ZM_LOG_WARNING,tempstr)
           upload_failed(zm,fpath)
@@ -2628,7 +2695,7 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
 					lprintf(zm,ZM_LOG_INFO,tempstr)
 					files_received++
 					IF(bytes_received<>NIL) THEN bytes_received[]:=bytes_received[]+b
-          upload_completed(zm,fpath) 
+          upload_completed(zm,fpath,l) 
 				ENDIF
 				IF(zm.current_file_time) THEN SetFileDate(fpath,zm.current_file_time)
 			ENDIF 
@@ -2855,11 +2922,13 @@ PROC zmodem_recv_file_frame(zm: PTR TO zmodem_t, fp,pos:PTR TO LONG)
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
   DEF p
+  DEF offset
+  
 	/*
 	 * wait for a ZDATA header with the right file offset
 	 * or a timeout or a ZFIN
 	 */
-
+  offset:=pos[]
   attempt:=0
   LOOP
 		IF(attempt>=zm.max_errors) THEN RETURN TIMEOUT
@@ -2891,6 +2960,7 @@ recframecont:
     attempt++
 	ENDLOOP
 
+  lprintf(zm,ZM_LOG_WARNING,'received ZDATA frame')
 	IF(zm.rxd_header_pos<>pos[])
     StringF(tempstr,'Received wrong ZDATA frame (\d vs \d)"',zm.rxd_header_pos, pos[])
 		lprintf(zm,ZM_LOG_WARNING,tempstr)
@@ -2917,7 +2987,7 @@ recframecont:
 		IF(type=FRAMEOK) THEN zm.block_size:=n
 
     p:=zm.zm_progress
-		IF(p<>NIL) THEN p(pos[],zm.current_file_size,zm.transfer_start_time1,zm.transfer_start_time2,zm.errors,zm.transfer_start_pos,zm.current_file_name,zm.new_file,zm.block_size)    
+		IF(p<>NIL) THEN p(pos[],pos[]-offset,zm.current_file_size,zm.transfer_start_time1,zm.transfer_start_time2,zm.errors,zm.transfer_start_pos,zm.current_file_name,zm.new_file,zm.block_size)    
     zm.new_file:=FALSE
 
 		IF(is_cancelled(zm)) THEN RETURN ZCAN
@@ -2958,7 +3028,6 @@ EXPORT PROC zmodem_init(zm: PTR TO zmodem_t, cbdata: PTR TO CHAR,
   ENDIF
 
 	IF max_errors<>0 THEN zm.max_errors:=max_errors ELSE zm.max_errors:=9
-
 
 	zm.cbdata:=cbdata
 	zm.zm_lputs:=lputs

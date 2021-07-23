@@ -18,6 +18,7 @@ EXPORT DEF node
 EXPORT DEF cacheTests
 EXPORT DEF cacheHits
 EXPORT DEF loggedOnUser: PTR TO user
+EXPORT DEF memConf:PTR TO LONG
 
 EXPORT PROC getNodeFile(toolType,tooltypeSelector,nodeFile)
   DEF tempStr[255]:STRING
@@ -162,7 +163,14 @@ EXPORT PROC readToolType(toolType,tooltypeSelector,key,outValue)
     tooltypes:=do.tooltypes
     IF (s:=FindToolType(tooltypes,key)) THEN StrCopy(outValue,s)
   ENDIF
-  IF diskObjectCache=NIL THEN FreeDiskObject(do)
+  IF diskObjectCache=NIL
+    FreeDiskObject(do)
+  ELSE
+    IF tooltypeSelector=TOOLTYPE_CONF
+      key--
+      IF key<(ListLen(memConf)-1) THEN memConf[key]:=do
+    ENDIF
+  ENDIF
 ENDPROC s<>NIL
 
 EXPORT PROC readToolTypeInt(toolType,tooltypeSelector,key)
@@ -325,7 +333,8 @@ EXPORT PROC clearDiskObjectCache()
   DEF cacheObj: PTR TO diskObjectCacheItem
   DEF i, do: PTR TO diskobject
   DEF mem
-
+  
+  FOR i:=0 TO ListLen(memConf)-1 DO memConf[i]:=0
   IF diskObjectCache=NIL THEN RETURN
   FOR i:=0 TO diskObjectCache.count()-1
     IF (cacheObj:=diskObjectCache.item(i))
