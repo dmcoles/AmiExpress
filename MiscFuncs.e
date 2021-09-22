@@ -85,14 +85,14 @@ EXPORT PROC makeIntList(src:PTR TO CHAR)
   res:=List(m)
   FOR i:=0 TO StrLen(src)-1
     IF src[i]=","
-      listAdd2(res,Val(tmp))
+      ListAddItem(res,Val(tmp))
       StrCopy(tmp,'')
     ELSE
-      strAddChar(tmp,src[i])
+      StrAddChar(tmp,src[i])
     ENDIF
   ENDFOR
   IF StrLen(tmp)>0
-    listAdd2(res,Val(tmp))
+    ListAddItem(res,Val(tmp))
   ENDIF
   
   DisposeLink(tmp)
@@ -110,8 +110,11 @@ EXPORT PROC strCmpi(test1: PTR TO CHAR, test2: PTR TO CHAR, len = ALL)
     len:=l1
   ENDIF
 
+  
+
   FOR i:=0 TO len-1
-    IF charToLower(test1[i])<>charToLower(test2[i]) THEN RETURN FALSE
+    IF LowerChar(test1[i])<>LowerChar(test2[i]) THEN RETURN FALSE
+    IF test1[i]=0 THEN RETURN TRUE
   ENDFOR
 ENDPROC TRUE
 
@@ -119,25 +122,11 @@ EXPORT PROC midStr2(dest,src,pos,len)
   IF len>0 THEN MidStr(dest,src,pos,len) ELSE StrCopy(dest,'')
 ENDPROC
 
-EXPORT PROC charToLower(c)
-  /* convert a given char to lowercase */
-  DEF str[1]:STRING
-  str[0]:=c
-  LowerStr(str)
-ENDPROC str[0]
-
-EXPORT PROC charToUpper(c)
-  /* convert a given char to uppercase */
-  DEF str[1]:STRING
-  str[0]:=c
-  UpperStr(str)
-ENDPROC str[0]
-
 EXPORT PROC stringCompare(nam: PTR TO CHAR,pat: PTR TO CHAR)
   DEF p,loop=TRUE
 
   WHILE loop
-    IF charToLower(nam[0])=charToLower(pat[0])
+    IF LowerChar(nam[0])=LowerChar(pat[0])
       IF nam[0]=0 THEN RETURN RESULT_SUCCESS
       nam++
       pat++
@@ -157,7 +146,7 @@ EXPORT PROC stringCompare(nam: PTR TO CHAR,pat: PTR TO CHAR)
   ENDWHILE
 
   FOR p:=StrLen(nam)-1 TO 0 STEP -1
-    IF charToLower(nam[p]) = charToLower(pat[0])
+    IF LowerChar(nam[p]) = LowerChar(pat[0])
       IF stringCompare(nam+p,pat) = RESULT_SUCCESS THEN RETURN RESULT_SUCCESS
     ENDIF
   ENDFOR
@@ -227,11 +216,6 @@ PROC bStrC(bstr: PTR TO CHAR,outbuf: PTR TO CHAR)
     outbuf[counter]:=str[loop]
     counter++
   ENDFOR
-ENDPROC
-
-EXPORT PROC listAdd2(list:PTR TO LONG, v)
-  ListAdd(list,[0])
-  list[ListLen(list)-1]:=v
 ENDPROC
 
 /*must be called with EString*/
@@ -497,11 +481,6 @@ EXPORT PROC strCpy(dest: PTR TO CHAR, source: PTR TO CHAR, len=ALL)
   ENDIF
 ENDPROC
 
-EXPORT PROC strAddChar(dest,source)
-  StrAdd(dest,' ')
-  dest[EstrLen(dest)-1]:=source
-ENDPROC
-
 EXPORT PROC countSpaces(str:PTR TO CHAR)
   DEF i,count=0
 
@@ -646,7 +625,7 @@ EXPORT PROC parsePatternNoCase2(source:PTR TO CHAR,dest:PTR TO CHAR, len)
   s:=String(c)
   FOR i:=0 TO StrLen(source)-1
     StrCopy(t,source+i,1)
-    IF InStr('()|~[]%',t)>=0 THEN strAddChar(s,39)
+    IF InStr('()|~[]%',t)>=0 THEN StrAddChar(s,39)
     StrAdd(s,t)
   ENDFOR
   r:=ParsePatternNoCase(s,dest,len)

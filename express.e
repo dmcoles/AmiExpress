@@ -1,5 +1,9 @@
 -> Ami Express 5 
-OPT LARGE,OSVERSION=37
+OPT LARGE,OSVERSION=37,PURE
+
+#ifndef EVO_3_4_0
+  FATAL 'Ami-Express should only be compiled with E-VO Amiga E Compiler'
+#endif
 
 /*
 
@@ -350,6 +354,7 @@ DEF bgChecking=FALSE
 
 DEF ftptime=0
 
+DEF nativeTelnet=FALSE
 DEF telnetSocket=-1
 DEF offHookFlag=TRUE
 
@@ -1361,9 +1366,9 @@ PROC getPass2(prompt: PTR TO CHAR,password:PTR TO CHAR,pwdhash:LONG, max:LONG,ou
       IF(c=CHAR_BACKSPACE)
         IF j<>0
           StrCopy(tempstr,'')
-          strAddChar(tempstr,8)
+          StrAddChar(tempstr,8)
           StrAdd(tempstr,' ')
-          strAddChar(tempstr,8)
+          StrAddChar(tempstr,8)
           aePuts(tempstr)
           j--
         ENDIF
@@ -2000,9 +2005,9 @@ redoinput:
             StrAdd(tempstr,'[1C')
           ENDFOR
         FOR i:=1 TO StrLen(outputString)
-            strAddChar(tempstr,8)
+            StrAddChar(tempstr,8)
             StrAdd(tempstr,' ')
-            strAddChar(tempstr,8)
+            StrAddChar(tempstr,8)
           ENDFOR
           aePuts(tempstr)
         StrCopy(outputString,'')
@@ -2016,9 +2021,9 @@ redoinput:
               StrAdd(tempstr,'[1C')
             ENDFOR
           FOR i:=1 TO StrLen(outputString)
-              strAddChar(tempstr,8)
+              StrAddChar(tempstr,8)
               StrAdd(tempstr,' ')
-              strAddChar(tempstr,8)
+              StrAddChar(tempstr,8)
             ENDFOR
           StrCopy(outputString,historyBuf.item(historyCycle),maxLen)
             historyCycle--
@@ -2033,9 +2038,9 @@ redoinput:
               StrAdd(tempstr,'[1C')
             ENDFOR
           FOR i:=1 TO StrLen(outputString)
-              strAddChar(tempstr,8)
+              StrAddChar(tempstr,8)
               StrAdd(tempstr,' ')
-              strAddChar(tempstr,8)
+              StrAddChar(tempstr,8)
             ENDFOR
           StrCopy(outputString,historyBuf.item(historyCycle),maxLen)
             historyCycle++
@@ -2059,11 +2064,11 @@ redoinput:
           IF (ch=CHAR_BACKSPACE)
           StrCopy(tempstr,'')
             IF curpos>0
-            strAddChar(tempstr,ch)
+            StrAddChar(tempstr,ch)
               curpos--
             FOR i:=curpos TO StrLen(outputString)-2
               outputString[i]:=outputString[i+1]
-              strAddChar(tempstr,outputString[i+1])
+              StrAddChar(tempstr,outputString[i+1])
               ENDFOR
             StrAdd(tempstr,' ')
             FOR i:=curpos TO StrLen(outputString)-1
@@ -2078,7 +2083,7 @@ redoinput:
           IF curpos<(StrLen(outputString))
             FOR i:=curpos TO StrLen(outputString)-2
               outputString[i]:=outputString[i+1]
-              strAddChar(tempstr,outputString[i+1])
+              StrAddChar(tempstr,outputString[i+1])
               ENDFOR
             StrAdd(tempstr,' ')
             FOR i:=curpos TO StrLen(outputString)-1
@@ -2097,7 +2102,7 @@ redoinput:
           aePuts(cmdCharString)
             curpos++
           FOR i:=curpos TO StrLen(outputString)-1
-            strAddChar(tempstr,outputString[i])
+            StrAddChar(tempstr,outputString[i])
             ENDFOR
           FOR i:=curpos TO StrLen(outputString)-1
               StrAdd(tempstr,'[1D')
@@ -2293,7 +2298,7 @@ PROC loadTranslator(translator:PTR TO translator,fileName)
       ELSE
         wordList:=indexes[26]
       ENDIF
-      listAdd2(wordList,outtxt)
+      ListAddItem(wordList,outtxt)
       outtxt:=outtxt+StrLen(outtxt)+1
       outtxt:=outtxt+StrLen(outtxt)+1
     ENDFOR
@@ -5645,7 +5650,7 @@ PROC tranChat()
           StrCopy(str,'')
           StrCopy(str2,'')
           WHILE cnt>0
-            strAddChar(str,CHAR_BACKSPACE)
+            StrAddChar(str,CHAR_BACKSPACE)
             StrAdd(str2,' ')
             cnt--
           ENDWHILE
@@ -5669,7 +5674,7 @@ PROC tranChat()
           StrCopy(str,'')
           StrCopy(str2,'')
           WHILE cnt>0
-            strAddChar(str,CHAR_BACKSPACE)
+            StrAddChar(str,CHAR_BACKSPACE)
             StrAdd(str2,' ')
             cnt--
           ENDWHILE
@@ -5692,12 +5697,12 @@ PROC tranChat()
     ENDIF
 
     IF chatConFlag
-      strAddChar(tempstr1,c)
+      StrAddChar(tempstr1,c)
       conPutChar(c)
       conLineLen++
     ENDIF
     IF chatSerFlag
-      strAddChar(tempstr2,c)
+      StrAddChar(tempstr2,c)
       serPutChar(c)
       serLineLen++
     ENDIF
@@ -7657,10 +7662,39 @@ EXCEPT
   RETURN RESULT_FAILURE
 ENDPROC RESULT_SUCCESS
 
+PROC writeLogoffLog(stringout:PTR TO CHAR,newFile)
+  DEF gfp1, xgstr1[20]:STRING, xgstr2[255]:STRING
+  DEF calltime
+  DEF datestr[20]:STRING
+  DEF timestr[20]:STRING
+  DEF fname[100]:STRING
+
+  calltime:=getSystemTime()
+  formatLongDate(calltime,datestr)
+  formatLongTime(calltime,timestr)
+
+  StringF(xgstr1,'\s \s',datestr,timestr)
+
+  StringF(fname,'ram:logoff\d.log',node)
+
+  IF newFile THEN DeleteFile(fname)
+  gfp1:=Open(fname,MODE_READWRITE)
+
+  IF(gfp1<>0)
+    Seek(gfp1,0,OFFSET_END)
+    StringF(xgstr2,'\s ',xgstr1)
+    Write(gfp1,xgstr2,StrLen(xgstr2))
+    fileWriteLn(gfp1,stringout)
+    Close(gfp1)
+  ENDIF
+ENDPROC
+
 PROC processLoggingOff()
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
   DEF filetags:PTR TO LONG
+
+  writeLogoffLog('logging off 1 (start)',TRUE)
 
   cmdShortcuts:=FALSE
   shortcuts.clear()
@@ -7674,6 +7708,7 @@ PROC processLoggingOff()
   ENDIF
   nonStopDisplayFlag:=TRUE
 
+  writeLogoffLog('logging off 2',FALSE)
   processOlmMessageQueue(FALSE)
 
   setEnvStat(ENV_LOGOFF)
@@ -7682,6 +7717,7 @@ PROC processLoggingOff()
     captureFP:=NIL
   ENDIF
 
+  writeLogoffLog('logging off 3',FALSE)
   checkOnlineStatus()
   clearFlagItems(flagFilesList)
 
@@ -7692,8 +7728,10 @@ PROC processLoggingOff()
   historyNum:=0
   historyCycle:=0
 
+  writeLogoffLog('logging off 4',FALSE)
   IF loggedOnUser<>NIL
 
+    writeLogoffLog('logging off 5',FALSE)
     IF(validUser=3)
       logoffLog('UUCP feed completed')
     ELSEIF lostCarrier
@@ -7702,6 +7740,7 @@ PROC processLoggingOff()
       logoffLog('N')
     ENDIF
 
+    writeLogoffLog('logging off 6',FALSE)
     IF tempAccessGranted
       loggedOnUser.secStatus:=tempAccess.accessLevel
       loggedOnUser.secBoard:=tempAccess.ratioType
@@ -7711,14 +7750,17 @@ PROC processLoggingOff()
       tempAccessGranted:=FALSE
     ENDIF
 
+    writeLogoffLog('logging off 7',FALSE)
     updateTimeUsed()
     clearUser()
 
+    writeLogoffLog('logging off 8',FALSE)
     IF(quickFlag=FALSE)
       checkScreenClear()
       IF(logonType<>LOGON_TYPE_SYSOP) THEN displayScreen(SCREEN_LOGOFF)
     ENDIF
 
+    writeLogoffLog('logging off 9',FALSE)
     IF(logonType<>LOGON_TYPE_SYSOP) THEN aePuts('\b\nClick...')
 
     strCpy(loggedOnUserKeys.userName,loggedOnUser.name,31)
@@ -7727,13 +7769,17 @@ PROC processLoggingOff()
 
     IF(newSinceFlag) THEN loggedOnUser.newSinceDate:=getSystemTime()
 
+    writeLogoffLog('logging off 10',FALSE)
     saveMsgPointers(currentConf,currentMsgBase)
 
     loggedOnUser.timeLastOn:=getSystemTime()
+    writeLogoffLog('logging off 11',FALSE)
     addMsgPointers()
     masterSavePointers(loggedOnUser)
+    writeLogoffLog('logging off 12',FALSE)
     saveAccount(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc,0,0) /* Reseave users account after logoff */
 
+    writeLogoffLog('logging off 13',FALSE)
     IF (readToolType(TOOLTYPE_BBSCONFIG,0,'EXECUTE_ON_LOGOFF',tempstr))
       filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,TAG_DONE]:LONG
       processMci(tempstr,tempstr2)
@@ -7748,6 +7794,7 @@ PROC processLoggingOff()
       END filetags[countTags(filetags)]
     ENDIF
 
+    writeLogoffLog('logging off 14',FALSE)
     IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_LOGOFF')) AND (StrLen(mailOptions.sysopEmail)>0)
       StringF(tempstr,'\s: Ami-Express logoff notification',cmds.bbsName)
       StringF(tempstr2,'This is a notification that \s from \s has logged off\n\n',loggedOnUser.name,loggedOnUser.location)
@@ -7756,20 +7803,25 @@ PROC processLoggingOff()
 
     StrCopy(reservedName,'')
 
+    writeLogoffLog('logging off 15',FALSE)
     WHILE(acpLockNodes()<>node)
       StringF(tempstr,'Standby node \d',node)
       setEnvMsg(tempstr)
       Delay(30)
     ENDWHILE
+    writeLogoffLog('logging off 16',FALSE)
     processSysCommand('LOGOFF')
 
+    writeLogoffLog('logging off 17',FALSE)
     IF autoDeactivateDays<>-1
       deactivateOldUsers(autoDeactivateDays)
     ENDIF
 
+    writeLogoffLog('logging off 18',FALSE)
     StringF(tempstr,'LOGOFF\d',node)
     processSysCommand(tempstr)
 
+    writeLogoffLog('logging off 19',FALSE)
     IF (relogon)
       processSysCommand('RELOGON')
       StringF(tempstr,'RELOGON\d',node)
@@ -7778,12 +7830,14 @@ PROC processLoggingOff()
         errorLog('RL')
       ENDIF
     ENDIF
+    writeLogoffLog('logging off 20',FALSE)
     acpLockNodes()
 
     END loggedOnUser
     END loggedOnUserKeys
     END loggedOnUserMisc
   ENDIF
+  writeLogoffLog('logging off 21',FALSE)
 
   serialCacheEnabled:=FALSE
   flushSerialCache()
@@ -7797,6 +7851,7 @@ PROC processLoggingOff()
   sendQuietFlag(quietFlag)
   Delay(50)
   stateData:=0
+  writeLogoffLog('logging off 22',FALSE)
 
   quickFlag:=FALSE
   ansiColour:=TRUE
@@ -7804,23 +7859,28 @@ PROC processLoggingOff()
   mcioff:=FALSE
   mciViewSafe:=TRUE
 
+  writeLogoffLog('logging off 23',FALSE)
   END recFileNames
   recFileNames:=NEW recFileNames.stringlist()
 
+  writeLogoffLog('logging off 24',FALSE)
   IF (relogon=FALSE)
     state:=STATE_AWAIT
 
+    writeLogoffLog('logging off 25',FALSE)
     IF(cmds.acLvl[LVL_SCREEN_TO_FRONT] AND scropen) THEN expressToBack()
     modemOffHook()
   ELSE
     state:=STATE_LOGON
     relogon:=FALSE
   ENDIF
+  writeLogoffLog('logging off 26',FALSE)
 
   IF sopt.trapDoor OR (netTrans=2)
     StrCopy(shutDownMsg,'!')
     reqState:=REQ_STATE_SHUTDOWN
   ENDIF
+  writeLogoffLog('logging off 27 (end)',FALSE)
 ENDPROC
 
 PROC myDirProtect(bits,ps: PTR TO CHAR)
@@ -9691,9 +9751,9 @@ next2:
       IF(c=30)
         StrCopy(tempstr,'')
         WHILE(x)
-          strAddChar(tempstr,8)
+          StrAddChar(tempstr,8)
           StrAdd(tempstr,' ')
-          strAddChar(tempstr,8)
+          StrAddChar(tempstr,8)
           x--
         ENDWHILE
         aePuts(tempstr)
@@ -9703,11 +9763,11 @@ next2:
       IF(c=CHAR_BACKSPACE)
         StrCopy(tempstr,'')
         IF x>0
-          strAddChar(tempstr,c)
+          StrAddChar(tempstr,c)
           x--
           FOR i:=x TO StrLen(space)-2
             space[i]:=space[i+1]
-            strAddChar(tempstr,space[i+1])
+            StrAddChar(tempstr,space[i+1])
           ENDFOR
           StrAdd(tempstr,' ')
           FOR i:=x TO StrLen(space)-1
@@ -9724,7 +9784,7 @@ next2:
         IF x<(StrLen(space))
           FOR i:=x TO StrLen(space)-2
             space[i]:=space[i+1]
-            strAddChar(tempstr,space[i+1])
+            StrAddChar(tempstr,space[i+1])
           ENDFOR
           StrAdd(tempstr,' ')
           FOR i:=x TO StrLen(space)-1
@@ -9766,7 +9826,7 @@ next2:
             ENDFOR
 
             FOR i:=x TO StrLen(space)-1
-              strAddChar(tempstr,space[i])
+              StrAddChar(tempstr,space[i])
             ENDFOR
             FOR i:=x TO StrLen(space)-1
               StrAdd(tempstr,'[1D')
@@ -9799,7 +9859,7 @@ next2:
           sendChar(c)
           x++
           FOR i:=x TO StrLen(space)-1
-            strAddChar(tempstr,space[i])
+            StrAddChar(tempstr,space[i])
           ENDFOR
           FOR i:=x TO StrLen(space)-1
             StrAdd(tempstr,'[1D')
@@ -9843,9 +9903,9 @@ next2:
         StrCopy(space,str)
         StrCopy(tempstr,'')
         FOR cn:=0 TO x
-          strAddChar(tempstr,8)
+          StrAddChar(tempstr,8)
           StrAdd(tempstr,' ')
-          strAddChar(tempstr,8)
+          StrAddChar(tempstr,8)
         ENDFOR
         aePuts(tempstr)
         aePuts('\b\n')
@@ -11493,7 +11553,7 @@ PROC readMSG(gfh)
          (stringCompare(mailHeader.fromName,confMailName)=RESULT_SUCCESS)) OR
          (checkSecurity(ACS_SYSOP_READ))
 
-        lowerChar:=charToLower(str[0])
+        lowerChar:=LowerChar(str[0])
         SELECT lowerChar
           CASE "k"
             mailHeader.recv:=0
@@ -12766,12 +12826,27 @@ PROC setEnvMsg(s: PTR TO CHAR)
   strCpy(masterMsg.action,temp)
 
   IF loggedOnUser<>NIL
-    StringF(temp,'\r\d[7]',onlineBaud)
-    strCpy(masterMsg.baud,temp)
+    IF (telnetSocket<>-1)
+      StrCopy(temp,'TELNET')
+    ELSE
+      IF (StrLen(cmds.serDev)=0)
+        StrCopy(temp,'LOCAL')
+      ELSE
+        StringF(temp,'\r\d[7]',onlineBaud)
+      ENDIF
+    ENDIF
   ELSE
-    StringF(temp,'\r\d[7]',cmds.openingBaud)
-    strCpy(masterMsg.baud,temp)
+    IF (StrLen(cmds.serDev)=0)
+      IF nativeTelnet
+        StrCopy(temp,'TELNET')
+      ELSE
+        StrCopy(temp,'LOCAL')
+      ENDIF
+    ELSE
+      StringF(temp,'\r\d[7]',cmds.openingBaud)
+    ENDIF
   ENDIF
+  strCpy(masterMsg.baud,temp)
 
   IF((port:=FindPort('AE.Master')))
     PutMsg(port,masterMsg)
@@ -12862,14 +12937,29 @@ PROC sendMaster()
   IF loggedOnUser<>NIL
     strCpy(masterMsg2.user,loggedOnUser.name)
     strCpy(masterMsg2.location,loggedOnUser.location)
-    StringF(temp,'\r\d[7]',onlineBaud)
-    strCpy(masterMsg2.baud,temp)
+    IF (telnetSocket<>-1)
+      StrCopy(temp,'TELNET')
+    ELSE
+      IF (StrLen(cmds.serDev)=0)
+        StrCopy(temp,'LOCAL')
+      ELSE
+        StringF(temp,'\r\d[7]',onlineBaud)
+      ENDIF
+    ENDIF
   ELSE
     strCpy(masterMsg2.user,'')
     strCpy(masterMsg2.location,'')
-    StringF(temp,'\r\d[7]',cmds.openingBaud)
-    strCpy(masterMsg2.baud,temp)
+    IF (StrLen(cmds.serDev)=0)
+      IF nativeTelnet
+        StrCopy(temp,'TELNET')
+      ELSE
+        StrCopy(temp,'LOCAL')
+      ENDIF
+    ELSE
+      StringF(temp,'\r\d[7]',cmds.openingBaud)
+    ENDIF
   ENDIF
+  strCpy(masterMsg2.baud,temp)
 
   StringF(temp,'\d',currentStat)
   strCpy(masterMsg2.action,temp)
@@ -14282,7 +14372,7 @@ PROC updateZDisplay()
       vi:=GetVisualInfoA(screen, [NIL])
       tags2:=NEW [GT_VISUALINFO,vi,TAG_DONE]
 
-      DrawBevelBoxA(windowZmodem.rport,10,135,315,10,tags2)
+      DrawBevelBoxA(windowZmodem.rport,9,129,316,10,tags2)
       FreeVisualInfo(vi)
       END tags2[countTags(tags2)]
       CloseLibrary(gadtoolsbase)
@@ -14291,7 +14381,7 @@ PROC updateZDisplay()
     IF(zModemInfo.filesize=0)
       zmodemStatPrint(' Complete: N/A\n')
       SetAPen(windowZmodem.rport,0)
-      RectFill(windowZmodem.rport,11,136,322,143)
+      RectFill(windowZmodem.rport,11,130,322,137)
     ELSE
       IF zModemInfo.filesize<100
         StringF(tempstr,' Complete: \d%\n',Div(Mul(zModemInfo.transPos,100),zModemInfo.filesize))
@@ -14302,25 +14392,29 @@ PROC updateZDisplay()
 
       v1:=zModemInfo.transPos
       v2:=zModemInfo.filesize
-      IF v2>=1048576
-        v1:=Shr(v1,10) AND $003fffff
-        v2:=Shr(v2,10) AND $003fffff
+      IF (v2=0)
+        xpos:=11
+      ELSE
+        IF v2>=1048576
+          v1:=Shr(v1,10) AND $003fffff
+          v2:=Shr(v2,10) AND $003fffff
+        ENDIF
+        xpos:=11+Div(Mul(v1,311),v2)
       ENDIF
-      xpos:=11+Div(Mul(v1,311),v2)
 
       IF xpos>11
         SetAPen(windowZmodem.rport,1)
-        RectFill(windowZmodem.rport,11,136,xpos,143)
+        RectFill(windowZmodem.rport,11,130,xpos,137)
       ENDIF
 
       IF xpos<322
         SetAPen(windowZmodem.rport,0)
-        RectFill(windowZmodem.rport,xpos+1,136,322,143)
+        RectFill(windowZmodem.rport,xpos+1,130,322,137)
       ENDIF
     ENDIF
     StringF(tempstr,' LastTime: \s\n',zModemInfo.lastTime)
     zmodemStatPrint(tempstr)
-    StringF(tempstr,'      CPS: \d Efficency \d%\n\n',zModemInfo.cps,zModemInfo.eff)
+    StringF(tempstr,'      CPS: \d Efficiency \d%\n\n',zModemInfo.cps,zModemInfo.eff)
     zmodemStatPrint(tempstr)
     StringF(tempstr,' Z Status: \s\n',zModemInfo.zStat)
     zmodemStatPrint(tempstr)
@@ -14466,6 +14560,7 @@ PROC ftpUploadFileStart(fileName:PTR TO CHAR,filelen)
   sendMasterUpload(FilePart(fileName))
   zModemInfo.filesize:=filelen
   zModemInfo.resumePos:=0
+  zModemInfo.transPos:=0
   ftptime:=getSystemTime()
   updateZDisplay()
 ENDPROC
@@ -14497,6 +14592,8 @@ PROC ftpDownloadFileStart(fileName:PTR TO CHAR,filelen)
   ENDIF
   zModemInfo.filesize:=filelen
   zModemInfo.resumePos:=0
+  zModemInfo.transPos:=0
+  zModemInfo.cps
   updateZDisplay()
 ENDPROC
 
@@ -14542,6 +14639,7 @@ ENDPROC dup
 
 PROC ftpAuth(userName:PTR TO CHAR,password:PTR TO CHAR)
   IF strCmpi(userName,loggedOnUser.name,31)=FALSE THEN RETURN FALSE
+  UpperStr(password)
   IF calcPasswordHash(password)<>loggedOnUser.pwdHash THEN RETURN FALSE
 ENDPROC TRUE
 
@@ -14626,10 +14724,6 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
 
   IF checkToolTypeExists(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPAUTH') THEN authPtr:={ftpAuth}
 
-  IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPHOST',tempstr)=FALSE
-    StrCopy(tempstr,'localhost')
-  ENDIF
-
   IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPTEMP',tempstr)=FALSE
     StringF(tempDir,'RAM:ftp\d',node)
   ELSE
@@ -14645,6 +14739,7 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
     FOR i:=0 TO fileList.count()-1
       item:=fileList.item(i)
       StringF(linkStr,'\s\s',tempDir,FilePart(item.fileName))
+      DeleteFile(linkStr)
       IF MakeLink(linkStr,item.fileName,1)=0
         StringF(tempstr,'Makelink failed \s \s error: \d\b\n',linkStr,item.fileName,IoErr())
         aePuts(tempstr)
@@ -14652,6 +14747,10 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
     ENDFOR
   ENDIF
   
+  IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPHOST',tempstr)=FALSE
+    StrCopy(tempstr,'localhost')
+  ENDIF
+
   zModemInfo.current:=0
   zModemInfo.fileList:=fileList
   
@@ -14662,7 +14761,8 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
-  doftp(node,tempstr,ftpPorts,ftpDataPorts,tempDir,{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},{ftpAuth},FALSE)
+  
+  doftp(node,tempstr,ftpPorts,ftpDataPorts,tempDir,{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},authPtr,FALSE)
   serialCacheEnabled:=oldSerCache
  
   ->clean up ram links
@@ -14739,21 +14839,31 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   zModemInfo.shouldUpdateDownloadStats:=updateDownloadStats
   zModemInfo.needUpdateDownloadStats:=FALSE
 
+  zModemInfo.current:=0;zModemInfo.total:=fileList.count();zModemInfo.transPos:=0;zModemInfo.filesize:=0;zModemInfo.errorCount:=0;zModemInfo.errorPos:=0;zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
+  strCpy(zModemInfo.zStat,'')
+  strCpy(zModemInfo.fileName,'')
+  strCpy(zModemInfo.lastTime,'')
+
   IF (strCmpi(protocol,'FTP'))
+    StrCopy(tempstr,'')
+    StrCopy(tempstr2,'')
     readToolType(TOOLTYPE_BBSCONFIG,'','FTPPORT',tempstr)
     readToolType(TOOLTYPE_NODE,node,'FTPPORT',tempstr2)
     IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
-    StrAdd(tempstr,tempstr2)
+    StrAdd(tempstr,tempstr2)  
     
     ftpPorts:=makeIntList(tempstr)
 
+    StrCopy(tempstr,'')
+    StrCopy(tempstr2,'')
     readToolType(TOOLTYPE_BBSCONFIG,'','FTPDATAPORT',tempstr)
     readToolType(TOOLTYPE_NODE,node,'FTPDATAPORT',tempstr2)
     IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
+    StrAdd(tempstr,tempstr2)
     ftpDataPorts:=makeIntList(tempstr)
 
-    IF ListLen(ftpPorts)=0 THEN listAdd2(ftpPorts,10000+(node*2))
-    IF ListLen(ftpDataPorts)=0 THEN listAdd2(ftpDataPorts,10001+(node*2))
+    IF ListLen(ftpPorts)=0 THEN ListAddItem(ftpPorts,10000+(node*2))
+    IF ListLen(ftpDataPorts)=0 THEN ListAddItem(ftpDataPorts,10001+(node*2))
     IF scropen
       openZmodemStat()
     ENDIF
@@ -14765,12 +14875,15 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   ENDIF
 
   IF (strCmpi(protocol,'HTTP'))
+    StrCopy(tempstr,'')
+    StrCopy(tempstr2,'')
     readToolType(TOOLTYPE_BBSCONFIG,'','HTTPPORT',tempstr)
     readToolType(TOOLTYPE_NODE,node,'HTTPPORT',tempstr2)
     IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
+    StrAdd(tempstr,tempstr2)
     httpPorts:=makeIntList(tempstr)
 
-    IF ListLen(httpPorts)=0 THEN listAdd2(httpPorts,20000+node)
+    IF ListLen(httpPorts)=0 THEN ListAddItem(httpPorts,20000+node)
     IF scropen
       openZmodemStat()
     ENDIF
@@ -14803,11 +14916,6 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
       RETURN 0
     ENDIF
   ENDIF
-
-  zModemInfo.current:=0;zModemInfo.total:=fileList.count();zModemInfo.transPos:=0;zModemInfo.filesize:=0;zModemInfo.errorCount:=0;zModemInfo.errorPos:=0;zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
-  strCpy(zModemInfo.zStat,'')
-  strCpy(zModemInfo.fileName,'')
-  strCpy(zModemInfo.lastTime,'')
 
   IF scropen
     openZmodemStat()
@@ -15706,6 +15814,12 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     ext:=TRUE
   ENDIF
 
+  zModemInfo.current:=0; zModemInfo.transPos:=0; zModemInfo.filesize:=0; zModemInfo.errorCount:=0; zModemInfo.errorPos:=0; zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
+  strCpy(zModemInfo.zStat,'')
+  strCpy(zModemInfo.fileName,'')
+  strCpy(zModemInfo.apxTime,'')
+  strCpy(zModemInfo.lastTime,'')
+
   IF(strCmpi(protocol,'INTERNAL'))
     StrCopy(tempstr,'xprzmodem.library')
   ELSEIF(strCmpi(protocol,'HYDRA'))
@@ -15713,19 +15827,24 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     RETURN RESULT_FAILURE
   ELSEIF (strCmpi(protocol,'FTP'))
 
+    StrCopy(tempstr,'')
+    StrCopy(tempstr2,'')
     readToolType(TOOLTYPE_BBSCONFIG,'','FTPPORT',tempstr)
     readToolType(TOOLTYPE_NODE,node,'FTPPORT',tempstr2)
     IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
-
+    StrAdd(tempstr,tempstr2)
     ftpPorts:=makeIntList(tempstr)
 
+    StrCopy(tempstr,'')
+    StrCopy(tempstr2,'')
     readToolType(TOOLTYPE_BBSCONFIG,'','FTPDATAPORT',tempstr)
     readToolType(TOOLTYPE_NODE,node,'FTPDATAPORT',tempstr2)
     IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
+    StrAdd(tempstr,tempstr2)
     ftpDataPorts:=makeIntList(tempstr)
 
-    IF ListLen(ftpPorts)=0 THEN listAdd2(ftpPorts,10000+(node*2))
-    IF ListLen(ftpDataPorts)=0 THEN listAdd2(ftpDataPorts,10001+(node*2))
+    IF ListLen(ftpPorts)=0 THEN ListAddItem(ftpPorts,10000+(node*2))
+    IF ListLen(ftpDataPorts)=0 THEN ListAddItem(ftpDataPorts,10001+(node*2))
     
     IF scropen THEN openZmodemStat()
     ftpUpload(file,ftpPorts,ftpDataPorts)
@@ -15742,12 +15861,15 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     RETURN 1
   ELSEIF (strCmpi(protocol,'HTTP'))
 
+    StrCopy(tempstr,'')
+    StrCopy(tempstr2,'')
     readToolType(TOOLTYPE_BBSCONFIG,'','HTTPPORT',tempstr)
     readToolType(TOOLTYPE_NODE,node,'HTTPPORT',tempstr2)
     IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
+    StrAdd(tempstr,tempstr2)
     httpPorts:=makeIntList(tempstr)
 
-    IF ListLen(httpPorts)=0 THEN listAdd2(httpPorts,20000+node)
+    IF ListLen(httpPorts)=0 THEN ListAddItem(httpPorts,20000+node)
     
     IF scropen THEN openZmodemStat()
     httpUpload(file,httpPorts)
@@ -15772,12 +15894,6 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     ENDIF
     xprio:=NEW xprio
   ENDIF
-
-  zModemInfo.current:=0; zModemInfo.transPos:=0; zModemInfo.filesize:=0; zModemInfo.errorCount:=0; zModemInfo.errorPos:=0; zModemInfo.cps:=0; zModemInfo.eff:=0; zModemInfo.resumePos:=0
-  strCpy(zModemInfo.zStat,'')
-  strCpy(zModemInfo.fileName,'')
-  strCpy(zModemInfo.apxTime,'')
-  strCpy(zModemInfo.lastTime,'')
 
   oldshared:=serShared
   serShared:=FALSE
@@ -19283,7 +19399,7 @@ PROC editVoteTopic()
             aePuts('\b\n[34mEDIT CHOICE [33m[[0mA-Z[33m][0m > ')
             ans:=readChar(INPUT_TIMEOUT)
             IF ans<0 THEN RETURN
-            ans:=charToUpper(ans)
+            ans:=UpperChar(ans)
             sendChar(ans)
             aePuts('\b\n')
             IF (ans>="A") AND (ans<="Z")
@@ -19494,7 +19610,7 @@ PROC topicVote(topicNum)
       Close(fh)
       RETURN
     ENDIF
-    ch:=charToUpper(ch)
+    ch:=UpperChar(ch)
     sendChar(ch)
     aePuts('\b\n')
 
@@ -19749,7 +19865,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
     flag:=0
     command:=readChar(INPUT_TIMEOUT)
     IF(command<0) THEN RETURN command
-    command:=charToUpper(command)
+    command:=UpperChar(command)
 
     flag:=0
 
@@ -19911,7 +20027,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
               StrCopy(tempStr,'')
               StrAdd(tempStr,'         ')
               FOR i:=1 TO 9
-                strAddChar(tempStr,8)
+                StrAddChar(tempStr,8)
               ENDFOR
               aePuts(tempStr)
               lineInput('','',50,INPUT_TIMEOUT,tempStr)
@@ -19924,7 +20040,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
             StrCopy(tempStr,'[3;56H')
             StrAdd(tempStr,'         ')
             FOR i:=1 TO 9
-              strAddChar(tempStr,8)
+              StrAddChar(tempStr,8)
             ENDFOR
             aePuts(tempStr)
             lineInput('','',50,INPUT_TIMEOUT,tempStr)
@@ -20147,7 +20263,7 @@ PROC userNotes(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3:
     flag:=0
     command:=readChar(INPUT_TIMEOUT)
     IF(command<0) THEN RETURN command
-    command:=charToUpper(command)
+    command:=UpperChar(command)
 
     flag:=0
 
@@ -20227,11 +20343,11 @@ PROC listNewAccounts(f6)
             StrCopy(tempStr,'')
 
             FOR i:=1 TO 9
-              strAddChar(tempStr,8)
+              StrAddChar(tempStr,8)
             ENDFOR
             StrAdd(tempStr,'         ')
             FOR i:=1 TO 9
-              strAddChar(tempStr,8)
+              StrAddChar(tempStr,8)
             ENDFOR
             aePuts(tempStr)
           CASE 3 /* ^C */
@@ -20387,7 +20503,7 @@ PROC creditMaintenance(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, 
     aePuts('[17;2H                                     ')
 
     IF(ch<0) THEN RETURN ch
-    ch:=charToUpper(ch)
+    ch:=UpperChar(ch)
 
     SELECT ch
       CASE "\t"
@@ -20614,7 +20730,7 @@ PROC conferenceAccounting(hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
     ch:=readChar(INPUT_TIMEOUT)
         IF(ch<0) THEN RETURN ch
 
-    ch:=charToUpper(ch)
+    ch:=UpperChar(ch)
 
     SELECT ch
       CASE "+"
@@ -20823,15 +20939,15 @@ PROC editAccounts(f6)
       aePuts('  S>earch by name  N>ew account editing\b\nC>redit Accounts  B>ulk editing\b\nEdit which account? ')
       stat:=lineInput('','',5,INPUT_TIMEOUT,tempStr)
       IF(stat) THEN JUMP returnf
-      IF(charToUpper(tempStr[0])="N")
+      IF(UpperChar(tempStr[0])="N")
         listNewAccounts(f6)
-      ELSEIF(charToUpper(tempStr[0])="B")
+      ELSEIF(UpperChar(tempStr[0])="B")
         bulkAccountEditor()
-      ELSEIF(charToUpper(tempStr[0])="C")
+      ELSEIF(UpperChar(tempStr[0])="C")
         listCreditAccounts(f6)
-      ELSEIF(charToUpper(tempStr[0])="I")
+      ELSEIF(UpperChar(tempStr[0])="I")
         includeDeact:=Not(includeDeact)
-      ELSEIF(charToUpper(tempStr[0])="S")
+      ELSEIF(UpperChar(tempStr[0])="S")
         aePuts('\b\nUserName: ')
         stat:=lineInput('','',30,INPUT_TIMEOUT,tempStr)
         IF(stat) THEN JUMP returnf
@@ -21124,7 +21240,7 @@ PROC conferenceMaintenance()
     ch:=readChar(INPUT_TIMEOUT)
     IF(ch<0) THEN RETURN ch
 
-    ch:=charToUpper(ch)
+    ch:=UpperChar(ch)
 
     SELECT ch
       CASE "1"
@@ -21685,7 +21801,7 @@ PROC bulkAccountEditor()
     conCursorOn()
     command:=readChar(INPUT_TIMEOUT)
     IF(command<0) THEN RETURN command
-    command:=charToUpper(command)
+    command:=UpperChar(command)
 
     SELECT command
       CASE "@"
@@ -22066,7 +22182,7 @@ PROC bulkPresets()
     conCursorOn()
     command:=readChar(INPUT_TIMEOUT)
     IF(command<0) THEN RETURN command
-    command:=charToUpper(command)
+    command:=UpperChar(command)
 
     SELECT command
       CASE "1"
@@ -27164,7 +27280,7 @@ PROC handleIemsi()
   
   ch:="*"
   REPEAT
-    IF (ch>31) THEN strAddChar(tempStr,ch)
+    IF (ch>31) THEN StrAddChar(tempStr,ch)
     WHILE (ch<>13) AND (ch>0)
       ch:=readChar(1)
       IF ch<0
@@ -27172,7 +27288,7 @@ PROC handleIemsi()
         RETURN
       ENDIF
       
-      IF (ch>31) THEN strAddChar(tempStr,ch)
+      IF (ch>31) THEN StrAddChar(tempStr,ch)
       IF ((s:=StrLen(tempStr))<8) AND (StrCmp(tempStr,'**EMSI_',s)=FALSE)
         DisposeLink(tempStr)        
         RETURN
@@ -27218,7 +27334,7 @@ PROC handleIemsi()
   FOR i:=0 TO StrLen(iemsiData)-1
     IF bracketCount>0
       IF iemsiData[i]<>"}"
-        strAddChar(tempStr,iemsiData[i])
+        StrAddChar(tempStr,iemsiData[i])
       ELSE
         IF bracketCount=1 THEN StrCopy(iemsiUsername,tempStr)
         IF bracketCount=6 THEN StrCopy(iemsiPassword,tempStr)
@@ -28306,7 +28422,7 @@ PROC openZmodemStat()
   IF pub 
     tags:=NEW [WA_CLOSEGADGET,1,
           WA_PUBSCREEN,pubLock,
-          WA_SIZEGADGET,1,
+          WA_SIZEGADGET,0,
           WA_DRAGBAR,1,
           WA_LEFT,(window.width-350/2)+window.leftedge,
           WA_TOP,(window.height-150/2)+window.topedge,
@@ -28322,7 +28438,7 @@ PROC openZmodemStat()
   ELSE
     tags:=NEW [WA_CLOSEGADGET,1,
           WA_CUSTOMSCREEN,screen,
-          WA_SIZEGADGET,1,
+          WA_SIZEGADGET,0,
           WA_DRAGBAR,1,
           WA_LEFT,(screen.width-350)/2,
           WA_TOP,(screen.height-150)/2,
@@ -28341,13 +28457,13 @@ PROC openZmodemStat()
     IF pubLock THEN UnlockPubScreen(NIL,pubLock)
     initZmodemStatCon()
     IF (KickVersion(40) AND (bitPlanes>2)) THEN zmodemStatPrint('[37m[ s')
-    zmodemStatPrint('[H[J[0 p[H\n FileName:\n FileSize: 0\n ETA Time:\n Cur Time:\n Position: 0\n Complete: 0%\n LastTime:\n      CPS: 0\n\n Z Status: Starting\n Errors: 0\n ErrorPos: 0')
+    zmodemStatPrint('[H[J[0 p[H\n FileName:\n FileSize: 0\n ETA Time:\n Cur Time:\n Position: 0\n Resume P: 0\n Complete: N/A\n LastTime:\n      CPS: 0 Efficiency 0%\n\n Z Status: Starting\n Errors: 0\n ErrorPos: 0')
 
     IF (gadtoolsbase:=OpenLibrary('gadtools.library',0))<>NIL
       vi:=GetVisualInfoA(screen, [NIL])
       tags2:=NEW [GT_VISUALINFO,vi,TAG_DONE]
 
-      DrawBevelBoxA(windowZmodem.rport,10,125,315,10,tags2)
+      DrawBevelBoxA(windowZmodem.rport,9,129,316,10,tags2)
       FreeVisualInfo(vi)
       END tags2[countTags(tags2)]
       CloseLibrary(gadtoolsbase)
@@ -28767,6 +28883,7 @@ PROC main() HANDLE
   DEF transptr:PTR TO mln
   DEF oldWinPtr
   DEF proc: PTR TO process
+  DEF newbroker:PTR TO newbroker
 
   updateVersion(expressVer,expressDate)
 
@@ -28941,6 +29058,7 @@ PROC main() HANDLE
   ringCount:=readToolTypeInt(TOOLTYPE_NODE,node,'RINGCOUNT')
 
   IF checkToolTypeExists(TOOLTYPE_NODE,node,'TELNET')
+    nativeTelnet:=TRUE
     waitSocketLib(TRUE)
   ENDIF
 
@@ -28995,8 +29113,7 @@ PROC main() HANDLE
 
     StringF(tempstr,'Express Node \d',node)
 
-    broker:=CxBroker(
-             [NB_VERSION,   -> Version of the NewBroker object
+    newbroker:= NEW [NB_VERSION,   -> Version of the NewBroker object
               0,  -> E-Note: pad byte
              tempstr,  -> Name: commodities uses for this commodity
              'Express',      -> Title of commodity that appears in CXExchange
@@ -29007,8 +29124,12 @@ PROC main() HANDLE
               0,  -> E-Note: pad byte
               broker_mp, -> Port: mp CX talks to
               0   -> ReservedChannel: reserved for later use
-             ]:newbroker, NIL)
+             ]:newbroker
+
+    broker:=CxBroker(newbroker, NIL)
     cxsigflag:=Shl(1, broker_mp.sigbit)
+
+    END newbroker
 
     -> After it's set up correctly, the broker has to be activated
     ActivateCxObj(broker, TRUE)

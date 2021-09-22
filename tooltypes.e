@@ -295,7 +295,7 @@ EXPORT PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
           toolTypes:=List(lineCount+1)
           off:=0
           FOR i:=1 TO lineCount
-            listAdd2(toolTypes,fileBuf+off)
+            ListAddItem(toolTypes,fileBuf+off)
             off:=off+StrLen(fileBuf+off)+1
           ENDFOR
           ListAdd(toolTypes,[NIL])

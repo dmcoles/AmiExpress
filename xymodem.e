@@ -151,10 +151,10 @@ PROC is_cancelled(xym: PTR TO xymodem_t)
   ENDIF
 ENDPROC xym.cancelled
 
-PROC upload_completed(xym:PTR TO xymodem_t,fname:PTR TO CHAR)
+PROC upload_completed(xym:PTR TO xymodem_t,fname:PTR TO CHAR,filebytes)
   DEF p
   p:=xym.zm_upload_completed
-  IF (p<>NIL) THEN p(fname)
+  IF (p<>NIL) THEN p(fname,filebytes)
 ENDPROC
 
 PROC upload_failed(xym:PTR TO xymodem_t,fname:PTR TO CHAR)
@@ -181,7 +181,7 @@ PROC xmodem_progress(xym:PTR TO xymodem_t)
   DEF p
 
   p:=xym.zm_progress
-  IF(p<>NIL) THEN p(xym.current_file_pos,xym.current_file_size,xym.transfer_start_time1,xym.transfer_start_time2,xym.errors,0,xym.current_file_name,xym.new_file,xym.block_size)
+  IF(p<>NIL) THEN p(xym.current_file_pos,xym.current_file_pos,xym.current_file_size,xym.transfer_start_time1,xym.transfer_start_time2,xym.errors,0,xym.current_file_name,xym.new_file,xym.block_size)
 ENDPROC
 
 PROC putcom(xym:PTR TO xymodem_t,ch)
@@ -773,7 +773,7 @@ sbr2:
     IF(xmodem_get_mode(xym)=FALSE) THEN JUMP sbr3
 
     p:=xym.zm_progress
-    IF(p<>NIL) THEN p(sent_bytes,fsize,t1,t2,xym.errors,0,fname2,TRUE,xym.block_size)
+    IF(p<>NIL) THEN p(sent_bytes,sent_bytes,fsize,t1,t2,xym.errors,0,fname2,TRUE,xym.block_size)
 
     block_num:=1
     xym.errors:=0
@@ -816,7 +816,7 @@ sbr2:
         sent_bytes:=sent_bytes+rd
       ENDIF
       p:=xym.zm_progress
-      IF(p<>NIL) THEN p(sent_bytes,fsize,t1,t2,xym.errors,0,fname2,FALSE,xym.block_size)
+      IF(p<>NIL) THEN p(sent_bytes,sent_bytes,fsize,t1,t2,xym.errors,0,fname2,FALSE,xym.block_size)
 
 lp4:
     ENDWHILE
@@ -1210,7 +1210,7 @@ rbr2:
     ENDIF
 
     IF(success)
-      upload_completed(xym,str)
+      upload_completed(xym,str,file_bytes)
       StringF(logtmp,'Successful - Time: \d:\d  CPS: \d',Div(t,50),Mod(t,50),cps)
       lprintf(xym,LOG_INFO,logtmp)
       fcount++

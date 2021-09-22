@@ -227,7 +227,7 @@ PROC fileProgress(ftpData:PTR TO ftpData,fn,pos,cps)
   MOVE.L pos,-(A7)
   MOVE.L cps,-(A7)
   fp()
-  ADD.L #8,A7
+  ADD.L #12,A7
 ENDPROC
 
 PROC fileDupeCheck(ftpData:PTR TO ftpData,fn)
@@ -283,6 +283,22 @@ PROC fastSystemTime()
   startds:=DateStamp(currDate)
 
 ENDPROC Mul(startds.minute,3000)+startds.tick
+
+PROC calcCPS(pd,t,t2)
+  DEF cps
+  cps:=0
+  
+  IF t<t2
+    IF (pd<0) OR (pd>$1000000)
+      pd:=Shr(pd,4) AND $fffffff
+      cps:=Div(Mul(pd,50),(t2-t))
+      cps:=Shl(cps,4)
+    ELSE
+      cps:=Div(Mul(pd,50),(t2-t))     
+    ENDIF
+  ENDIF
+ENDPROC cps
+
 
 PROC openSocket(sb,port, reuseable,ftpData:PTR TO ftpData)
   DEF server_s
@@ -688,7 +704,7 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
       ENDIF
       
       buff:=New(32768)
-      t:=0
+      t:=fastSystemTime()
       lastpos:=0
       cps:=0
       REPEAT
@@ -707,7 +723,7 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
             ELSE
               pos:=Seek(fh,0,OFFSET_CURRENT)
             ENDIF
-            IF (t<t2) THEN cps:=Div(Mul((pos-lastpos),50),(t2-t))
+            cps:=calcCPS(pos-lastpos,t,t2)
             lastpos:=pos
             fileProgress(ftpData,filename,pos,cps)
             t:=t2
@@ -724,7 +740,7 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
         ELSE
           pos:=Seek(fh,0,OFFSET_CURRENT)
         ENDIF
-        IF (t<t2) THEN cps:=Div(Mul((pos-lastpos),50),(t2-t))
+        cps:=calcCPS(pos-lastpos,t,t2)
         fileProgress(ftpData,filename,pos,cps)
       ENDIF
       IF asynclib<>NIL
@@ -850,7 +866,7 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
               ELSE
                 pos:=Seek(fh,0,OFFSET_CURRENT)
               ENDIF
-              IF (t<t2) THEN cps:=Div(Mul((pos-lastpos),50),(t2-t))
+              cps:=calcCPS(pos-lastpos,t,t2)
               lastpos:=pos
               fileProgress(ftpData,filename,pos,cps)
               t:=t2
@@ -868,7 +884,7 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
         ELSE
           pos:=Seek(fh,0,OFFSET_CURRENT)
         ENDIF
-        IF (t<t2) THEN cps:=Div(Mul((pos-lastpos),50),(t2-t))
+        cps:=calcCPS(pos-lastpos,t,t2)
         fileProgress(ftpData,filename,pos,cps)
       ENDIF
       IF asynclib<>NIL
@@ -1016,9 +1032,9 @@ PROC ftpThread()
 ENDPROC
 
 PROC saveA4(taskID,ftpData,node)
-  DEF pa,nd
+  DEF pa,nd,tid
   MOVEM.L D0-D7/A0-A6,-(A7)
-  MOVE.L taskID,D7
+  tid:=taskID
   pa:=ftpData
   nd:=node
   
@@ -1029,14 +1045,13 @@ PROC saveA4(taskID,ftpData,node)
   ADD.W D0,D0
   ADD.W D0,D0
   MOVE.L A4,0(A0,D0.W)
-  MOVE.L D7,0(A1,D0.W)
+  MOVE.L tid,0(A1,D0.W)
   MOVE.L pa,0(A2,D0.W)
   MOVEM.L (A7)+,D0-D7/A0-A6
 ENDPROC
 
 PROC loadA4()
-DEF pa
-  MOVEM.L D0-D7/A0-A3/A5-A6,-(A7)
+  MOVEM.L D1-D7/A0-A3/A5-A6,-(A7)
   MOVE.L 4,A6
   SUB.L A1,A1
   JSR -$126(A6)     ->findtask
@@ -1060,9 +1075,9 @@ findA4task:
 
 taskfound:
   MOVE.L 0(A0,D0),A4
-  MOVE.L 0(A2,D0),pa
-  MOVEM.L (A7)+,D0-D7/A0-A3/A5-A6
-ENDPROC pa
+  MOVE.L 0(A2,D0),D0
+  MOVEM.L (A7)+,D1-D7/A0-A3/A5-A6
+ENDPROC D0
 
 
 PROC createThread(num,node,sockid,ftpData:PTR TO ftpData)
