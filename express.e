@@ -8476,6 +8476,12 @@ PROC displayMessage(gfh)
   DEF tempStr[255]:STRING
   DEF stat
 
+  IF(mailHeader.status="D")
+    checkScreenClear()
+    aePuts('\b\nThat message has been deleted.\b\n\b\n')
+    RETURN 0
+  ENDIF
+
   timeVar:=mailHeader.msgDate
   formatLongDateTime(timeVar,date)
 
@@ -10715,18 +10721,22 @@ contloop:
       IF(checkSecurity(ACS_ACCOUNT_EDITING))
         StrCopy(str,mailHeader.fromName,31)
         unum:=findUserFromName(1,confNameType,str,tempUser,tempUserKeys,tempUserMisc)
-        stat:=loadAccount(unum,tempUser,tempUserKeys,tempUserMisc)
-        IF(stat=RESULT_FAILURE)
-          aePuts('Warning, error while loading account\b\n')
-          JUMP contloop
-        ENDIF
+        IF unum
+          stat:=loadAccount(unum,tempUser,tempUserKeys,tempUserMisc)
+          IF(stat=RESULT_FAILURE)
+            aePuts('Warning, error while loading account\b\n')
+            JUMP contloop
+          ENDIF
 
-        sendCLS()
-        callersLog('\tAccount editing from mail.')
-        editInfo(unum,tempUser,tempUserKeys,tempUserMisc,FALSE)
-        sendCLS()
-        stat:=displayMessage(gfh)
-        IF(stat<0) THEN RETURN stat
+          sendCLS()
+          callersLog('\tAccount editing from mail.')
+          editInfo(unum,tempUser,tempUserKeys,tempUserMisc,FALSE)
+          sendCLS()
+          stat:=displayMessage(gfh)
+          IF(stat<0) THEN RETURN stat
+        ELSE
+          aePuts('User no longer exists.\b\n')
+        ENDIF
         JUMP contloop
       ENDIF
     ENDIF
@@ -11649,18 +11659,22 @@ PROC readMSG(gfh)
       IF(((str[0]="U") OR (str[0]="u")) AND ((checkSecurity(ACS_ACCOUNT_EDITING))))
         StrCopy(str,mailHeader.fromName,31)
         uNum:=findUserFromName(1,confNameType,str,tempUser,tempUserKeys,tempUserMisc)
-        stat:=loadAccount(uNum,tempUser,tempUserKeys,tempUserMisc)
-        IF(stat=RESULT_FAILURE)
-          aePuts('Warning, error while loading account\b\n')
-          JUMP nextMenu
+        IF uNum
+          stat:=loadAccount(uNum,tempUser,tempUserKeys,tempUserMisc)
+          IF(stat=RESULT_FAILURE)
+            aePuts('Warning, error while loading account\b\n')
+            JUMP nextMenu
+          ENDIF
+          sendCLS()
+          callersLog('\tAccount editing from mail.')
+          StrCopy(str,'\d',tempUser.slotNumber)
+          IF runSysCommand('ACCOUNTS',str)<>RESULT_SUCCESS THEN editInfo(uNum,tempUser,tempUserKeys,tempUserMisc,FALSE)
+          sendCLS()
+          stat:=displayMessage(gfh)
+          IF(stat<0) THEN RETURN stat
+        ELSE
+          aePuts('User no longer exists.\b\n')
         ENDIF
-        sendCLS()
-        callersLog('\tAccount editing from mail.')
-        StrCopy(str,'\d',tempUser.slotNumber)
-        IF runSysCommand('ACCOUNTS',str)<>RESULT_SUCCESS THEN editInfo(uNum,tempUser,tempUserKeys,tempUserMisc,FALSE)
-        sendCLS()
-        stat:=displayMessage(gfh)
-        IF(stat<0) THEN RETURN stat
         JUMP nextMenu
       ENDIF
     ENDIF
@@ -14708,7 +14722,7 @@ PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPorts,ftpDataPorts)
     StrCopy(tempstr,'localhost')
   ENDIF
 
-  doftp(node,tempstr,ftpPorts,ftpDataPorts,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},authPtr,TRUE)
+  doftp(node,tempstr,ftpPorts,ftpDataPorts,NIL,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},authPtr,TRUE)
   serialCacheEnabled:=oldSerCache
 ENDPROC
 
@@ -14716,37 +14730,12 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
   DEF i
   DEF dirLock
   DEF tempstr[255]:STRING
-  DEF tempDir[255]:STRING
-  DEF linkStr[255]:STRING
   DEF item:PTR TO flagFileItem
   DEF oldSerCache
   DEF authPtr=NIL
 
   IF checkToolTypeExists(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPAUTH') THEN authPtr:={ftpAuth}
 
-  IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPTEMP',tempstr)=FALSE
-    StringF(tempDir,'RAM:ftp\d',node)
-  ELSE
-    StringF(tempDir,'\sftp\d',tempstr,node)
-  ENDIF
-  
-  aePuts('\b\nCreating FTP file area\b\n')
-  dirLock:=CreateDir(tempDir)
-  StrAdd(tempDir,'/')
-  IF dirLock<>NIL THEN UnLock(dirLock)
-  ->create links in ram
-  IF fileList<>NIL
-    FOR i:=0 TO fileList.count()-1
-      item:=fileList.item(i)
-      StringF(linkStr,'\s\s',tempDir,FilePart(item.fileName))
-      DeleteFile(linkStr)
-      IF MakeLink(linkStr,item.fileName,1)=0
-        StringF(tempstr,'Makelink failed \s \s error: \d\b\n',linkStr,item.fileName,IoErr())
-        aePuts(tempstr)
-      ENDIF
-    ENDFOR
-  ENDIF
-  
   IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPHOST',tempstr)=FALSE
     StrCopy(tempstr,'localhost')
   ENDIF
@@ -14757,17 +14746,13 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
   zModemInfo.shouldUpdateDownloadStats:=updateDownloadStats
   zModemInfo.needUpdateDownloadStats:=FALSE
   
- 
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
   
-  doftp(node,tempstr,ftpPorts,ftpDataPorts,tempDir,{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},authPtr,FALSE)
+  doftp(node,tempstr,ftpPorts,ftpDataPorts,fileList,'',{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},authPtr,FALSE)
   serialCacheEnabled:=oldSerCache
  
-  ->clean up ram links
-  StringF(linkStr,'DELETE \s ALL',tempDir)
-  Execute(linkStr,NIL,NIL)
 ENDPROC
 
 ->this returns 0 = fail, 1 = success unlike most of the routines
@@ -20950,19 +20935,21 @@ PROC editAccounts(f6)
       ELSEIF(UpperChar(tempStr[0])="S")
         aePuts('\b\nUserName: ')
         stat:=lineInput('','',30,INPUT_TIMEOUT,tempStr)
-        IF(stat) THEN JUMP returnf
-        lw:=0
-        REPEAT
-          lw++
-          which:=findUserFromName(lw,NAME_TYPE_USERNAME,tempStr,tempUser,tempUserKeys,tempUserMisc)
-          IF(which<=0)
-            aePuts('\b\nSorry no user under that name.\b\n')
-          ELSE
-            lw:=which
-            stat:=checkNEdit(which,f6)
-            IF stat<0 THEN JUMP returnf
-          ENDIF
-        UNTIL (which<=0) OR (stat<>2)
+        IF (stat) THEN JUMP returnf
+        IF (StrLen(tempStr))
+          lw:=0
+          REPEAT
+            lw++
+            which:=findUserFromName(lw,NAME_TYPE_USERNAME,tempStr,tempUser,tempUserKeys,tempUserMisc)
+            IF(which<=0)
+              aePuts('\b\nSorry no user under that name.\b\n')
+            ELSE
+              lw:=which
+              stat:=checkNEdit(which,f6)
+              IF stat<0 THEN JUMP returnf
+            ENDIF
+          UNTIL (which<=0) OR (stat<>2)
+        ENDIF
       ELSE
         which:=Val(tempStr)
         IF(which<=0) THEN JUMP returnf

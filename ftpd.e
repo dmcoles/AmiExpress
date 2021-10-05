@@ -22,7 +22,11 @@ MODULE	'socket',
        'exec/tasks',
        'exec/alerts',
        'asyncio',
-       'libraries/asyncio'
+       'libraries/asyncio',
+       '*stringlist',
+       '*axobjects',
+       '*miscfuncs'
+       
  
 OBJECT ftpData
   rest:LONG
@@ -31,6 +35,7 @@ OBJECT ftpData
   hostName:PTR TO CHAR
   workingPath:PTR TO CHAR
   uploadMode:LONG
+  fileList:PTR TO stdlist
   port:LONG
   dataPorts:PTR TO LONG
   restPos:LONG
@@ -299,6 +304,19 @@ PROC calcCPS(pd,t,t2)
   ENDIF
 ENDPROC cps
 
+PROC getFileName(ftpData:PTR TO ftpData, filename:PTR TO CHAR)
+  DEF i,fn=NIL
+  DEF fileList:PTR TO stdlist
+  DEF item:PTR TO flagFileItem
+
+  fileList:=ftpData.fileList
+  IF fileList<>NIL
+    FOR i:=0 TO fileList.count()-1
+      item:=fileList.item(i)
+      IF strCmpi(FilePart(item.fileName),filename) THEN fn:=item.fileName
+    ENDFOR
+  ENDIF
+ENDPROC fn
 
 PROC openSocket(sb,port, reuseable,ftpData:PTR TO ftpData)
   DEF server_s
@@ -420,7 +438,7 @@ PROC getFileDate(s: PTR TO CHAR,outdate:PTR TO datestamp)
   FreeDosObject(DOS_FIB,fBlock)
 ENDPROC
 
-PROC formatLongDate(dts: PTR TO datestamp,outDateStr)
+PROC formatFileDate(dts: PTR TO datestamp,outDateStr)
   DEF datestr[10]:STRING
   DEF timestr[10]:STRING
   DEF dt:datetime
@@ -438,7 +456,7 @@ PROC formatLongDate(dts: PTR TO datestamp,outDateStr)
   ENDIF
 ENDPROC FALSE
 
-PROC formatLongDate2(dts: PTR TO datestamp,outDateStr)
+PROC formatFileDate2(dts: PTR TO datestamp,outDateStr)
   DEF datestr[10]:STRING
   DEF timestr[10]:STRING
   DEF dt:datetime
@@ -506,7 +524,7 @@ PROC myDir(sb,data_c, path: PTR TO CHAR)
   DEF tempstr[255]:STRING
   DEF dirline[255]:STRING
   DEF fn[255]:STRING
-  DEF fh,size
+  DEF size
 
   f_info:=AllocDosObject(DOS_FIB,NIL)
   IF(f_info)=NIL THEN RETURN
@@ -522,20 +540,11 @@ PROC myDir(sb,data_c, path: PTR TO CHAR)
     FreeDosObject(DOS_FIB,f_info)
     RETURN FALSE
   ENDIF
-
   
   IF(f_info.entrytype>0)
     WHILE((ExNext(lock,f_info))<>0)
-      formatLongDate(f_info.datestamp,tempstr)
-
-      size:=-1
-      StringF(fn,'\s\s',path,f_info.filename)
-      fh:=Open(fn,MODE_OLDFILE)
-      IF fh<>0
-        Seek(fh,0,OFFSET_END)
-        size:=Seek(fh,0,OFFSET_END)
-        Close(fh)
-      ENDIF
+      formatFileDate(f_info.datestamp,tempstr)
+      size:=f_info.size
 
       StringF(dirline,'-rw-rw-rw-   1 root  root \r\d[10] \s \s\b\n',size,tempstr,f_info.filename)
       writeLineEx(sb,data_c, dirline)
@@ -543,6 +552,38 @@ PROC myDir(sb,data_c, path: PTR TO CHAR)
   ENDIF
 
   UnLock(lock)
+  FreeDosObject(DOS_FIB,f_info)
+ENDPROC TRUE
+
+PROC vDir(sb,data_c, fileList:PTR TO stdlist)
+  DEF lock
+  DEF f_info: PTR TO fileinfoblock
+  DEF tempstr[255]:STRING
+  DEF dirline[255]:STRING
+  DEF fn
+  DEF i,size
+  DEF item:PTR TO flagFileItem
+
+  f_info:=AllocDosObject(DOS_FIB,NIL)
+  IF(f_info)=NIL THEN RETURN 
+
+  FOR i:=0 TO fileList.count()-1
+    item:=fileList[i]
+    fn:=item.fileName
+    lock:=Lock(fn,ACCESS_READ)
+    size:=0
+    StrCopy(tempstr,'JAN-01-0001 00:00')
+    IF(lock)<>0
+      IF(Examine(lock,f_info))<>0
+        formatFileDate(f_info.datestamp,tempstr)
+        size:=f_info.size
+      ENDIF
+      UnLock(lock)
+    ENDIF
+
+    StringF(dirline,'-rw-rw-rw-   1 root  root \r\d[10] \s \s\b\n',size,tempstr,f_info.filename)
+    writeLineEx(sb,data_c, dirline)
+  ENDFOR
   FreeDosObject(DOS_FIB,f_info)
 ENDPROC TRUE
 
@@ -585,15 +626,15 @@ PROC cmdType(sb,ftp_c,params)
 ENDPROC
 
 PROC cmdMdtm(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
-  DEF fn[500]:STRING
+  DEF fn:PTR TO CHAR
   DEF ds:datestamp
   DEF temp[255]:STRING
   DEF outDateStr[255]:STRING
 
   IF filename[0]="\\" THEN filename++
-  StringF(fn,'\s\s',ftpData.workingPath,filename)
+  fn:=getFileName(ftpData,filename)
   IF getFileDate(fn,ds)
-    formatLongDate2(ds,outDateStr)
+    formatFileDate2(ds,outDateStr)
     StringF(temp,'213 \s\b\n',outDateStr)
     writeLineEx(sb,ftp_c,temp)
   ELSE
@@ -608,7 +649,7 @@ PROC cmdSize(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF len
 
   IF filename[0]="\\" THEN filename++
-  StringF(fn,'\s\s',ftpData.workingPath,filename)
+  fn:=getFileName(ftpData,filename)
   
   len:=FileLength(fn)
   
@@ -785,8 +826,8 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF break=FALSE
   DEF buff
   DEF asynclib
-  DEF fn[500]:STRING
-  DEF r,l,pos,cps,lastpos
+  DEF fn:PTR TO CHAR
+  DEF i,r,l,pos,cps,lastpos
   DEF fh
   DEF t,t2
 
@@ -809,17 +850,19 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   ENDIF
 
   IF (data_c>=0)
-    IF filename[0]="\\" THEN filename++
-    StringF(fn,'\s\s',ftpData.workingPath,filename)
-    
-    
-    IF asynclib<>NIL
-      writeLineEx(sb,ftp_c, '150 Opening BINARY connection with ASYNC\b\n')
-      fh:=OpenAsync(fn,MODE_READ,32768)
-    ELSE
-      writeLineEx(sb,ftp_c, '150 Opening BINARY connection with no ASYNC\b\n')
+    IF filename[0]="\\" THEN filename++   
+   
+    fn:=getFileName(ftpData,filename)
+    fh:=0
+    IF fn
+      IF asynclib<>NIL
+        writeLineEx(sb,ftp_c, '150 Opening BINARY connection with ASYNC\b\n')
+        fh:=OpenAsync(fn,MODE_READ,32768)
+      ELSE
+        writeLineEx(sb,ftp_c, '150 Opening BINARY connection with no ASYNC\b\n')
 
-      fh:=Open(fn,MODE_OLDFILE)
+        fh:=Open(fn,MODE_OLDFILE)
+      ENDIF
     ENDIF
     IF fh=0
       StringF(temp,'/XFTP: open error \s \d\b\n',fn,IoErr())
@@ -929,7 +972,11 @@ PROC cmdList(sb,ftp_c,data_s,data_c,ftpData:PTR TO ftpData)
   DEF r
   
   IF (data_c>=0)  
-    myDir(sb,data_c,ftpData.workingPath)
+    IF ftpData.uploadMode
+      myDir(sb,data_c,ftpData.workingPath)
+    ELSE
+      vDir(sb,data_c,ftpData.fileList)
+    ENDIF
     writeLineEx(sb,ftp_c, '226 Transfer Complete\b\n')
   ELSE
     writeLineEx(sb,ftp_c, '425 Can''t open data connection\b\n')
@@ -1096,7 +1143,8 @@ PROC createThread(num,node,sockid,ftpData:PTR TO ftpData)
  END tags[7]
 ENDPROC
 
-EXPORT PROC doftp(node,ftphost,ftpports:PTR TO LONG,ftpdataports:PTR TO LONG,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, ftpDupeCheckPtr,ftpCheckConnection,ftpAuthPtr,uploadMode)
+
+EXPORT PROC doftp(node,ftphost,ftpports:PTR TO LONG,ftpdataports:PTR TO LONG,fileList: PTR TO stdlist,ftppath,aePutsPtr, readCharPtr, sCheckInputPtr, ftpFileStartPtr, ftpFileEndPtr, ftpFileProgressPtr, ftpDupeCheckPtr,ftpCheckConnection,ftpAuthPtr,uploadMode)
   DEF r,ftp_s,ftp_c,s,sb
   DEF temp[255]:STRING
   DEF ftpData:PTR TO ftpData
@@ -1111,6 +1159,7 @@ EXPORT PROC doftp(node,ftphost,ftpports:PTR TO LONG,ftpdataports:PTR TO LONG,ftp
   ftpData.scount:=0
   ftpData.port:=-1
   ftpData.uploadMode:=uploadMode
+  ftpData.fileList:=fileList
   ftpData.restPos:=0
   ftpData.aePuts:=aePutsPtr
   ftpData.readChar:=readCharPtr
