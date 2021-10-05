@@ -568,7 +568,7 @@ PROC vDir(sb,data_c, fileList:PTR TO stdlist)
   IF(f_info)=NIL THEN RETURN 
 
   FOR i:=0 TO fileList.count()-1
-    item:=fileList[i]
+    item:=fileList.item(i)
     fn:=item.fileName
     lock:=Lock(fn,ACCESS_READ)
     size:=0
