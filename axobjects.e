@@ -9,10 +9,8 @@
 
 
 EXPORT OBJECT user
-  name[30]:ARRAY OF CHAR
-  name31: CHAR  -> last character of name (odd sized arrays are always padded so need this kludge)
-  pass0: CHAR   -> first character of pass (odd sized arrays are always padded so need this kludge)
-  pass[8]:ARRAY OF CHAR
+  name[31]:ARRAY OF CHAR
+  pass[9]:ARRAY OF CHAR
   location[30]:ARRAY OF CHAR
   phoneNumber[13]:ARRAY OF CHAR
   slotNumber: INT

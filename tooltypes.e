@@ -235,7 +235,7 @@ EXPORT PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
     i:=0
     WHILE (i<cnt) AND (found=FALSE)
       IF (cacheObj:=diskObjectCache.item(i))
-        IF strCmpi(fileName,cacheObj.fileName)
+        IF StriCmp(fileName,cacheObj.fileName)
           do:=cacheObj.diskObject
           found:=TRUE
         ENDIF

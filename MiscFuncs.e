@@ -99,25 +99,6 @@ EXPORT PROC makeIntList(src:PTR TO CHAR)
   
 ENDPROC res
 
-EXPORT PROC strCmpi(test1: PTR TO CHAR, test2: PTR TO CHAR, len = ALL)
-  /* case insensitive string compare */
-  DEF i,l1,l2
-
-  IF len=ALL
-    l1:=StrLen(test1)
-    l2:=StrLen(test2)
-    IF l1<>l2 THEN RETURN FALSE
-    len:=l1
-  ENDIF
-
-  
-
-  FOR i:=0 TO len-1
-    IF LowerChar(test1[i])<>LowerChar(test2[i]) THEN RETURN FALSE
-    IF test1[i]=0 THEN RETURN TRUE
-  ENDFOR
-ENDPROC TRUE
-
 EXPORT PROC midStr2(dest,src,pos,len)
   IF len>0 THEN MidStr(dest,src,pos,len) ELSE StrCopy(dest,'')
 ENDPROC
@@ -194,7 +175,7 @@ EXPORT PROC findAssign(name: PTR TO CHAR)
   Forbid()
   WHILE(devicelist.next)
     bStrC(devicelist.name,temp2)
-    IF(strCmpi(temp2,temp)/* && devicelist->dl_Type!=DLT_DEVICE*/)
+    IF(StriCmp(temp2,temp)/* && devicelist->dl_Type!=DLT_DEVICE*/)
       Permit()
       RETURN 0
     ENDIF 
@@ -465,21 +446,6 @@ EXPORT PROC fileWrite(fh,str: PTR TO CHAR)
   s:=Write(fh,str,StrLen(str))
   IF s<>StrLen(str) THEN RETURN RESULT_FAILURE
 ENDPROC RESULT_SUCCESS
-
-EXPORT PROC strCpy(dest: PTR TO CHAR, source: PTR TO CHAR, len=ALL)
-  DEF c,endfound=FALSE
-  DEF i
-  IF len=ALL
-    AstrCopy(dest,source)
-  ELSE
-    FOR i:=0 TO len-1
-      c:=source[i]
-      IF (c=0) OR (i=(len-1)) THEN endfound:=TRUE
-      IF endfound THEN c:=0
-      dest[i]:=c
-    ENDFOR
-  ENDIF
-ENDPROC
 
 EXPORT PROC countSpaces(str:PTR TO CHAR)
   DEF i,count=0
