@@ -958,10 +958,12 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
         r:=closeSocket(sb,data_s)
         data_s:=-1
       ENDIF
-      
-	    callersLog(ftpData,'\tUpload Failed..')
-      StringF(temp,'\tSkipped \s',filename)
-      callersLog(ftpData,temp)
+
+      IF ftpData.callersLog      
+        callersLog(ftpData,'\tUpload Failed..')
+        StringF(temp,'\tSkipped \s',filename)
+        callersLog(ftpData,temp)
+      ENDIF
 
       RETURN
     ENDIF
@@ -1082,20 +1084,26 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
 
       success:=(break=FALSE)
       IF success
-        StringF(temp,'\tUploading \s \d bytes',filename,pos)
-        callersLog(ftpData,temp)
-        
-        StringF(temp,'\t 1 file(s), \dk bytes, \d minute(s). \d second(s), \d cps',Shr(pos,10),Div(totTime,60),Mod(totTime,60),cps)
-        callersLog(ftpData,temp)
+        IF ftpData.callersLog
+          StringF(temp,'\tUploading \s \d bytes',filename,pos)
+          callersLog(ftpData,temp)
+          
+          StringF(temp,'\t 1 file(s), \dk bytes, \d minute(s). \d second(s), \d cps',Shr(pos,10),Div(totTime,60),Mod(totTime,60),cps)
+          callersLog(ftpData,temp)
+        ENDIF
       ELSE
-        callersLog(ftpData,'\tUpload Failed..')
+        IF ftpData.callersLog
+          callersLog(ftpData,'\tUpload Failed..')
+        ENDIF
       ENDIF
 
       IF ftpData.uploadFileEnd<>NIL
         uploadFileEnd(ftpData,filename,success)
       ENDIF
-      freeFileList(ftpData.fileList)
-      ftpData.fileList:=makeFileList(ftpData)
+      IF ftpData.makeFileList
+        freeFileList(ftpData.fileList)
+        ftpData.fileList:=makeFileList(ftpData)
+      ENDIF
 
       StringF(temp, '\d \s ... \s\b\n', 
       IF (success) THEN 226 ELSE 426, 
@@ -1195,12 +1203,12 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
           Seek(fh,0,OFFSET_END)
           pos:=Seek(fh,0,OFFSET_CURRENT)
         ENDIF
-        IF checkDownloadRatio(ftpData,fn,pos,res)=FALSE
+        IF (ftpData.checkDownloadRatio<>NIL) ANDALSO (checkDownloadRatio(ftpData,fn,pos,res)=FALSE)
           StringF(temp,'550 \s\b\n',res)
           writeLineEx(sb,ftp_c,temp)
           candl:=FALSE
         ELSE
-          downloadFileStart(ftpData,fn,pos)
+          IF (ftpData.downloadFileStart<>NIL) THEN downloadFileStart(ftpData,fn,pos)
         ENDIF
       ENDIF
       IF candl
@@ -1356,9 +1364,11 @@ PROC mainFtpLoop(sb,ftp_c,ftpData:PTR TO ftpData)
   DEF data_s=-1,data_c=-1
   WHILE((readLine(sb,ftp_c, request, MAX_LINE-1) > 0) AND (StrCmp(request, 'QUIT', 4)=FALSE)) AND (CtrlC()=FALSE)
     StringF(string,'\tFTP Command >: \s',request)
-    callersLog(ftpData,string)    
+    IF ftpData.callersLog
+      callersLog(ftpData,string)    
+    ENDIF
     StrAdd(string,'\b\n')
-    conPuts(ftpData,string)
+    IF ftpData.conPuts THEN conPuts(ftpData,string)
     IF(StrCmp(request, 'USER ', 5))
       cmdUser(sb,ftp_c,request+5,ftpData)
     ELSEIF(StrCmp(request, 'PASS ', 5))
@@ -1661,6 +1671,7 @@ EXPORT PROC doftp(node,ftphost,ftpports:PTR TO LONG,ftpdataports:PTR TO LONG,fil
   ftpData.hostName:=String(255)
   ftpData.dataPorts:=ftpdataports
   ftpData.ftpAuth:=ftpAuthPtr
+  ftpData.callersLog:=NIL
 
   IF uploadMode
     ftpData.ftpDir:={myDir}

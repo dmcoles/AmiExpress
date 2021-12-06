@@ -14552,9 +14552,10 @@ PROC ftpDownloadFileEnd(fileName:PTR TO CHAR, result)
 
   IF fileItem=NIL THEN RETURN
 
+  IF (result) THEN updateDownloadStats(fileItem)
+
   IF ftpConn
-    IF result
-      updateDownloadStats(fileItem)
+    IF result     
       tTTM:=getSystemTime()-ftptime
       StringF(tempStr,'\t 1 files, \dk bytes, \d minutes \d seconds \d cps',Shr(zModemInfo.filesize,10) AND $003fffff,Div(tTTM,60),Mod(tTTM,60),zModemInfo.cps)
       callersLog(tempStr)
@@ -14796,7 +14797,6 @@ PROC makeConfFileList()
               ENDIF
               
               IF found
-                WriteF(tempstr)
                 spPos:=InStr(tempstr,' ')
                 SetStr(tempstr,spPos)           
                 checkForFileSize(tempstr,-1,NIL,NIL,fileList,0)
@@ -15987,6 +15987,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     IF ListLen(ftpPorts)=0 THEN ListAddItem(ftpPorts,10000+(node*2))
     IF ListLen(ftpDataPorts)=0 THEN ListAddItem(ftpDataPorts,10001+(node*2))
     
+    zModemInfo.currentOperation:=ZMODEM_UPLOAD
     IF scropen THEN openZmodemStat()
     ftpUpload(file,ftpPorts,ftpDataPorts)
     DisposeLink(ftpPorts)
@@ -16012,6 +16013,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
 
     IF ListLen(httpPorts)=0 THEN ListAddItem(httpPorts,20000+node)
     
+    zModemInfo.currentOperation:=ZMODEM_UPLOAD
     IF scropen THEN openZmodemStat()
     httpUpload(file,httpPorts)
     DisposeLink(httpPorts)
