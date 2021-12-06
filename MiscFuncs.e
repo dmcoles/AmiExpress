@@ -379,13 +379,33 @@ EXPORT PROC formatLongDateTime2(cDateVal,outDateStr,seperatorChar)
   ENDIF
 ENDPROC FALSE
 
+EXPORT PROC decodeDateStr(datestr:PTR TO CHAR)
+  DEF dtstr[20]:STRING
+  DEF y=0,m=0,d=0
+  
+  StrCopy(dtstr,datestr)
+
+  dtstr[2]:=" "
+  dtstr[5]:=" "
+  m:=Val(dtstr)
+  d:=Val(dtstr+3)
+  y:=Val(dtstr+6)
+
+  IF (y<100) AND (y>TWODIGITYEARSWITCHOVER) THEN y:=1900+y ELSE y:=2000+y
+ENDPROC y,m,d
+
 ->returns a numeric value of the date suitable for comparing to other dates
 EXPORT PROC getDateCompareVal(datestr:PTR TO CHAR)
   DEF month,day,year
+  DEF dtstr[20]:STRING
 
-  month:=Val(datestr)
-  day:=Val(datestr+3)
-  year:=Val(datestr+6)
+  StrCopy(dtstr,datestr)
+  dtstr[2]:=" "
+  dtstr[5]:=" "
+
+  month:=Val(dtstr)
+  day:=Val(dtstr+3)
+  year:=Val(dtstr+6)
 
   IF (year>TWODIGITYEARSWITCHOVER) THEN year:=1900+year ELSE year:=2000+year
 

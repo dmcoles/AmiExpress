@@ -177,8 +177,10 @@ EXPORT OBJECT mailHeader
   subject[31]: ARRAY OF CHAR
   msgDate: LONG
   recv: LONG
-  pad: CHAR
-ENDOBJECT
+  extMsgNum: INT
+ENDOBJECT  ->110
+->1+1+4+31+31+31+1+4+4+1
+
 
 EXPORT OBJECT mailStat
   lowestKey : LONG

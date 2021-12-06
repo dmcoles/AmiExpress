@@ -3402,23 +3402,13 @@ PROC telnetSend(socket,msg,len=-1)
   IF r<>len THEN RETURN FALSE
 ENDPROC TRUE
 
-PROC setSingleFDS(socketVal)
-  DEF i,n
-  
-  n:=socketVal/32
-  IF (n<0) OR (n>=32) THEN Raise(ERR_FDS_RANGE)
-
-  FOR i:=0 TO 31 DO fds[i]:=0
-  fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
-ENDPROC
-
 PROC clearFDS()
   DEF i
   FOR i:=0 TO 31 DO fds[i]:=0
 ENDPROC
 
 PROC setFDS(socketVal)
-  DEF i,n
+  DEF n
   
   n:=socketVal/32
   IF (n<0) OR (n>=32) THEN Raise(ERR_FDS_RANGE)
@@ -3449,6 +3439,60 @@ PROC updateVersion(expVer:PTR TO CHAR,expDate:PTR TO CHAR)
   ENDIF
 ENDPROC
 
+PROC updateDosConnectionList(connectionList:PTR TO stdlist,t)
+  DEF i
+  DEF connItem:PTR TO connectionItem
+  DEF res=FALSE
+  
+  FOR i:=connectionList.count()-1 TO 0 STEP -1
+    connItem:=connectionList.item(i)
+    IF (connItem.blocked=FALSE)
+      IF ((connItem.connectionTime>t) OR (connItem.connectionTime<(t-dosCheckTime)))
+        END connItem
+        connectionList.remove(i)
+        res:=TRUE
+      ENDIF
+    ELSE
+      IF (connItem.blockExpiry<>0) AND (connItem.blockExpiry<t)
+        END connItem
+        connectionList.remove(i)
+        res:=TRUE
+      ENDIF
+    ENDIF
+  ENDFOR
+ENDPROC res
+
+PROC applyDosBan(connectionList:PTR TO stdlist,ipAddr:PTR TO sockaddr_in,t)
+  DEF i
+  DEF connItem:PTR TO connectionItem
+  
+  FOR i:=connectionList.count()-1 TO 0 STEP -1
+    connItem:=connectionList.item(i)
+    END connItem
+    connectionList.remove(i)
+  ENDFOR
+  connItem:=NEW connItem
+  connItem.ipAddr:=ipAddr.sin_addr
+  connItem.connectionTime:=t
+  connItem.blocked:=TRUE
+  IF dosBanTime<0
+    connItem.blockExpiry:=0     ->permanent ban
+  ELSE
+    connItem.blockExpiry:=t+Mul(dosBanTime,60)  -> apply denial of service ban period
+  ENDIF
+  connectionList.add(connItem)
+ENDPROC
+
+PROC addDosConnect(connectionList:PTR TO stdlist,ipAddr:PTR TO sockaddr_in,t)
+  DEF connItem:PTR TO connectionItem
+  connItem:=NEW connItem
+  connItem.ipAddr:=ipAddr.sin_addr
+  connItem.connectionTime:=t
+  connItem.blocked:=FALSE
+  connItem.blockExpiry:=0
+  connectionList.add(connItem)
+ENDPROC
+
 PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
   DEF tempstr[255]:STRING
   DEF ftpSocket=-1
@@ -3469,22 +3513,7 @@ PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
 
     IF (dosCheckTime>0) AND (dosCheckTrigger>0)
       t:=getSystemTime()
-      FOR i:=connectionList.count()-1 TO 0 STEP -1
-        connItem:=connectionList.item(i)
-        IF (connItem.blocked=FALSE)
-          IF ((connItem.connectionTime>t) OR (connItem.connectionTime<(t-dosCheckTime)))
-            END connItem
-            connectionList.remove(i)
-            saveConn:=TRUE
-          ENDIF
-        ELSE
-          IF (connItem.blockExpiry<>0) AND (connItem.blockExpiry<t)
-            END connItem
-            connectionList.remove(i)
-            saveConn:=TRUE
-          ENDIF
-        ENDIF
-      ENDFOR
+      IF updateDosConnectionList(connectionList,t) THEN saveConn:=TRUE
         
       n:=0
       FOR i:=0 TO connectionList.count()-1
@@ -3507,22 +3536,7 @@ PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
       ENDFOR
       
       IF (ftpSocket<>-1) AND (n>=dosCheckTrigger)
-        FOR i:=connectionList.count()-1 TO 0 STEP -1
-          connItem:=connectionList.item(i)
-          END connItem
-          connectionList.remove(i)
-          saveConn:=TRUE
-        ENDFOR
-        connItem:=NEW connItem
-        connItem.ipAddr:=peeraddr.sin_addr
-        connItem.connectionTime:=t
-        connItem.blocked:=TRUE
-        IF dosBanTime<0
-          connItem.blockExpiry:=0     ->permanent ban
-        ELSE
-          connItem.blockExpiry:=t+Mul(dosBanTime,60)  -> apply denial of service ban period
-        ENDIF
-        connectionList.add(connItem)
+        applyDosBan(connectionList,peeraddr,t)
         saveConn:=TRUE
         IF dosBanTime<0
           telnetSend(ftpSocket,'530 Your ip address has been blocked permanently\b\n')
@@ -3535,12 +3549,7 @@ PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
       ENDIF
 
       IF (ftpSocket<>-1)
-        connItem:=NEW connItem
-        connItem.ipAddr:=peeraddr.sin_addr
-        connItem.connectionTime:=t
-        connItem.blocked:=FALSE
-        connItem.blockExpiry:=0
-        connectionList.add(connItem)
+        addDosConnect(connectionList,peeraddr,t)
         saveConn:=TRUE
       ENDIF
     ENDIF
@@ -3617,23 +3626,8 @@ PROC acceptTelnet(telnetServerSocket,connectionList:PTR TO stdlist)
 
     IF (dosCheckTime>0) AND (dosCheckTrigger>0)
       t:=getSystemTime()
-      FOR i:=connectionList.count()-1 TO 0 STEP -1
-        connItem:=connectionList.item(i)
-        IF (connItem.blocked=FALSE)
-          IF ((connItem.connectionTime>t) OR (connItem.connectionTime<(t-dosCheckTime)))
-            END connItem
-            connectionList.remove(i)
-            saveConn:=TRUE
-          ENDIF
-        ELSE
-          IF (connItem.blockExpiry<>0) AND (connItem.blockExpiry<t)
-            END connItem
-            connectionList.remove(i)
-            saveConn:=TRUE
-          ENDIF
-        ENDIF
-      ENDFOR
-        
+      IF updateDosConnectionList(connectionList,t) THEN saveConn:=TRUE
+              
       n:=0
       FOR i:=0 TO connectionList.count()-1
         connItem:=connectionList.item(i)
@@ -3655,23 +3649,10 @@ PROC acceptTelnet(telnetServerSocket,connectionList:PTR TO stdlist)
       ENDFOR
       
       IF (telnetSocket<>-1) AND (n>=dosCheckTrigger)
-        FOR i:=connectionList.count()-1 TO 0 STEP -1
-          connItem:=connectionList.item(i)
-          END connItem
-          connectionList.remove(i)
-          saveConn:=TRUE
-        ENDFOR
-        connItem:=NEW connItem
-        connItem.ipAddr:=peeraddr.sin_addr
-        connItem.connectionTime:=t
-        connItem.blocked:=TRUE
-        IF dosBanTime<0
-          connItem.blockExpiry:=0     ->permanent ban
-        ELSE
-          connItem.blockExpiry:=t+Mul(dosBanTime,60)  -> apply denial of service ban period
-        ENDIF
-        connectionList.add(connItem)
+
+        applyDosBan(connectionList,peeraddr,t)
         saveConn:=TRUE
+        
         IF dosBanTime<0
           telnetSend(telnetSocket,'\b\n/X Native Telnet:  Your ip address has been blocked permanently\b\n')
         ELSE
@@ -3683,12 +3664,7 @@ PROC acceptTelnet(telnetServerSocket,connectionList:PTR TO stdlist)
       ENDIF
 
       IF (telnetSocket<>-1)
-        connItem:=NEW connItem
-        connItem.ipAddr:=peeraddr.sin_addr
-        connItem.connectionTime:=t
-        connItem.blocked:=FALSE
-        connItem.blockExpiry:=0
-        connectionList.add(connItem)
+        addDosConnect(connectionList,peeraddr,t)
         saveConn:=TRUE
       ENDIF
     ENDIF
