@@ -8336,7 +8336,7 @@ PROC parseList(liststring,list:PTR TO stringlist)
       IF StrLen(newitem)>0 THEN list.add(newitem)
     ENDIF
   ELSE
-    newitem:=StrClone(liststring)
+    StrCopy(tempstr,liststring)
     UpperStr(tempstr)
     IF StrLen(tempstr)>0 THEN list.add(tempstr)
   ENDIF
@@ -12733,7 +12733,7 @@ PROC getBaudText(baudText:PTR TO CHAR)
   ELSE
     IF (StrLen(cmds.serDev)=0)
       IF nativeTelnet AND nativeFtp
-        StrCopy(baudText,'TNT/FTP')
+        StrCopy(baudText,'FTP/TEL')
       ELSEIF nativeTelnet
         StrCopy(baudText,'TELNET')
       ELSEIF nativeFtp
@@ -12847,7 +12847,7 @@ PROC sendMaster()
     AstrCopy(masterMsg2.location,'')
     IF (StrLen(cmds.serDev)=0)
       IF nativeTelnet AND nativeFtp
-        StrCopy(temp,'TNT/FTP')
+        StrCopy(temp,'FTP/TEL')
       ELSEIF nativeTelnet
         StrCopy(temp,'TELNET')
       ELSEIF nativeFtp

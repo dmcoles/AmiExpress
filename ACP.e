@@ -1958,7 +1958,11 @@ ENDPROC
 
 PROC showCPS(node,incps:PTR TO CHAR)
   DEF cps[10]:STRING
-  StringF(cps,'\s[7]',incps)
+  IF StrLen(incps)>7
+    StrCopy(cps,'9999999')
+  ELSE
+    StringF(cps,'\s[7]',incps)
+  ENDIF
 
   drawPen:=chat[node]
   IF(quietNode[node]) THEN drawPen:=3
