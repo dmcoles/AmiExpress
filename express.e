@@ -1293,22 +1293,24 @@ PROC checkDoorMsg(mode)
           setEnvStat(ENV_RESERVE)
         ENDIF
       CASE SV_INCOMING_MSG
-        subState:=stateData
+        IF blockOLM=FALSE
+          subState:=stateData
 
-        lastOlmNode:=servermsg.nodeID
-        olmBuf.add(servermsg.string)
-        IF servermsg.lineNum<0
-          ->message ready to send
-          IF (state=STATE_LOGGEDON) AND (subState.subState=SUBSTATE_READ_COMMAND)
-            FOR i:=0 TO olmBuf.count()-1
-              aePuts(olmBuf.item(i))
-            ENDFOR
-            olmBuf.clear()
-          ELSE
-            FOR i:=0 TO olmBuf.count()-1
-              olmQueue.add(olmBuf.item(i))
-            ENDFOR
-            olmBuf.clear()
+          lastOlmNode:=servermsg.nodeID
+          olmBuf.add(servermsg.string)
+          IF servermsg.lineNum<0
+            ->message ready to send
+            IF (state=STATE_LOGGEDON) AND (subState.subState=SUBSTATE_READ_COMMAND)
+              FOR i:=0 TO olmBuf.count()-1
+                aePuts(olmBuf.item(i))
+              ENDFOR
+              olmBuf.clear()
+            ELSE
+              FOR i:=0 TO olmBuf.count()-1
+                olmQueue.add(olmBuf.item(i))
+              ENDFOR
+              olmBuf.clear()
+            ENDIF
           ENDIF
         ENDIF
       CASE LOAD_ACCOUNT
@@ -1762,8 +1764,20 @@ PROC checkCarrier()
   ENDIF
 ENDPROC
 
+PROC getSigs()
+  DEF sigs=0
+  IF windowClose<>NIL
+    sigs:=sigs OR Shl(1, windowClose.userport.sigbit)
+  ELSEIF window<>NIL
+    sigs:=sigs OR Shl(1, window.userport.sigbit)
+  ENDIF
 
-PROC checkInput()
+  sigs:=sigs OR cxsigflag
+
+  IF resmp<>NIL THEN sigs:=sigs OR Shl(1,resmp.sigbit)
+ENDPROC sigs
+
+PROC processMessages()
   checkDoorMsg(0)
   IF servercmd=SV_UNICONIFY
     servercmd:=-1
@@ -1772,7 +1786,10 @@ PROC checkInput()
   
   processWindowMessage(-1)
   processCommodityMessage(-1)
+ENDPROC
 
+PROC checkInput()
+  processMessages()
   IF(logonType>=LOGON_TYPE_REMOTE)
     IF(checkCarrier()=FALSE) THEN RETURN TRUE
   ENDIF 
@@ -7741,7 +7758,7 @@ PROC processLoggingOff()
   ENDIF
 
   writeLogoffLog('logging off 3',FALSE)
-  checkOnlineStatus()
+  IF ftpConn=FALSE THEN checkOnlineStatus()
   clearFlagItems(flagFilesList)
 
   olmBuf.clear()
@@ -12718,7 +12735,7 @@ PROC getBaudText(baudText:PTR TO CHAR)
   IF loggedOnUser<>NIL
     IF (telnetSocket<>-1)
       IF ftpConn
-        StrCopy(baudText,'FTP')
+        StrCopy(baudText,'FTP   ')
       ELSE
         StrCopy(baudText,'TELNET')
       ENDIF
@@ -12737,7 +12754,7 @@ PROC getBaudText(baudText:PTR TO CHAR)
       ELSEIF nativeTelnet
         StrCopy(baudText,'TELNET')
       ELSEIF nativeFtp
-        StrCopy(baudText,'FTP')
+        StrCopy(baudText,'FTP   ')
       ELSE
         StrCopy(baudText,'LOCAL')
       ENDIF
@@ -13916,13 +13933,7 @@ PROC xprupdate()
       debugLog(LOG_DEBUG,outmsg)
       zModemInfo.lastUpdate:=updateTime
 
-      processWindowMessage(-1)
-      processCommodityMessage(-1)
-      checkDoorMsg(0)
-      IF servercmd=SV_UNICONIFY
-          IF scropen THEN expressToFront() ELSE openExpressScreen()
-        servercmd:=-1
-      ENDIF
+      processMessages()
 
     ENDIF
   ENDIF
@@ -14470,26 +14481,39 @@ ENDPROC
 PROC ftpUploadFileEnd(fileName:PTR TO CHAR,success)
   DEF i
   DEF str[255]:STRING
-  
+
+  IF ftpConn THEN tTTM:=0
+
   tTTM:=tTTM+getSystemTime()-ftptime
   setEnvStat(ENV_UPLOADING)
   
-  IF ftpConn 
+  IF ftpConn   
+    IF success
+      StringF(str,'\tUploading \s \d bytes',fileName,zModemInfo.transPos)
+      callersLog(str)
+      
+      StringF(str,'\t 1 file(s), \dk bytes, \d minute(s). \d second(s), \d cps, N/A % efficiency.',Shr(zModemInfo.transPos,10),Div(tTTM,60),Mod(tTTM,60),zModemInfo.cps)
+      callersLog(str)
+    ELSE
+      callersLog('\tUpload Failed..')
+    ENDIF  
+  
     FOR i:=0 TO skipdFiles.count()-1
       StringF(str,'\tSkipped \s',skipdFiles.item(i))
       callersLog(str)
       udLog(str)
     ENDFOR
-  ENDIF
   
-  IF ftpConn AND success
-    //do posting of file
-    transfering:=TRUE
-    bgChecking:=TRUE
-    doBackgroundCheck(fileName)
+    IF success
+      //do posting of file
+      transfering:=TRUE
+      bgChecking:=TRUE
+      doBackgroundCheck(fileName)
+      
+      transfering:=FALSE
+      bgChecking:=FALSE
+    ENDIF
     tidyPlayPen()
-    transfering:=FALSE
-    bgChecking:=FALSE
     setEnvStat(ENV_IDLE)
   ENDIF
 ENDPROC
@@ -14541,6 +14565,10 @@ PROC ftpDownloadFileEnd(fileName:PTR TO CHAR, result)
   DEF tempStr[255]:STRING
   DEF i
   
+  IF ftpConn THEN tTTM:=0
+
+  tTTM:=tTTM+getSystemTime()-ftptime
+
   fileItem:=NIL
   fn:=FilePart(fileName)
   IF zModemInfo.fileList<>NIL
@@ -14556,8 +14584,7 @@ PROC ftpDownloadFileEnd(fileName:PTR TO CHAR, result)
 
   IF ftpConn
     IF result     
-      tTTM:=getSystemTime()-ftptime
-      StringF(tempStr,'\t 1 files, \dk bytes, \d minutes \d seconds \d cps',Shr(zModemInfo.filesize,10) AND $003fffff,Div(tTTM,60),Mod(tTTM,60),zModemInfo.cps)
+      StringF(tempStr,'\t 1 file(s), \dk bytes, \d minutes \d seconds \d cps, N/A % efficiency.',Shr(zModemInfo.filesize,10) AND $003fffff,Div(tTTM,60),Mod(tTTM,60),zModemInfo.cps)
       callersLog(tempStr)
       udLog(tempStr)
     ELSE
@@ -14880,7 +14907,7 @@ PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPorts,ftpDataPorts)
     StrCopy(tempstr,'localhost')
   ENDIF
 
-  doftp(node,tempstr,ftpPorts,ftpDataPorts,NIL,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},authPtr,TRUE)
+  doftp(node,tempstr,ftpPorts,ftpDataPorts,NIL,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},authPtr,{processMessages},{getSigs},TRUE)
   serialCacheEnabled:=oldSerCache
 ENDPROC
 
@@ -14905,7 +14932,7 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
   flushSerialCache()
   serialCacheEnabled:=FALSE
   
-  doftp(node,tempstr,ftpPorts,ftpDataPorts,fileList,'',{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},authPtr,FALSE)
+  doftp(node,tempstr,ftpPorts,ftpDataPorts,fileList,'',{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},authPtr,{processMessages},{getSigs},FALSE)
   serialCacheEnabled:=oldSerCache
 
 ENDPROC
@@ -15554,13 +15581,7 @@ PROC zmprogress(pos,cnt,filesize,s1,s2,errors,startpos,filename:PTR TO CHAR,newf
     debugLog(LOG_DEBUG,tempStr)
     zModemInfo.lastUpdate:=updateTime
 
-    processWindowMessage(-1)
-    processCommodityMessage(-1)
-    checkDoorMsg(0)
-    IF servercmd=SV_UNICONIFY
-        IF scropen THEN expressToFront() ELSE openExpressScreen()
-      servercmd:=-1
-    ENDIF
+    processMessages()
     checkCarrier()
   ENDIF
 ENDPROC
@@ -18522,6 +18543,8 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
               loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
            ENDIF
           ENDIF
+          IF (bytesADL<>$7fffffff) THEN bytesADL:=bytesADL+fsize
+
 
           formatFileSizeForDirList(fsize,tempstr)
           formatLongDate(getSystemTime(),tempstr2)
@@ -27264,6 +27287,8 @@ PROC processFtpLoggedOnUser()
 
   IoctlSocket(telnetSocket,FIONBIO,[0])
 
+  blockOLM:=TRUE
+
   zModemInfo.current:=0
   zModemInfo.fileList:=NIL
 
@@ -27311,7 +27336,7 @@ PROC processFtpLoggedOnUser()
   ENDIF
 
   IF reqState=REQ_STATE_NONE
-    ftpServerMode(telnetSocket,tempstr,confNames,uploadPath,{ftpGetPath},{ftpDupeCheck},{ftpCheckRatio},{ftpUploadFileStart},{ftpDownloadFileStart},{ftpUploadFileEnd},{ftpDownloadFileEnd},{ftpTransferFileProgress},{callersLog},{makeConfFileList},{conPuts},ftpDataPorts)
+    ftpServerMode(telnetSocket,tempstr,confNames,uploadPath,{ftpGetPath},{ftpDupeCheck},{ftpCheckRatio},{ftpUploadFileStart},{ftpDownloadFileStart},{ftpUploadFileEnd},{ftpDownloadFileEnd},{ftpTransferFileProgress},{callersLog},{makeConfFileList},{conPuts},{processMessages},{getSigs},ftpDataPorts)
   ENDIF
   
   ->CloseSocket(telnetSocket)
