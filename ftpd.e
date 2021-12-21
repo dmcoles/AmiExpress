@@ -11,6 +11,8 @@ CONST EWOULDBLOCK=35
 CONST MAX_LINE=255
 CONST FIONBIO=$8004667e
 
+CONST TIMEOUT=300
+
 ENUM CMDTYPE_LIST=1,CMDTYPE_NLST=2,CMDTYPE_MLSD=3
 ENUM MODE_UPLOAD, MODE_DOWNLOAD, MODE_FULLSERVER
 
@@ -67,6 +69,7 @@ OBJECT ftpData
   transType:CHAR
   confNames:PTR TO stringlist
   currentConf:LONG
+  setReuseAddr:INT
   mode:INT
 ENDOBJECT
  
@@ -391,17 +394,6 @@ PROC doAuth(ftpData:PTR TO ftpData,userName:PTR TO CHAR,password:PTR TO CHAR)
   ENDIF
 ENDPROC r
 
-PROC setSingleFDS(fds:PTR TO LONG,socketVal)
-  DEF i,n
-  
-  n:=(socketVal/32)
-  IF (n<0) OR (n>=32) THEN RETURN
-  
-  FOR i:=0 TO 31 DO fds[i]:=0
-  fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
-ENDPROC
-
-
 PROC makeFileList(ftpData:PTR TO ftpData)
   DEF mflist
   mflist:=ftpData.makeFileList
@@ -419,14 +411,6 @@ PROC freeFileList(fileList:PTR TO stdlist)
   ENDIF
 ENDPROC
 
-PROC fastSystemTime()
-  DEF currDate: datestamp
-  DEF startds:PTR TO datestamp
-
-  startds:=DateStamp(currDate)
-
-ENDPROC Mul(startds.minute,3000)+startds.tick
-
 PROC calcCPS(pd,t,t2)
   DEF cps
   cps:=0
@@ -443,6 +427,30 @@ PROC calcCPS(pd,t,t2)
     cps:=pd
   ENDIF
 ENDPROC cps
+
+PROC invalidFn(fn:PTR TO CHAR)
+  IF StrLen(fn)>12 THEN RETURN TRUE
+  
+  IF((InStr(fn,'%')>=0) OR ((InStr(fn,'#'))>=0) OR ((InStr(fn,'?'))>=0) OR ((InStr(fn,' '))>=0) OR ((InStr(fn,'/'))>=0) OR
+   ((InStr(fn,'('))>=0) OR ((InStr(fn,')'))>=0) OR ((InStr(fn,':'))>=0) OR ((InStr(fn,'*'))>=0)) THEN TRUE
+ENDPROC FALSE
+
+->setting SO_REUSEADDR on windows allows the same socket to be opened twice - BAD BAD BAD!
+PROC testSocket(sb,ftpData:PTR TO ftpData,port)
+  DEF r
+  DEF sock1,sock2
+  
+  r,sock1:=openSocket(sb,port,1,ftpData)
+  
+  IF r
+    r,sock2:=openSocket(sb,port,1,ftpData)
+    IF r
+      ftpData.setReuseAddr:=FALSE
+      closeSocket(sb,sock2)
+    ENDIF
+    closeSocket(sb,sock1)     
+  ENDIF
+ENDPROC
 
 PROC getFileName(ftpData:PTR TO ftpData, filename:PTR TO CHAR,outFilename:PTR TO CHAR)
   DEF i
@@ -476,9 +484,11 @@ PROC openSocket(sb,port, reuseable,ftpData:PTR TO ftpData)
 	ENDIF
 
   IF reuseable
-    IF setSockOpt(sb,server_s, SOL_SOCKET, SO_REUSEADDR, [1]:LONG, 4)<>0
-      StringF(tempStr,'/XFTP: error setting socket options SO_REUSEADDR, error=\d\b\n',errno(sb))
-      aePuts(ftpData,tempStr)
+    IF ftpData.setReuseAddr
+      IF setSockOpt(sb,server_s, SOL_SOCKET, SO_REUSEADDR, [1]:LONG, 4)<>0
+        StringF(tempStr,'/XFTP: error setting socket options SO_REUSEADDR, error=\d\b\n',errno(sb))
+        aePuts(ftpData,tempStr)
+      ENDIF
     ENDIF
 
     optval:=NEW [0,0]:LONG
@@ -538,12 +548,13 @@ PROC readLine(ftpData:PTR TO ftpData,sb,sockd,vptr:PTR TO CHAR, maxlen)
   DEF fds,res
   DEF sigs=0
   DEF sigsPtr=0
+  DEF string[255]:STRING
 
   buffer:=vptr
 
   FOR n:=0 TO maxlen-1 
 
-    tv.secs:=300
+    tv.secs:=TIMEOUT
     tv.micro:=0
     fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
     setSingleFDS(fds,sockd)
@@ -561,15 +572,14 @@ PROC readLine(ftpData:PTR TO ftpData,sb,sockd,vptr:PTR TO CHAR, maxlen)
 			EXIT c[] = "\n"
 			buffer[]++:=c[]
 		ELSEIF ( rc = 0 )
-			IF ( n = 1 ) THEN RETURN 0
-      EXIT TRUE
+          EXIT TRUE
 		ELSE
-			CONT errno(sb) = EINTR
-			RETURN -1
+          rc:=errno(sb)
+		  CONT rc = EINTR
+		  RETURN -1
 		ENDIF
   ENDFOR
   buffer[]:=0
-  END fds[32]
 ENDPROC n
 
 PROC writeLine(sb,sockd, vptr:PTR TO CHAR, n)
@@ -642,6 +652,10 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF hostEnt: PTR TO hostent
   DEF r,data_c,data_s
   DEF i,port
+  DEF tv:timeval
+  DEF fds,res
+  DEF sigs=0
+  DEF sigsPtr=0
 	 
   hostEnt:=getHostByName(sb,serverHost)
   addr:=hostEnt.h_addr_list[]
@@ -650,6 +664,7 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
   ftpData.rest:=0  
 
   i:=0
+  r:=0
   REPEAT
     port:=ftpData.dataPorts[i]
     r,data_s:=openSocket(sb,port,1,ftpData)
@@ -665,9 +680,27 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
   ->WriteF(temp)
   writeLineEx(sb,ftp_c, temp)
   ftpData.restPos:=0
+
+  REPEAT
+    tv.secs:=TIMEOUT
+    tv.micro:=0
+    fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
+    setSingleFDS(fds,data_s)
+    IF ftpData<>NIL THEN sigs:=getSigs(ftpData)
+    IF sigs<>0 THEN sigsPtr:={sigs}
+    res:=waitSelect(sb,data_s+1,fds,NIL,NIL,tv,sigsPtr)
+    IF ftpData<>NIL THEN processMessages(ftpData)
+    END fds[32]
+    IF (res<1) AND (sigs=0)
+      ftpData.scount:=ftpData.scount-1
+      closeSocket(sb,data_s)
+      writeLineEx(sb,ftp_c, '425 Timed out waiting for data connection\b\n')
+      RETURN -1,-1
+    ENDIF
+  UNTIL res>0
   
   IF((data_c:=accept(sb,data_s, NIL, NIL) ) < 0)
-    aePuts(ftpData,'/XFTP: Error calling accept()\b\n')
+    ->aePuts(ftpData,'/XFTP: Error calling accept()\b\n')
     ftpData.scount:=ftpData.scount-1
     closeSocket(sb,data_s)
     writeLineEx(sb,ftp_c, '425 Can''t open data connection\b\n')
@@ -749,6 +782,12 @@ PROC vDir(sb,data_c, ftpData:PTR TO ftpData,cmdType)
       writeLineEx(sb,data_c, dirline)
     ENDFOR
     RETURN TRUE
+  ENDIF
+
+  IF (ftpData.mode=MODE_FULLSERVER)
+    IF ftpData.callersLog      
+      callersLog(ftpData,'\tDirectory Scan via ftp')
+    ENDIF
   ENDIF
   
   fileList:=ftpData.fileList 
@@ -988,6 +1027,8 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF asynclib
   DEF i,n
 
+  upperChars(filename)
+
   IF (ftpData.transType<>"I") AND (ftpData.transType<>"A")
     StringF(temp,'550 This server only supports binary or acii transfers\b\n',filename)
     writeLineEx(sb,ftp_c,temp)
@@ -1002,6 +1043,30 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
       ftpData.scount:=ftpData.scount-1
       r:=closeSocket(sb,data_s)
       data_s:=-1
+    ENDIF
+    RETURN
+  ENDIF
+
+  IF invalidFn(filename)
+    StringF(temp,'553 \s: Invalid filename\b\n',filename)
+    writeLineEx(sb,ftp_c,temp)
+
+    IF (data_c>=0)
+      ftpData.scount:=ftpData.scount-1
+      r:=closeSocket(sb,data_c)
+      data_c:=-1
+    ENDIF
+    
+    IF (data_s>=0)
+      ftpData.scount:=ftpData.scount-1
+      r:=closeSocket(sb,data_s)
+      data_s:=-1
+    ENDIF
+
+    IF ftpData.callersLog      
+      callersLog(ftpData,'\tUpload Failed..')
+      StringF(temp,'\tInvalid filename \s',filename)
+      callersLog(ftpData,temp)
     ENDIF
     RETURN
   ENDIF
@@ -1079,7 +1144,7 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
     StringF(fn,'\s\s',ftpData.uploadPath,filename)
     StringF(temp,'150 Opening \s connection\b\n',IF (ftpData.transType="I") THEN 'Binary' ELSE 'Ascii')
     writeLineEx(sb,ftp_c,temp)
-    
+
     IF asynclib<>NIL
       fh:=OpenAsync(fn,MODE_APPEND,32768)
     ELSE
@@ -1451,7 +1516,7 @@ PROC mainFtpLoop(sb,ftp_c,ftpData:PTR TO ftpData)
   DEF r
   DEF data_s=-1,data_c=-1
    
-  WHILE((readLine(ftpData,sb,ftp_c, request, MAX_LINE-1) > 0) AND (StrCmp(request, 'QUIT', 4)=FALSE)) AND (CtrlC()=FALSE)
+  WHILE(((readLine(ftpData,sb,ftp_c, request, MAX_LINE-1)) > 0) AND (StrCmp(request, 'QUIT', 4)=FALSE)) AND (CtrlC()=FALSE)
     StringF(string,'\tFTP Command >: \s',request)
     IF ftpData.callersLog
       callersLog(ftpData,string)    
@@ -1534,7 +1599,7 @@ PROC mainFtpLoop(sb,ftp_c,ftpData:PTR TO ftpData)
       writeLineEx(sb,ftp_c, '500 command not recognized\b\n')
       ->WriteF('UNKNOWN command: \s\b\n', request);
     ENDIF
-    ->IF errno<>0 THEN WriteF('error \d\b\n',errno)    
+    ->IF errno<>0 THEN WriteF('error \d\b\n',errno)
   ENDWHILE
   writeLineEx(sb,ftp_c, '200 Byebye!\b\n')
   
@@ -1682,6 +1747,9 @@ EXPORT PROC ftpServerMode(ftp_c,ftpHost:PTR TO CHAR,confNames:PTR TO stringlist,
   ftpData.currentConf:=0
   ftpData.processMessages:=ftpProcessMessagesPtr
   ftpData.getSigs:=ftpGetSigsPtr
+  ftpData.setReuseAddr:=TRUE
+
+  IF ListLen(ftpDataPorts)>0 THEN testSocket(socketbase,ftpData,ftpDataPorts[0])
 
   StrCopy(ftpData.hostName,ftpHost)
   
@@ -1769,6 +1837,7 @@ EXPORT PROC doftp(node,ftphost,ftpports:PTR TO LONG,ftpdataports:PTR TO LONG,fil
   ftpData.callersLog:=NIL
   ftpData.processMessages:=ftpProcessMessages
   ftpData.getSigs:=ftpGetSigs
+  ftpData.setReuseAddr:=TRUE
 
   IF uploadMode
     ftpData.ftpDir:={myDir}
@@ -1783,6 +1852,8 @@ EXPORT PROC doftp(node,ftphost,ftpports:PTR TO LONG,ftpdataports:PTR TO LONG,fil
   
 	sb:=OpenLibrary('bsdsocket.library',2)
 	IF (sb)
+    testSocket(sb,ftpData,ftpports[0])
+    
     i:=0
     REPEAT
       port:=ftpports[i]

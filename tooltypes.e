@@ -168,7 +168,7 @@ EXPORT PROC readToolType(toolType,tooltypeSelector,key,outValue)
   ELSE
     IF tooltypeSelector=TOOLTYPE_CONF
       key--
-      IF key<(ListLen(memConf)-1) THEN memConf[key]:=do
+      IF memConf ANDALSO (key<(ListLen(memConf)-1)) THEN memConf[key]:=do
     ENDIF
   ENDIF
 ENDPROC s<>NIL
@@ -334,7 +334,7 @@ EXPORT PROC clearDiskObjectCache()
   DEF i, do: PTR TO diskobject
   DEF mem
   
-  FOR i:=0 TO ListLen(memConf)-1 DO memConf[i]:=0
+  IF memConf THEN FOR i:=0 TO ListLen(memConf)-1 DO memConf[i]:=0
   IF diskObjectCache=NIL THEN RETURN
   FOR i:=0 TO diskObjectCache.count()-1
     IF (cacheObj:=diskObjectCache.item(i))

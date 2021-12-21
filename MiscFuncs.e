@@ -5,6 +5,25 @@
   MODULE 'dos/dos','dos/dosextens','dos/datetime'
   MODULE '*axenums','*axconsts','*axobjects','*errors'
 
+EXPORT PROC setSingleFDS(fds:PTR TO LONG,socketVal)
+  DEF i,n
+  
+  n:=(socketVal/32)
+  IF (n<0) OR (n>=32) THEN Raise(ERR_FDSRANGE)
+  
+  FOR i:=0 TO 31 DO fds[i]:=0
+  fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
+ENDPROC
+
+EXPORT PROC setFDS(fds:PTR TO LONG,socketVal)
+  DEF n
+  
+  n:=(socketVal/32)
+  IF (n<0) OR (n>=32) THEN Raise(ERR_FDSRANGE)
+  
+  fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
+ENDPROC
+
 EXPORT PROC getFileSize(s: PTR TO CHAR)
 /* returns the file size of a given file or 8192 if an error occured */
   DEF fBlock: fileinfoblock
@@ -98,6 +117,26 @@ EXPORT PROC makeIntList(src:PTR TO CHAR)
   DisposeLink(tmp)
   
 ENDPROC res
+
+EXPORT PROC upperChars(s:PTR TO CHAR)
+  DEF c
+  WHILE s[]<>0
+    c:=s[]
+    IF (c>="a") AND (c<="z") THEN s[]:=c AND $DF
+    s++
+  ENDWHILE
+ENDPROC
+
+EXPORT PROC removeSlashes(str:PTR TO CHAR)
+  DEF s,i
+  s:=String(StrLen(str))
+  FOR i:=0 TO StrLen(str)-1
+    CONT str[i]="/"
+    StrAddChar(s,str[i])
+  ENDFOR
+  StrCopy(str,s)
+  DisposeLink(s)
+ENDPROC
 
 EXPORT PROC midStr2(dest,src,pos,len)
   IF len>0 THEN MidStr(dest,src,pos,len) ELSE StrCopy(dest,'')
@@ -413,6 +452,14 @@ ENDPROC Mul(year,10000)+Mul(month,100)+day
 
 EXPORT PROC isupper(c)
 ENDPROC (c>="A") AND (c<="Z")
+
+EXPORT PROC fastSystemTime()
+  DEF currDate: datestamp
+  DEF startds:PTR TO datestamp
+
+  startds:=DateStamp(currDate)
+
+ENDPROC Mul(startds.minute,3000)+startds.tick
 
 ->returns system date converted to c time format
 EXPORT PROC getSystemDate()

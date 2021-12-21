@@ -391,6 +391,15 @@ PROC countTags(tags:PTR TO LONG)
   n++
 ENDPROC
 
+PROC calcEfficiency(cps,baud)
+  DEF res
+  IF cps>21474836
+    res:=Mul(Div(cps,Div(baud,10)),100)
+  ELSE
+    res:=Div(Mul(cps,100),Div(baud,10))
+  ENDIF
+ENDPROC res
+
 PROC configFileExists(fname:PTR TO CHAR)
   DEF lh
   DEF fn[255]:STRING
@@ -2875,7 +2884,7 @@ PROC telnetConnect(host:PTR TO CHAR,port)
   aePuts(tempstr)
 
   IoctlSocket(s,FIONBIO,[1])
-  setSingleFDS(s)
+  setSingleFDS(fds,s)
 
   Connect(s,sa,SIZEOF sockaddr_in)
     
@@ -2919,8 +2928,8 @@ PROC telnetConnect(host:PTR TO CHAR,port)
     IF consoleReadMP<>NIL THEN sigs:=sigs OR Shl(1,consoleReadMP.sigbit)
     IF serialReadMP<>NIL THEN sigs:=sigs OR Shl(1,serialReadMP.sigbit)
     IF resmp<>NIL THEN sigs:=sigs OR Shl(1,resmp.sigbit)
-    n:=setSingleFDS(s)
-    IF telnetSocket>=0 THEN setFDS(telnetSocket)
+    n:=setSingleFDS(fds,s)
+    IF telnetSocket>=0 THEN setFDS(fds,telnetSocket)
     tv.secs:=1
     tv.micro:=0
     n:=WaitSelect(Max(s,telnetSocket)+1,fds,NIL,NIL,tv,{sigs})
@@ -7077,7 +7086,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
   
     IF telnetSocket>=0
       REPEAT
-        setSingleFDS(telnetSocket)
+        setSingleFDS(fds,telnetSocket)
         signals:=SIGBREAKF_CTRL_C OR consolesig OR windowsig OR cxsigflag OR doorsig OR rexxsig OR serialsig OR timersig OR extsig
         WaitSelect(telnetSocket+1,fds,NIL,NIL,NIL,{signals})
         IF checkTelnetData()
@@ -8185,11 +8194,11 @@ PROC relConf(cn)
   ENDWHILE
 ENDPROC count
 
-PROC getInverse(cn)
+PROC getInverse(cn,force=FALSE)
   DEF i=0
   DEF j=0
   IF(cn<1) THEN RETURN 0
-  IF(sopt.toggles[TOGGLES_CONFRELATIVE]=FALSE) THEN RETURN cn
+  IF (force=FALSE) AND (sopt.toggles[TOGGLES_CONFRELATIVE]=FALSE) THEN RETURN cn
     WHILE(i<cn)
       IF(j<cmds.numConf)
        IF(checkConfAccess(j+1)) THEN i++
@@ -13518,7 +13527,7 @@ PROC xprsread()
     c2:=0
     REPEAT
       IF timeout<>0
-      setSingleFDS(telnetSocket)
+      setSingleFDS(fds,telnetSocket)
       res:=WaitSelect(telnetSocket+1,fds,NIL,NIL,tv,NIL)
       ENDIF
       IF (timeout=0) OR (res>0)
@@ -13916,7 +13925,7 @@ PROC xprupdate()
   IF(xpru.xpru_updatemask AND XPRU_DATARATE)<>0
     IF xpru.xpru_datarate<>-1
       zModemInfo.cps:=xpru.xpru_datarate
-      zModemInfo.eff:=Div(Mul(zModemInfo.cps,100),Div(onlineBaud,10))
+      zModemInfo.eff:=calcEfficiency(zModemInfo.cps,onlineBaud)
     ENDIF
   ENDIF
 
@@ -14549,11 +14558,9 @@ PROC ftpDownloadFileStart(fileName:PTR TO CHAR,filelen)
   zModemInfo.cps:=0
   updateZDisplay()
 
-  IF ftpConn
-    StringF(tempStr,'\t\sDownloading \s \d bytes',IF zModemInfo.freeDFlag THEN 'Free ' ELSE '',fileName,zModemInfo.filesize)
-    callersLog(tempStr)
-    udLog(tempStr)
-  ENDIF
+  StringF(tempStr,'\t\sDownloading \s \d bytes',IF zModemInfo.freeDFlag THEN 'Free ' ELSE '',fileName,zModemInfo.filesize)
+  callersLog(tempStr)
+  udLog(tempStr)
 
 ENDPROC
 
@@ -14613,6 +14620,8 @@ PROC ftpGetPath(conf,path:PTR TO CHAR)
   DEF mystat
   DEF string[255]:STRING
   DEF tempstr[255]:STRING
+
+  conf:=getInverse(conf,TRUE)
 
   IF (msgBaseNum<1 ) OR (msgBaseNum>getConfMsgBaseCount(conf)) THEN msgBaseNum:=1
   currentConf:=conf
@@ -14688,7 +14697,7 @@ ENDPROC path
 PROC ftpTransferFileProgress(fileName:PTR TO CHAR,pos,cps)
   zModemInfo.transPos:=pos
   zModemInfo.cps:=cps
-  zModemInfo.eff:=Div(Mul(zModemInfo.cps,100),Div(onlineBaud,10))
+  zModemInfo.eff:=calcEfficiency(zModemInfo.cps,onlineBaud)
   updateZDisplay()
 ENDPROC
 
@@ -14904,7 +14913,9 @@ PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPorts,ftpDataPorts)
   flushSerialCache()
   serialCacheEnabled:=FALSE
   IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPHOST',tempstr)=FALSE
-    StrCopy(tempstr,'localhost')
+    IF readToolType(TOOLTYPE_BBSCONFIG,'','FTPHOST',tempstr)=FALSE
+      StrCopy(tempstr,'127.0.0.1')
+    ENDIF
   ENDIF
 
   doftp(node,tempstr,ftpPorts,ftpDataPorts,NIL,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},authPtr,{processMessages},{getSigs},TRUE)
@@ -14918,10 +14929,6 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
 
   IF checkToolTypeExists(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPAUTH') THEN authPtr:={ftpAuth}
 
-  IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPHOST',tempstr)=FALSE
-    StrCopy(tempstr,'localhost')
-  ENDIF
-
   zModemInfo.current:=0
   zModemInfo.fileList:=fileList
   
@@ -14932,6 +14939,12 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
   flushSerialCache()
   serialCacheEnabled:=FALSE
   
+  IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPHOST',tempstr)=FALSE
+    IF readToolType(TOOLTYPE_BBSCONFIG,'','FTPHOST',tempstr)=FALSE
+      StrCopy(tempstr,'127.0.0.1')
+    ENDIF
+  ENDIF
+
   doftp(node,tempstr,ftpPorts,ftpDataPorts,fileList,'',{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},authPtr,{processMessages},{getSigs},FALSE)
   serialCacheEnabled:=oldSerCache
 
@@ -15035,6 +15048,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
       openZmodemStat()
     ENDIF
     result:=ftpDownload(fileList,updateDownloadStats,ftpPorts,ftpDataPorts)
+    zModemInfo.currentOperation:=ZMODEM_NONE
     closezModemStats()
     DisposeLink(ftpPorts)
     DisposeLink(ftpDataPorts)
@@ -15056,8 +15070,14 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
     ENDIF
     result:=httpDownload(fileList,updateDownloadStats,httpPorts)
     closezModemStats()
+    zModemInfo.currentOperation:=ZMODEM_NONE
     DisposeLink(httpPorts)
     RETURN result
+  ENDIF
+
+  IF (logonType<>LOGON_TYPE_REMOTE)
+    aePuts('\b\nNot supported locally...')
+    RETURN 0
   ENDIF
 
   IF(StriCmp(protocol,'INTERNAL'))
@@ -15552,7 +15572,7 @@ PROC zmprogress(pos,cnt,filesize,s1,s2,errors,startpos,filename:PTR TO CHAR,newf
   AstrCopy(zModemInfo.fileName,filename,255)
 
   zModemInfo.cps:=n
-  zModemInfo.eff:=Div(Mul(zModemInfo.cps,100),Div(onlineBaud,10))
+  zModemInfo.eff:=calcEfficiency(zModemInfo.cps,onlineBaud)
 
   IF pos>=0
     zModemInfo.transPos:=pos
@@ -15653,7 +15673,7 @@ testiac3:
 buffempty:
   tv.secs:=timeout
   tv.micro:=0
-  setSingleFDS(telnetSocket)
+  setSingleFDS(fds,telnetSocket)
   res:=WaitSelect(telnetSocket+1,fds,NIL,NIL,tv,NIL)
 
   bufferReadOffset:=0
@@ -15706,7 +15726,7 @@ redo1:
     ELSE
       tv.secs:=timeout
       tv.micro:=0
-      setSingleFDS(telnetSocket)
+      setSingleFDS(fds,telnetSocket)
       res:=WaitSelect(telnetSocket+1,fds,NIL,NIL,tv,NIL)
 
       bufferReadOffset:=0
@@ -15808,7 +15828,7 @@ PROC zmdatawaiting(timeout)
   IF timeout=0 THEN RETURN FALSE
 
   IF telnetSocket>=0  
-    setSingleFDS(telnetSocket)
+    setSingleFDS(fds,telnetSocket)
     tv.secs:=timeout
     tv.micro:=0
     WaitSelect(telnetSocket+1,fds,NIL,NIL,tv,NIL)
@@ -15950,6 +15970,10 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   DEF ext=TRUE
   DEF bgStack
 
+  ObtainSemaphore(bgData)
+  bgData.checkedCount:=0
+  bgData.checkedBytes:=0
+  ReleaseSemaphore(bgData)
 
   IF (forceZmodem) OR (loggedOnUser=NIL)
     StrCopy(protocol,'INTERNAL')
@@ -16017,7 +16041,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     checkOffhookFlag()
     receivePlayPen(TRUE)
     IF (tBT>0) AND (tTTM>0)
-      tTEFF:=Div(Mul(Div(tBT,tTTM),100),Div(onlineBaud,10))
+      tTEFF:=calcEfficiency(Div(tBT,tTTM),onlineBaud)
     ELSE
       tTEFF:=0
     ENDIF
@@ -16042,7 +16066,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     checkOffhookFlag()
     receivePlayPen(TRUE)
     IF (tBT>0) AND (tTTM>0)
-      tTEFF:=Div(Mul(Div(tBT,tTTM),100),Div(onlineBaud,10))
+      tTEFF:=calcEfficiency(Div(tBT,tTTM),onlineBaud)
     ELSE
       tTEFF:=0
     ENDIF
@@ -16179,11 +16203,6 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
 
   cancelTransferOffHook:=FALSE
 
-  ObtainSemaphore(bgData)
-  bgData.checkedCount:=0
-  bgData.checkedBytes:=0
-  ReleaseSemaphore(bgData)
-
   IF loggedOnUserKeys<>NIL
     IF bgFileCheck AND ((loggedOnUserKeys.userFlags AND USER_BGFILECHECK) OR (checkToolTypeExists(TOOLTYPE_NODE,node,'FORCE_BGFILECHECK')))
       bgChecking:=TRUE
@@ -16257,7 +16276,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   IF ext THEN receivePlayPen(FALSE)
   
   IF (tBT>0) AND (tTTM>0)
-    tTEFF:=Div(Mul(Div(tBT,tTTM),100),Div(onlineBaud,10))
+    tTEFF:=calcEfficiency(Div(tBT,tTTM),onlineBaud)
   ELSE
     tTEFF:=0
   ENDIF
@@ -16927,8 +16946,11 @@ PROC receivePlayPen(log)
   DEF cnt = 0
   DEF tempstr[255]:STRING
 
-  onlineNFiles:=0
-  tBT:=0
+  ObtainSemaphore(bgData)
+  onlineNFiles:=bgData.checkedCount
+  tBT:=bgData.checkedBytes
+  ReleaseSemaphore(bgData)
+
   recFileNames.clear()
 
   IF(StrLen(sopt.ramPen)>0) THEN StrCopy(tempstr,sopt.ramPen) ELSE StringF(tempstr,'\sNode\d/Playpen/',cmds.bbsLoc,node)
@@ -17308,7 +17330,7 @@ PROC checkForFile(fn: PTR TO CHAR)
   DEF x
 
   IF((InStr(fn,'%')>=0) OR ((InStr(fn,'#'))>=0) OR ((InStr(fn,'?'))>=0) OR ((InStr(fn,' '))>=0) OR ((InStr(fn,'/'))>=0) OR
-    ((InStr(fn,'('))>=0) OR ((InStr(fn,')'))>=0)) THEN RETURN RESULT_FAILURE
+    ((InStr(fn,'('))>=0) OR ((InStr(fn,')'))>=0) OR ((InStr(fn,':'))>=0) OR ((InStr(fn,'*'))>=0)) THEN RETURN RESULT_FAILURE
 
   /* here we can add our own file list of files to check */
   IF(StrLen(sopt.filesNot)>0)
@@ -17933,7 +17955,7 @@ PROC uploadaFile(uLFType,cmd,attach)            -> JOE
     pcps:=zModemInfo.cps
   ENDIF
 
-  StringF(string,' \d file(s), \dk bytes, \d minute(s). \d second(s), \d cps, \d% efficiency.',onlineNFiles+bgCnt,Shr(tBT+bgBytes,10) AND $003fffff,Div(tTTM,60),Mod(tTTM,60),pcps,peff)
+  StringF(string,' \d file(s), \dk bytes, \d minute(s). \d second(s), \d cps, \d% efficiency.',onlineNFiles,Shr(tBT,10) AND $003fffff,Div(tTTM,60),Mod(tTTM,60),pcps,peff)
   aePuts(string)
 
   IF (pcps > loggedOnUserKeys.upCPS2)
@@ -17946,7 +17968,6 @@ PROC uploadaFile(uLFType,cmd,attach)            -> JOE
     IF bgCnt>0
       StringF(tempstr,'\b\n\b\n\d files were checked and posted in the background during upload',bgCnt)
       aePuts(tempstr)
-      onlineNFiles:=onlineNFiles+bgCnt
     ENDIF
     bgCnt:=0
   ENDIF
@@ -18687,7 +18708,12 @@ PROC checkRatiosAndTime(minsptr:PTR TO LONG,sizeptr:PTR TO LONG,cntptr:PTR TO LO
   DEF freeDFlag=0
   DEF cb:PTR TO confBase
   
-  tsec:=Div(dtfsize,estDlCPS)
+  tempsize:=0
+  FOR i:=1 TO cmds.numConf
+      tempsize:=tempsize+tfsizes.item(i-1)
+  ENDFOR
+  
+  tsec:=Div(tempsize,estDlCPS)
   min:=tsec/60
   minsptr[]:=min
   
@@ -27267,7 +27293,8 @@ PROC processFtpLoggedOnUser()
   DEF ftpDataPorts:PTR TO LONG
   DEF uploadPath[255]:STRING
   DEF lastDay,currDay
-  DEF currTime
+  DEF currTime,i
+  DEF cnames:PTR TO stringlist
   
   setEnvStat(ENV_IDLE)
 
@@ -27280,10 +27307,6 @@ PROC processFtpLoggedOnUser()
   StrAdd(tempstr,tempstr2)
   ftpDataPorts:=makeIntList(tempstr)
   IF ListLen(ftpDataPorts)=0 THEN ListAddItem(ftpDataPorts,10001+(node*2))
-
-  IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPHOST',tempstr)=FALSE
-    StrCopy(tempstr,'127.0.0.1')
-  ENDIF
 
   IoctlSocket(telnetSocket,FIONBIO,[0])
 
@@ -27331,13 +27354,28 @@ PROC processFtpLoggedOnUser()
 
   IF(StrLen(sopt.ramPen)>0) THEN StrCopy(uploadPath,sopt.ramPen) ELSE StringF(uploadPath,'\sNode\d/Playpen/',cmds.bbsLoc,node)
 
-  IF readToolType(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPHOST',tempstr)=FALSE
-    StrCopy(tempstr,'localhost')
+  cnames:=NEW cnames.stringlist(cmds.numConf)
+  FOR i:=1 TO cmds.numConf
+    IF checkConfAccess(i)
+      IF readToolType(TOOLTYPE_CONF,i,'FTPDIRNAME',tempstr)=FALSE
+        StrCopy(tempstr,confNames.item(i-1))
+      ENDIF
+      removeSlashes(tempstr)
+      cnames.add(tempstr)
+    ENDIF
+  ENDFOR
+
+  IF readToolType(TOOLTYPE_XFERLIB,'FTP','FTPHOST',tempstr)=FALSE
+    IF readToolType(TOOLTYPE_BBSCONFIG,'','FTPHOST',tempstr)=FALSE
+      StrCopy(tempstr,'127.0.0.1')
+    ENDIF
+  ENDIF
+  
+  IF reqState=REQ_STATE_NONE
+    ftpServerMode(telnetSocket,tempstr,cnames,uploadPath,{ftpGetPath},{ftpDupeCheck},{ftpCheckRatio},{ftpUploadFileStart},{ftpDownloadFileStart},{ftpUploadFileEnd},{ftpDownloadFileEnd},{ftpTransferFileProgress},{callersLog},{makeConfFileList},{conPuts},{processMessages},{getSigs},ftpDataPorts)
   ENDIF
 
-  IF reqState=REQ_STATE_NONE
-    ftpServerMode(telnetSocket,tempstr,confNames,uploadPath,{ftpGetPath},{ftpDupeCheck},{ftpCheckRatio},{ftpUploadFileStart},{ftpDownloadFileStart},{ftpUploadFileEnd},{ftpDownloadFileEnd},{ftpTransferFileProgress},{callersLog},{makeConfFileList},{conPuts},{processMessages},{getSigs},ftpDataPorts)
-  ENDIF
+  END cnames
   
   ->CloseSocket(telnetSocket)
   ->telnetSocket:=-1
@@ -29234,25 +29272,6 @@ PROC checkTelnetData()
   ->count:=Recv(telnetSocket,buf,1,MSG_PEEK)
 ENDPROC count>0,count
 
-PROC setSingleFDS(socketVal)
-  DEF i,n
-  
-  n:=(socketVal/32)
-  IF (n<0) OR (n>=32) THEN Raise(ERR_FDSRANGE)
-  
-  FOR i:=0 TO 31 DO fds[i]:=0
-  fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
-ENDPROC
-
-PROC setFDS(socketVal)
-  DEF n
-  
-  n:=(socketVal/32)
-  IF (n<0) OR (n>=32) THEN Raise(ERR_FDSRANGE)
-  
-  fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
-ENDPROC
-
 PROC updateVersion(expVer:PTR TO CHAR,expDate:PTR TO CHAR)
   DEF v,p
   DEF y,m,d
@@ -29905,8 +29924,6 @@ PROC main() HANDLE
   ENDIF
 
   END recFileNames
-
-  DisposeLink(memConf)
   END confNames
   END confDirs
   END olmBuf
@@ -29920,6 +29937,7 @@ PROC main() HANDLE
 
   clearDiskObjectCache()
   IF diskObjectCache<>NIL THEN END diskObjectCache
+  DisposeLink(memConf)
 
   END skipdFiles
 
@@ -29935,6 +29953,9 @@ PROC main() HANDLE
 
   cleanupssl()
   END mailOptions
+  
+  IF socketbase<>NIL THEN CloseLibrary(socketbase)
+  socketbase:=NIL
   
   closeExpressScreen()
   IF iconbase THEN CloseLibrary(iconbase)
