@@ -86,6 +86,7 @@ DEF nodeWorkDir[255]:STRING
 DEF reservedName[255]:STRING
 DEF consoleOutputDeviceName[255]:STRING
 DEF consoleInputDeviceName[255]:STRING
+DEF bgCheckPortName[20]:STRING
 
 DEF currentConf=0 ->shared with tooltypes.e
 DEF currentMsgBase=0
@@ -505,10 +506,13 @@ ENDPROC
 
 PROC updateTimeUsed()
   DEF currDay,logonDay,currTime
+  DEF string[255]:STRING
   currTime:=getSystemTime()
   currDay:=Div(currTime-21600,86400)
   logonDay:=Div(logonTime-21600,86400)
   IF (currDay<>logonDay)
+    StringF(string,'timeused debug: \s new day reset,  currday \d, lastday \d',loggedOnUser.name, currDay,logonDay)
+    debugLog(LOG_DEBUG,string)
     loggedOnUser.timeTotal:=loggedOnUser.timeLimit
     loggedOnUser.dailyBytesDld:=0
     loggedOnUser.timeUsed:=0
@@ -662,7 +666,7 @@ PROC openSerial(baud, dataLen, stopBits)
 
   IF(StrLen(cmds.serDev)>0)
     IF (serialCacheSize>0) THEN serialCache:=New(serialCacheSize+1)
-    serialCacheLastFlush1,serialCacheLastFlush2:=getSystemTime2()
+    serialCacheLastFlush1,serialCacheLastFlush2:=getSystemTime()
 
     IF (serialCacheSize<=0) OR (serialCache<>NIL)
       IF(serialReadMP:=createPort(0,0))
@@ -1265,8 +1269,8 @@ PROC checkDoorMsg(mode)
         quietFlag:=Not(quietFlag)
         sendQuietFlag(quietFlag)
       CASE SV_SETNRAMS
-        type:=servermsg.msg.ln.type
         ReplyMsg(servermsg)
+        type:=servermsg.msg.ln.type
         IF type=NT_FREEMSG THEN FreeMem(servermsg,servermsg.msg.length)
         servermsg:=NIL
         setNRAMS()
@@ -1341,8 +1345,8 @@ PROC checkDoorMsg(mode)
         acceptIncomingConnection(servermsg.data,TRUE)
     ENDSELECT
     IF servermsg<>NIL
-      type:=servermsg.msg.ln.type
       ReplyMsg(servermsg)
+      type:=servermsg.msg.ln.type
       IF type=NT_FREEMSG THEN FreeMem(servermsg,servermsg.msg.length)
     ENDIF
   ENDWHILE
@@ -1539,7 +1543,7 @@ PROC flushSerialCache()
         DoIO(serialWriteIO)
       ENDIF
       serialCacheCurrentSize:=0
-      serialCacheLastFlush1,serialCacheLastFlush2:=getSystemTime2()
+      serialCacheLastFlush1,serialCacheLastFlush2:=getSystemTime()
     ENDIF
   ENDIF
 ENDPROC
@@ -1591,7 +1595,7 @@ PROC serPuts(string: PTR TO CHAR, putlen=-1,binary=FALSE, force=FALSE)
 
       serFlushTime:=0
       IF serialCacheEnabled
-        tempTime1,tempTime2:=getSystemTime2()
+        tempTime1,tempTime2:=getSystemTime()
 
         ->calculate ticks (50ths of a second) since last cache flush
         serFlushTime:=Mul(tempTime1-serialCacheLastFlush1,50)+tempTime2-serialCacheLastFlush2
@@ -6195,7 +6199,8 @@ PROC translateText(textstring)
   DEF i
   DEF cnt=0, translated
 
-  sourceText:=StrClone(textstring)
+  sourceText:=String(StrLen(textstring))
+  StrCopy(sourceText,textstring)
 
   trans:=translators
   IF translatorMode=TRANS_HOST_TO_DEFINED
@@ -7944,14 +7949,7 @@ PROC myDirDisplay(f_info: PTR TO fileinfoblock)
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
 
-  t:=Mul(f_info.datestamp.days+2914,86400)
-  t:=t+(Mul(f_info.datestamp.minute,60))
-  t:=t+712800
-  h:=(Div(f_info.datestamp.minute,60))
-  m:=((f_info.datestamp.minute)-(Mul(h,60)))
-  s:=(Div(f_info.datestamp.tick,50))
-  t:=t+s
-  t:=t-21601
+  t:=dateStampToDateTime(f_info.datestamp)
 
   formatLongDateTime(t,date)
 
@@ -12210,26 +12208,13 @@ PROC displayULStats(u: PTR TO user, um:PTR TO userMisc)
   aePuts(string)
 ENDPROC
 
-PROC checkForFileSize(checkFilename:PTR TO CHAR, checkConfNum, tfsizeList:PTR TO stdlist, freeDFlagList:PTR TO stdlist, cfn:PTR TO stdlist, z)
-
-  DEF stat,pstat=1
-  DEF fflag=0,wflag=0,doflag=0
+PROC checkFIBForFileSize(fullPath:PTR TO CHAR, checkConfNum, fBlock:PTR TO fileinfoblock,tfsizeList:PTR TO stdlist,freeDFlagList:PTR TO stdlist, cfn:PTR TO stdlist,z)
   DEF tsec,min,secs
-  DEF path[255]:STRING,str[255]:STRING,final[255]:STRING,tempstr[100]:STRING,tempstr2[100]:STRING, p,dp
-  DEF fname1[255]:STRING,fname2[255]:STRING
-  DEF clog[200]:STRING
-  DEF ft
-
-  DEF fBlock: PTR TO fileinfoblock
-  DEF flagFile:PTR TO flagFileItem
-  DEF fLock=0
-  DEF drivenum
-  DEF ramDir[255]:STRING
-  DEF patternBuf,patBufLen
-  DEF debugcount
   DEF estDlCPS
-
-  IF checkConfNum=-1 THEN checkConfNum:=currentConf
+  DEF str[255]:STRING
+  DEF clog[200]:STRING
+  DEF flagFile:PTR TO flagFileItem
+  DEF dp, p
 
   IF loggedOnUserMisc.lastDlCPS<>0
     estDlCPS:=loggedOnUserMisc.lastDlCPS
@@ -12237,8 +12222,73 @@ PROC checkForFileSize(checkFilename:PTR TO CHAR, checkConfNum, tfsizeList:PTR TO
     estDlCPS:=Div(onlineBaud,10)
   ENDIF
 
-  FOR min:=0 TO StrLen(checkFilename)-1
-    IF((checkFilename[min]="?") OR (checkFilename[min]="*")) THEN wflag:=1
+  fsize:=fBlock.size
+  tsec:=Div(fsize,estDlCPS)
+  min:=tsec/60
+  secs:=tsec-(min*60)
+  IF ftpConn=FALSE
+    StringF(str,' \r\dk, \d mins \z\r\d[2] secs \s\t',Shr(fsize,10) AND $003fffff,min,secs,fBlock.filename)
+    ->IF(str[16]=" ") THEN SetStr(str,16)
+    aePuts(str)
+  ENDIF
+  IF((fBlock.comment[0]="F") OR (freeDownloads))
+    IF ftpConn=FALSE THEN aePuts('  >>Free Download!\b\n')
+    IF tfsizeList<>NIL THEN tfsizeList.setItem(checkConfNum-1,tfsizeList.item(checkConfNum-1)-fsize)
+  ELSE
+    IF freeDFlagList<>NIL THEN freeDFlagList.setItem(checkConfNum-1,freeDFlagList.item(checkConfNum-1)+1)
+    IF ftpConn=FALSE THEN aePuts('\b\n')
+  ENDIF
+  IF((z<>1) OR sysopdl)
+    IF(StriCmp(fBlock.comment,'Restricted',10))
+     IF ftpConn=FALSE THEN aePuts('    >>Restricted File<< Updating CallersLog\b\n')
+     StringF(clog,'\t\tAttempt to download RESTRICTED file [\s]',fullPath)
+     callersLog(clog)
+     RETURN -1
+    ENDIF
+
+    IF((dp:=isInList(cfn,fullPath,checkConfNum)))=FALSE
+      numFiles++
+      flagFile:=NEW flagFile
+      flagFile.confNum:=checkConfNum
+      flagFile.fileName:=String(StrLen(fullPath))
+      fullTrim(fullPath,flagFile.fileName)
+      cfn.add(flagFile)
+      IF sysopdl=FALSE
+        IF((p:=isInFlaggedList(fBlock.filename,checkConfNum)))=FALSE
+          addFlagToList(fBlock.filename,checkConfNum)
+        ENDIF
+      ENDIF
+    ELSE
+      IF ftpConn=FALSE THEN aePuts('   File is already selected!\b\n')
+    ENDIF
+  ENDIF
+
+  IF(dp=NIL)
+    IF tfsizeList<>NIL THEN tfsizeList.setItem(checkConfNum-1,tfsizeList.item(checkConfNum-1)+fsize)
+    dtfsize:=dtfsize+fsize
+  ENDIF
+ENDPROC dp
+
+PROC checkForFileSize(checkFilename:PTR TO CHAR, checkConfNum, tfsizeList:PTR TO stdlist, freeDFlagList:PTR TO stdlist, cfn:PTR TO stdlist, z)
+
+  DEF stat,pstat=1,i
+  DEF fflag=0,wflag=0,doflag=0
+  DEF path[255]:STRING,str[255]:STRING,tempstr[100]:STRING,tempstr2[100]:STRING
+  DEF fname1[255]:STRING,fname2[255]:STRING
+  DEF final[255]:STRING
+  DEF ft,dp
+
+  DEF fBlock: PTR TO fileinfoblock
+  DEF fLock=0
+  DEF drivenum
+  DEF ramDir[255]:STRING
+  DEF patternBuf,patBufLen
+  DEF debugcount
+
+  IF checkConfNum=-1 THEN checkConfNum:=currentConf
+
+  FOR i:=0 TO StrLen(checkFilename)-1
+    IF((checkFilename[i]="?") OR (checkFilename[i]="*")) THEN wflag:=1
   ENDFOR
   StrCopy(tempstr2,checkFilename)
   UpperStr(tempstr2)
@@ -12376,53 +12426,14 @@ gotit:
               StrCopy(final,path)
               StrAdd(final,fBlock.filename)
             ENDIF
-            fsize:=fBlock.size
-            tsec:=Div(fsize,estDlCPS)
-            min:=tsec/60
-            secs:=tsec-(min*60)
-            IF ftpConn=FALSE
-              StringF(str,' \r\dk, \d mins \z\r\d[2] secs \s\t',Shr(fsize,10) AND $003fffff,min,secs,fBlock.filename)
-              ->IF(str[16]=" ") THEN SetStr(str,16)
-              aePuts(str)
-            ENDIF
-            IF((fBlock.comment[0]="F") OR (freeDownloads))
-              IF ftpConn=FALSE THEN aePuts('  >>Free Download!\b\n')
-              IF tfsizeList<>NIL THEN tfsizeList.setItem(checkConfNum-1,tfsizeList.item(checkConfNum-1)-fsize)
-            ELSE
-              IF freeDFlagList<>NIL THEN freeDFlagList.setItem(checkConfNum-1,freeDFlagList.item(checkConfNum-1)+1)
-              IF ftpConn=FALSE THEN aePuts('\b\n')
-            ENDIF
-            IF((z<>1) OR sysopdl)
-              IF(StriCmp(fBlock.comment,'Restricted',10))
-               IF ftpConn=FALSE THEN aePuts('    >>Restricted File<< Updating CallersLog\b\n')
-               StringF(clog,'\t\tAttempt to download RESTRICTED file [\s]',checkFilename)
-               callersLog(clog)
-               FreeDosObject(DOS_FIB,fBlock)
-               UnLock(fLock)
-               RETURN 11
-              ENDIF
 
-              IF((dp:=isInList(cfn,final,checkConfNum)))=FALSE
-                numFiles++
-                flagFile:=NEW flagFile
-                flagFile.confNum:=checkConfNum
-                flagFile.fileName:=String(StrLen(final))
-                fullTrim(final,flagFile.fileName)
-                cfn.add(flagFile)
-                IF sysopdl=FALSE
-                  IF((p:=isInFlaggedList(fBlock.filename,checkConfNum)))=FALSE
-                    addFlagToList(fBlock.filename,checkConfNum)
-                  ENDIF
-                ENDIF
-              ELSE
-                IF ftpConn=FALSE THEN aePuts('   File is already selected!\b\n')
-              ENDIF
+            IF (dp:=checkFIBForFileSize(final, checkConfNum, fBlock,tfsizeList,freeDFlagList,cfn, z))=-1
+              FreeDosObject(DOS_FIB,fBlock)
+              UnLock(fLock)
+              RETURN 11
             ENDIF
 
-            IF(dp=NIL)
-              IF tfsizeList<>NIL THEN tfsizeList.setItem(checkConfNum-1,tfsizeList.item(checkConfNum-1)+fsize)
-              dtfsize:=dtfsize+fsize
-            ENDIF
+            
             IF(wflag=0)
               FreeDosObject(DOS_FIB,fBlock)
               UnLock(fLock)
@@ -14512,18 +14523,6 @@ PROC ftpUploadFileEnd(fileName:PTR TO CHAR,success)
       callersLog(str)
       udLog(str)
     ENDFOR
-  
-    IF success
-      //do posting of file
-      transfering:=TRUE
-      bgChecking:=TRUE
-      doBackgroundCheck(fileName)
-      
-      transfering:=FALSE
-      bgChecking:=FALSE
-    ENDIF
-    tidyPlayPen()
-    setEnvStat(ENV_IDLE)
   ENDIF
 ENDPROC
 
@@ -14614,14 +14613,56 @@ PROC ftpDownloadFileEnd(fileName:PTR TO CHAR, result)
   ENDIF
 ENDPROC
 
-PROC ftpGetPath(conf,path:PTR TO CHAR)
+PROC ftpStartFileCheck(filename:PTR TO CHAR,success)
+  DEF bgCheckPort:PTR TO mp
+  DEF msg:PTR TO jhMessage
+ 
+  IF success   
+    bgCheckPort:=createBackgroundFileCheckThread()
+    IF bgCheckPort
+      msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
+      IF msg
+        msg.command:=BG_CHECKFILE_THEN_QUIT
+        AstrCopy(msg.string,FilePart(filename),200)
+        msg.msg.length:=SIZEOF jhMessage
+        ->signal background checking to check the file
+        PutMsg(bgCheckPort,msg)
+      ENDIF
+    ENDIF
+  ENDIF
+ENDPROC
+
+PROC ftpWaitFileCheck(timeout)
+  DEF done
+   
+  IF bgChecking=FALSE
+    done:=TRUE
+  ELSE
+    timeout:=timeout*5
+    done:=FALSE
+    REPEAT
+      IF FindPort(bgCheckPortName)=FALSE THEN done:=TRUE
+      IF done=FALSE
+        Delay(10)
+        timeout--
+      ENDIF
+    UNTIL done OR (timeout=0)
+  ENDIF
+   
+  IF done
+    transfering:=FALSE
+    bgChecking:=FALSE
+    tidyPlayPen()
+    setEnvStat(ENV_IDLE)
+  ENDIF
+ENDPROC done
+
+PROC ftpGetPath(conf,subDir:PTR TO CHAR,path:PTR TO CHAR)
   DEF temp[255]:STRING
   DEF msgBaseNum=1
-  DEF mystat
+  DEF mystat,dirNum
   DEF string[255]:STRING
   DEF tempstr[255]:STRING
-
-  conf:=getInverse(conf,TRUE)
 
   IF (msgBaseNum<1 ) OR (msgBaseNum>getConfMsgBaseCount(conf)) THEN msgBaseNum:=1
   currentConf:=conf
@@ -14684,12 +14725,29 @@ PROC ftpGetPath(conf,path:PTR TO CHAR)
   loggedOnUser.confRJoin:=conf
   loggedOnUser.msgBaseRJoin:=msgBaseNum
   createNodeUserFiles()
+  
+  IF StrLen(subDir)>0
+    dirNum:=1
+    StringF(path,'DLPATH.\d',dirNum++)
+    WHILE(readToolType(TOOLTYPE_CONF,currentConf,path,path))
+      checkPathSlash(path)
+      
+      StringF(temp,'\s\s',path,subDir)
+      IF dirExists(temp) 
+        StrCopy(path,temp)
+        RETURN path
+      ENDIF
 
-  StringF(temp,'ULPATH.\d',1)
-  IF(readToolType(TOOLTYPE_CONF,currentConf,temp,path))
-    checkPathSlash(path)
-  ELSE
+      StringF(path,'DLPATH.\d',dirNum++)
+    ENDWHILE
     StrCopy(path,'')
+  ELSE
+    StringF(temp,'ULPATH.\d',1)
+    IF(readToolType(TOOLTYPE_CONF,currentConf,temp,path))
+      checkPathSlash(path)
+    ELSE
+      StrCopy(path,'')
+    ENDIF
   ENDIF
 ENDPROC path
 
@@ -14746,7 +14804,8 @@ PROC ftpCheckRatio(fileName:PTR TO CHAR,flen,errormsg:PTR TO CHAR)
   zModemInfo.fileList:=fileList
   fileItem:=NEW fileItem
   fileItem.confNum:=currentConf
-  fileItem.fileName:=StrClone(fileName)
+  fileItem.fileName:=String(StrLen(fileName))
+  StrCopy(fileItem.fileName,fileName)
   fileList.add(fileItem)
 
   res:=checkRatiosAndTime({min},{size},{cnt},errormsg,estDlCPS,tfsizes,freeDFlags)
@@ -14767,90 +14826,19 @@ PROC ftpAuth(userName:PTR TO CHAR,password:PTR TO CHAR)
   IF calcPasswordHash(password)<>loggedOnUser.pwdHash THEN RETURN FALSE
 ENDPROC TRUE
 
-PROC makeConfFileList()
+PROC ftpFindFile(filename:PTR TO CHAR,outFullFilename:PTR TO CHAR)
   DEF fileList:PTR TO stdlist
-  DEF dirNum,found=FALSE,spPos
-  DEF dirFile[255]:STRING
-  DEF tempstr[255]:STRING
-  DEF dtStr[20]:STRING
-  DEF startDate,dtcomp1,dtcomp2
-  DEF fh,dayOffset,t
+  DEF fileItem:PTR TO flagFileItem
   
-  dayOffset:=readToolTypeInt(TOOLTYPE_CONF,currentConf,'FTP_DIR_DAYS')
-  IF dayOffset=-1 THEN dayOffset:=10
-  dayOffset:=Mul(dayOffset,86400)
-  
-  startDate:=getSystemDate()-dayOffset
-  formatLongDate(startDate,dtStr)
-  dtcomp1:=getDateCompareVal(dtStr)
-  
-  fileList:=NEW fileList.stdlist(256)
-  IF currentConf>0
-    dirNum:=maxDirs+1
-    REPEAT
-      dirNum--
-      StringF(dirFile,'\sDIR\d',currentConfDir,dirNum)   
-      fh:=Open(dirFile,MODE_OLDFILE)
-      IF fh<>0
-      
-        IF(Fgets(fh,tempstr,255)<>NIL) AND (StrLen(tempstr)>0)
-          tempstr[255]:=0
-          SetStr(tempstr,StrLen(tempstr))
-          IF (tempstr[0]<>32) AND (tempstr[0]<>0) AND (tempstr[0]<>"\n")
-            t:=TrimStr(tempstr+14)
-            spPos:=InStr(t,' ')               
-            StrCopy(dtStr,TrimStr(t+spPos))
-
-            IF (StrLen(dtStr)>=8) AND (dtStr[2]="-") AND (dtStr[5]="-")
-              dtcomp2:=getDateCompareVal(dtStr)
-            
-              IF dtcomp2<dtcomp1 THEN found:=TRUE
-            ENDIF
-          ENDIF
-        ENDIF
-      
-        IF found=FALSE THEN Close(fh)
-      ENDIF
-    UNTIL (found) OR (dirNum=0)
-    
-    IF found
-      WHILE (dirNum<=maxDirs) AND (fh>0)
-        found:=FALSE
-        REPEAT
-          IF StrLen(tempstr)>0
-            IF (tempstr[0]<>32) AND (tempstr[0]<>0) AND (tempstr[0]<>"\n")
-            
-              IF found=FALSE
-                t:=TrimStr(tempstr+14)
-                spPos:=InStr(t,' ')               
-                StrCopy(dtStr,TrimStr(t+spPos))
-                
-                IF (StrLen(dtStr)>=8) AND (dtStr[2]="-") AND (dtStr[5]="-")
-                  dtcomp2:=getDateCompareVal(dtStr)
-                
-                  IF dtcomp2>=dtcomp1 THEN found:=TRUE
-                ENDIF
-              ENDIF
-              
-              IF found
-                spPos:=InStr(tempstr,' ')
-                SetStr(tempstr,spPos)           
-                checkForFileSize(tempstr,-1,NIL,NIL,fileList,0)
-              ENDIF
-            ENDIF
-          ENDIF
-        UNTIL (Fgets(fh,tempstr,255)=0)
-        Close(fh)
-        dirNum++
-        IF dirNum<=maxDirs
-          StringF(dirFile,'\sDIR\d',currentConfDir,dirNum)   
-          fh:=Open(dirFile,MODE_OLDFILE)
-        ENDIF
-      ENDWHILE
-    ENDIF
-    
+  fileList:=NEW fileList.stdlist(1)
+  checkForFileSize(filename,-1,NIL,NIL,fileList,0)
+  IF fileList.count()>0
+    fileItem:=fileList.item(0)   
+    StrCopy(outFullFilename,fileItem.fileName)
   ENDIF
-ENDPROC fileList
+  clearFlagItems(fileList)
+  END fileList
+ENDPROC
 
 PROC updateDownloadStats(fileItem:PTR TO flagFileItem)
   DEF tempsize
@@ -14879,8 +14867,6 @@ PROC updateDownloadStats(fileItem:PTR TO flagFileItem)
         cb.downloads:=cb.downloads+1
       ENDIF
     ENDIF
-    cb.dailyBytesDld:=cb.dailyBytesDld+tempsize
-    IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
     loadMsgPointers(currentConf,currentMsgBase)
   ELSE
     IF(freeDownloads=FALSE)
@@ -14891,15 +14877,16 @@ PROC updateDownloadStats(fileItem:PTR TO flagFileItem)
         loggedOnUser.downloads:=loggedOnUser.downloads+1
       ENDIF
     ENDIF
-    loggedOnUser.dailyBytesDld:=loggedOnUser.dailyBytesDld+tempsize
-    IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
   ENDIF
+  loggedOnUser.dailyBytesDld:=loggedOnUser.dailyBytesDld+tempsize
+  IF bytesADL<>$7fffffff THEN bytesADL:=bytesADL-tempsize
 ENDPROC
 
 PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPorts,ftpDataPorts)
   DEF tempstr[100]:STRING
   DEF oldSerCache
   DEF authPtr=NIL
+  DEF ftpData:PTR TO ftpData
 
   IF checkToolTypeExists(TOOLTYPE_XFERLIB,loggedOnUser.xferProtocol,'FTPAUTH') THEN authPtr:={ftpAuth}
 
@@ -14918,11 +14905,35 @@ PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPorts,ftpDataPorts)
     ENDIF
   ENDIF
 
-  doftp(node,tempstr,ftpPorts,ftpDataPorts,NIL,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},authPtr,{processMessages},{getSigs},TRUE)
+  ftpData:=NEW ftpData
+
+  ftpData.conPuts:=NIL
+  ftpData.aePuts:={aePuts}
+  ftpData.readChar:={readChar}
+  ftpData.sCheckInput:={sCheckInput}
+  ftpData.uploadFileStart:={ftpUploadFileStart}
+  ftpData.uploadFileEnd:={ftpUploadFileEnd}
+  ftpData.uploadFileProgress:={ftpTransferFileProgress}
+  ftpData.downloadFileStart:=NIL
+  ftpData.downloadFileEnd:=NIL
+  ftpData.downloadFileProgress:=NIL
+  ftpData.checkDownloadRatio:=NIL
+  ftpData.fileDupeCheck:={ftpDupeCheck}
+  ftpData.ftpCheckConnection:={checkCarrier}
+  ftpData.ftpAuth:=authPtr
+  ftpData.callersLog:=NIL
+  ftpData.processMessages:={processMessages}
+  ftpData.getSigs:={getSigs}
+
+  doftp(ftpData,node,tempstr,ftpPorts,ftpDataPorts,NIL,uploadFolder,cmds.acLvl[LVL_CAPITOLS_in_FILE]<>0,TRUE)
+
+  END ftpData
+
   serialCacheEnabled:=oldSerCache
 ENDPROC
 
 PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataPorts)
+  DEF ftpData:PTR TO ftpData
   DEF tempstr[255]:STRING
   DEF oldSerCache
   DEF authPtr=NIL
@@ -14945,7 +14956,30 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
     ENDIF
   ENDIF
 
-  doftp(node,tempstr,ftpPorts,ftpDataPorts,fileList,'',{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd},{ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},authPtr,{processMessages},{getSigs},FALSE)
+  ftpData:=NEW ftpData
+
+  ftpData.conPuts:=NIL
+  ftpData.aePuts:={aePuts}
+  ftpData.readChar:={readChar}
+  ftpData.sCheckInput:={sCheckInput}
+  ftpData.uploadFileStart:=NIL
+  ftpData.uploadFileEnd:=NIL
+  ftpData.uploadFileProgress:=NIL
+  ftpData.downloadFileStart:={ftpDownloadFileStart}
+  ftpData.downloadFileEnd:={ftpDownloadFileEnd}
+  ftpData.downloadFileProgress:={ftpTransferFileProgress}
+  ftpData.checkDownloadRatio:=NIL
+  ftpData.fileDupeCheck:={ftpDupeCheck}
+  ftpData.ftpCheckConnection:={checkCarrier}
+  ftpData.ftpAuth:=authPtr
+  ftpData.callersLog:=NIL
+  ftpData.processMessages:={processMessages}
+  ftpData.getSigs:={getSigs}
+
+  doftp(ftpData,node,tempstr,ftpPorts,ftpDataPorts,fileList,'',cmds.acLvl[LVL_CAPITOLS_in_FILE]<>0,FALSE)
+
+  END ftpData
+
   serialCacheEnabled:=oldSerCache
 
 ENDPROC
@@ -15526,24 +15560,24 @@ PROC zmlputs(level, str:PTR TO CHAR)
 ENDPROC
 
 PROC zmprogress(pos,cnt,filesize,s1,s2,errors,startpos,filename:PTR TO CHAR,newfile,blocksize)
-  DEF t1,t2,t,n
+  DEF t1,t2,t,td,n
   DEF h,m,s
   DEF tempStr[255]:STRING
   DEF updateTime
 
   t1,t2:=getZmSystemTime()
-  t:=Mul((t1-s1),50)+t2-s2
+  td:=Mul((t1-s1),50)+t2-s2
   
-  IF (t>50)
+  IF (td>50)
     IF (cnt>40000000)
-      n:=Div(cnt,Div(t,50)) 
+      n:=Div(cnt,Div(td,50)) 
     ELSE
-      n:=Div(Mul(cnt,50),t) 
+      n:=Div(Mul(cnt,50),td) 
     ENDIF
   ELSE
     n:=cnt
   ENDIF
-  t:=Div(t,50)
+  t:=Div(td,50)
   
   h:=Div(t,3600)
   m:=Mod(t,3600)
@@ -15595,7 +15629,7 @@ PROC zmprogress(pos,cnt,filesize,s1,s2,errors,startpos,filename:PTR TO CHAR,newf
 
   updateTime:=getSystemTime()
   IF zModemInfo.lastUpdate<>updateTime
-    updateZDisplay()
+    updateZDisplay()   
     debugLog(LOG_DEBUG,'zmprogress update')
     StringF(tempStr,'current block size: \d',blocksize)
     debugLog(LOG_DEBUG,tempStr)
@@ -15608,7 +15642,7 @@ ENDPROC
 
 PROC zmrecvbyteTelnet(timeout)
   DEF res
-  DEF n,r
+  DEF r
   DEF tv:timeval
   ->DEF sysTime
   
@@ -15678,19 +15712,18 @@ buffempty:
 
   bufferReadOffset:=0
   bufferedBytes:=0
-  n:=zModemBufferSize     
-  REPEAT
-    IF (r:=Recv(telnetSocket,zmodemBuffer+bufferedBytes,n,0))<>-1
+  r:=-1
+  IF res>0
+    IF (r:=Recv(telnetSocket,zmodemBuffer+bufferedBytes,zModemBufferSize,0))<>-1
       bufferedBytes:=bufferedBytes+r
     ENDIF
-    n:=(zModemBufferSize-bufferedBytes)     
-  UNTIL (r=-1) OR (n=0)
+  ENDIF
     
   IF r<=0
-    IF checkCarrier()=FALSE THEN RETURN -1
+    IF (checkCarrier()=FALSE) THEN RETURN -1
   ENDIF
   
-  IF timeout
+  IF bufferedBytes
     SUB.L A0,A0
     MOVE.L bufferedBytes,A1
     MOVE.L zmodemBuffer,A2
@@ -15951,6 +15984,39 @@ ENDPROC res
 PROC zmfirstfile(fname:PTR TO CHAR) IS xprffirst2(fname)
 PROC zmnextfile(fname:PTR TO CHAR) IS xprfnext2(fname)
 
+PROC createBackgroundFileCheckThread()
+  DEF bgCheckPort=0,bgStack
+  DEF tags=NIL:PTR TO LONG
+  DEF proc:PTR TO process
+
+  transfering:=TRUE
+  bgChecking:=TRUE
+  bgStack:=readToolTypeInt(TOOLTYPE_NODE,node,'BGFILECHECKSTACK')
+  IF bgStack<=0 THEN bgStack:=20000
+
+  tags:=NEW [NP_ENTRY,{backgroundFileCheckThread},NP_STACKSIZE,bgStack,TAG_DONE]:LONG
+  Forbid()
+  proc:=CreateNewProc(tags)
+  END tags[countTags(tags)]
+  IF proc<>NIL
+    saveA4thread(proc.task)
+  ELSE
+    transfering:=FALSE
+    bgChecking:=FALSE
+  ENDIF
+  Permit()     
+  bgCheckPort:=FindPort(bgCheckPortName)
+  IF proc<>0
+    IF bgCheckPort=0
+      REPEAT
+        Delay(10)
+        bgCheckPort:=FindPort(bgCheckPortName)
+      UNTIL bgCheckPort<>0
+    ENDIF
+  ENDIF
+    
+ENDPROC bgCheckPort
+
 PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   DEF tempstr[255]:STRING,tempstr2[255]:STRING,debugstr[255]:STRING
   DEF result
@@ -15958,7 +16024,6 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   DEF time1,time2
   DEF oldshared,bgport
   DEF msg:PTR TO jhMessage,tags=NIL:PTR TO LONG
-  DEF proc:PTR TO process
   DEF ftpPorts:PTR TO LONG,ftpDataPorts:PTR TO LONG,httpPorts:PTR TO LONG
   DEF protocol[255]:STRING
   
@@ -15968,7 +16033,6 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   DEF maxBlkSize=1024
   DEF ulTimeTaken
   DEF ext=TRUE
-  DEF bgStack
 
   ObtainSemaphore(bgData)
   bgData.checkedCount:=0
@@ -16205,16 +16269,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
 
   IF loggedOnUserKeys<>NIL
     IF bgFileCheck AND ((loggedOnUserKeys.userFlags AND USER_BGFILECHECK) OR (checkToolTypeExists(TOOLTYPE_NODE,node,'FORCE_BGFILECHECK')))
-      bgChecking:=TRUE
-      bgStack:=readToolTypeInt(TOOLTYPE_NODE,node,'BGFILECHECKSTACK')
-      IF bgStack<=0 THEN bgStack:=20000
-
-      tags:=NEW [NP_ENTRY,{backgroundFileCheckThread},NP_STACKSIZE,bgStack,TAG_DONE]:LONG
-      Forbid()
-      proc:=CreateNewProc(tags)
-      END tags[countTags(tags)]
-      saveA4thread(proc.task)
-      Permit()     
+      createBackgroundFileCheckThread()
     ENDIF
   ENDIF
 
@@ -16245,23 +16300,20 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
 
   IF (loggedOnUserKeys<>NIL) AND (netMailTransfer=FALSE)
       IF bgFileCheck AND ((loggedOnUserKeys.userFlags AND USER_BGFILECHECK) OR (checkToolTypeExists(TOOLTYPE_NODE,node,'FORCE_BGFILECHECK')))
-      StringF(tempstr,'bgCheckPort\d',node)
-      IF (bgport:=FindPort(tempstr))
+      IF (bgport:=FindPort(bgCheckPortName))
         msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
         IF msg
           msg.command:=BG_EXIT
-          msg.msg.ln.type:=NT_FREEMSG
           msg.msg.length:=SIZEOF jhMessage
 
           ->signal background checking to finish
           PutMsg(bgport,msg)
-
-          IF FindPort(tempstr)
+          
+          IF FindPort(bgCheckPortName)<>0
             aePuts('Waiting for background filecheck to complete...\b\n\b\n',TRUE)
-            ->wait for it to finish
-            WHILE FindPort(tempstr)
+            REPEAT
               Delay(10)
-            ENDWHILE
+            UNTIL FindPort(bgCheckPortName)=0
           ENDIF
         ENDIF
       ENDIF
@@ -17392,20 +17444,16 @@ PROC checkInPlaypens(s: PTR TO CHAR)
 ENDPROC 0
 
 PROC doBgCheck()
-  DEF tempstr[255]:STRING
   DEF bgport
   DEF msg:PTR TO jhMessage
   
   IF (zModemInfo.currentOperation=ZMODEM_UPLOAD) AND bgFileCheck AND ((loggedOnUserKeys.userFlags AND USER_BGFILECHECK) OR (checkToolTypeExists(TOOLTYPE_NODE,node,'FORCE_BGFILECHECK')))
       
-
-    StringF(tempstr,'bgCheckPort\d',node)
-    IF (bgport:=FindPort(tempstr))
+    IF (bgport:=FindPort(bgCheckPortName))
       msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
       IF msg
         msg.command:=BG_CHECKFILE
         AstrCopy(msg.string,FilePart(zModemInfo.fileName),200)
-        msg.msg.ln.type:=NT_FREEMSG
         msg.msg.length:=SIZEOF jhMessage
 
         ->signal background checking to check the file
@@ -17417,35 +17465,40 @@ ENDPROC
 
 PROC backgroundFileCheckThread()
   DEF bgCheckPort:PTR TO mp
-  DEF bgCheckPortName[255]:STRING
   DEF msg:PTR TO jhMessage
   DEF exit=FALSE
-  DEF msgcmd
+  DEF msgcmd,type
 
   loadA4thread()
 
-  StringF(bgCheckPortName,'bgCheckPort\d',node)
   bgCheckPort:=createPort(bgCheckPortName,0)
-  WHILE(exit=FALSE)
-    Wait(Shl(1, bgCheckPort.sigbit))
+  IF bgCheckPort
+    WHILE(exit=FALSE)
+      WHILE(msg:=GetMsg(bgCheckPort))
+        msgcmd:=msg.command       
 
-    WHILE(msg:=GetMsg(bgCheckPort))
-      msgcmd:=msg.command
-
-      SELECT msgcmd
-        CASE BG_EXIT
-          exit:=TRUE
-        CASE BG_DONT_EXIT
-          exit:=FALSE
-        CASE BG_CHECKFILE
-          doBackgroundCheck(msg.string)
-      ENDSELECT
-
-      ReplyMsg(msg)
-      IF msg.msg.ln.type=NT_FREEMSG THEN FreeMem(msg,msg.msg.length)
-
+        SELECT msgcmd
+          CASE BG_EXIT
+            exit:=TRUE
+            ReplyMsg(msg)
+            type:=msg.msg.ln.type
+            IF type=NT_FREEMSG THEN FreeMem(msg,msg.msg.length)
+          CASE BG_CHECKFILE
+            doBackgroundCheck(msg.string)
+            ReplyMsg(msg)
+            type:=msg.msg.ln.type
+            IF type=NT_FREEMSG THEN FreeMem(msg,msg.msg.length)
+          CASE BG_CHECKFILE_THEN_QUIT
+            doBackgroundCheck(msg.string)
+            ReplyMsg(msg)
+            type:=msg.msg.ln.type
+            IF type=NT_FREEMSG THEN FreeMem(msg,msg.msg.length)
+            exit:=TRUE
+        ENDSELECT
+      ENDWHILE
+      IF exit=FALSE THEN WaitPort(bgCheckPort)
     ENDWHILE
-  ENDWHILE
+  ENDIF
   deletePort(bgCheckPort)
   Exit(0)
 ENDPROC 0
@@ -21081,7 +21134,7 @@ PROC deleteConfAccess(slot)
         t.bytesUpload:=0
         t.uploadTracking:=0
         t.unused:=0
-        t.dailyBytesDld:=0
+        t.unused2:=0
         t.upload:=0
         t.downloads:=0
         t.ratioType:=0
@@ -22909,7 +22962,6 @@ PROC sendOlmPacket(nodenum,msg:PTR TO CHAR,last)
 
   IF(olmMsg:=AllocMem(256,MEMF_ANY OR MEMF_CLEAR))
     olmMsg.command:=SV_INCOMING_MSG
-    olmMsg.msg.ln.type:=NT_FREEMSG
     olmMsg.nodeID:=node
     olmMsg.msg.length:=256
     olmMsg.msg.replyport:=0
@@ -23846,7 +23898,6 @@ PROC internalCommandNM()
             StringF(str,'AEServer.\d',nd)
             IF (nodeport:=FindPort(str))<>NIL
               serverMsg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
-              serverMsg.msg.ln.type:=NT_FREEMSG     ->this means the receiver should free the memory
               serverMsg.msg.length:=SIZEOF jhMessage
               serverMsg.msg.replyport:=0
               serverMsg.command:=SV_EXITNODE
@@ -23872,7 +23923,6 @@ PROC internalCommandNM()
             StringF(str,'AEServer.\d',nd)
             IF (nodeport:=FindPort(str))<>NIL
               serverMsg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
-              serverMsg.msg.ln.type:=NT_FREEMSG     ->this means the receiver should free the memory
               serverMsg.msg.length:=SIZEOF jhMessage
               serverMsg.msg.replyport:=0
               serverMsg.command:=SV_KICKUSER
@@ -26970,7 +27020,7 @@ PROC processLoggedOnUser()
       loggedOnUser.timeTotal:=loggedOnUser.timeLimit
     ELSE
       loggedOnUserKeys.timesOnToday:=loggedOnUserKeys.timesOnToday+1
-      StringF(string,'timeused debug: \s logon same day,  currday \d, lastday \d, timeused \d',loggedOnUser.name,currDay,lastDay,loggedOnUser.timeUsed)
+      StringF(string,'timeused debug: \s logon same day,  currday \d, lastday \d, timeused \d, todays dl \d',loggedOnUser.name,currDay,lastDay,loggedOnUser.timeUsed,loggedOnUser.dailyBytesDld)
       debugLog(LOG_DEBUG,string)
     ENDIF
 
@@ -27295,6 +27345,9 @@ PROC processFtpLoggedOnUser()
   DEF lastDay,currDay
   DEF currTime,i
   DEF cnames:PTR TO stringlist
+  DEF cdirs:PTR TO stringlist
+  DEF cnums:PTR TO stdlist
+  DEF ftpData:PTR TO ftpData
   
   setEnvStat(ENV_IDLE)
 
@@ -27335,7 +27388,7 @@ PROC processFtpLoggedOnUser()
     loggedOnUser.timeTotal:=loggedOnUser.timeLimit
   ELSE
     loggedOnUserKeys.timesOnToday:=loggedOnUserKeys.timesOnToday+1
-    StringF(tempstr,'timeused debug: \s logon same day,  currday \d, lastday \d, timeused \d',loggedOnUser.name,currDay,lastDay,loggedOnUser.timeUsed)
+    StringF(tempstr,'timeused debug: \s logon same day,  currday \d, lastday \d, timeused \d, todays dl \d',loggedOnUser.name,currDay,lastDay,loggedOnUser.timeUsed,loggedOnUser.dailyBytesDld)
     debugLog(LOG_DEBUG,tempstr)
   ENDIF
 
@@ -27355,13 +27408,17 @@ PROC processFtpLoggedOnUser()
   IF(StrLen(sopt.ramPen)>0) THEN StrCopy(uploadPath,sopt.ramPen) ELSE StringF(uploadPath,'\sNode\d/Playpen/',cmds.bbsLoc,node)
 
   cnames:=NEW cnames.stringlist(cmds.numConf)
+  cdirs:=NEW cdirs.stringlist(cmds.numConf)
+  cnums:=NEW cnums.stdlist(cmds.numConf)
   FOR i:=1 TO cmds.numConf
-    IF checkConfAccess(i)
+    IF checkConfAccess(i) AND (checkToolTypeExists(TOOLTYPE_CONF,i,'EXCLUDE_FTP')=FALSE)
       IF readToolType(TOOLTYPE_CONF,i,'FTPDIRNAME',tempstr)=FALSE
         StrCopy(tempstr,confNames.item(i-1))
       ENDIF
       removeSlashes(tempstr)
       cnames.add(tempstr)
+      cdirs.add(confDirs.item(i-1))
+      cnums.add(i)
     ENDIF
   ENDFOR
 
@@ -27372,10 +27429,40 @@ PROC processFtpLoggedOnUser()
   ENDIF
   
   IF reqState=REQ_STATE_NONE
-    ftpServerMode(telnetSocket,tempstr,cnames,uploadPath,{ftpGetPath},{ftpDupeCheck},{ftpCheckRatio},{ftpUploadFileStart},{ftpDownloadFileStart},{ftpUploadFileEnd},{ftpDownloadFileEnd},{ftpTransferFileProgress},{callersLog},{makeConfFileList},{conPuts},{processMessages},{getSigs},ftpDataPorts)
+  
+    ftpData:=NEW ftpData
+    ftpData.aePuts:=NIL
+    ftpData.conPuts:={conPuts}
+    ftpData.readChar:=NIL
+    ftpData.sCheckInput:=NIL
+    ftpData.getPath:={ftpGetPath}
+    ftpData.findFile:={ftpFindFile}
+    ftpData.checkDownloadRatio:={ftpCheckRatio}
+    ftpData.uploadFileStart:={ftpUploadFileStart}
+    ftpData.uploadFileEnd:={ftpUploadFileEnd}
+    ftpData.uploadFileProgress:={ftpTransferFileProgress}
+    ftpData.downloadFileStart:={ftpDownloadFileStart}
+    ftpData.downloadFileEnd:={ftpDownloadFileEnd}
+    ftpData.downloadFileProgress:={ftpTransferFileProgress}
+    ftpData.callersLog:={callersLog}
+    ftpData.fileDupeCheck:={ftpDupeCheck}
+    ftpData.ftpAuth:=NIL
+    ftpData.processMessages:={processMessages}
+    ftpData.getSigs:={getSigs}
+    ftpData.startFileCheck:={ftpStartFileCheck}
+    ftpData.waitFileCheck:={ftpWaitFileCheck}
+
+    ftpData.confNames:=cnames
+    ftpData.confDirs:=cdirs
+    ftpData.confNums:=cnums
+
+    ftpServerMode(ftpData,telnetSocket,tempstr,uploadPath,ftpDataPorts,cmds.acLvl[LVL_CAPITOLS_in_FILE]<>0)
+    END ftpData
   ENDIF
 
   END cnames
+  END cdirs
+  END cnums
   
   ->CloseSocket(telnetSocket)
   ->telnetSocket:=-1
@@ -29442,6 +29529,8 @@ PROC main() HANDLE
   ENDIF
 
   saveA4()
+
+  StringF(bgCheckPortName,'bgCheckPort\d',node)
 
   createResControl()
   createRexxPort()

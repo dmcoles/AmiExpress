@@ -137,7 +137,7 @@ EXPORT OBJECT confBase
   bytesUpload: LONG
   uploadTracking: INT
   unused: INT
-  dailyBytesDld: LONG
+  unused2:LONG  ->dailyBytesDld: LONG
   upload: INT
   downloads: INT
   ratioType: INT

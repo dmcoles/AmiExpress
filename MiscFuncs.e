@@ -271,6 +271,18 @@ PROC asmputchar()
   MOVE.B D0,(A3)+
 ENDPROC
 
+EXPORT PROC dateStampToDateTime(datestamp:PTR TO datestamp) IS (Mul(Mul(datestamp.days+2922,1440),60)+(datestamp.minute*60)+(datestamp.tick/50))+21600
+
+EXPORT PROC dateTimeToDateStamp(dateVal,datestamp:PTR TO datestamp)
+  dateVal:=dateVal-21600
+
+  datestamp.tick:=(dateVal-Mul(Div(dateVal,60),60))
+  datestamp.tick:=Mul(datestamp.tick,50)
+  dateVal:=Div(dateVal,60)
+  datestamp.days:=Div((dateVal),1440)-2922   ->-2922 days between 1/1/70 and 1/1/78
+  datestamp.minute:=dateVal-(Mul(datestamp.days+2922,1440))
+ENDPROC
+
 EXPORT PROC formatUnsignedLong(val,outStr)
   DEF outputTxt[10]:ARRAY OF CHAR
   
@@ -284,14 +296,8 @@ EXPORT PROC formatLongDate(cDateVal,outDateStr)
   DEF datestr[10]:STRING
   DEF dateVal
 
-  dateVal:=cDateVal-21600
-
   d:=dt.stamp
-  d.tick:=(dateVal-Mul(Div(dateVal,60),60))
-  d.tick:=Mul(d.tick,50)
-  dateVal:=Div(dateVal,60)
-  d.days:=Div((dateVal),1440)-2922   ->-2922 days between 1/1/70 and 1/1/78
-  d.minute:=dateVal-(Mul(d.days+2922,1440))
+  dateTimeToDateStamp(cDateVal,d)
 
   dt.format:=FORMAT_USA
   dt.flags:=0
@@ -311,14 +317,8 @@ EXPORT PROC formatLongTime(cDateVal,outDateStr)
   DEF time[10]:STRING
   DEF dateVal
 
-  dateVal:=cDateVal-21600
-
   d:=dt.stamp
-  d.tick:=(dateVal-Mul(Div(dateVal,60),60))
-  d.tick:=Mul(d.tick,50)
-  dateVal:=Div(dateVal,60)
-  d.days:=Div((dateVal),1440)-2922   ->-2922 days between 1/1/70 and 1/1/78
-  d.minute:=dateVal-(Mul(d.days+2922,1440))
+  dateTimeToDateStamp(cDateVal,d)
 
   dt.format:=FORMAT_USA
   dt.flags:=0
@@ -340,14 +340,8 @@ EXPORT PROC formatLongDateTime(cDateVal,outDateStr)
   DEF timestr[10]:STRING
   DEF dateVal
 
-  dateVal:=cDateVal-21600
-
   d:=dt.stamp
-  d.tick:=(dateVal-Mul(Div(dateVal,60),60))
-  d.tick:=Mul(d.tick,50)
-  dateVal:=Div(dateVal,60)
-  d.days:=Div((dateVal),1440)-2922   ->-2922 days between 1/1/70 and 1/1/78
-  d.minute:=dateVal-(Mul(d.days+2922,1440))
+  dateTimeToDateStamp(cDateVal,d)
 
   dt.format:=FORMAT_DOS
   dt.flags:=0
@@ -369,14 +363,8 @@ EXPORT PROC formatCDateTime(cDateVal,outDateStr)
   DEF timestr[10]:STRING
   DEF dateVal
 
-  dateVal:=cDateVal-21600
-
   d:=dt.stamp
-  d.tick:=(dateVal-Mul(Div(dateVal,60),60))
-  d.tick:=Mul(d.tick,50)
-  dateVal:=Div(dateVal,60)
-  d.days:=Div((dateVal),1440)-2922   ->-2922 days between 1/1/70 and 1/1/78
-  d.minute:=dateVal-(Mul(d.days+2922,1440))
+  dateTimeToDateStamp(cDateVal,d)
 
   dt.format:=FORMAT_DOS
   dt.flags:=0
@@ -397,14 +385,8 @@ EXPORT PROC formatLongDateTime2(cDateVal,outDateStr,seperatorChar)
   DEF timestr[10]:STRING
   DEF dateVal
 
-  dateVal:=cDateVal-21600
-
   d:=dt.stamp
-  d.tick:=(dateVal-Mul(Div(dateVal,60),60))
-  d.tick:=Mul(d.tick,50)
-  dateVal:=Div(dateVal,60)
-  d.days:=Div((dateVal),1440)-2922   ->-2922 days between 1/1/70 and 1/1/78
-  d.minute:=dateVal-(Mul(d.days+2922,1440))
+  dateTimeToDateStamp(cDateVal,d)
 
   dt.format:=FORMAT_USA
   dt.flags:=0
@@ -431,7 +413,25 @@ EXPORT PROC decodeDateStr(datestr:PTR TO CHAR)
   y:=Val(dtstr+6)
 
   IF (y<100) AND (y>TWODIGITYEARSWITCHOVER) THEN y:=1900+y ELSE y:=2000+y
-ENDPROC y,m,d
+ENDPROC m,d,y
+
+EXPORT PROC encodeDate(m,d,y)
+  DEF dt : datetime
+  DEF datestr[20]:STRING
+  DEF r
+  DEF ds:PTR TO datestamp
+  StringF(datestr,'\z\r\d[2]-\z\r\d[2]-\z\r\d[2]',m,d,Mod(y,100))
+
+  dt.format:=FORMAT_USA
+  dt.flags:=0
+  dt.strday:=0
+  dt.strtime:=0
+  dt.strdate:=datestr
+  r:=StrToDate(dt)
+  ds:=dt.stamp
+  ds.minute:=0
+  ds.tick:=0
+ENDPROC dateStampToDateTime(ds)
 
 ->returns a numeric value of the date suitable for comparing to other dates
 EXPORT PROC getDateCompareVal(datestr:PTR TO CHAR)
@@ -469,11 +469,12 @@ EXPORT PROC getSystemDate()
 
   startds:=DateStamp(currDate)
 
-  s4:=(Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50))+21600
+  s4:=dateStampToDateTime(startds)
+  ->s4:=(Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50))+21600
   ->2922 days between 1/1/70 and 1/1/78
 ENDPROC Mul(Div(s4,86400),86400)
 
-->returns system time converted to c time format
+->returns system time converted to c time format and ticks
 EXPORT PROC getSystemTime()
   DEF currDate: datestamp
   DEF startds:PTR TO datestamp
@@ -482,25 +483,6 @@ EXPORT PROC getSystemTime()
   ->2922 days between 1/1/70 and 1/1/78
 
 ENDPROC (Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50))+21600,Mod(startds.tick,50)
-
-->returns system time converted to c time format and ticks
-EXPORT PROC getSystemTime2()
-  DEF currDate: datestamp
-  DEF startds:PTR TO datestamp
-  DEF s1,s2,s3,s4
-
-  startds:=DateStamp(currDate)
-
-  s1:=startds.days+2922
-  s1:=Mul(1440,s1)
-  s1:=Mul(60,s1)
-  s2:=Mul(60,startds.minute)
-  s3:=startds.tick/50
-  s4:=Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50)
-
-  ->2922 days between 1/1/70 and 1/1/78
-
-ENDPROC s4+21600,Mod(startds.tick,50)
 
 EXPORT PROC fileWriteLn(fh,str: PTR TO CHAR)
   DEF stat

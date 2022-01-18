@@ -91,7 +91,7 @@ acpversion.e: verinfogen
 bcd.m:				bcd.e
 							$(compiler) bcd $(options)
 
-ftpd.m:				ftpd.e
+ftpd.m:				ftpd.e tooltypes.m stringlist.m axobjects.m axenums.m miscfuncs.m
 							$(compiler) ftpd $(options)
 
 httpd.m:			httpd.e axcommon.m stringlist.m
