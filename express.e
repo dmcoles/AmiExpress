@@ -2825,7 +2825,7 @@ ENDPROC
 
 PROC telnetConnect(host:PTR TO CHAR,port)
   DEF sa=0:PTR TO sockaddr_in
-  DEF addr: PTR TO LONG
+  DEF addr: LONG
   DEF hostEnt: PTR TO hostent
   DEF tempstr[255]:STRING
   DEF socketLibWasOpen=FALSE
@@ -2862,15 +2862,16 @@ PROC telnetConnect(host:PTR TO CHAR,port)
     RETURN
   ENDIF
   
-  addr:=hostEnt.h_addr_list[]
-  addr:=addr[]
+  
+  addr:=Long(hostEnt.h_addr_list)
+  addr:=Long(addr)
 
   NEW sa
 
   sa.sin_len:=SIZEOF sockaddr_in
   sa.sin_family:=2
   sa.sin_port:=port
-  sa.sin_addr:=addr[]
+  sa.sin_addr:=addr
 
   s:=Socket(AF_INET,SOCK_STREAM,0)
   IF s<0
@@ -5097,7 +5098,7 @@ PROC processMciCmd(mcidata,len,pos,outdata = NIL)
       IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'BD'))
       pos:=pos+2+t
-      StringF(tempstr,'\d',loggedOnUser.dailyBytesLimit)
+      StringF(tempstr,'\d',loggedOnUser.todaysBytesLimit)
       IF outdata=NIL THEN aePuts2(tempstr,maxLen) ELSE StrAdd(outdata,tempstr,maxLen)
     ELSEIF (StrCmp(cmd,'LG')) OR (StrCmp(cmd,'ON'))
       pos:=pos+2+t
@@ -12949,7 +12950,8 @@ PROC sendMasterUpload(filename:PTR TO CHAR)
   IF(sopt.toggles[TOGGLES_MULTICOM])
     ObtainSemaphore(singleNode)
     AstrCopy(singleNode.misc1,FilePart(filename))
-    AstrCopy(singleNode.misc2,'1111')
+    AstrCopy(singleNode.misc2,'')
+    singleNode.misc2[0]:=IF blockOLM THEN 1 ELSE 0
     ReleaseSemaphore(singleNode);
     runExecuteOn('STATUS_CHANGE')
   ENDIF
@@ -12994,6 +12996,8 @@ PROC sendMasterDownload(filename: PTR TO CHAR)
   IF(sopt.toggles[TOGGLES_MULTICOM])
     ObtainSemaphore(singleNode)
     AstrCopy(singleNode.misc1,FilePart(filename))
+    AstrCopy(singleNode.misc2,'')
+    singleNode.misc2[0]:=IF blockOLM THEN 1 ELSE 0
     ReleaseSemaphore(singleNode);
     runExecuteOn('STATUS_CHANGE')
   ENDIF
@@ -13189,8 +13193,8 @@ PROC statPrintUser(hoozer: PTR TO user,hoozer2: PTR TO userKeys,hoozer3: PTR TO 
   StringF(string,'\r\z\d[3]',currentConf)
   statMessage(77,2,string)
 
-  IF (hoozer.dailyBytesLimit<>0)
-    StringF(string,'\l\d[8]',hoozer.dailyBytesLimit)
+  IF (hoozer.todaysBytesLimit<>0)
+    StringF(string,'\l\d[8]',hoozer.todaysBytesLimit)
   ELSE
     StrCopy(string,'Infinite')
   ENDIF
@@ -14751,7 +14755,6 @@ PROC ftpGetPath(conf,subDir:PTR TO CHAR,path:PTR TO CHAR)
   ENDIF
 ENDPROC path
 
-
 PROC ftpTransferFileProgress(fileName:PTR TO CHAR,pos,cps)
   zModemInfo.transPos:=pos
   zModemInfo.cps:=cps
@@ -15666,7 +15669,7 @@ repbuff:
   
 testiac:
   CMP.B #1,D2
-  BNE.S testiac2
+  BNE.S test1  ->testiac2
 
   CMP.B #255,D0
   BNE.S test1
@@ -18466,7 +18469,10 @@ eit:
     tempsize:=Shr(tempsize,10) AND $003fffff
   ENDIF
 
-  IF(lcfile=FALSE) AND (bytesADL<>$7fffffff) THEN bytesADL:=bytesADL+tempsize     /* dont add bytes if files moved to LCFILES DIR */
+  IF(lcfile=FALSE) AND (bytesADL<>$7fffffff)
+    loggedOnUser.todaysBytesLimit:=loggedOnUser.todaysBytesLimit+tempsize
+    bytesADL:=bytesADL+tempsize     /* dont add bytes if files moved to LCFILES DIR */
+  ENDIF
 
   displayULStats(loggedOnUser,loggedOnUserMisc)          /* Show User stats.. Num Dnloads, uploads */
   aePuts('\b\n')
@@ -18617,7 +18623,10 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
               loggedOnUser.bytesUpload:=convertFromBCD(loggedOnUserMisc.uploadBytesBCD)
            ENDIF
           ENDIF
-          IF (bytesADL<>$7fffffff) THEN bytesADL:=bytesADL+fsize
+          IF (bytesADL<>$7fffffff)
+            loggedOnUser.todaysBytesLimit:=loggedOnUser.todaysBytesLimit+fsize
+            bytesADL:=bytesADL+fsize
+          ENDIF
 
 
           formatFileSizeForDirList(fsize,tempstr)
@@ -20391,7 +20400,14 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
           flag:=0
         CASE "Q" /* Daily Bytes Limit */
           aePuts('[11;21H         [11;21H')
+          IF hoozer.todaysBytesLimit<>0
+            temp:=hoozer.todaysBytesLimit-hoozer.dailyBytesLimit
+          ELSE
+            temp:=0
+          ENDIF
           hoozer.dailyBytesLimit:=longNumberInput(hoozer.dailyBytesLimit)
+          hoozer.todaysBytesLimit:=hoozer.dailyBytesLimit
+          IF hoozer.todaysBytesLimit<>0 THEN hoozer.todaysBytesLimit:=hoozer.todaysBytesLimit+temp
           flag:=0
         CASE "R" /* Time_Total */
           aePuts('[12;17H')
@@ -20625,7 +20641,15 @@ ENDPROC RESULT_SUCCESS
 PROC onlineEditor(f6)
   DEF temp,t=0
   DEF str[255]:STRING
+  DEF extraBytes
+  
   temp:=loggedOnUser.timeLimit
+
+  IF loggedOnUser.todaysBytesLimit<>0 
+    extraBytes:=loggedOnUser.todaysBytesLimit-loggedOnUser.dailyBytesLimit
+  ELSE
+    extraBytes:=0
+  ENDIF
 
   StrCopy(str,'\d',loggedOnUser.slotNumber)
   IF runSysCommand('ACCOUNTS',str)<>RESULT_SUCCESS
@@ -20638,9 +20662,11 @@ PROC onlineEditor(f6)
   ENDIF
 
   IF (loggedOnUser.dailyBytesLimit<>0)
-    bytesADL:=loggedOnUser.dailyBytesLimit-loggedOnUser.dailyBytesDld
+    bytesADL:=loggedOnUser.dailyBytesLimit+extraBytes-loggedOnUser.dailyBytesDld
+    loggedOnUser.todaysBytesLimit:=loggedOnUser.dailyBytesLimit+extraBytes
   ELSE
     bytesADL:=$7fffffff
+    loggedOnUser.todaysBytesLimit:=0
   ENDIF
   IF(t) THEN aePuts('\b\nCompleted Edit\b\n')
 ENDPROC
@@ -22302,6 +22328,7 @@ PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO 
   DEF fh,fh2,fh3,v,p
   DEF stat,stat2,stat3,match
   DEF sn=1
+  DEF extraBytes
 
   IF((fh:=Open(userDataFile,MODE_OLDFILE)))=0 THEN RETURN RESULT_FAILURE
 
@@ -22387,7 +22414,16 @@ PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO 
           tempUser.bytesDownload:=convertFromBCD(tempUserMisc.downloadBytesBCD)
         ENDIF
 
-        IF StrLen(settings[8])>0 THEN tempUser.dailyBytesLimit:=Val(settings[8])
+        IF StrLen(settings[8])>0
+          IF tempUser.todaysBytesLimit<>0
+            extraBytes:=tempUser.todaysBytesLimit-tempUser.dailyBytesLimit
+          ELSE
+            extraBytes:=0
+          ENDIF
+          tempUser.dailyBytesLimit:=Val(settings[8])
+          tempUser.todaysBytesLimit:=tempUser.dailyBytesLimit
+          IF tempUser.todaysBytesLimit<>0 THEN tempUser.todaysBytesLimit:=tempUser.todaysBytesLimit+extraBytes
+        ENDIF
         IF StrLen(settings[9])>0 THEN tempUser.timeTotal:=Mul(Val(settings[9]),60)
         IF StrLen(settings[10])>0 THEN tempUser.timeLimit:=Mul(Val(settings[10]),60)
         IF StrLen(settings[11])>0 THEN tempUser.chatLimit:=Mul(Val(settings[11]),60)
@@ -22765,8 +22801,8 @@ PROC fileStatus(opt)
           IF (ca) THEN loadMsgPointers(i,1)
           formatBCD(loggedOnUserMisc.uploadBytesBCD,bytesup)
           formatBCD(loggedOnUserMisc.downloadBytesBCD,bytesdown)
-          IF (loggedOnUser.dailyBytesLimit<>0)
-            formatUnsignedLong((loggedOnUser.dailyBytesLimit-loggedOnUser.dailyBytesDld),bytesavail)
+          IF (loggedOnUser.todaysBytesLimit<>0)
+            formatUnsignedLong((loggedOnUser.todaysBytesLimit-loggedOnUser.dailyBytesDld),bytesavail)
           ELSE
             StrCopy(bytesavail,'Infinite')
           ENDIF
@@ -22845,9 +22881,9 @@ PROC who(opt)
       ReleaseSemaphore(s)
       JUMP whonext
     ENDIF
+    olmBlocked:=s.misc2[0]
     ReleaseSemaphore(s)
 
-    olmBlocked:=s.misc2[0]
     IF olmBlocked THEN StrCopy(chatstr,'[31mNO') ELSE StrCopy(chatstr,'[32mYES')
 
     SELECT status
@@ -22855,7 +22891,7 @@ PROC who(opt)
         StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
         StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','IDLE',chatstr)
       CASE ENV_DOWNLOADING
-        StringF(mes, '[34m| [33m\l\s[20] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
         IF checkSecurity(ACS_HIDE_FILES)
           StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','DOWNLOADING',chatstr)
         ELSEIF(StrLen(fileName)>0)
@@ -22882,59 +22918,86 @@ PROC who(opt)
           StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','MODULE',chatstr)
         ENDIF
       CASE ENV_MAIL
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','READING MAIL',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','READING MAIL',chatstr)
       CASE ENV_STATS
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','REVIEWING STATS',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','REVIEWING STATS',chatstr)
       CASE ENV_ACCOUNT
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ACCOUNT EDITING',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ACCOUNT EDITING',chatstr)
       CASE ENV_ZOOM
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ZOOMING',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ZOOMING',chatstr)
       CASE ENV_FILES
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','VIEWING DIRS',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','VIEWING DIRS',chatstr)
       CASE ENV_BULLETINS
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','READING BULLS',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','READING BULLS',chatstr)
       CASE ENV_VIEWING
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','VIEWING FILES',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','VIEWING FILES',chatstr)
       CASE ENV_ACCOUNTSEQ
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ACCOUNT SEQUENCE',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','')
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ACCOUNT SEQUENCE',chatstr)
       CASE ENV_LOGOFF
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','LOGGING OFF',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','LOGGING OFF',chatstr)
       CASE ENV_SYSOP
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SYSOPING',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SYSOPING',chatstr)
       CASE ENV_SHELL
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','USING SHELL',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','USING SHELL',chatstr)
       CASE ENV_EMACS
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','EDITING',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','EDITING',chatstr)
       CASE ENV_JOIN
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','JOINING CONF',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','JOINING CONF',chatstr)
       CASE ENV_CHAT
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','CHATTING',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','CHATTING',chatstr)
       CASE ENV_NOTACTIVE
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','NODE INACTIVE.',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','')
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','NODE INACTIVE.',chatstr)
       CASE ENV_REQ_CHAT
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','REQUESTING CHAT',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','REQUESTING CHAT',chatstr)
       CASE ENV_CONNECT
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','CONNECTING',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','CONNECTING',chatstr)
       CASE ENV_LOGGINGON
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','LOGGING ON',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','LOGGING ON',chatstr)
       CASE ENV_AWAITCONNECT
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','AWAITING CONNECT',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','')
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','AWAITING CONNECT',chatstr)
       CASE ENV_SCANNING
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SCANNING MAIL',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SCANNING MAIL',chatstr)
       CASE ENV_SHUTDOWN
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SHUTDOWN',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','')
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SHUTDOWN',chatstr)
       CASE ENV_MULTICHAT
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location);StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','MULTICHAT',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','MULTICHAT',chatstr)
       CASE ENV_SUSPEND
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SUSPENDED',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','')
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','SUSPENDED',chatstr)
       CASE ENV_RESERVE
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','RESERVED',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','')
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','RESERVED',chatstr)
       CASE ENV_ONLINEMSG
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ONLINE MESSAGE',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m',name,location)
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','ONLINE MESSAGE',chatstr)
       CASE -1
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','UNAVAILABLE',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','')
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','UNAVAILABLE',chatstr)
       DEFAULT
-        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','');StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','',chatstr)
+        StringF(mes, '[34m| [33m\l\s[19] [34m|[35m \l\s[19] [34m|[0m','','')
+        StringF(mes1,' \l\s[19] [34m|\l\s[9][34m|[0m','',chatstr)
     ENDSELECT
     StringF(mes2,'[34m| [0m\z\r\d[2]',i)
     IF((((status<>27) AND (status<>24) AND (status<>18)) OR checkSecurity(ACS_SYSOP_COMMANDS)) AND (status>=0))
@@ -23979,6 +24042,7 @@ PROC internalCommandOLM(params)
   DEF olmBlocked
   DEF nodenum
   DEF userstatus
+  DEF destNode: PTR TO singlePort
   DEF i
 
   IF((checkSecurity(ACS_OLM))=FALSE) OR (sopt.toggles[TOGGLES_MULTICOM]=FALSE) THEN RETURN RESULT_NOT_ALLOWED
@@ -24021,16 +24085,16 @@ PROC internalCommandOLM(params)
     olmBlocked:=FALSE
     ObtainSemaphore(masterNode)
     IF masterNode.myNode[nodenum]<>NIL
-      singleNode:=masterNode.myNode[nodenum].s
-      IF singleNode<>NIL
-        userstatus:=singleNode.status
-        olmBlocked:=singleNode.misc2[0]
+      destNode:=masterNode.myNode[nodenum].s
+      IF destNode<>NIL
+        userstatus:=destNode.status
+        olmBlocked:=destNode.misc2[0]
       ENDIF
     ENDIF
     ReleaseSemaphore(masterNode)
 
     IF olmBlocked
-      StringF(tempStr,'\b\n[34m*[0m--[33mNODE [0m\d[33m HAS MESSAGES SUPPRESSED[0m--[34m*[0m\b\n',node)
+      StringF(tempStr,'\b\n[34m*[0m--[33mNODE [0m\d[33m HAS MESSAGES SUPPRESSED[0m--[34m*[0m\b\n',nodenum)
       aePuts(tempStr)
     ENDIF
   ENDIF
@@ -24042,7 +24106,7 @@ PROC internalCommandOLM(params)
 
   msgsent:=TRUE
 
-  StringF(tempStr,'\b\n\b\n[34m*[0mOnline Message![0m From Node[32m:[36m( [33m\d[36m )[0m User[32m: [36m[[0m\s[36m][0m\b\n\b\n',node,loggedOnUser.name)
+  StringF(tempStr,'\b\n\b\n[34m*[0mOnline Message![0m From Node[32m:[36m([33m\d[36m)[0m User[32m: [36m[[0m\s[36m][0m\b\n\b\n',node,loggedOnUser.name)
   IF sendOlmPacket(nodenum,tempStr,0)<>RESULT_SUCCESS THEN msgsent:=FALSE
   IF(parsedParams.count()<2)
     FOR i:=0 TO lines-1
@@ -27018,15 +27082,21 @@ PROC processLoggedOnUser()
       loggedOnUser.chatRemain:=loggedOnUser.chatLimit
       loggedOnUser.dailyBytesDld:=0
       loggedOnUser.timeTotal:=loggedOnUser.timeLimit
+      loggedOnUser.todaysBytesLimit:=loggedOnUser.dailyBytesLimit
     ELSE
+      IF loggedOnUser.dailyBytesLimit=0
+        loggedOnUser.todaysBytesLimit:=0
+      ELSE
+        IF loggedOnUser.todaysBytesLimit<loggedOnUser.dailyBytesLimit THEN loggedOnUser.todaysBytesLimit:=loggedOnUser.dailyBytesLimit
+      ENDIF
       loggedOnUserKeys.timesOnToday:=loggedOnUserKeys.timesOnToday+1
       StringF(string,'timeused debug: \s logon same day,  currday \d, lastday \d, timeused \d, todays dl \d',loggedOnUser.name,currDay,lastDay,loggedOnUser.timeUsed,loggedOnUser.dailyBytesDld)
       debugLog(LOG_DEBUG,string)
     ENDIF
 
     timeLimit:=loggedOnUser.timeTotal-loggedOnUser.timeUsed
-    IF (loggedOnUser.dailyBytesLimit<>0)
-      bytesADL:=loggedOnUser.dailyBytesLimit
+    IF (loggedOnUser.todaysBytesLimit<>0)
+      bytesADL:=loggedOnUser.todaysBytesLimit
     ELSE
       bytesADL:=$7fffffff
     ENDIF
@@ -27153,7 +27223,10 @@ PROC processFtpLogon()
   DEF userName[100]:STRING
   DEF password[100]:STRING
   DEF dateStr[30]:STRING
+  DEF tmp[255]:STRING
   DEF tmp2[255]:STRING
+  DEF path[255]:STRING
+  DEF tFShi,tFSlo,fSUploadingHi,fSUploadingLo
 
   binaryRaw:=TRUE
 
@@ -27331,6 +27404,20 @@ PROC processFtpLogon()
     telnetSend(sendStr,EstrLen(sendStr))
     StrCopy(sendStr,'230-\b\n')
     telnetSend(sendStr,EstrLen(sendStr))
+
+
+    tFShi,tFSlo:=freeDiskSpace()                /* check free space - now in mb instead of bytes */
+    IF(tFShi<>RESULT_FAILURE)
+      IF(StrLen(sopt.ramPen)>0) THEN StrCopy(path,sopt.ramPen) ELSE StringF(path,'\sNode\d/Playpen/',cmds.bbsLoc,node)
+
+      fSUploadingHi,fSUploadingLo:=rFreeSpace(path)
+
+      formatSpaceValue(tFShi,tFSlo,tmp)
+      formatSpaceValue(fSUploadingHi,fSUploadingLo,tmp2)
+      StringF(sendStr,'230-\s available for uploading.  \s at one time.\b\n',tmp,tmp2)   ->changed to indicate space in mb instead of bytes
+      telnetSend(sendStr,EstrLen(sendStr))
+    ENDIF
+
   ENDIF
 
   state:=STATE_LOGGEDON
@@ -27393,8 +27480,8 @@ PROC processFtpLoggedOnUser()
   ENDIF
 
   timeLimit:=loggedOnUser.timeTotal-loggedOnUser.timeUsed
-  IF (loggedOnUser.dailyBytesLimit<>0)
-    bytesADL:=loggedOnUser.dailyBytesLimit
+  IF (loggedOnUser.todaysBytesLimit<>0)
+    bytesADL:=loggedOnUser.todaysBytesLimit
   ELSE
     bytesADL:=$7fffffff
   ENDIF

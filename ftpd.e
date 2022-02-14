@@ -686,7 +686,7 @@ ENDPROC FALSE
 
 PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF temp[255]:STRING
-  DEF addr: PTR TO LONG
+  DEF addr: LONG
   DEF hostEnt: PTR TO hostent
   DEF r,data_c,data_s
   DEF i,port
@@ -696,8 +696,9 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF sigsPtr=0
 	 
   hostEnt:=getHostByName(sb,serverHost)
-  addr:=hostEnt.h_addr_list[]
-  addr:=addr[]
+
+  addr:=Long(hostEnt.h_addr_list)
+  addr:=Long(addr)
   
   ftpData.rest:=0  
 
@@ -714,7 +715,7 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
     RETURN -1,-1
   ENDIF
   
-  StringF(temp,'227 Entering Passive Mode (\d,\d,\d,\d,\d,\d)\b\n',Shr(addr[] AND $FF000000,24)AND $FF,Shr(addr[] AND $FF0000,16) AND $FF,Shr(addr[] AND $FF00,8) AND $FF,addr[] AND $FF,Shr(port,8) AND $FF,port AND $FF)
+  StringF(temp,'227 Entering Passive Mode (\d,\d,\d,\d,\d,\d)\b\n',Shr(addr AND $FF000000,24)AND $FF,Shr(addr AND $FF0000,16) AND $FF,Shr(addr AND $FF00,8) AND $FF,addr AND $FF,Shr(port,8) AND $FF,port AND $FF)
   ->WriteF(temp)
   writeLineEx(sb,ftp_c, temp)
   ftpData.restPos:=0
@@ -1474,7 +1475,7 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
       buff:=New(32768)
       t:=fastSystemTime()
       startTime:=t
-      lastpos:=0
+      lastpos:=ftpData.restPos
       cps:=0
       REPEAT
         l:=recv(sb,data_c, buff,32768,0)
@@ -1525,7 +1526,7 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
           pos:=Seek(fh,0,OFFSET_CURRENT)
         ENDIF
         t2:=fastSystemTime()
-        cps:=calcCPS(pos,startTime,t2)
+        cps:=calcCPS(ftpData.restPos-pos,startTime,t2)
         uploadFileProgress(ftpData,filename,pos,cps)
       ENDIF
       IF asynclib<>NIL
@@ -1674,7 +1675,7 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
         buff:=New(32768)
         t:=fastSystemTime()
         startTime:=t
-        lastpos:=0
+        lastpos:=ftpData.restPos
         cps:=0
         REPEAT
           IF asynclib<>NIL
@@ -1713,7 +1714,7 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
             pos:=Seek(fh,0,OFFSET_CURRENT)
           ENDIF
           t2:=fastSystemTime()
-          cps:=calcCPS(pos,startTime,t2)
+          cps:=calcCPS(ftpData.restPos-pos,startTime,t2)
           downloadFileProgress(ftpData,fn,pos,cps)
         ENDIF
         IF asynclib<>NIL
