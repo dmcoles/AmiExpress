@@ -14268,6 +14268,7 @@ PROC updateZDisplay()
   DEF tempstr[255]:STRING
   DEF xpos,tags2:PTR TO LONG,vi
   DEF v1,v2
+  DEF d1,d2
   IF netMailTransfer
     IF zModemInfo.currentOperation=ZMODEM_DOWNLOAD
       StringF(tempstr,'[Node \d] NetMail Send Window',node)
@@ -14361,7 +14362,26 @@ PROC updateZDisplay()
     zmodemStatPrint(tempstr)
 
   ENDIF
-  StringF(tempstr,'\r\d[7]',zModemInfo.cps)
+  
+  IF zModemInfo.cps>900000000
+    d1:=Shr(zModemInfo.cps,30) AND $FF
+    d2:=Shr(zModemInfo.cps,25) AND $1f
+    d2:=Shr(Mul(d2,10),5)
+    StringF(tempstr,'\r\d[2].\d[1]g/s',d1,d2)
+  ELSEIF zModemInfo.cps>900000
+    d1:=Shr(zModemInfo.cps,20) AND $3FF
+    d2:=Shr(zModemInfo.cps,15) AND $1f
+    d2:=Shr(Mul(d2,10),5)
+    IF d1>100 THEN StringF(tempstr,'\r\d[3]m/s',d1) ELSE StringF(tempstr,'\r\d[2].\d[1]m/s',d1,d2)
+  ELSEIF zModemInfo.cps>900
+    d1:=Shr(zModemInfo.cps,10) AND $3FF
+    d2:=Shr(zModemInfo.cps,5) AND $1f
+    d2:=Shr(Mul(d2,10),5)
+    IF d1>100 THEN StringF(tempstr,'\r\d[3]k/s',d1) ELSE StringF(tempstr,'\r\d[2].\d[1]k/s',d1,d2)
+  ELSE
+    StringF(tempstr,'\r\d[4]cps',zModemInfo.cps)
+  ENDIF
+  
   sendACPCommand2(tempstr,JH_TRANSFERCPS)
 ENDPROC
 
@@ -14493,10 +14513,10 @@ PROC httpDownload(fileList: PTR TO stdlist, pupdateDownloadStats,httpPorts)
   Execute(linkStr,NIL,NIL)
 ENDPROC
 
-PROC ftpUploadFileStart(fileName:PTR TO CHAR,filelen)
+PROC ftpUploadFileStart(fileName:PTR TO CHAR,resumefrom)
   sendMasterUpload(FilePart(fileName))
-  zModemInfo.filesize:=filelen
-  zModemInfo.resumePos:=0
+  zModemInfo.filesize:=0
+  zModemInfo.resumePos:=resumefrom
   zModemInfo.transPos:=0
   ftptime:=getSystemTime()
   updateZDisplay()
@@ -15658,7 +15678,7 @@ repbuff:
   ADD.L A2,A0
   CLR.L D0
   MOVE.B (A0)+,D0
-  SUB.L A2,A0
+  SUB.L       A2,A0
   
   MOVE.L lastIAC,D2
   BNE.S testiac
@@ -15669,7 +15689,7 @@ repbuff:
   
 testiac:
   CMP.B #1,D2
-  BNE.S test1  ->testiac2
+  BNE.S testiac2
 
   CMP.B #255,D0
   BNE.S test1

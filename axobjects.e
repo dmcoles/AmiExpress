@@ -60,7 +60,7 @@ EXPORT OBJECT user
   translatorID: CHAR
   msgBaseRJoin:INT
   confYM9: LONG ->not used
-  beginLogCall : LONG ->not used
+  todaysBytesLimit : LONG
   protocol: CHAR  ->not really used
   uucpa: CHAR
   lineLength: CHAR

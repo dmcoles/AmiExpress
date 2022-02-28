@@ -42,7 +42,7 @@
          '*jsonParser',
          '*jsonCreate',
          '*stringlist',
-         '*acpversion'
+        '*acpversion'
 
 ENUM ERR_NONE,ERR_ALREADY_RUNNING,ERR_STARTUP, ERR_VALIDATE,ERR_NO_DISKFONT,ERR_FDS_RANGE
 
@@ -52,7 +52,9 @@ CONST MAX_LINE=255
 CONST FIONBIO=$8004667e
 CONST EWOULDBLOCK=35
 
+#ifndef EVO_3_5_0
 CONST TAG_END=0    
+#endif
 
 CONST NODECONFIG=1
 CONST RUNMCP=2

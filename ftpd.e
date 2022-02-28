@@ -248,11 +248,11 @@ PROC setSockOpt(sb,s,level,optname,optval,optlen )
   MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
-PROC uploadFileStart(ftpData:PTR TO ftpData,fn,pos)
+PROC uploadFileStart(ftpData:PTR TO ftpData,fn,resumepos)
   DEF fs
   fs:=ftpData.uploadFileStart
   MOVE.L fn,-(A7)
-  MOVE.L pos,-(A7)
+  MOVE.L resumepos,-(A7)
   fs()
   ADD.L #8,A7
 ENDPROC
@@ -444,16 +444,17 @@ PROC freeFileList(fileList:PTR TO stdlist)
 ENDPROC
 
 PROC calcCPS(pd,t,t2)
-  DEF cps
+  DEF cps,td
   cps:=0
-  
   IF t<t2
-    IF (pd<0) OR (pd>$1000000)
-      pd:=Shr(pd,4) AND $fffffff
-      cps:=Div(Mul(pd,50),(t2-t))
-      cps:=Shl(cps,4)
+    td:=t2-t
+    IF (pd<0) OR (pd>$10000000)
+      pd:=Shr(pd,1) AND $7fffffff
+      td:=Div(td,50)
+      IF td<1 THEN td:=1
+      cps:=Shl(Div(pd,td),1)
     ELSE
-      cps:=Div(Mul(pd,50),(t2-t))     
+      cps:=Div(Mul(pd,50),td)     
     ENDIF
   ELSE
     cps:=pd
@@ -1469,7 +1470,7 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
       writeLineEx(sb,ftp_c,temp)
     ELSE
       IF ftpData.uploadFileStart<>NIL
-        uploadFileStart(ftpData,filename,0)
+        uploadFileStart(ftpData,filename,ftpData.restPos)
       ENDIF
       
       buff:=New(32768)
@@ -1526,7 +1527,7 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
           pos:=Seek(fh,0,OFFSET_CURRENT)
         ENDIF
         t2:=fastSystemTime()
-        cps:=calcCPS(ftpData.restPos-pos,startTime,t2)
+        cps:=calcCPS(pos-ftpData.restPos,startTime,t2)
         uploadFileProgress(ftpData,filename,pos,cps)
       ENDIF
       IF asynclib<>NIL
@@ -1714,7 +1715,7 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
             pos:=Seek(fh,0,OFFSET_CURRENT)
           ENDIF
           t2:=fastSystemTime()
-          cps:=calcCPS(ftpData.restPos-pos,startTime,t2)
+          cps:=calcCPS(pos-ftpData.restPos,startTime,t2)
           downloadFileProgress(ftpData,fn,pos,cps)
         ENDIF
         IF asynclib<>NIL
