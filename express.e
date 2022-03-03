@@ -364,8 +364,8 @@ DEF iemsiPassword[255]:STRING
 
 DEF fds=NIL:PTR TO LONG
 
-DEF zmodemBuffer=0
-DEF zModemBufferSize=65536
+DEF zmodemRxBuffer=0
+DEF zModemRxBufferSize=65536
 DEF bufferedBytes=0
 DEF bufferReadOffset=0
 ->DEF lastCarrierCheck=0
@@ -14085,11 +14085,10 @@ ENDPROC xprffirst2(buffer)
 
 PROC xprffirst2(buffer)
   DEF fileItem:PTR TO flagFileItem
-
-  zModemInfo.freeDFlag:=checkFree(fileItem.fileName)
   zModemInfo.resumePos:=0
   zModemInfo.current:=0
   fileItem:=zModemInfo.fileList.item(zModemInfo.current)
+  zModemInfo.freeDFlag:=checkFree(fileItem.fileName)
   AstrCopy(buffer,fileItem.fileName,255)
   sendMasterDownload(fileItem.fileName)
 ENDPROC TRUE
@@ -14436,7 +14435,7 @@ PROC downloadFile(str: PTR TO CHAR,forceZmodem=FALSE)
     ENDFOR
   ENDIF
 
-  res:=downloadFiles(templist,FALSE,forceZmodem)
+  res:=downloadFiles(templist,0,FALSE,forceZmodem)
 
   clearFlagItems(templist)
   END templist
@@ -15008,7 +15007,7 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
 ENDPROC
 
 ->this returns 0 = fail, 1 = success unlike most of the routines
-PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FALSE)
+PROC downloadFiles(fileList: PTR TO stdlist, estimatedSize, updateDownloadStats, forceZmodem=FALSE)
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
   DEF debugstr[255]:STRING
@@ -15168,6 +15167,9 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
   oldshared:=serShared
   serShared:=FALSE
 
+  zModemRxBufferSize:=8192
+  zmodemRxBuffer:=New(zModemRxBufferSize)
+
   IF ext
     xprio:=NEW xprio
 
@@ -15228,7 +15230,9 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
             {zmfwrite},
             {zmfirstfile},
             {zmnextfile},
-            2048,0,binaryRaw)
+            2048,0,binaryRaw,65536)
+      xym.total_files:=fileList.count()
+      xym.total_bytes:=estimatedSize
     ELSE    
       zm:=NEW zm
       zm.log_level:=ZM_LOG_DEBUG
@@ -15252,7 +15256,9 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
             {zmfwrite},
             {zmfirstfile},
             {zmnextfile},
-            maxBlkSize,0,binaryRaw)
+            maxBlkSize,0,binaryRaw,65536)
+      zm.total_files:=fileList.count()
+      zm.total_bytes:=estimatedSize
     ENDIF
   ENDIF
   
@@ -15267,6 +15273,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
       END xprio
       zModemInfo.currentOperation:=ZMODEM_NONE
       closezModemStats()
+      Dispose(zmodemRxBuffer)
       RETURN 0
     ENDIF
   ENDIF
@@ -15298,7 +15305,6 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
     ENDIF
     tTTM:=Div(dlTimeTaken,50)
   ENDIF
-
 
   IF zModemInfo.transPos<>zModemInfo.filesize THEN result:=FALSE
 
@@ -15334,6 +15340,8 @@ PROC downloadFiles(fileList: PTR TO stdlist, updateDownloadStats, forceZmodem=FA
 
   ->restart normal serial
   queueSerialRead({serbuff})
+
+  Dispose(zmodemRxBuffer)
 
   aePuts(protocol)
   IF result THEN aePuts(' download successful\b\n') ELSE aePuts(' download unsuccessful\b\n')
@@ -15671,7 +15679,7 @@ PROC zmrecvbyteTelnet(timeout)
   
   MOVE.L bufferReadOffset,A0
   MOVE.L bufferedBytes,A1
-  MOVE.L zmodemBuffer,A2
+  MOVE.L zmodemRxBuffer,A2
 repbuff:
   CMPA.L A1,A0
   BGE buffempty
@@ -15737,7 +15745,7 @@ buffempty:
   bufferedBytes:=0
   r:=-1
   IF res>0
-    IF (r:=Recv(telnetSocket,zmodemBuffer+bufferedBytes,zModemBufferSize,0))<>-1
+    IF (r:=Recv(telnetSocket,zmodemRxBuffer+bufferedBytes,zModemRxBufferSize,0))<>-1
       bufferedBytes:=bufferedBytes+r
     ENDIF
   ENDIF
@@ -15749,7 +15757,7 @@ buffempty:
   IF bufferedBytes
     SUB.L A0,A0
     MOVE.L bufferedBytes,A1
-    MOVE.L zmodemBuffer,A2
+    MOVE.L zmodemRxBuffer,A2
     JUMP repbuff
   ENDIF
   
@@ -15757,7 +15765,7 @@ buffempty:
 redo1:
     IF (bufferReadOffset<bufferedBytes)
       REPEAT
-        res:=zmodemBuffer[bufferReadOffset]
+        res:=zmodemRxBuffer[bufferReadOffset]
         bufferReadOffset++
         IF (lastIAC=0) AND (res<>255) THEN RETURN res
         
@@ -15787,12 +15795,12 @@ redo1:
 
       bufferReadOffset:=0
       bufferedBytes:=0
-      n:=zModemBufferSize     
+      n:=zModemRxBufferSize     
       REPEAT
-        IF (r:=Recv(telnetSocket,zmodemBuffer+bufferedBytes,n,0))<>-1
+        IF (r:=Recv(telnetSocket,zmodemRxBuffer+bufferedBytes,n,0))<>-1
           bufferedBytes:=bufferedBytes+r
         ENDIF
-        n:=(zModemBufferSize-bufferedBytes)     
+        n:=(zModemRxBufferSize-bufferedBytes)     
       UNTIL (r=-1) OR (n=0)
         
       IF ((lastCarrierCheck+5)<sysTime)
@@ -15810,7 +15818,7 @@ PROC zmrecvbyteSerial(timeout)
   DEF waiting,abort
   
   IF (bufferReadOffset<bufferedBytes)
-    res:=zmodemBuffer[bufferReadOffset]
+    res:=zmodemRxBuffer[bufferReadOffset]
     bufferReadOffset++
     RETURN res
   ENDIF
@@ -15819,9 +15827,9 @@ PROC zmrecvbyteSerial(timeout)
   bufferedBytes:=0
   
   waiting:=getSerialInfo()
-  IF waiting>zModemBufferSize THEN waiting:=zModemBufferSize
+  IF waiting>zModemRxBufferSize THEN waiting:=zModemRxBufferSize
   IF(waiting > 0)
-    doSerialRead(zmodemBuffer,waiting)
+    doSerialRead(zmodemRxBuffer,waiting)
     bufferedBytes:=serialReadIO.iostd.actual
     serialReadIO.iostd.actual:=0
   ENDIF  
@@ -15830,7 +15838,7 @@ PROC zmrecvbyteSerial(timeout)
     IF bufferedBytes=0 
       RETURN -1
     ELSE
-      res:=zmodemBuffer[bufferReadOffset]
+      res:=zmodemRxBuffer[bufferReadOffset]
       bufferReadOffset++
       RETURN res
     ENDIF
@@ -15840,7 +15848,7 @@ PROC zmrecvbyteSerial(timeout)
   setTimer(timeout,0)
   IF timerport<>NIL THEN timersig:=Shl(1, timerport.sigbit)
 
-  queueSerialRead(zmodemBuffer,zModemBufferSize)
+  queueSerialRead(zmodemRxBuffer,zModemRxBufferSize)
   serialsig:=Shl(1, serialReadMP.sigbit)
 
   signals:=Wait(SIGBREAKF_CTRL_C OR serialsig OR timersig)
@@ -15858,7 +15866,7 @@ PROC zmrecvbyteSerial(timeout)
   IF bufferedBytes=0 
     res:=-1
   ELSE
-    res:=zmodemBuffer[bufferReadOffset]
+    res:=zmodemRxBuffer[bufferReadOffset]
     bufferReadOffset++
   ENDIF
   checkCarrier()
@@ -16162,6 +16170,9 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     StringF(tempstr,'\s.library',protocol)
   ENDIF
 
+  zModemRxBufferSize:=65546
+  zmodemRxBuffer:=New(zModemRxBufferSize)
+
   IF ext
     IF (xprotocolbase:=OpenLibrary(tempstr,0))=NIL
       aePuts('\b\nUnable to open the xpr library\b\n')
@@ -16229,7 +16240,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
             {zmfwrite},
             {zmfirstfile},
             {zmnextfile},
-            2048,0,binaryRaw)
+            2048,0,binaryRaw,0)
     ELSE
       zm:=NEW zm
       zm.log_level:=ZM_LOG_DEBUG
@@ -16253,7 +16264,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
             {zmfwrite},
             {zmfirstfile},
             {zmnextfile},
-            maxBlkSize,0,binaryRaw)
+            maxBlkSize,0,binaryRaw,0)
     ENDIF
   ENDIF
 
@@ -16309,7 +16320,6 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
     ENDIF
     tTTM:=Div(ulTimeTaken,50)
   ENDIF
-
   
   IF ext
     XprotocolCleanup(xprio)
@@ -16349,7 +16359,7 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   checkOffhookFlag()
 
   IF ext THEN receivePlayPen(FALSE)
-  
+
   IF (tBT>0) AND (tTTM>0)
     tTEFF:=calcEfficiency(Div(tBT,tTTM),onlineBaud)
   ELSE
@@ -16382,12 +16392,14 @@ PROC zModemUpload(file,forceZmodem=FALSE) HANDLE
   ->restart normal serial IO
   queueSerialRead({serbuff})
   
+  Dispose(zmodemRxBuffer)
   RETURN 1
 EXCEPT
   IF ext THEN CloseLibrary(xprotocolbase)
   zModemInfo.currentOperation:=ZMODEM_NONE
   closezModemStats()
   IF xprio THEN END xprio
+  Dispose(zmodemRxBuffer)
   RETURN RESULT_FAILURE
 ENDPROC
 
@@ -19202,7 +19214,7 @@ breakd:
     beenUDd:=TRUE
   ENDIF
 
-  status:=downloadFiles(finalList,TRUE)
+  status:=downloadFiles(finalList,dtfsize,TRUE)
 
   IF(status<>0) THEN clearFlagItems(flagFilesList)
 
@@ -24339,7 +24351,7 @@ ENDPROC RESULT_SUCCESS
 
 PROC internalCommandVER()
   DEF tempStr[255]:STRING
-  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ©2018-2021 Darren Coles\b\n',expressVer,expressDate)
+  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ©2018-2022 Darren Coles\b\n',expressVer,expressDate)
   aePuts(tempStr)
   aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   StringF(tempStr,'Registered to \s.\b\n',regKey)
@@ -27363,7 +27375,7 @@ PROC processFtpLogon()
   ENDIF
   telnetSend(sendStr,EstrLen(sendStr))
 
-  StringF(sendStr,'230-\b\n230-Running AmiExpress \s Copyright ©2018-2021 Darren Coles\b\n',expressVer)
+  StringF(sendStr,'230-\b\n230-Running AmiExpress \s Copyright ©2018-2022 Darren Coles\b\n',expressVer)
   telnetSend(sendStr,EstrLen(sendStr))
   StringF(sendStr,'230-Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   telnetSend(sendStr,EstrLen(sendStr))
@@ -28067,7 +28079,7 @@ PROC processLogon()
   ENDIF
   aePuts(tempStr)
 
-  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018-2021 Darren Coles\b\n',expressVer)
+  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018-2022 Darren Coles\b\n',expressVer)
   aePuts(tempStr)
   aePuts('Original Version (C)1992-95 LightSpeed Technologies Inc.\b\n')
   StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
@@ -28402,7 +28414,7 @@ PROC processAwait()
 
       StringF(tempstr,'\b\n           [33m© 1992-1995 AmiExpress [37mby[35m Light Speed Technologies Inc.[0m\b\n')
       aePuts(tempstr)
-      StringF(tempstr,'\b\n                           [33m Version 5 ©2018-2021[0m\b\n')
+      StringF(tempstr,'\b\n                           [33m Version 5 ©2018-2022[0m\b\n')
       aePuts(tempstr)
 
       StringF(tempstr,'\b\n                       [37m Programming by: [33m Darren Coles')
@@ -29556,8 +29568,6 @@ PROC main() HANDLE
 
   stripAnsi(0,0,1,0,ansi)
 
-  zmodemBuffer:=New(zModemBufferSize)
-
   securityNames:=[
    'ACS.ACCOUNT_EDITING','ACS.READ_BULLETINS','ACS.COMMENT_TO_SYSOP','ACS.DOWNLOAD','ACS.UPLOAD','ACS.ENTER_MESSAGE','ACS.FILE_LISTINGS','ACS.JOIN_CONFERENCE','ACS.NEW_FILES_SINCE',
    'ACS.PAGE_SYSOP','ACS.READ_MESSAGE','ACS.REMOTE_SHELL','ACS.DISPLAY_USER_STATS','ACS.VIEW_A_FILE','ACS.EDIT_USER_INFO','ACS.EDIT_INTERNET_NAME','ACS.EDIT_USER_LOCATION',
@@ -30177,9 +30187,7 @@ PROC main() HANDLE
   IF owndevunitbase THEN CloseLibrary(owndevunitbase)
 
   closeSerial()
-
-  Dispose(zmodemBuffer)
-  
+ 
   IF (doorExtSig<>NIL) THEN FreeSignal(doorExtSig)
   doorExtSig:=NIL
 

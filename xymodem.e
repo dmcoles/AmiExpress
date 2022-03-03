@@ -90,6 +90,8 @@ EXPORT OBJECT xymodem_t
   current_file_size
   total_files
   total_bytes
+  files_remaining
+  bytes_remaining
   errors
   fallback_to_xmodem
 
@@ -374,7 +376,7 @@ PROC xmodem_get_block(xym:PTR TO xymodem_t, block:PTR TO CHAR, expected_block_nu
       CASE CAN
         IF(can=FALSE)      -> must get two CANs in a row
           can:=1
-          StringF(xym,LOG_WARNING,'Block \d: Received CAN  Expected SOH, STX, or EOT',expected_block_num)
+          StringF(tempstr,'Block \d: Received CAN  Expected SOH, STX, or EOT',expected_block_num)
           lprintf(xym,LOG_WARNING,tempstr)
           JUMP lp
         ENDIF
@@ -590,10 +592,14 @@ lp2:
     SELECT i
       CASE NAK     -> checksum 
         lprintf(xym,LOG_INFO,'Receiver requested mode: 8-bit Checksum')
+        xym.max_block_size:=XMODEM_MAX_BLOCK_SIZE
+        xym.block_size:=XMODEM_MAX_BLOCK_SIZE
         RETURN TRUE
       CASE "C"
         lprintf(xym,LOG_INFO,'Receiver requested mode: 16-bit CRC')
         IF(xym.crc_mode_supported=FALSE) THEN JUMP lp2
+        xym.max_block_size:=XMODEM_MAX_BLOCK_SIZE
+        xym.block_size:=XMODEM_MAX_BLOCK_SIZE
 
         xym.mode:=xym.mode OR CRC
         RETURN TRUE
@@ -608,6 +614,8 @@ lp2:
       CASE "G"
         lprintf(xym,LOG_INFO,'Receiver requested mode: Streaming, 16-bit CRC')
         IF ((xym.crc_mode_supported=FALSE) OR (xym.g_mode_supported=FALSE)) THEN JUMP lp2
+        xym.max_block_size:=XMODEM_MAX_BLOCK_SIZE
+        xym.block_size:=XMODEM_MAX_BLOCK_SIZE
 
         xym.mode:=xym.mode OR (GMODE OR CRC)
         RETURN TRUE
@@ -687,7 +695,7 @@ PROC xmodem_send_file(xym:PTR TO xymodem_t, fname:PTR TO CHAR, sent:PTR TO LONG,
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
   DEF ch
-  DEF p
+  DEF p,r
   DEF fname2:PTR TO CHAR
 
   
@@ -712,8 +720,10 @@ PROC xmodem_send_file(xym:PTR TO xymodem_t, fname:PTR TO CHAR, sent:PTR TO LONG,
   ENDIF
 
   IF(xym.total_files=0) THEN xym.total_files:=1
-
   IF(xym.total_bytes=0) THEN xym.total_bytes:=fsize
+
+  IF(xym.files_remaining=0) THEN xym.files_remaining:=1
+  IF(xym.bytes_remaining=0) THEN xym.bytes_remaining:=fsize
 
   -> try 
     IF((xym.mode) AND YMODEM)
@@ -727,8 +737,8 @@ PROC xmodem_send_file(xym:PTR TO xymodem_t, fname:PTR TO CHAR, sent:PTR TO LONG,
       StringF(tempstr,'\d \d 0 0 \d \d'
         ,fsize
         ,0 ->(uintmax_t)st.st_mtime
-        ,xym.total_files  ->-xym.sent_files
-        ,xym.total_bytes  ->-xym.sent_bytes
+        ,xym.files_remaining  ->-xym.sent_files
+        ,xym.bytes_remaining  ->-xym.sent_bytes
         )
       AstrCopy(block+StrLen(block)+1,tempstr)
       block_len:=StrLen(block)+1+StrLen(tempstr)
@@ -802,11 +812,11 @@ sbr2:
       memset(block+rd,CPMEOF,xym.block_size-rd)
      
       xmodem_put_block(xym, block, xym.block_size, block_num)
-      IF(xmodem_get_ack(xym, 5,block_num) <> ACK)
+      IF((r:=xmodem_get_ack(xym, 5,block_num)) <> ACK)
         xym.errors:=xym.errors+1
-        StringF(tempstr,'Block \d: Error #\d at offset \d',block_num, xym.errors,(sent_bytes-xym.block_size))
+        StringF(tempstr,'Block \d: Error #\d at offset \d',block_num, xym.errors,sent_bytes)
         lprintf(xym,LOG_WARNING,tempstr)
-        IF((xym.errors=3) AND (block_num=1) AND (xym.block_size>XMODEM_MIN_BLOCK_SIZE))
+        IF (((r="C") OR (xym.errors=3)) AND (block_num=1) AND (xym.block_size>XMODEM_MIN_BLOCK_SIZE))
           StringF(tempstr,'Block \d: Falling back to 128-byte blocks', block_num)
           lprintf(xym,LOG_NOTICE,tempstr)
           xym.block_size:=XMODEM_MIN_BLOCK_SIZE
@@ -851,14 +861,18 @@ sbr3:
 
 ENDPROC success
 
-EXPORT PROC xymodem_send_files(xym: PTR TO xymodem_t,sent: PTR TO LONG, timetaken:PTR TO LONG)
+EXPORT PROC xymodem_send_files(xym: PTR TO xymodem_t,sentptr: PTR TO LONG, timetaken:PTR TO LONG)
   DEF p,res,init=TRUE
   DEF fname[255]:STRING
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
   DEF ch
-
+  DEF sent=0
+  
   xym.mode:=YMODEM OR SEND
+
+  xym.files_remaining:=xym.total_files
+  xym.bytes_remaining:=xym.total_bytes
 
   WHILE(((ch:=getcom(xym,0))<>NOINP) AND (is_connected(xym)))
     chr(ch,tempstr2)
@@ -868,21 +882,25 @@ EXPORT PROC xymodem_send_files(xym: PTR TO xymodem_t,sent: PTR TO LONG, timetake
 
    
   IF timetaken<>NIL THEN timetaken[]:=0
-  IF sent<>NIL THEN sent[]:=0
   p:=xym.zm_firstfile
   IF p<>NIL
     IF p(fname)
       REPEAT
-        res:=xmodem_send_file(xym, fname, sent, timetaken)
+        res:=xmodem_send_file(xym, fname, {sent}, timetaken)
         IF res=FALSE THEN RETURN res
         init:=FALSE
         IF res
           p:=xym.zm_nextfile
           res:=FALSE
           IF p<>NIL THEN res:=p(fname)
+          xym.files_remaining:=xym.files_remaining-1
+          xym.bytes_remaining:=xym.bytes_remaining-sent
+          IF xym.files_remaining<0 THEN xym.files_remaining:=0
+          IF xym.bytes_remaining<0 THEN xym.bytes_remaining:=0
+          IF sentptr<>NIL THEN sentptr[]:=sentptr[]+sent
         ENDIF
       UNTIL res=FALSE
-      xmodem_send_file(xym, '', sent, timetaken)
+      xmodem_send_file(xym, '', {sent}, timetaken)
       xmodem_flush(xym)
       
     ENDIF
@@ -1172,7 +1190,6 @@ c1:
       block_num++
     ENDWHILE
 rbr2:
-
     /* Use correct file size */
     ->fflush(fp);
 
@@ -1253,7 +1270,7 @@ EXPORT PROC xymodem_init(xym: PTR TO xymodem_t, cbdata: PTR TO CHAR,
         data_waiting,upload_completed,upload_failed,dupecheck,
         flush,duplicate_filename,fileopen,fileclose,fileseek,
         fileread,filewrite,firstfile,nextfile,
-        block_size,max_errors,iacEncode)
+        block_size,max_errors,iacEncode,sendbufsize)
   
   ->Use sane default values
   xym.send_timeout:=10   -> seconds
@@ -1302,7 +1319,8 @@ EXPORT PROC xymodem_init(xym: PTR TO xymodem_t, cbdata: PTR TO CHAR,
   xym.g_mode_supported:=TRUE
   xym.crc_mode_supported:=TRUE
 
-  xym.sendBufferSize:=(xym.max_block_size+512)*2
+  IF sendbufsize<(xym.max_block_size+512)*2 THEN sendbufsize:=(xym.max_block_size+512)*2
+  xym.sendBufferSize:=sendbufsize
   xym.sendBuffer:=New(xym.sendBufferSize)
   xym.sendBufferPtr:=xym.sendBuffer
   xym.sendBufferEnd:=xym.sendBuffer+xym.sendBufferSize

@@ -1078,7 +1078,9 @@ PROC zmodem_send_data_subpkt(zm: PTR TO zmodem_t, subpkt_type, p: PTR TO CHAR, l
 	ENDIF
 
 	IF(subpkt_type = ZCRCW) THEN zmodem_send_raw(zm, XON)
-	IF (subpkt_type <> ZCRCG) OR (p=NIL) OR (zm.can_overlap_io=FALSE) OR zm.no_streaming THEN zmodem_flush(zm)
+	IF (subpkt_type <> ZCRCG) OR (p=NIL) OR (zm.can_overlap_io=FALSE) OR zm.no_streaming
+    zmodem_flush(zm)
+  ENDIF
 ENDPROC
 
 PROC zmodem_send_data(zm: PTR TO zmodem_t, subpkt_type, p: PTR TO CHAR, l)
@@ -2042,7 +2044,6 @@ PROC zmodem_send_from(zm: PTR TO zmodem_t, fp, pos,sent: PTR TO LONG)
   DEF p
   DEF startfrom
 
-
   startfrom:=pos
   IF doSeek(zm,fp,pos,OFFSET_BEGINING)=-1 
     StringF(tempstr,'ERROR \d seeking to file offset \d',IoErr(), pos)
@@ -2119,6 +2120,7 @@ PROC zmodem_send_from(zm: PTR TO zmodem_t, fp, pos,sent: PTR TO LONG)
 			ENDIF
 		ENDIF
 
+   
 		IF(sent<>NIL) THEN sent[]:=sent[]+n
 
 		buf_sent:=buf_sent+n
@@ -2184,22 +2186,32 @@ PROC zmodem_send_from(zm: PTR TO zmodem_t, fp, pos,sent: PTR TO LONG)
 
 ENDPROC ZACK
 
-EXPORT PROC zmodem_send_files(zm: PTR TO zmodem_t,sent: PTR TO LONG, timetaken:PTR TO LONG)
+EXPORT PROC zmodem_send_files(zm: PTR TO zmodem_t,sentptr: PTR TO LONG, timetaken:PTR TO LONG)
   DEF p,res,init=TRUE
   DEF fname[255]:STRING
-  
+  DEF sent=0
+
+  zm.files_remaining:=zm.total_files
+  zm.bytes_remaining:=zm.total_bytes
+
   timetaken[]:=0
+
   p:=zm.zm_firstfile
   IF p<>NIL
     IF p(fname)
       REPEAT
-        res:=zmodem_send_file(zm, fname, init,sent, timetaken)
+        res:=zmodem_send_file(zm, fname, init,{sent}, timetaken)
         IF res=FALSE THEN RETURN res
         init:=FALSE
         IF res
           p:=zm.zm_nextfile
           res:=FALSE
           IF p<>NIL THEN res:=p(fname)
+          zm.files_remaining:=zm.files_remaining-1
+          zm.bytes_remaining:=zm.bytes_remaining-sent
+          IF zm.files_remaining<0 THEN zm.files_remaining:=0
+          IF zm.bytes_remaining<0 THEN zm.bytes_remaining:=0
+          IF sentptr<>NIL THEN sentptr[]:=sentptr[]+sent
         ENDIF
       UNTIL res=FALSE
       zmodem_send_zfin(zm)
@@ -2219,7 +2231,7 @@ ENDPROC TRUE
 PROC zmodem_send_file(zm: PTR TO zmodem_t, fname: PTR TO CHAR, request_init,sent: PTR TO LONG, timetaken: PTR TO LONG)
 
 	DEF	pos=0
-	DEF	sent_bytes
+	DEF	sent_bytes=0
 	DEF p: PTR TO CHAR
 	DEF	zfile_frame: PTR TO CHAR
 	DEF	type
@@ -2344,7 +2356,6 @@ PROC zmodem_send_file(zm: PTR TO zmodem_t, fname: PTR TO CHAR, request_init,sent
 		zm.files_remaining,
 		zm.bytes_remaining)
   strcopy(p,tempstr,-1)
-
 	p:=p+StrLen(p) + 1
 
   attempts:=0
@@ -3000,7 +3011,7 @@ EXPORT PROC zmodem_init(zm: PTR TO zmodem_t, cbdata: PTR TO CHAR,
         data_waiting,upload_completed,upload_failed,dupecheck,
         flush,duplicate_filename,fileopen,fileclose,fileseek,
         fileread,filewrite,firstfile,nextfile,
-        block_size,max_errors,iacEncode)
+        block_size,max_errors,iacEncode,sendbufsize)
   
 	->memset(zm,0,SIZEOF zmodem_t)
 
@@ -3052,7 +3063,8 @@ EXPORT PROC zmodem_init(zm: PTR TO zmodem_t, cbdata: PTR TO CHAR,
   zm.tx_data_subpacket:=New(TXSUBPACKETSIZE)
   zm.rx_data_subpacket:=New(RXSUBPACKETSIZE)
   
-  zm.sendBufferSize:=(zm.max_block_size+512)*2
+  IF sendbufsize<(zm.max_block_size+512)*2 THEN sendbufsize:=(zm.max_block_size+512)*2
+  zm.sendBufferSize:=sendbufsize
   zm.sendBuffer:=New(zm.sendBufferSize)
   zm.sendBufferPtr:=zm.sendBuffer
   zm.sendBufferEnd:=zm.sendBuffer+zm.sendBufferSize
