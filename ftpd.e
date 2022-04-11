@@ -1652,11 +1652,12 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
    
       IF (ftpData.downloadFileStart<>NIL) OR (ftpData.checkDownloadRatio<>NIL)
         
+        pos:=ftpData.restPos
         IF asynclib<>NIL
-          SeekAsync(fh,0,MODE_END)
+          SeekAsync(fh,pos,MODE_START)
           pos:=SeekAsync(fh,0,MODE_CURRENT)
         ELSE
-          Seek(fh,0,OFFSET_END)
+          Seek(fh,pos,OFFSET_BEGINNING)
           pos:=Seek(fh,0,OFFSET_CURRENT)
         ENDIF
         IF (ftpData.checkDownloadRatio<>NIL) ANDALSO (checkDownloadRatio(ftpData,fn,pos,res)=FALSE)
@@ -1668,11 +1669,6 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
         ENDIF
       ENDIF
       IF candl
-        IF asynclib<>NIL
-          SeekAsync(fh,ftpData.restPos,MODE_START)
-        ELSE
-          Seek(fh,ftpData.restPos,OFFSET_BEGINNING)
-        ENDIF
         buff:=New(32768)
         t:=fastSystemTime()
         startTime:=t

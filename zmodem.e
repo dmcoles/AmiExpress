@@ -410,6 +410,7 @@ EXPORT OBJECT zmodem_t
   zm_is_cancelled
   zm_upload_completed
   zm_upload_failed
+  zm_download_completed
   zm_dupecheck
   zm_data_waiting
   zm_flush
@@ -561,6 +562,12 @@ PROC upload_failed(zm:PTR TO zmodem_t,fname:PTR TO CHAR)
   DEF p
   p:=zm.zm_upload_failed
   IF (p<>NIL) THEN p(fname)
+ENDPROC
+
+PROC download_completed(zm:PTR TO zmodem_t,fname:PTR TO CHAR,filebytes)
+  DEF p
+  p:=zm.zm_download_completed
+  IF (p<>NIL) THEN p(fname,filebytes)
 ENDPROC
 
 PROC dupe_check(zm:PTR TO zmodem_t,fname)
@@ -2189,7 +2196,7 @@ ENDPROC ZACK
 EXPORT PROC zmodem_send_files(zm: PTR TO zmodem_t,sentptr: PTR TO LONG, timetaken:PTR TO LONG)
   DEF p,res,init=TRUE
   DEF fname[255]:STRING
-  DEF sent=0
+  DEF sent
 
   zm.files_remaining:=zm.total_files
   zm.bytes_remaining:=zm.total_bytes
@@ -2200,8 +2207,14 @@ EXPORT PROC zmodem_send_files(zm: PTR TO zmodem_t,sentptr: PTR TO LONG, timetake
   IF p<>NIL
     IF p(fname)
       REPEAT
+        sent:=0
         res:=zmodem_send_file(zm, fname, init,{sent}, timetaken)
         IF res=FALSE THEN RETURN res
+        
+        IF (zm.send_successful) AND (zm.file_skipped=FALSE)
+          doDownloadCompleted(zm,fname,sent)
+        ENDIF
+        
         init:=FALSE
         IF res
           p:=zm.zm_nextfile
@@ -2708,7 +2721,7 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
 					IF(bytes_received<>NIL) THEN bytes_received[]:=bytes_received[]+b
           upload_completed(zm,fpath,l) 
 				ENDIF
-				IF(zm.current_file_time) THEN SetFileDate(fpath,zm.current_file_time)
+				->IF(zm.current_file_time) THEN SetFileDate(fpath,unixDateToDatestamp(zm.current_file_time)) removed
 			ENDIF 
 
 zreccont1:
@@ -3008,7 +3021,7 @@ ENDPROC type
 
 EXPORT PROC zmodem_init(zm: PTR TO zmodem_t, cbdata: PTR TO CHAR,
         lputs,progress,recv_byte,is_connected,is_cancelled,
-        data_waiting,upload_completed,upload_failed,dupecheck,
+        data_waiting,upload_completed,upload_failed,download_completed,dupecheck,
         flush,duplicate_filename,fileopen,fileclose,fileseek,
         fileread,filewrite,firstfile,nextfile,
         block_size,max_errors,iacEncode,sendbufsize)
@@ -3049,6 +3062,7 @@ EXPORT PROC zmodem_init(zm: PTR TO zmodem_t, cbdata: PTR TO CHAR,
 	zm.zm_data_waiting:=data_waiting
   zm.zm_upload_completed:=upload_completed
   zm.zm_upload_failed:=upload_failed
+  zm.zm_download_completed:=download_completed
   zm.zm_dupecheck:=dupecheck
 	zm.zm_flush:=flush
   zm.zm_duplicate_filename:=duplicate_filename
@@ -3079,6 +3093,14 @@ EXPORT PROC zmodem_cleanup(zm: PTR TO zmodem_t)
   Dispose(zm.sendBuffer)
 ENDPROC
 
+PROC doDownloadCompleted(zm:PTR TO zmodem_t,fname,size)
+  DEF p
+  p:=zm.zm_download_completed
+  IF p<>NIL
+    RETURN p(size)
+  ENDIF
+ENDPROC
+
 PROC doOpen(zm:PTR TO zmodem_t,fname,mode)
   DEF p
   p:=zm.zm_fopen
@@ -3092,7 +3114,7 @@ PROC doClose(zm:PTR TO zmodem_t,fhandle)
   DEF p
   p:=zm.zm_fclose
   IF p<>NIL
-    RETURN p(fhandle,(zm.send_successful) AND (zm.file_skipped=FALSE))
+    RETURN p(fhandle)
   ENDIF
   lprintf(zm,ZM_LOG_WARNING,'zm_fclose not set, defaulting to dos library Close') 
 ENDPROC Close(fhandle)

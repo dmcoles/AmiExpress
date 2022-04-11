@@ -655,12 +655,9 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
               generatePage(sb,http_c,httppath,node,uploadMode,fileList)
               
             ELSEIF (StrCmp(getCmd,'/',1))
+
               StringF(temp,'\s\s',httppath,getCmd+1)          
               
-              IF httpData.fileStart<>NIL
-                fileStart(httpData,temp,FileLength(temp))
-              ENDIF
-
               IF asynciobase<>NIL
                 fh:=OpenAsync(temp,MODE_READ,32768)
               ELSE
@@ -668,6 +665,10 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
               ENDIF
               
               IF fh<>0
+                IF httpData.fileStart<>NIL
+                  fileStart(httpData,temp,FileLength(temp))
+                ENDIF
+
                 writeLineEx(sb,http_c,'HTTP/1.1 200 OK\b\n')
                 writeLineEx(sb,http_c,'content-type: binary/octet-stream\b\n')
                 writeLineEx(sb,http_c,'\b\n')
@@ -730,7 +731,6 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
               generatePage(sb,http_c,httppath,node,uploadMode,fileList)
             ENDIF
           ENDIF
-
           r:=closeSocket(sb,http_c)
         ENDIF
       ENDWHILE
