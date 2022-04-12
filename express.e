@@ -9148,7 +9148,9 @@ PROC logUDFile(dl)
     IF zModemInfo.resumePos<>0
       StringF(tempStr,'\tResuming \s[12] \d bytes from \d',FilePart(zModemInfo.fileName),zModemInfo.filesize,zModemInfo.resumePos)
     ELSE
-      StringF(tempStr,'\tUploading \s[12] \d bytes',FilePart(zModemInfo.fileName),zModemInfo.filesize)
+      IF zModemInfo.filesize<>$7fffffff
+        StringF(tempStr,'\tUploading \s[12] \d bytes',FilePart(zModemInfo.fileName),zModemInfo.filesize)
+      ENDIF
     ENDIF
   ENDIF
   callersLog(tempStr)
@@ -14885,8 +14887,8 @@ PROC ftpCheckRatio(fileName:PTR TO CHAR,flen,errormsg:PTR TO CHAR)
   DEF freeDFlags:PTR TO stdlist
   DEF fileList:PTR TO stdlist
   DEF fileItem:PTR TO flagFileItem
-  DEF estDlCPS
-  
+  DEF estDlCPS  
+ 
   IF loggedOnUserMisc.lastDlCPS<>0
     estDlCPS:=loggedOnUserMisc.lastDlCPS
   ELSE
@@ -16788,7 +16790,7 @@ PROC fileUpload(file,forceZmodem=FALSE) HANDLE
 
   checkOffhookFlag()
 
-  IF ext THEN receivePlayPen(FALSE)
+  IF ext OR xmodemFlag THEN receivePlayPen(xmodemFlag)
 
   Delay(50)
 
@@ -17254,7 +17256,7 @@ PROC cleanItUp()
     RETURN
   ENDIF
 
-  /* lock the directory (Playpen or RamPen) */
+  /* lock the work directory */
   IF((fLock:=Lock(tempstr,ACCESS_READ)))=0
     myError(8)
     JUMP ef
@@ -27921,6 +27923,7 @@ PROC processFtpLoggedOnUser()
   DEF cnames:PTR TO stringlist
   DEF cdirs:PTR TO stringlist
   DEF cnums:PTR TO stdlist
+  DEF confULBlock:PTR TO stringlist
   DEF ftpData:PTR TO ftpData
   
   setEnvStat(ENV_IDLE)
@@ -27985,6 +27988,7 @@ PROC processFtpLoggedOnUser()
   cnames:=NEW cnames.stringlist(cmds.numConf)
   cdirs:=NEW cdirs.stringlist(cmds.numConf)
   cnums:=NEW cnums.stdlist(cmds.numConf)
+  confULBlock:=NEW confULBlock.stringlist(cmds.numConf)
   FOR i:=1 TO cmds.numConf
     IF checkConfAccess(i) AND (checkToolTypeExists(TOOLTYPE_CONF,i,'EXCLUDE_FTP')=FALSE)
       IF readToolType(TOOLTYPE_CONF,i,'FTPDIRNAME',tempstr)=FALSE
@@ -27994,6 +27998,15 @@ PROC processFtpLoggedOnUser()
       cnames.add(tempstr)
       cdirs.add(confDirs.item(i-1))
       cnums.add(i)
+      IF readToolType(TOOLTYPE_CONF,i,'NO_FTP_UPLOADS',tempstr)
+        IF StrLen(tempstr)=0
+          confULBlock.add('FTP uploads not allowed in this conference')
+        ELSE
+          confULBlock.add(tempstr)
+        ENDIF
+      ELSE
+        confULBlock.add('')
+      ENDIF
     ENDIF
   ENDFOR
 
@@ -28030,6 +28043,7 @@ PROC processFtpLoggedOnUser()
     ftpData.confNames:=cnames
     ftpData.confDirs:=cdirs
     ftpData.confNums:=cnums
+    ftpData.confULBlock:=confULBlock
 
     ftpServerMode(ftpData,telnetSocket,tempstr,uploadPath,ftpDataPorts,cmds.acLvl[LVL_CAPITOLS_in_FILE]<>0)
     END ftpData
@@ -28038,6 +28052,7 @@ PROC processFtpLoggedOnUser()
   END cnames
   END cdirs
   END cnums
+  END confULBlock
   
   ->CloseSocket(telnetSocket)
   ->telnetSocket:=-1
@@ -30697,7 +30712,10 @@ PROC main() HANDLE
     Raise(ERR_COMPUTERTYPES)
   ENDIF
 
+  StringF(nodeWorkDir,'\sNode\d/Work/',cmds.bbsLoc,node)
+
   tidyPlayPen()
+  cleanItUp()
   clearUser()
 
   clearOverride()
@@ -30719,7 +30737,6 @@ PROC main() HANDLE
 
   StrCopy(nodeScreenDir,sopt.nodeScreens)
 
-  StringF(nodeWorkDir,'\sNode\d/Work/',cmds.bbsLoc,node)
 
   IF (proc.task.ln.pri<>cmds.taskPri)
     SetTaskPri(FindTask(0),cmds.taskPri)

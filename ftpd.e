@@ -76,6 +76,7 @@ EXPORT OBJECT ftpData
   confNames:PTR TO stringlist
   confDirs:PTR TO stringlist
   confNums:PTR TO stdlist
+  confULBlock:PTR TO stringlist
   currentConf:LONG
   setReuseAddr:INT
   filenameCAPS:INT
@@ -1427,6 +1428,28 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
     RETURN
   ENDIF
 
+  IF ftpData.confULBlock<>NIL
+    IF ftpData.currentConf>0
+      IF StrLen(ftpData.confULBlock.item(ftpData.currentConf-1))
+        StringF(temp,'550 \s\b\n',ftpData.confULBlock.item(ftpData.currentConf-1))
+        writeLineEx(sb,ftp_c,temp)
+        IF (data_c>=0)
+          ftpData.scount:=ftpData.scount-1
+          r:=closeSocket(sb,data_c)
+          data_c:=-1
+        ENDIF
+        
+        IF (data_s>=0)
+          ftpData.scount:=ftpData.scount-1
+          r:=closeSocket(sb,data_s)
+          data_s:=-1
+        ENDIF
+        RETURN
+      ENDIF
+    ENDIF
+  ENDIF
+
+
   IF ftpData.mode=MODE_DOWNLOAD
     StringF(temp,'550 \s: Not expecting any uploads\b\n',filename)
     writeLineEx(sb,ftp_c,temp)
@@ -2121,7 +2144,7 @@ EXPORT PROC doftp(ftpData:PTR TO ftpData,node,ftphost,ftpports:PTR TO LONG,ftpda
   ftpData.hostName:=String(255)
   ftpData.dataPorts:=ftpdataports
   ftpData.setReuseAddr:=TRUE
-
+  
   IF uploadMode
     ftpData.ftpDir:={uploadDir}
   ELSE
