@@ -1970,6 +1970,7 @@ PROC showCPS(node,incps:PTR TO CHAR)
   drawPen:=chat[node]
   IF(quietNode[node]) THEN drawPen:=3
 
+  SetAPen(eWin.rport,drawPen)
   Move(eWin.rport,GLEF_BAUD+5,topOffset+32+(node*11))
   Text(eWin.rport,cps,7)
 ENDPROC
