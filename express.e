@@ -1729,14 +1729,17 @@ ENDPROC
 PROC purgeLineEnd()
   DEF result
 
-  IF (serialReadIO<>NIL) AND (transfering=FALSE) AND (doorSilent=FALSE)
-    result:=CheckIO(serialReadIO)
+  IF (transfering=FALSE) AND (doorSilent=FALSE)
+    IF (serialReadIO<>NIL)
+      result:=CheckIO(serialReadIO)
       IF(result=FALSE)
-      AbortIO(serialReadIO)
-    ENDIF
+        AbortIO(serialReadIO)
+      ENDIF
       WaitIO(serialReadIO)
       serialReadIO.iostd.command:=CMD_CLEAR
       DoIO(serialReadIO)
+    ENDIF
+    IF telnetSocket>=0 THEN purgeTelnet()
   ENDIF
 ENDPROC
 
@@ -1749,15 +1752,31 @@ PROC purgeLineStart()
 ENDPROC
 
 PROC purgeLine()
-  IF (serialReadIO<>NIL) AND (transfering=FALSE) AND (doorSilent=FALSE)
-    AbortIO(serialReadIO)
-    WaitIO(serialReadIO)
-    serialReadIO.iostd.command:=CMD_CLEAR
-    DoIO(serialReadIO)
-    queueSerialRead({serbuff})
+  IF (transfering=FALSE) AND (doorSilent=FALSE)
+    IF (serialReadIO<>NIL)
+      AbortIO(serialReadIO)
+      WaitIO(serialReadIO)
+      serialReadIO.iostd.command:=CMD_CLEAR
+      DoIO(serialReadIO)
+      queueSerialRead({serbuff})
+    ENDIF
+    IF telnetSocket>=0 THEN purgeTelnet()
   ENDIF
 ENDPROC
 
+PROC purgeTelnet()
+  DEF data,tot,n
+  DEF buff[4096]:ARRAY OF CHAR
+
+  data,tot:=checkTelnetData()
+  n:=4096
+  WHILE (tot>0)
+    IF tot<4096 THEN n:=tot
+    IoctlSocket(telnetSocket,FIONBIO,[1])
+    n:=Recv(telnetSocket,buff,n,0)
+    IF n>0 THEN tot:=tot-n ELSE tot:=0
+  ENDWHILE
+ENDPROC
 PROC checkCarrier()
   DEF stat,stat2=0
   DEF temp[255]:STRING
@@ -4755,6 +4774,16 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
 
   IF (checkConfAccess(conf)=FALSE) THEN conf:=1
   IF((conf<1) OR (conf>cmds.numConf)) THEN conf:=1
+  WHILE (conf<=cmds.numConf) ANDALSO (checkConfAccess(conf)=FALSE)
+    conf++
+  ENDWHILE
+
+  IF (conf>cmds.numConf)
+    aePuts('\b\nYou do not have access to any conferences on this BBS\b\n')
+    aePuts('Disconnecting..\b\n')
+    reqState:=REQ_STATE_LOGOFF
+    RETURN
+  ENDIF
 
   IF (msgBaseNum<1 ) OR (msgBaseNum>getConfMsgBaseCount(conf)) THEN msgBaseNum:=1
 
@@ -18545,6 +18574,7 @@ PROC uploadaFile(uLFType,cmd,attach,alreadyUploaded=FALSE)            -> JOE
   /* dunno why cause we dont return shit */
   checkOnlineStatus()    /* can return no carrier */
 
+  purgeLine()
 
   IF(cmds.acLvl[LVL_KEEP_UPLOAD_CREDIT]>0) THEN loggedOnUser.timeTotal:=loggedOnUser.timeTotal+(Div(peff,2))
 
@@ -19691,7 +19721,7 @@ breakd:
     callersLog('\tDownload Failed..')
     udLog('\tDownload Failed..')
   ENDIF
-
+ 
   IF (uTBT>0)
     ->hydra uploads
     ObtainSemaphore(bgData)
@@ -19712,6 +19742,8 @@ breakd:
 
   displayULStats(loggedOnUser,loggedOnUserMisc)          /* Show User stats.. Num Dnloads, uploads */
   aePuts('\b\n')
+  
+  purgeLine()
 
   statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
   IF((mystat=71) OR (mystat=103)) THEN RETURN(pGoodbye())
@@ -27630,11 +27662,13 @@ PROC processLoggedOnUser()
     ENDIF
   ELSEIF subState.subState=SUBSTATE_DISPLAY_CONF_BULL
     joinConf(loggedOnUser.confRJoin,loggedOnUser.msgBaseRJoin,FALSE,FORCE_MAILSCAN_SKIP)
-    loadFlagged()
-    IF StrLen(historyFolder)>0 THEN loadHistory()
-    blockOLM:=FALSE
-    menuPause:=TRUE
-    subState.subState:=SUBSTATE_DISPLAY_MENU
+    IF reqState=REQ_STATE_NONE
+      loadFlagged()
+      IF StrLen(historyFolder)>0 THEN loadHistory()
+      blockOLM:=FALSE
+      menuPause:=TRUE
+      subState.subState:=SUBSTATE_DISPLAY_MENU
+    ENDIF
   ELSEIF subState.subState=SUBSTATE_DISPLAY_MENU
     IF ((loggedOnUser.expert="N") AND (doorExpertMode=FALSE)) OR (checkToolTypeExists(TOOLTYPE_CONF,currentConf,'FORCE_MENUS'))
       IF (menuPause) THEN doPause()
