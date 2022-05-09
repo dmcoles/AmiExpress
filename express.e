@@ -4527,13 +4527,13 @@ PROC runCommand(cmdtype,cmd,params,privcmd,subtype=-1)
     IF passparams=1 THEN RETURN RESULT_SUCCESS
 
     readToolType(tooltype,cmd,'INTERNAL',commandfile)
-    IF passparams
+    IF passparams>0
       ->pass in the original params
       StrAdd(commandfile,' ')
       StrAdd(commandfile,params)
     ENDIF
 
-    IF passparams=2 THEN subtype++
+    IF (passparams=-1) OR (passparams=2) THEN subtype++
     IF (passparams=4) THEN subtype:=SUBTYPE_INTCMD
     IF (passparams=5) THEN subtype:=SUBTYPE_ANYCMD
     
