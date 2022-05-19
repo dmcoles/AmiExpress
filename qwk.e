@@ -414,7 +414,7 @@ PROC main() HANDLE
   DEF optionName[255]:STRING
   DEF optionValue[255]:STRING
 
-  WriteF('Ami-Express QWK file processor Copyright 2020 Darren Coles\n')
+  WriteF('Ami-Express QWK file processor (v1.1) Copyright 2022 Darren Coles\n')
   
   myargs:=[0,0]:LONG
   IF rdargs:=ReadArgs('CFG/A',myargs,NIL)
