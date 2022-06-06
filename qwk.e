@@ -1,6 +1,10 @@
 
   MODULE 'dos/dos','dos/dostags','dos/datetime'
-  MODULE '*stringlist'
+  MODULE '*stringlist','*axobjects'
+
+#ifndef EVO_3_4_0
+  FATAL 'This should only be compiled with E-VO Amiga E Compiler'
+#endif
 
   DEF confIds=NIL:PTR TO stringlist
   DEF confNames=NIL:PTR TO stringlist
@@ -31,24 +35,6 @@ OBJECT qwkHeader
   confNum: INT
   relativeMsgNum: INT
   netTag: CHAR
-ENDOBJECT
-
-OBJECT mailStat
-  lowestKey : LONG
-  highMsgNum : LONG
-  lowestNotDel : LONG
-  pad[6]:ARRAY OF CHAR
-ENDOBJECT
-
-OBJECT mailHeader
-  status: CHAR
-  msgNumb: LONG
-  toName[31]: ARRAY OF CHAR
-  fromName[31]: ARRAY OF CHAR
-  subject[31]: ARRAY OF CHAR
-  msgDate: LONG
-  recv: LONG
-  pad: CHAR
 ENDOBJECT
 
 PROC exec(fileName:PTR TO CHAR)
@@ -109,17 +95,10 @@ PROC fillStrCopy(src:PTR TO CHAR,dest:PTR TO CHAR,len)
 ENDPROC
 
 PROC saveMh(fh,mailHeader)
-  DEF result
-  
-  result:=Write(fh,mailHeader,1)    -> STATUS
-  result:=result+Write(fh,mailHeader+110,1)   ->PAD
-  result:=result+Write(fh,mailHeader+2,4)   ->MsgNum
-  result:=result+Write(fh,mailHeader+6,31)   ->toName
-  result:=result+Write(fh,mailHeader+38,31)   ->fromName
-  result:=result+Write(fh,mailHeader+70,31)   ->subject
-  result:=result+Write(fh,mailHeader+110,1)   ->PAD
-  result:=result+Write(fh,mailHeader+102,9)  ->msgdate, recv & pad
-  result:=result+Write(fh,mailHeader+110,1)   ->PAD
+  DEF result,size
+
+  size:=SIZEOF mailHeader
+  result:=Write(fh,mailHeader,size)
 ENDPROC result
 
 PROC getMsgBasePath(confNum,msgBasePath:PTR TO CHAR)
@@ -435,7 +414,7 @@ PROC main() HANDLE
   DEF optionName[255]:STRING
   DEF optionValue[255]:STRING
 
-  WriteF('Ami-Express QWK file processor Copyright 2020 Darren Coles\n')
+  WriteF('Ami-Express QWK file processor (v1.1) Copyright 2022 Darren Coles\n')
   
   myargs:=[0,0]:LONG
   IF rdargs:=ReadArgs('CFG/A',myargs,NIL)
@@ -678,7 +657,6 @@ PROC main() HANDLE
             buf2:=New(bufsz)
             Read(mf,buf2,bufsz)
      
-            mh.pad:=0
             mh.status:="P"
             mh.msgNumb:=newMsgNum
          
@@ -693,6 +671,7 @@ PROC main() HANDLE
 
             mh.msgDate:=getEncodedDate(qh.msgdate)
             mh.recv:=0
+            mh.extMsgNum:=0
 
             IF saveMh(fh,mh)<>110
               WriteF('Error saving mail header for message \d\n',newMsgNum)

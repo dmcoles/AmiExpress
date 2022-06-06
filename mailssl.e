@@ -504,9 +504,6 @@ EXPORT PROC cleanupssl()
 
   CloseLibrary(amisslmasterbase);
   amisslmasterbase:=NIL;
-
-  IF socketbase<>NIL THEN CloseLibrary(socketbase)
-  socketbase:=NIL;
 ENDPROC
 
 /* Connect to the specified server, either directly or through the specified

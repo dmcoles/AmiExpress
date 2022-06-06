@@ -171,7 +171,9 @@ EXPORT CONST SV_ACPALERT=182
 EXPORT CONST SV_INCOMING_MSG=183
 EXPORT CONST SV_KICKUSER=184
 EXPORT CONST SV_STARTNODE=185
+EXPORT CONST SV_INFO=199
 EXPORT CONST INCOMING_TELNET=200
+EXPORT CONST INCOMING_FTP=201
 
 
 EXPORT CONST GETKEY=500
@@ -261,7 +263,7 @@ EXPORT CONST REL_CONF=627
 EXPORT CONST RETURNCOMMAND2=628
 EXPORT CONST CANCEL_TRANSFER_OFFHOOK=629
 EXPORT CONST CLEAR_OLM_QUEUE=630
-EXPORT CONST UNKNOWN12=631
+EXPORT CONST QUIET_DOWNLOAD=631
 EXPORT CONST CHECK_PLAYPEN_EXISTS=632
 EXPORT CONST EXT_LOAD_ACCOUNT=633
 EXPORT CONST EXT_SAVE_ACCOUNT=634
@@ -324,6 +326,7 @@ EXPORT CONST DT_SIZEUPLOAD=703
 EXPORT CONST DT_SIZEDOWNLOAD=704
 EXPORT CONST CON_CURSOR=705
 EXPORT CONST TELNET_CONNECT=706
+EXPORT CONST GET_CMD_TOOLTYPE=707
 
 /* end of new /X 5 host commands */
 
@@ -383,11 +386,17 @@ EXPORT CONST JH_TRANSFERCPS=9
 EXPORT OBJECT commands
   acLvl[100]: ARRAY OF CHAR
   serDevUnit: CHAR
-  serDev[40]: ARRAY OF CHAR
-  newUserPw[15]: ARRAY OF CHAR -> 141
-  openingBaud: LONG            -> 156
-  taskPri: CHAR                -> 160
-  conf1Name[54]: ARRAY OF CHAR ->161
+  serDev[40]: ARRAY OF CHAR                -> 101 y
+  newUserPw[15]: ARRAY OF CHAR             -> 141
+  openingBaud: LONG                        -> 156
+  taskPri: CHAR                            -> 160
+  UNION
+  [
+  confNames[540]: ARRAY OF CHAR            -> 161
+  confLocs[540]: ARRAY OF CHAR             -> 701
+  ]
+  [
+  conf1Name[54]: ARRAY OF CHAR  ->odd      ->161
   conf2Name[54]: ARRAY OF CHAR
   conf3Name[54]: ARRAY OF CHAR
   conf4Name[54]: ARRAY OF CHAR
@@ -406,64 +415,12 @@ EXPORT OBJECT commands
   conf7Loc[54]: ARRAY OF CHAR
   conf8Loc[54]: ARRAY OF CHAR
   conf9Loc[54]: ARRAY OF CHAR
-  conf10Loc[54]: ARRAY OF CHAR
-  bbsName[41]: ARRAY OF CHAR  -> 1241
-  bbsLoc[41]: ARRAY OF CHAR
-  sysopName[41]: ARRAY OF CHAR   
-  pSAcLvl[6]: ARRAY OF CHAR -> 1364
-  pSRType[6]: ARRAY OF CHAR
-  pSRatio[6]: ARRAY OF CHAR
-  pSDBytes[6]: ARRAY OF LONG -> 1382
-  pSTime[6]: ARRAY OF LONG 
-  pSCnfAc1[6]:ARRAY OF CHAR -> 1430
-  pSCnfAc2[6]:ARRAY OF CHAR
-  pSCnfAc3[6]:ARRAY OF CHAR
-  pSCnfAc4[6]:ARRAY OF CHAR
-  pSCnfAc5[6]:ARRAY OF CHAR
-  pSCnfAc6[6]:ARRAY OF CHAR
-  pSCnfAc7[6]:ARRAY OF CHAR
-  pSCnfAc8[6]:ARRAY OF CHAR
-  pSCnfAc9[6]:ARRAY OF CHAR
-  pPSCnfAc10[6]:ARRAY OF CHAR
-  mInit[101]: ARRAY OF CHAR -> 1490
-  mReset[31]: ARRAY OF CHAR
-  mRing[31]: ARRAY OF CHAR
-  mAnswer[31]: ARRAY OF CHAR
-  mC300[31]: ARRAY OF CHAR
-  mC1200[31]: ARRAY OF CHAR
-  mC2400[31]: ARRAY OF CHAR
-  mC4800[31]: ARRAY OF CHAR
-  mC9600[31]: ARRAY OF CHAR
-  mC19200[31]: ARRAY OF CHAR
-  numConf: INT                -> 1870
-  sysPass[31]: ARRAY OF CHAR  -> 1872
-  remotePass[31]: ARRAY OF CHAR
-  baudTimes[10]: ARRAY OF INT
-  pad[22]: ARRAY OF CHAR
-ENDOBJECT -> 1976
-
-EXPORT OBJECT packedCommands
-  acLvl[100]: ARRAY OF CHAR
-  serDevUnit: CHAR
-  serDev0:CHAR                              ->101
-  serDev1[38]: ARRAY OF CHAR
-  serDev39: CHAR
-  newUserPw0: CHAR                          -> 141
-  newUserPw1[14]: ARRAY OF CHAR
-  openingBaud: LONG                        -> 156
-  taskPri: CHAR                            -> 160
-  confNames0: CHAR                         -> 161
-  confNames1[538]: ARRAY OF CHAR
-  confNames539: CHAR
-  confLocs0: CHAR                           ->701
-  confLocs1[538]: ARRAY OF CHAR
-  confLocs539: CHAR
-  bbsName0: CHAR                            ->1241
-  bbsName1[40]: ARRAY OF CHAR
-  bbsLoc[40]: ARRAY OF CHAR                 ->1282
-  bbsLoc41: CHAR
-  sysopName0: CHAR                          ->1323
-  sysopName1[40]: ARRAY OF CHAR
+  conf10Loc[54]: ARRAY OF CHAR  
+  ]
+  ENDUNION
+  bbsName[41]: ARRAY OF CHAR               ->1241
+  bbsLoc[41]: ARRAY OF CHAR                ->1282
+  sysopName[41]: ARRAY OF CHAR             ->1323
 
   /*conf1Name[54]: ARRAY OF CHAR  ->odd      ->161
   conf2Name[54]: ARRAY OF CHAR
@@ -503,23 +460,27 @@ EXPORT OBJECT packedCommands
   pSCnfAc8[6]:ARRAY OF CHAR
   pSCnfAc9[6]:ARRAY OF CHAR
   pPSCnfAc10[6]:ARRAY OF CHAR
-  mInit[100]: ARRAY OF CHAR -> 1490
-  mInit100: CHAR
-  mReset0: CHAR             ->1591
-  mReset1[30]: ARRAY OF CHAR  
-  mRing[30]: ARRAY OF CHAR  ->1622
-  mRing30:CHAR
-  mAnswer0: CHAR            ->1653
-  mAnswer1[30]: ARRAY OF CHAR
+  mInit[101]: ARRAY OF CHAR -> 1490
+  mReset[31]: ARRAY OF CHAR ->1591
+  mRing[31]: ARRAY OF CHAR  ->1622
+  mAnswer[31]: ARRAY OF CHAR ->1653
   mConnects[186]:ARRAY OF CHAR
   numConf: INT                -> 1870
-  sysPass[30]: ARRAY OF CHAR  -> 1872
-  sysPass30: CHAR
-  remotePass0: CHAR
-  remotePass1[30]: ARRAY OF CHAR
-  baudTimes[10]: ARRAY OF INT
+  sysPass[31]: ARRAY OF CHAR  -> 1872
+  remotePass[31]: ARRAY OF CHAR -> 1903
+  baudTimes[10]: ARRAY OF INT   -> 1934
   pad[22]: ARRAY OF CHAR
 ENDOBJECT -> 1976
+
+EXPORT OBJECT acpData
+  masterSemi: PTR TO LONG
+  lastUsers[5]:ARRAY OF LONG
+  lastUsersDate[5]:ARRAY OF LONG
+  lastUploads[5]:ARRAY OF LONG
+  lastUploadsDate[5]:ARRAY OF LONG
+  lastDownloads[5]:ARRAY OF LONG
+  lastDownloadsDate[5]:ARRAY OF LONG
+ENDOBJECT
 
 EXPORT OBJECT startOption
   leftEdge : INT          ->done
@@ -564,7 +525,7 @@ EXPORT OBJECT acpMessage
   command:LONG
   node:LONG
   lineNum:LONG
-  myCmds:PTR TO packedCommands
+  myCmds:PTR TO commands
   sopt: PTR TO startOption
 ENDOBJECT  ->LENGTH 204
 
@@ -599,7 +560,7 @@ ENDOBJECT
    
 EXPORT OBJECT nodeInfo
   handle[31]:ARRAY OF CHAR
-  telnetSocket:LONG
+  netSocket:LONG
   chatColor:LONG
   offHook:LONG
   private:LONG
@@ -622,11 +583,10 @@ EXPORT OBJECT singlePort
   multiCom: LONG
   semiName[20]:ARRAY OF CHAR
   status:LONG -> 82
-  handle[30]:ARRAY OF CHAR
-  handle31:CHAR
-  location0:CHAR
-  location[30]:ARRAY OF CHAR
+  handle[31]:ARRAY OF CHAR
+  location[31]:ARRAY OF CHAR
   misc1[100]:ARRAY OF CHAR
   misc2[100]:ARRAY OF CHAR
+  baud[10]:ARRAY OF CHAR
 ENDOBJECT
 

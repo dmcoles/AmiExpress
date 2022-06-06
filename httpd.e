@@ -11,8 +11,6 @@ CONST EWOULDBLOCK=35
 CONST MAX_LINE=255
 CONST FIONBIO=$8004667e
 
-DEF zModemInfo
-
 MODULE	'socket',
         'net/netdb',
         'net/in',
@@ -472,7 +470,7 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
     WHILE((readMemLine(lineBuff,sb,socket,buff,{readSize},{pos},255,bufsize,{contentLength})) > 0)
     IF (p:=InStr(lineBuff,'filename="'))>=0
         StrCopy(fname,httpData.workingPath)
-        StrAdd(fname,lineBuff+p+10,ALL)
+        StrAdd(fname,lineBuff+p+10)
         p:=InStr(fname,'"')
         SetStr(fname,p)
     ENDIF
@@ -653,16 +651,13 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
           
           IF StrLen(getCmd)>0
             IF (spcPos:=InStr(getCmd,' '))>=0 THEN SetStr(getCmd,spcPos)
-            IF StrCmp(getCmd,'/',ALL)
+            IF StrCmp(getCmd,'/')
               generatePage(sb,http_c,httppath,node,uploadMode,fileList)
               
             ELSEIF (StrCmp(getCmd,'/',1))
+
               StringF(temp,'\s\s',httppath,getCmd+1)          
               
-              IF httpData.fileStart<>NIL
-                fileStart(httpData,temp,FileLength(temp))
-              ENDIF
-
               IF asynciobase<>NIL
                 fh:=OpenAsync(temp,MODE_READ,32768)
               ELSE
@@ -670,6 +665,10 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
               ENDIF
               
               IF fh<>0
+                IF httpData.fileStart<>NIL
+                  fileStart(httpData,temp,FileLength(temp))
+                ENDIF
+
                 writeLineEx(sb,http_c,'HTTP/1.1 200 OK\b\n')
                 writeLineEx(sb,http_c,'content-type: binary/octet-stream\b\n')
                 writeLineEx(sb,http_c,'\b\n')
@@ -727,12 +726,11 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
           
           IF StrLen(postCmd)>0
             IF (spcPos:=InStr(postCmd,' '))>=0 THEN SetStr(postCmd,spcPos)
-            IF StrCmp(postCmd,'/',ALL)
+            IF StrCmp(postCmd,'/')
               extractFileData(sb,http_c,httpData,boundary,contentLength)
               generatePage(sb,http_c,httppath,node,uploadMode,fileList)
             ENDIF
           ENDIF
-
           r:=closeSocket(sb,http_c)
         ENDIF
       ENDWHILE

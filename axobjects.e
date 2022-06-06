@@ -9,10 +9,8 @@
 
 
 EXPORT OBJECT user
-  name[30]:ARRAY OF CHAR
-  name31: CHAR  -> last character of name (odd sized arrays are always padded so need this kludge)
-  pass0: CHAR   -> first character of pass (odd sized arrays are always padded so need this kludge)
-  pass[8]:ARRAY OF CHAR
+  name[31]:ARRAY OF CHAR
+  pass[9]:ARRAY OF CHAR
   location[30]:ARRAY OF CHAR
   phoneNumber[13]:ARRAY OF CHAR
   slotNumber: INT
@@ -62,7 +60,7 @@ EXPORT OBJECT user
   translatorID: CHAR
   msgBaseRJoin:INT
   confYM9: LONG ->not used
-  beginLogCall : LONG ->not used
+  todaysBytesLimit : LONG
   protocol: CHAR  ->not really used
   uucpa: CHAR
   lineLength: CHAR
@@ -139,7 +137,7 @@ EXPORT OBJECT confBase
   bytesUpload: LONG
   uploadTracking: INT
   unused: INT
-  dailyBytesDld: LONG
+  unused2:LONG  ->dailyBytesDld: LONG
   upload: INT
   downloads: INT
   ratioType: INT
@@ -179,8 +177,10 @@ EXPORT OBJECT mailHeader
   subject[31]: ARRAY OF CHAR
   msgDate: LONG
   recv: LONG
-  pad: CHAR
-ENDOBJECT
+  extMsgNum: INT
+ENDOBJECT  ->110
+->1+1+4+31+31+31+1+4+4+1
+
 
 EXPORT OBJECT mailStat
   lowestKey : LONG

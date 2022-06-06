@@ -1,6 +1,6 @@
 -> ACP v5
 
-  OPT LARGE,REG=5,OSVERSION=37
+  OPT LARGE,OSVERSION=37
 
   MODULE 'workbench/startup',
        'exec/ports',
@@ -42,7 +42,7 @@
          '*jsonParser',
          '*jsonCreate',
          '*stringlist',
-         '*acpversion'
+        '*acpversion'
 
 ENUM ERR_NONE,ERR_ALREADY_RUNNING,ERR_STARTUP, ERR_VALIDATE,ERR_NO_DISKFONT,ERR_FDS_RANGE
 
@@ -52,7 +52,9 @@ CONST MAX_LINE=255
 CONST FIONBIO=$8004667e
 CONST EWOULDBLOCK=35
 
+#ifndef EVO_3_5_0
 CONST TAG_END=0    
+#endif
 
 CONST NODECONFIG=1
 CONST RUNMCP=2
@@ -306,6 +308,7 @@ DEF doMultiCom
 
 DEF quietNode[MAX_NODES]:ARRAY OF INT
 DEF telnetNode[MAX_NODES]:ARRAY OF INT
+DEF ftpNode[MAX_NODES]:ARRAY OF INT
 DEF bbsStack
 
 DEF nodes[MAX_NODES]:ARRAY OF INT
@@ -336,7 +339,7 @@ DEF cpymsg:PTR TO acpMessage
 
 DEF portName[255]:STRING
 
-
+DEF acpData:PTR TO acpData
 
 DEF lastUsers=NIL: PTR TO itemsList
 DEF lastUploads=NIL: PTR TO itemsList
@@ -364,8 +367,8 @@ DEF buttonID=-1  /**** Nutton to be processed when Node Button is selected*/
 DEF shortUp=FALSE
 DEF setOriText[15]:ARRAY OF LONG    ->char[15][100]/** Original Text for 15 control buttons **/
 
-DEF semiNodes:PTR TO multiPort
-DEF singleNode:PTR TO singlePort
+DEF semiNodes=NIL:PTR TO multiPort
+DEF singleNode=NIL:PTR TO singlePort
 
 DEF multiName[8]:STRING
 DEF singleName[8]:STRING
@@ -431,6 +434,7 @@ DEF maddItemi=0
 DEF startupCompleteScript[255]:STRING
 
 DEF telnetPort=-1
+DEF ftpPort=-1
 DEF fds=0:PTR TO LONG
 
 PROC init() OF itemsList  ->constructor
@@ -445,6 +449,7 @@ PROC init() OF itemsList  ->constructor
   self.lastUserDates[2]:=String(20)
   self.lastUserDates[3]:=String(20)
   self.lastUserDates[4]:=String(20)
+  
   self.num:=0
 ENDPROC
 
@@ -565,7 +570,7 @@ ENDPROC (Shr((n),11) AND $1F)
 
 ->/* ***** Free the Gadlist and return ***** */
 PROC freeGads()
-  FreeGadgets(eGList)
+  IF eGList THEN FreeGadgets(eGList)
   IF (visInfo) THEN FreeVisualInfo(visInfo)
   visInfo:=NIL
   eGList:=NIL
@@ -1008,6 +1013,7 @@ PROC createCustomMenus(nodes)
     maddItem( NM_ITEM,'/X Developement',0,0,0,0)
     maddItem( NM_SUB,'    /X Developement Team   ',0,0,0,0)
     maddItem( NM_SUB,'   ~~~~~~~~~~~~~~~~~~~~~~  ',0,0,0,0)
+    maddItem( NM_SUB,'   Mike Thomas             ',0,0,0,0)
     maddItem( NM_SUB,'   Joseph Hodge            ',0,0,0,0)
     maddItem( NM_SUB,'   James E. Millsap        ',0,0,0,0)
     maddItem( NM_SUB,'   Gregg Green             ',0,0,0,0)
@@ -1955,11 +1961,16 @@ ENDPROC
 
 PROC showCPS(node,incps:PTR TO CHAR)
   DEF cps[10]:STRING
-  StringF(cps,'\s[7]',incps)
+  IF StrLen(incps)>7
+    StrCopy(cps,'9999999')
+  ELSE
+    StringF(cps,'\s[7]',incps)
+  ENDIF
 
   drawPen:=chat[node]
   IF(quietNode[node]) THEN drawPen:=3
 
+  SetAPen(eWin.rport,drawPen)
   Move(eWin.rport,GLEF_BAUD+5,topOffset+32+(node*11))
   Text(eWin.rport,cps,7)
 ENDPROC
@@ -1997,6 +2008,11 @@ PROC checkMasterSig(signals)
           activeNodeCount++
           activeNodes[cpymsg.node]:=TRUE
         ENDIF
+      ENDIF
+
+      IF(cpymsg.command=SV_INFO)
+        cpymsg.data:=acpData;
+        ReplyMsg(cpymsg)
       ENDIF
 
       IF(cpymsg.command=SV_NODE_LOCK)
@@ -2113,7 +2129,7 @@ PROC drawChatBlock(node)
   Draw(eWin.rport,61,topOffset+26+(node*11)+6) 
 ENDPROC
 
-PROC cmdOpt(cmd:PTR TO packedCommands,maxNodes,x,y)
+PROC cmdOpt(cmd:PTR TO commands,maxNodes,x,y)
   DEF j
   FOR j:=0 TO maxNodes-1
     cmd.acLvl[x]:=y
@@ -2165,7 +2181,7 @@ PROC initSemaSemiNodes(s:PTR TO multiPort)
     
     s.myNode[i].t:=NIL
     s.myNode[i].taskSignal:=NIL
-    s.myNode[i].telnetSocket:=-1
+    s.myNode[i].netSocket:=-1
     s.myNode[i].private:=FALSE
     s.myNode[i].offHook:=TRUE
     s.myNode[i].chatColor:=i+1
@@ -2396,7 +2412,7 @@ PROC getIconNodeInfo(i)
   DEF basis[200]:STRING
   DEF fileName[200]:STRING
   DEF temp[255]:STRING
-  DEF cmd:PTR TO packedCommands
+  DEF cmd:PTR TO commands
   DEF sopt:PTR TO startOption
   DEF n
   
@@ -2412,9 +2428,9 @@ PROC getIconNodeInfo(i)
     IF(dobj)
       oldtooltypes:=dobj.tooltypes
       IF(s:=FindToolType(oldtooltypes,'MODEM.INIT')) THEN AstrCopy(cmd.mInit,s)
-      IF(s:=FindToolType(oldtooltypes,'MODEM.RESET')) THEN AstrCopy(cmd.mReset1-1,s)
+      IF(s:=FindToolType(oldtooltypes,'MODEM.RESET')) THEN AstrCopy(cmd.mReset,s)
       IF(s:=FindToolType(oldtooltypes,'MODEM.RING')) THEN AstrCopy(cmd.mRing,s)
-      IF(s:=FindToolType(oldtooltypes,'MODEM.ANSWER')) THEN AstrCopy(cmd.mAnswer1-1,s)
+      IF(s:=FindToolType(oldtooltypes,'MODEM.ANSWER')) THEN AstrCopy(cmd.mAnswer,s)
       IF(s:=FindToolType(oldtooltypes,'MODEM.OFFHOOK')) THEN AstrCopy(sopt.offHook,s)
       IF(s:=FindToolType(oldtooltypes,'MODEM.CALLERID-1')) THEN sopt.toggles[TOGGLES_CALLERID]:=1
       IF(s:=FindToolType(oldtooltypes,'MODEM.CALLERID-2')) THEN sopt.toggles[TOGGLES_CALLERIDNAME]:=1
@@ -2431,7 +2447,7 @@ PROC getIconNodeInfo(i)
       oldtooltypes:=dobj.tooltypes
       IF(s:=FindToolType(oldtooltypes,'SERIAL.UNIT')) THEN cmd.serDevUnit:=Val(s)
       IF(s:=FindToolType(oldtooltypes,'SERIAL.BAUD')) THEN cmd.openingBaud:=Val(s)
-      IF(s:=FindToolType(oldtooltypes,'SERIAL.DRIVER')) THEN AstrCopy(cmd.serDev1-1,s)
+      IF(s:=FindToolType(oldtooltypes,'SERIAL.DRIVER')) THEN AstrCopy(cmd.serDev,s)
       IF(s:=FindToolType(oldtooltypes,'SERIAL.A2232_PATCH')) THEN sopt.a2232:=TRUE
       IF(s:=FindToolType(oldtooltypes,'SERIAL.NO_PURGELINE')) THEN sopt.toggles[TOGGLES_NOPURGE]:=1
       IF(s:=FindToolType(oldtooltypes,'SERIAL.REPURGE')) THEN sopt.toggles[TOGGLES_REPURGE]:=1
@@ -2477,8 +2493,8 @@ PROC getIconNodeInfo(i)
   IF(dobj)
     oldtooltypes:=dobj.tooltypes
     IF(s:=FindToolType(oldtooltypes,'SYSTEM_PASSWORD')) THEN AstrCopy(cmd.sysPass,s)
-    IF(s:=FindToolType(oldtooltypes,'REMOTE_PASSWORD')) THEN AstrCopy(cmd.remotePass1-1,s)
-    IF(s:=FindToolType(oldtooltypes,'NEWUSER_PASSWORD')) THEN AstrCopy(cmd.newUserPw1-1,s)
+    IF(s:=FindToolType(oldtooltypes,'REMOTE_PASSWORD')) THEN AstrCopy(cmd.remotePass,s)
+    IF(s:=FindToolType(oldtooltypes,'NEWUSER_PASSWORD')) THEN AstrCopy(cmd.newUserPw,s)
     IF(s:=FindToolType(oldtooltypes,'PRIORITY')) THEN cmd.taskPri:=Val(s)
     IF(s:=FindToolType(oldtooltypes,'QUIETNODE')) THEN sopt.toggles[TOGGLES_QUIETSTART]:=TRUE
     IF(s:=FindToolType(oldtooltypes,'NODESTART')) 
@@ -2522,6 +2538,7 @@ PROC getIconNodeInfo(i)
     ENDIF
     
     IF(s:=FindToolType(oldtooltypes,'TELNET')) THEN telnetNode[i]:=1
+    IF(s:=FindToolType(oldtooltypes,'FTP')) THEN ftpNode[i]:=1
     freeToolTypes(dobj,cfg)
   ENDIF
 ENDPROC
@@ -2533,7 +2550,7 @@ PROC getIconBBSInfo(maxNodes)
 
   DEF s:PTR TO CHAR
   DEF sopt:PTR TO startOption 
-  DEF cmd:PTR TO packedCommands
+  DEF cmd:PTR TO commands
 
   DEF i
   DEF def
@@ -2658,7 +2675,7 @@ PROC getCmds(i)
   DEF j
   DEF sopt:PTR TO startOption
   
-  cmds[i]:=AllocMem(SIZEOF packedCommands,MEMF_PUBLIC OR MEMF_CLEAR)
+  cmds[i]:=AllocMem(SIZEOF commands,MEMF_PUBLIC OR MEMF_CLEAR)
   sopts[i]:=AllocMem(SIZEOF startOption,MEMF_PUBLIC OR MEMF_CLEAR)
   sopt:=sopts[i]
   sopt.leftEdge:=0
@@ -2709,7 +2726,7 @@ PROC readStartUp(s:PTR TO CHAR)
   DEF image[200]:STRING
   DEF tempstr[255]:STRING
   DEF dobj:PTR TO diskobject
-  DEF cmd:PTR TO packedCommands
+  DEF cmd:PTR TO commands
   DEF sopt:PTR TO startOption
   DEF oldtooltypes,cfg
   DEF t:  PTR TO CHAR
@@ -2781,6 +2798,7 @@ PROC readStartUp(s:PTR TO CHAR)
   IF(t:=FindToolType(oldtooltypes,'SHORT_DONOTMOVE')) THEN shortUp:=1
   IF(t:=FindToolType(oldtooltypes,'PRIORITY')) THEN SetTaskPri(FindTask(0),Val(t))
   IF(t:=FindToolType(oldtooltypes,'TELNETPORT')) THEN telnetPort:=Val(t)
+  IF(t:=FindToolType(oldtooltypes,'FTPPORT')) THEN ftpPort:=Val(t)
   IF(t:=FindToolType(oldtooltypes,'DOSCHECKTIME')) THEN dosCheckTime:=Val(t)
   IF(t:=FindToolType(oldtooltypes,'DOSCHECKTRIGGER')) THEN dosCheckTrigger:=Val(t)
   IF(t:=FindToolType(oldtooltypes,'DOSBANTIME')) THEN dosBanTime:=Val(t)
@@ -2830,7 +2848,7 @@ PROC readStartUp(s:PTR TO CHAR)
   IF(t:=FindToolType(oldtooltypes,'BBS_NAME'))
     FOR i:=0 TO nodeCount-1
       cmd:=cmds[i]
-      AstrCopy(cmd.bbsName1-1,t)      
+      AstrCopy(cmd.bbsName,t)      
     ENDFOR
   ENDIF
   
@@ -2851,7 +2869,7 @@ PROC readStartUp(s:PTR TO CHAR)
   IF(t:=FindToolType(oldtooltypes,'SYSOP_NAME'))
     FOR i:=0 TO nodeCount-1
       cmd:=cmds[i]
-      AstrCopy(cmd.sysopName1-1,t)
+      AstrCopy(cmd.sysopName,t)
     ENDFOR
   ENDIF
 
@@ -2887,12 +2905,12 @@ PROC readStartUp(s:PTR TO CHAR)
     cmd:=cmds[i]
     StringF(image,'NODE\d_SYSOP',i)
     IF(t:=FindToolType(oldtooltypes,image))
-      AstrCopy(cmd.sysopName1-1,t)
+      AstrCopy(cmd.sysopName,t)
     ENDIF
 
     StringF(image,'NODE\d_NAME',i)
     IF(t:=FindToolType(oldtooltypes,image))
-      AstrCopy(cmd.bbsName1-1,t)
+      AstrCopy(cmd.bbsName,t)
     ENDIF
 
     StringF(image,'NODE\d_LOCATION',i)
@@ -2966,7 +2984,7 @@ ENDPROC
 
 PROC validate()
   DEF i
-  DEF cmd:PTR TO packedCommands
+  DEF cmd:PTR TO commands
   FOR i:=0 TO MAX_NODES-1
     IF(cmds[i]<>NIL)
       cmd:=cmds[i]
@@ -3029,7 +3047,7 @@ ENDPROC
 
 PROC do_appicon(myport: PTR TO mp)
   DEF temp[100]:STRING
-  DEF cmd:PTR TO packedCommands
+  DEF cmd:PTR TO commands
   ->DEF i=0  ->static int i=0;
   ->DEF j=0  ->static int j=0;
   
@@ -3392,13 +3410,17 @@ PROC telnetSend(socket,msg,len=-1)
   IF r<>len THEN RETURN FALSE
 ENDPROC TRUE
 
-PROC setSingleFDS(socketVal)
-  DEF i,n
+PROC clearFDS()
+  DEF i
+  FOR i:=0 TO 31 DO fds[i]:=0
+ENDPROC
+
+PROC setFDS(socketVal)
+  DEF n
   
   n:=socketVal/32
   IF (n<0) OR (n>=32) THEN Raise(ERR_FDS_RANGE)
 
-  FOR i:=0 TO 31 DO fds[i]:=0
   fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
 ENDPROC
 
@@ -3420,8 +3442,308 @@ PROC updateVersion(expVer:PTR TO CHAR,expDate:PTR TO CHAR)
     d:=Val(tmp)
     StringF(expDate,'\d[2]-\s[3]-\d[4]',d,'JanFebMarAprMayJunJulAugSepOctNovDec'+((m-1)*3),y)
   ELSE
-    StrCopy(expVer,v,ALL)
-    StrCopy(expDate,'',ALL)
+    StrCopy(expVer,v)
+    StrCopy(expDate,'')
+  ENDIF
+ENDPROC
+
+PROC updateDosConnectionList(connectionList:PTR TO stdlist,t)
+  DEF i
+  DEF connItem:PTR TO connectionItem
+  DEF res=FALSE
+  
+  FOR i:=connectionList.count()-1 TO 0 STEP -1
+    connItem:=connectionList.item(i)
+    IF (connItem.blocked=FALSE)
+      IF ((connItem.connectionTime>t) OR (connItem.connectionTime<(t-dosCheckTime)))
+        END connItem
+        connectionList.remove(i)
+        res:=TRUE
+      ENDIF
+    ELSE
+      IF (connItem.blockExpiry<>0) AND (connItem.blockExpiry<t)
+        END connItem
+        connectionList.remove(i)
+        res:=TRUE
+      ENDIF
+    ENDIF
+  ENDFOR
+ENDPROC res
+
+PROC applyDosBan(connectionList:PTR TO stdlist,ipAddr:PTR TO sockaddr_in,t)
+  DEF i
+  DEF connItem:PTR TO connectionItem
+  
+  FOR i:=connectionList.count()-1 TO 0 STEP -1
+    connItem:=connectionList.item(i)
+    END connItem
+    connectionList.remove(i)
+  ENDFOR
+  connItem:=NEW connItem
+  connItem.ipAddr:=ipAddr.sin_addr
+  connItem.connectionTime:=t
+  connItem.blocked:=TRUE
+  IF dosBanTime<0
+    connItem.blockExpiry:=0     ->permanent ban
+  ELSE
+    connItem.blockExpiry:=t+Mul(dosBanTime,60)  -> apply denial of service ban period
+  ENDIF
+  connectionList.add(connItem)
+ENDPROC
+
+PROC addDosConnect(connectionList:PTR TO stdlist,ipAddr:PTR TO sockaddr_in,t)
+  DEF connItem:PTR TO connectionItem
+  connItem:=NEW connItem
+  connItem.ipAddr:=ipAddr.sin_addr
+  connItem.connectionTime:=t
+  connItem.blocked:=FALSE
+  connItem.blockExpiry:=0
+  connectionList.add(connItem)
+ENDPROC
+
+PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
+  DEF tempstr[255]:STRING
+  DEF ftpSocket=-1
+  DEF ftpSocket2=-1
+  DEF i,f
+  DEF peeraddr: sockaddr_in
+  DEF n,t
+  DEF connItem: PTR TO connectionItem
+  DEF saveConn=FALSE
+  DEF num
+
+  ftpSocket:=Accept(ftpServerSocket,NIL,NIL)
+  IF ftpSocket>=0
+
+    saveConn:=FALSE
+    n:=SIZEOF sockaddr_in
+    GetPeerName(ftpSocket,peeraddr,{n})
+
+    IF (dosCheckTime>0) AND (dosCheckTrigger>0)
+      t:=getSystemTime()
+      IF updateDosConnectionList(connectionList,t) THEN saveConn:=TRUE
+        
+      n:=0
+      FOR i:=0 TO connectionList.count()-1
+        connItem:=connectionList.item(i)
+        IF (connItem.ipAddr=peeraddr.sin_addr)
+          IF connItem.blocked
+            IF (connItem.blockExpiry=0)
+              telnetSend(ftpSocket,'530 Your ip address is permanently blocked\b\n')
+            ELSE
+              num:=Div(connItem.blockExpiry-t,60)
+              StringF(tempstr,'530 Your ip address has been blocked for another \d minutes\b\n',num)
+              telnetSend(ftpSocket,tempstr)
+            ENDIF
+            CloseSocket(ftpSocket)
+            ftpSocket:=-1
+          ELSE
+            n++
+          ENDIF
+        ENDIF
+      ENDFOR
+      
+      IF (ftpSocket<>-1) AND (n>=dosCheckTrigger)
+        applyDosBan(connectionList,peeraddr,t)
+        saveConn:=TRUE
+        IF dosBanTime<0
+          telnetSend(ftpSocket,'530 Your ip address has been blocked permanently\b\n')
+        ELSE
+          StringF(tempstr,'530 Your ip address has been blocked for \d minutes\b\n',dosBanTime)
+          telnetSend(ftpSocket,tempstr)
+        ENDIF
+        CloseSocket(ftpSocket)
+        ftpSocket:=-1
+      ENDIF
+
+      IF (ftpSocket<>-1)
+        addDosConnect(connectionList,peeraddr,t)
+        saveConn:=TRUE
+      ENDIF
+    ENDIF
+
+    IF (ftpSocket<>-1)
+      f:=FALSE
+   
+      ->IF telnetSend(telnetSocket,'\b\n/X Native Telnet:  Searching for free node...\b\n')=FALSE THEN f:=TRUE
+
+      IF f=FALSE
+        i:=0
+        REPEAT
+          IF(users[i].actionVal=ENV_AWAITCONNECT) AND (ftpNode[i]=1)
+            IF(doMultiCom)
+              ObtainSemaphore(semiNodes)
+              IF semiNodes.myNode[i].offHook=FALSE
+                ftpSocket2:=semiNodes.myNode[i].netSocket
+                
+                ->set to -2 to prevent the node from being used between here and when the incoming_telnet message arrives
+                IF ftpSocket2=-1 THEN semiNodes.myNode[i].netSocket:=-2
+              ENDIF
+              ReleaseSemaphore(semiNodes)
+            ELSE
+              ftpSocket2:=-1
+            ENDIF
+
+            IF ftpSocket2=-1
+              StringF(tempstr,'220 Successful connection to node \d\b\n',i)
+              telnetSend(ftpSocket,tempstr)
+
+              IoctlSocket(ftpSocket,FIONBIO,[1])
+              ftpSocket2:=ReleaseSocket(ftpSocket,UNIQUE_ID)
+              callNode(i,INCOMING_FTP,ftpSocket2)
+              ftpSocket:=-1
+              i:=-1
+            ELSE
+              i++
+            ENDIF
+          ELSE
+            i++
+          ENDIF
+        UNTIL (i=MAX_NODES) OR (i=-1)
+        IF i<>-1
+          telnetSend(ftpSocket,'530 No nodes available to handle your connection \b\n\b\n')                   
+        ENDIF
+      ENDIF
+        
+      IF ftpSocket<>-1
+        CloseSocket(ftpSocket)
+        ftpSocket:=-1
+      ENDIF
+    ENDIF
+    IF saveConn THEN saveConnectionList(connectionList)
+  ENDIF
+ENDPROC
+
+PROC acceptTelnet(telnetServerSocket,connectionList:PTR TO stdlist)
+  DEF tempstr[255]:STRING
+  DEF telnetSocket=-1
+  DEF telnetSocket2=-1
+  DEF i,f
+  DEF peeraddr: sockaddr_in
+  DEF n,t
+  DEF connItem: PTR TO connectionItem
+  DEF saveConn=FALSE
+  DEF num
+
+  telnetSocket:=Accept(telnetServerSocket,NIL,NIL)
+  IF telnetSocket>=0
+
+    saveConn:=FALSE
+    n:=SIZEOF sockaddr_in
+    GetPeerName(telnetSocket,peeraddr,{n})
+
+    IF (dosCheckTime>0) AND (dosCheckTrigger>0)
+      t:=getSystemTime()
+      IF updateDosConnectionList(connectionList,t) THEN saveConn:=TRUE
+              
+      n:=0
+      FOR i:=0 TO connectionList.count()-1
+        connItem:=connectionList.item(i)
+        IF (connItem.ipAddr=peeraddr.sin_addr)
+          IF connItem.blocked
+            IF (connItem.blockExpiry=0)
+              telnetSend(telnetSocket,'\b\n/X Native Telnet:  Your ip address is permanently blocked\b\n')
+            ELSE
+              num:=Div(connItem.blockExpiry-t,60)
+              StringF(tempstr,'\b\n/X Native Telnet:  Your ip address has been blocked for another \d minutes\b\n',num)
+              telnetSend(telnetSocket,tempstr)
+            ENDIF
+            CloseSocket(telnetSocket)
+            telnetSocket:=-1
+          ELSE
+            n++
+          ENDIF
+        ENDIF
+      ENDFOR
+      
+      IF (telnetSocket<>-1) AND (n>=dosCheckTrigger)
+
+        applyDosBan(connectionList,peeraddr,t)
+        saveConn:=TRUE
+        
+        IF dosBanTime<0
+          telnetSend(telnetSocket,'\b\n/X Native Telnet:  Your ip address has been blocked permanently\b\n')
+        ELSE
+          StringF(tempstr,'\b\n/X Native Telnet:  Your ip address has been blocked for \d minutes\b\n',dosBanTime)
+          telnetSend(telnetSocket,tempstr)
+        ENDIF
+        CloseSocket(telnetSocket)
+        telnetSocket:=-1
+      ENDIF
+
+      IF (telnetSocket<>-1)
+        addDosConnect(connectionList,peeraddr,t)
+        saveConn:=TRUE
+      ENDIF
+    ENDIF
+
+    IF (telnetSocket<>-1)
+      f:=FALSE
+
+      ->WILL=251, WONT=252, DO=253, DONT=254
+    
+      IF telnetSend(telnetSocket,'\b\n/X Native Telnet:  Searching for free node...\b\n')=FALSE THEN f:=TRUE
+
+      IF f=FALSE
+        i:=0
+        REPEAT
+          IF(users[i].actionVal=ENV_AWAITCONNECT) AND (telnetNode[i]=1)
+            IF(doMultiCom)
+              ObtainSemaphore(semiNodes)
+              IF semiNodes.myNode[i].offHook=FALSE
+                telnetSocket2:=semiNodes.myNode[i].netSocket
+                
+                ->set to -2 to prevent the node from being used between here and when the incoming_telnet message arrives
+                IF telnetSocket2=-1 THEN semiNodes.myNode[i].netSocket:=-2
+              ENDIF
+              ReleaseSemaphore(semiNodes)
+            ELSE
+              telnetSocket2:=-1
+            ENDIF
+
+            IF telnetSocket2=-1
+              StringF(tempstr,'/X Native Telnet:  Successful connection to node \d\b\n\b\n',i)
+              telnetSend(telnetSocket,tempstr)
+
+              StringF(tempstr,'\c\c\c',255,253,0)    ->DO BINARY
+              telnetSend(telnetSocket,tempstr,3)
+              StringF(tempstr,'\c\c\c',255,254,31)    ->DONT NAWS
+              telnetSend(telnetSocket,tempstr,3)
+              StringF(tempstr,'\c\c\c',255,252,5)     ->WONT STATUS
+              telnetSend(telnetSocket,tempstr,3)
+              StringF(tempstr,'\c\c\c',255,254,32)    ->DONT TERMSPEED
+              telnetSend(telnetSocket,tempstr,3)
+              StringF(tempstr,'\c\c\c',255,254,34)    ->DONT LINEMODE
+              telnetSend(telnetSocket,tempstr,3)
+              StringF(tempstr,'\c\c\c',255,251,3)    ->WILL SGA
+              telnetSend(telnetSocket,tempstr,3)
+              StringF(tempstr,'\c\c\c',255,251,1)    ->WILL ECHO
+              telnetSend(telnetSocket,tempstr,3)
+
+
+              IoctlSocket(telnetSocket,FIONBIO,[1])
+              telnetSocket2:=ReleaseSocket(telnetSocket,UNIQUE_ID)
+              callNode(i,INCOMING_TELNET,telnetSocket2)
+              telnetSocket:=-1
+              i:=-1
+            ELSE
+              i++
+            ENDIF
+          ELSE
+            i++
+          ENDIF
+        UNTIL (i=MAX_NODES) OR (i=-1)
+        IF i<>-1
+          telnetSend(telnetSocket,'/X Native Telnet:  No nodes available to handle your connection \b\n\b\n')                   
+        ENDIF
+      ENDIF
+        
+      IF telnetSocket<>-1
+        CloseSocket(telnetSocket)
+        telnetSocket:=-1
+      ENDIF
+    ENDIF
+    IF saveConn THEN saveConnectionList(connectionList)
   ENDIF
 ENDPROC
 
@@ -3436,27 +3758,21 @@ PROC main() HANDLE
   DEF argmsg: PTR TO wbstartup
   DEF wb_arg:PTR TO wbarg
   DEF appmsg:PTR TO iostd
-
+  DEF num
   DEF ktr
   DEF newscreen=0
   DEF tempscreen:PTR TO screen
   DEF screenModeID
   DEF im: PTR TO intuimessage
-  DEF num
   DEF version[200]:STRING
   DEF windowSig,myappsig
   DEF i,class
   DEF newlock=NIL
   DEF telnetServerSocket=-1
-  DEF telnetSocket=-1
-  DEF telnetSocket2=-1
-  DEF f
-  DEF peeraddr: sockaddr_in
-  DEF n,t
+  DEF ftpServerSocket=-1
+  DEF b:PTR TO button
   DEF connectionList: PTR TO stdlist
   DEF connItem: PTR TO connectionItem
-  DEF saveConn=FALSE
-  DEF b:PTR TO button
 
   DEF sopt:PTR TO startOption
 
@@ -3563,14 +3879,28 @@ PROC main() HANDLE
     nodes[i]:=0
     quietNode[i]:=0
     telnetNode[i]:=0
+    ftpNode[i]:=0
   ENDFOR
  
   IF (diskfontbase:=OpenLibrary('diskfont.library', 37))=NIL THEN Raise(ERR_NO_DISKFONT)
+
+  acpData:=NEW acpData
 
   IF(FindPort('AE.Master'))
     myrequest('ACP is already running.')
     Raise(ERR_ALREADY_RUNNING)
   ENDIF
+
+  acpData.masterSemi:=0;
+  FOR i:=0 TO 4
+    acpData.lastUsers[i]:=0
+    acpData.lastUsersDate[i]:=0
+    acpData.lastUploads[i]:=0
+    acpData.lastUploadsDate[i]:=0
+    acpData.lastDownloads[i]:=0
+    acpData.lastDownloadsDate[i]:=0
+  ENDFOR
+
   
   openMaster()
   clearUsers()
@@ -3619,12 +3949,13 @@ PROC main() HANDLE
 
   IF(validate()=FALSE) THEN Raise(ERR_VALIDATE)
 
-  IF telnetPort<>-1
+  IF (telnetPort<>-1) OR (ftpPort<>-1)
     waitSocketLib()
     IF socketbase=NIL
       myrequest('Timeout error waiting for internet connection')
     ELSE
-      telnetServerSocket:=openListenSocket(telnetPort)
+      IF (telnetPort<>-1) THEN telnetServerSocket:=openListenSocket(telnetPort)
+      IF (ftpPort<>-1) THEN ftpServerSocket:=openListenSocket(ftpPort)
     ENDIF
   ENDIF
 
@@ -3762,169 +4093,30 @@ PROC main() HANDLE
         loadState()
         checkStartingScript()
 
+        acpData.masterSemi:=semiNodes;
+        FOR i:=0 TO 4
+          acpData.lastUsers[i]:=lastUsers.getItem(i)
+          acpData.lastUsersDate[i]:=lastUsers.getItemDate(i)
+          acpData.lastUploads[i]:=lastUploads.getItem(i)
+          acpData.lastUploadsDate[i]:=lastUploads.getItemDate(i)
+          acpData.lastDownloads[i]:=lastDownloads.getItem(i)
+          acpData.lastDownloadsDate[i]:=lastDownloads.getItemDate(i)
+        ENDFOR
+
         WHILE (notDone)
-          IF (telnetServerSocket=-1)
+          IF (telnetServerSocket=-1) AND (ftpServerSocket=-1)
             signals:=Wait(masterSig OR windowSig OR myappsig OR cxsigflag)
           ELSE
             REPEAT
-              setSingleFDS(telnetServerSocket)
+              clearFDS()
+              IF telnetServerSocket<>-1 THEN setFDS(telnetServerSocket)
+              IF ftpServerSocket<>-1 THEN setFDS(ftpServerSocket)
+              
+              
               signals:=masterSig OR windowSig OR myappsig OR cxsigflag
-              WaitSelect(telnetServerSocket+1,fds,NIL,NIL,NIL,{signals})
-              IF telnetServerSocket>=0
-                telnetSocket:=Accept(telnetServerSocket,NIL,NIL)
-                IF telnetSocket>=0
-
-                  saveConn:=FALSE
-                  n:=SIZEOF sockaddr_in
-                  GetPeerName(telnetSocket,peeraddr,{n})
-
-                  IF (dosCheckTime>0) AND (dosCheckTrigger>0)
-                    t:=getSystemTime()
-                    FOR i:=connectionList.count()-1 TO 0 STEP -1
-                      connItem:=connectionList.item(i)
-                      IF (connItem.blocked=FALSE)
-                        IF ((connItem.connectionTime>t) OR (connItem.connectionTime<(t-dosCheckTime)))
-                          END connItem
-                          connectionList.remove(i)
-                          saveConn:=TRUE
-                        ENDIF
-                      ELSE
-                        IF (connItem.blockExpiry<>0) AND (connItem.blockExpiry<t)
-                          END connItem
-                          connectionList.remove(i)
-                          saveConn:=TRUE
-                        ENDIF
-                      ENDIF
-                    ENDFOR
-                      
-                    n:=0
-                    FOR i:=0 TO connectionList.count()-1
-                      connItem:=connectionList.item(i)
-                      IF (connItem.ipAddr=peeraddr.sin_addr)
-                        IF connItem.blocked
-                          IF (connItem.blockExpiry=0)
-                            telnetSend(telnetSocket,'\b\n/X Native Telnet:  Your ip address is permanently blocked\b\n')
-                          ELSE
-                            num:=Div(connItem.blockExpiry-t,60)
-                            StringF(tempstr,'\b\n/X Native Telnet:  Your ip address has been blocked for another \d minutes\b\n',num)
-                            telnetSend(telnetSocket,tempstr)
-                          ENDIF
-                          CloseSocket(telnetSocket)
-                          telnetSocket:=-1
-                        ELSE
-                          n++
-                        ENDIF
-                      ENDIF
-                    ENDFOR
-                    
-                    IF (telnetSocket<>-1) AND (n>=dosCheckTrigger)
-                      FOR i:=connectionList.count()-1 TO 0 STEP -1
-                        connItem:=connectionList.item(i)
-                        END connItem
-                        connectionList.remove(i)
-                        saveConn:=TRUE
-                      ENDFOR
-                      connItem:=NEW connItem
-                      connItem.ipAddr:=peeraddr.sin_addr
-                      connItem.connectionTime:=t
-                      connItem.blocked:=TRUE
-                      IF dosBanTime<0
-                        connItem.blockExpiry:=0     ->permanent ban
-                      ELSE
-                        connItem.blockExpiry:=t+Mul(dosBanTime,60)  -> apply denial of service ban period
-                      ENDIF
-                      connectionList.add(connItem)
-                      saveConn:=TRUE
-                      IF dosBanTime<0
-                        telnetSend(telnetSocket,'\b\n/X Native Telnet:  Your ip address has been blocked permanently\b\n')
-                      ELSE
-                        StringF(tempstr,'\b\n/X Native Telnet:  Your ip address has been blocked for \d minutes\b\n',dosBanTime)
-                        telnetSend(telnetSocket,tempstr)
-                      ENDIF
-                      CloseSocket(telnetSocket)
-                      telnetSocket:=-1
-                    ENDIF
-
-                    IF (telnetSocket<>-1)
-                      connItem:=NEW connItem
-                      connItem.ipAddr:=peeraddr.sin_addr
-                      connItem.connectionTime:=t
-                      connItem.blocked:=FALSE
-                      connItem.blockExpiry:=0
-                      connectionList.add(connItem)
-                      saveConn:=TRUE
-                    ENDIF
-                  ENDIF
-
-                  IF (telnetSocket<>-1)
-                    f:=FALSE
-
-                    ->WILL=251, WONT=252, DO=253, DONT=254
-
-                    IF telnetSend(telnetSocket,'\b\n/X Native Telnet:  Searching for free node...\b\n')=FALSE THEN f:=TRUE
-        
-                    IF f=FALSE
-                      i:=0
-                      REPEAT
-                        IF(users[i].actionVal=ENV_AWAITCONNECT) AND (telnetNode[i]=1)
-                          IF(doMultiCom)
-                            ObtainSemaphore(semiNodes)
-                            IF semiNodes.myNode[i].offHook=FALSE
-                              telnetSocket2:=semiNodes.myNode[i].telnetSocket
-                              
-                              ->set to -2 to prevent the node from being used between here and when the incoming_telnet message arrives
-                              IF telnetSocket2=-1 THEN semiNodes.myNode[i].telnetSocket:=-2
-                            ENDIF
-                            ReleaseSemaphore(semiNodes)
-                          ELSE
-                            telnetSocket2:=-1
-                          ENDIF
-
-                          IF telnetSocket2=-1
-                            StringF(tempstr,'/X Native Telnet:  Successful connection to node \d\b\n\b\n',i)
-                            telnetSend(telnetSocket,tempstr)
-
-                            StringF(tempstr,'\c\c\c',255,253,0)    ->DO BINARY
-                            telnetSend(telnetSocket,tempstr,3)
-                            StringF(tempstr,'\c\c\c',255,254,31)    ->DONT NAWS
-                            telnetSend(telnetSocket,tempstr,3)
-                            StringF(tempstr,'\c\c\c',255,252,5)     ->WONT STATUS
-                            telnetSend(telnetSocket,tempstr,3)
-                            StringF(tempstr,'\c\c\c',255,254,32)    ->DONT TERMSPEED
-                            telnetSend(telnetSocket,tempstr,3)
-                            StringF(tempstr,'\c\c\c',255,254,34)    ->DONT LINEMODE
-                            telnetSend(telnetSocket,tempstr,3)
-                            StringF(tempstr,'\c\c\c',255,251,3)    ->WILL SGA
-                            telnetSend(telnetSocket,tempstr,3)
-                            StringF(tempstr,'\c\c\c',255,251,1)    ->WILL ECHO
-                            telnetSend(telnetSocket,tempstr,3)
-
-
-                            IoctlSocket(telnetSocket,FIONBIO,[1])
-                            telnetSocket2:=ReleaseSocket(telnetSocket,UNIQUE_ID)
-                            callNode(i,INCOMING_TELNET,telnetSocket2)
-                            telnetSocket:=-1
-                            i:=-1
-                          ELSE
-                            i++
-                          ENDIF
-                        ELSE
-                          i++
-                        ENDIF
-                      UNTIL (i=MAX_NODES) OR (i=-1)
-                      IF i<>-1
-                        telnetSend(telnetSocket,'/X Native Telnet:  No nodes available to handle your connection \b\n\b\n')                   
-                      ENDIF
-                    ENDIF
-                      
-                    IF telnetSocket<>-1
-                      CloseSocket(telnetSocket)
-                      telnetSocket:=-1
-                    ENDIF
-                  ENDIF
-                  IF saveConn THEN saveConnectionList(connectionList)
-                ENDIF
-              ENDIF
+              WaitSelect(Max(telnetServerSocket,ftpServerSocket)+1,fds,NIL,NIL,NIL,{signals})
+              IF telnetServerSocket>=0 THEN acceptTelnet(telnetServerSocket,connectionList)
+              IF ftpServerSocket>=0 THEN acceptFTP(ftpServerSocket,connectionList)
             UNTIL signals
           ENDIF
           
@@ -4000,27 +4192,30 @@ PROC main() HANDLE
  
         CloseWindow(eWin)
       ENDIF
-    ENDIF
-      
-    freeGads()  
-    IF(EstrLen(publicName)>0)
-      IF(scr:=LockPubScreen(publicName))
-        Forbid()
-        UnlockPubScreen(NIL,scr)
-        CloseScreen(scr)
-        Permit()
-      ENDIF
+    ENDIF     
+  ENDIF
+ 
+EXCEPT DO
+  freeGads()  
+  IF(EstrLen(publicName)>0)
+    IF(scr:=LockPubScreen(publicName))
+      Forbid()
+      UnlockPubScreen(NIL,scr)
+      CloseScreen(scr)
+      Permit()
     ENDIF
   ENDIF
-  FreeMem(msg,SIZEOF acpMessage)
+
+  IF msg THEN FreeMem(msg,SIZEOF acpMessage)
   
   IF(doMultiCom) THEN shutDownSemis()
   FOR i:=0 TO MAX_NODES-1
-    IF(cmds[i]) THEN FreeMem(cmds[i],SIZEOF packedCommands)
+    IF(cmds[i]) THEN FreeMem(cmds[i],SIZEOF commands)
     IF(sopts[i]) THEN FreeMem(sopts[i],SIZEOF startOption)
   ENDFOR
   
-EXCEPT DO
+  IF acpData THEN END acpData
+
   IF fds<>NIL THEN END fds[32]
   IF appicon THEN do_appicon(myappport)
   
@@ -4060,6 +4255,7 @@ EXCEPT DO
   END connectionList
 
   IF (telnetServerSocket>=0) THEN CloseSocket(telnetServerSocket)
+  IF (ftpServerSocket>=0) THEN CloseSocket(ftpServerSocket)
   
   IF broker THEN DeleteCxObj(broker)
   IF broker_mp

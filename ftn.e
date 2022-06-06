@@ -1,9 +1,19 @@
 
   MODULE 'dos/dos','dos/dostags','dos/datetime'
-  MODULE '*stringlist'
+  MODULE '*stringlist','*axobjects'
+
+#ifndef EVO_3_4_0
+  FATAL 'This should only be compiled with E-VO Amiga E Compiler'
+#endif
 
   DEF confNames=NIL:PTR TO stringlist
   DEF msgBasePaths=NIL:PTR TO stringlist
+
+  DEF tempDir[255]:STRING
+  DEF inboundDir[255]:STRING
+  DEF inboundInsecureDir[255]:STRING
+  DEF outboundDir[255]:STRING
+  DEF floPath[255]:STRING
 
   ENUM ERR_NOCFG,ERR_WRITE_MAILSTAT,ERR_READ_MESSAGES_DAT,ERR_READ_MAILSTAT,ERR_READ_HEADERFILE
 
@@ -15,24 +25,6 @@ OBJECT ftnHeader
   from[37]:ARRAY OF CHAR
   subject[73]:ARRAY OF CHAR
   confId[255]:ARRAY OF CHAR
-ENDOBJECT
-
-OBJECT mailStat
-  lowestKey : LONG
-  highMsgNum : LONG
-  lowestNotDel : LONG
-  pad[6]:ARRAY OF CHAR
-ENDOBJECT
-
-OBJECT mailHeader
-  status: CHAR
-  msgNumb: LONG
-  toName[31]: ARRAY OF CHAR
-  fromName[31]: ARRAY OF CHAR
-  subject[31]: ARRAY OF CHAR
-  msgDate: LONG
-  recv: LONG
-  pad: CHAR
 ENDOBJECT
 
 PROC exec(fileName:PTR TO CHAR)
@@ -93,17 +85,10 @@ PROC fillStrCopy(src:PTR TO CHAR,dest:PTR TO CHAR,len)
 ENDPROC
 
 PROC saveMh(fh,mailHeader)
-  DEF result
-  
-  result:=Write(fh,mailHeader,1)    -> STATUS
-  result:=result+Write(fh,mailHeader+110,1)   ->PAD
-  result:=result+Write(fh,mailHeader+2,4)   ->MsgNum
-  result:=result+Write(fh,mailHeader+6,31)   ->toName
-  result:=result+Write(fh,mailHeader+38,31)   ->fromName
-  result:=result+Write(fh,mailHeader+70,31)   ->subject
-  result:=result+Write(fh,mailHeader+110,1)   ->PAD
-  result:=result+Write(fh,mailHeader+102,9)  ->msgdate, recv & pad
-  result:=result+Write(fh,mailHeader+110,1)   ->PAD
+  DEF result,size
+
+  size:=SIZEOF mailHeader
+  result:=Write(fh,mailHeader,size)
 ENDPROC result
 
 PROC getMsgBasePath(confName,msgBasePath:PTR TO CHAR)
@@ -115,9 +100,10 @@ PROC getMsgBasePath(confName,msgBasePath:PTR TO CHAR)
   ENDFOR
 ENDPROC
 
-PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,packetPass:PTR TO CHAR,msgPktFileHandle, srcFilename:PTR TO CHAR,confId:PTR TO CHAR,tearLine:PTR TO CHAR, originLine:PTR TO CHAR,tzOffset:PTR TO CHAR)
+PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,packetPass:PTR TO CHAR,msgPktFileHandle, srcFilename:PTR TO CHAR,confId:PTR TO CHAR,tearLine:PTR TO CHAR, originLine:PTR TO CHAR,tzOffset:PTR TO CHAR,netMail,floFilename:PTR TO CHAR)
   DEF fh2
   DEF tempStr[255]:STRING
+  DEF tempStr2[255]:STRING
   DEF fromName[255]:STRING
   DEF toName[255]:STRING
   DEF subject[255]:STRING
@@ -131,6 +117,8 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
   DEF monthCodes[40]:STRING
   DEF msgId[10]:STRING
   DEF originStr[100]:STRING
+  DEF netInfo[255]:STRING
+  DEF flofh
   
   IF originPoint<>0
     StringF(originStr,'\d:\d/\d.\d',originZone,originNet,originNode,originPoint)
@@ -152,87 +140,136 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
   minute:=Val(tempStr)
   StrCopy(tempStr,msgDateTime+15,2)
   second:=Val(tempStr)
+
+  fh2:=Open(srcFilename,MODE_OLDFILE)
+  IF fh2<>0
   
-  IF msgPktFileHandle>0
-    IF Seek(msgPktFileHandle,0,OFFSET_CURRENT)=0
-      
-      ->create packet header
-      phdr[0]:=originNode AND 255
-      phdr[1]:=Shr(originNode,8) AND 255
-      phdr[2]:=destNode AND 255
-      phdr[3]:=Shr(destNode,8) AND 255
-      phdr[4]:=year AND 255
-      phdr[5]:=Shr(year,8) AND 255
-      phdr[6]:=month AND 255
-      phdr[7]:=Shr(month,8) AND 255
-      phdr[8]:=day AND 255
-      phdr[9]:=Shr(day,8) AND 255
-      phdr[10]:=hour AND 255
-      phdr[11]:=Shr(hour,8) AND 255
-      phdr[12]:=minute AND 255
-      phdr[13]:=Shr(minute,8) AND 255
-      phdr[14]:=second AND 255
-      phdr[15]:=Shr(second,8) AND 255
-      phdr[16]:=0 ->baud low
-      phdr[17]:=0 ->baud hi
-      phdr[18]:=2 ->type
-      phdr[19]:=0 ->type
-      phdr[20]:=originNet AND 255
-      phdr[21]:=Shr(originNet,8) AND 255
-      phdr[22]:=destNet AND 255
-      phdr[23]:=Shr(destNet,8) AND 255
-      phdr[24]:=0 ->prodCode
-      phdr[25]:=1 ->prodVersionMajor
-      phdr[26]:=0;phdr[27]:=0;phdr[28]:=0;phdr[29]:=0; ->password
-      phdr[30]:=0;phdr[31]:=0;phdr[32]:=0;phdr[33]:=0; ->password
-      AstrCopy(phdr+26,packetPass,9)
-      phdr[34]:=originZone AND 255
-      phdr[35]:=Shr(originZone,8) AND 255
-      phdr[36]:=destZone AND 255
-      phdr[37]:=Shr(destZone,8) AND 255
-      phdr[38]:=0 ->reserved
-      phdr[39]:=0 ->reserved
-      phdr[40]:=0 ->capvalid
-      phdr[41]:=1 ->capvalid
-      phdr[42]:=1 ->prodcodehi
-      phdr[43]:=0 ->prodversionminor
-      phdr[44]:=1 ->capword
-      phdr[45]:=0 ->capword
-      phdr[46]:=originZone AND 255
-      phdr[47]:=Shr(originZone,8) AND 255
-      phdr[48]:=destZone AND 255
-      phdr[49]:=Shr(destZone,8) AND 255
-      phdr[50]:=originPoint AND 255
-      phdr[51]:=Shr(originPoint,8) AND 255
-      phdr[52]:=destPoint AND 255
-      phdr[53]:=Shr(destPoint,8) AND 255
-      phdr[54]:=0
-      phdr[55]:=0
-      phdr[56]:=0
-      phdr[57]:=0
-      
-      ->write packet header
-      Write(msgPktFileHandle,phdr,58)      
+    ReadStr(fh2,fromName)
+    IF EstrLen(fromName)>35 THEN SetStr(fromName,35)
+    ReadStr(fh2,toName)
+    IF EstrLen(toName)>35 THEN SetStr(toName,35)
+    ReadStr(fh2,subject)
+    IF EstrLen(subject)>71 THEN SetStr(toName,71)
+    ReadStr(fh2,msgDateTime)
+    ReadStr(fh2,msgId)
+  
+    p:=Seek(fh2,0,OFFSET_END)
+    msgsz:=Seek(fh2,p,OFFSET_BEGINNING)-p
+    
+    msgbuf:=New(msgsz)
+    Read(fh2,msgbuf,msgsz)
+    Close(fh2)
+
+    IF netMail
+      IF (p:=InStr(toName,'@'))>=0
+        SetStr(toName,p)
+        StrCopy(netInfo,toName+p+1)
+        IF (p:=InStr(netInfo,':'))>0
+          ->extract and remove zone info
+          StrCopy(tempStr,netInfo,p)
+          destZone:=Val(tempStr)
+          StrCopy(netInfo,netInfo+p+1)
+        ELSE
+          destZone:=0
+        ENDIF
+
+        IF (p:=InStr(netInfo,'/'))>0
+          ->extract and remove net info
+          StrCopy(tempStr,netInfo,p)
+          destNet:=Val(tempStr)
+          StrCopy(netInfo,netInfo+p+1)
+          
+          IF (p:=InStr(netInfo,'/'))>0
+            ->extract and remove node info
+            StrCopy(tempStr,netInfo,p)
+            destNode:=Val(tempStr)
+            StrCopy(netInfo,netInfo+p+1)
+            
+            destPoint:=Val(netInfo)
+          ELSE
+            destNode:=Val(netInfo)
+            destPoint:=0
+          ENDIF
+        ELSE
+          destZone:=0
+          destNode:=0
+          destNet:=0
+          destPoint:=0
+        ENDIF
+      ELSE
+        destZone:=originZone
+        destNode:=originNode
+        destNet:=originNet
+        destPoint:=originPoint 
+      ENDIF
     ENDIF
-    
-    fh2:=Open(srcFilename,MODE_OLDFILE)
-    IF fh2<>0
-    
-      ReadStr(fh2,fromName)
-      IF EstrLen(fromName)>35 THEN SetStr(fromName,35)
-      ReadStr(fh2,toName)
-      IF EstrLen(toName)>35 THEN SetStr(toName,35)
-      ReadStr(fh2,subject)
-      IF EstrLen(subject)>71 THEN SetStr(toName,71)
-      ReadStr(fh2,msgDateTime)
-      ReadStr(fh2,msgId)
-    
-      p:=Seek(fh2,0,OFFSET_END)
-      msgsz:=Seek(fh2,p,OFFSET_BEGINNING)-p
-      
-      msgbuf:=New(msgsz)
-      Read(fh2,msgbuf,msgsz)
-      Close(fh2)
+  
+    IF (destNode=0) OR (destNet=0)
+      Dispose(msgbuf)
+      RETURN FALSE
+    ENDIF
+  
+    IF msgPktFileHandle>0
+      IF Seek(msgPktFileHandle,0,OFFSET_CURRENT)=0
+        
+        ->create packet header
+        phdr[0]:=originNode AND 255
+        phdr[1]:=Shr(originNode,8) AND 255
+        phdr[2]:=destNode AND 255
+        phdr[3]:=Shr(destNode,8) AND 255
+        phdr[4]:=year AND 255
+        phdr[5]:=Shr(year,8) AND 255
+        phdr[6]:=month AND 255
+        phdr[7]:=Shr(month,8) AND 255
+        phdr[8]:=day AND 255
+        phdr[9]:=Shr(day,8) AND 255
+        phdr[10]:=hour AND 255
+        phdr[11]:=Shr(hour,8) AND 255
+        phdr[12]:=minute AND 255
+        phdr[13]:=Shr(minute,8) AND 255
+        phdr[14]:=second AND 255
+        phdr[15]:=Shr(second,8) AND 255
+        phdr[16]:=0 ->baud low
+        phdr[17]:=0 ->baud hi
+        phdr[18]:=2 ->type
+        phdr[19]:=0 ->type
+        phdr[20]:=originNet AND 255
+        phdr[21]:=Shr(originNet,8) AND 255
+        phdr[22]:=destNet AND 255
+        phdr[23]:=Shr(destNet,8) AND 255
+        phdr[24]:=0 ->prodCode
+        phdr[25]:=1 ->prodVersionMajor
+        phdr[26]:=0;phdr[27]:=0;phdr[28]:=0;phdr[29]:=0; ->password
+        phdr[30]:=0;phdr[31]:=0;phdr[32]:=0;phdr[33]:=0; ->password
+        AstrCopy(phdr+26,packetPass,9)
+        phdr[34]:=originZone AND 255
+        phdr[35]:=Shr(originZone,8) AND 255
+        phdr[36]:=destZone AND 255
+        phdr[37]:=Shr(destZone,8) AND 255
+        phdr[38]:=0 ->reserved
+        phdr[39]:=0 ->reserved
+        phdr[40]:=0 ->capvalid
+        phdr[41]:=1 ->capvalid
+        phdr[42]:=1 ->prodcodehi
+        phdr[43]:=0 ->prodversionminor
+        phdr[44]:=1 ->capword
+        phdr[45]:=0 ->capword
+        phdr[46]:=originZone AND 255
+        phdr[47]:=Shr(originZone,8) AND 255
+        phdr[48]:=destZone AND 255
+        phdr[49]:=Shr(destZone,8) AND 255
+        phdr[50]:=originPoint AND 255
+        phdr[51]:=Shr(originPoint,8) AND 255
+        phdr[52]:=destPoint AND 255
+        phdr[53]:=Shr(destPoint,8) AND 255
+        phdr[54]:=0
+        phdr[55]:=0
+        phdr[56]:=0
+        phdr[57]:=0
+        
+        ->write packet header
+        Write(msgPktFileHandle,phdr,58)      
+      ENDIF
 
       status:=" "
 
@@ -272,8 +309,10 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
       Write(msgPktFileHandle,subject,EstrLen(subject))
       Write(msgPktFileHandle,null,1)
 
-      StringF(tempStr,'AREA:\s\b',confId)
-      Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
+      IF StrLen(confId)>0
+        StringF(tempStr,'AREA:\s\b',confId)
+        Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
+      ENDIF
 
       StringF(tempStr,'\cCHRS: LATIN-1 2\b',1)
       Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
@@ -289,72 +328,172 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
       FOR i:=0 TO msgsz-1
         IF msgbuf[i]=10 THEN msgbuf[i]:=13
       ENDFOR
+      Write(msgPktFileHandle,msgbuf,msgsz)
       
       ->write tear line
-      StringF(tempStr,'--- \s\b',tearLine)
-      Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
+      IF StrLen(tearLine)>0
+        StringF(tempStr,'--- \s\b',tearLine)
+        Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
+      ENDIF
 
       ->write origin line
-      StringF(tempStr,'  * Origin: \s (\s)\b',originLine,originStr)
-      Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
+      IF StrLen(originLine)>0
+        StringF(tempStr,'  * Origin: \s (\s)\b',originLine,originStr)
+        Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
+      ENDIF
       
-      ->write seen by line
-      StringF(tempStr,'SEEN-BY: \d/\d \d/\d\b',originNet,originNode,destNet,destNode)
-      Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
-      
-      StringF(tempStr,'\cPATH: \d/\d\b',1,originNet,originNode)
-      Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
+      IF (netMail=FALSE)
+        ->write seen by line
+        StringF(tempStr,'SEEN-BY: \d/\d \d/\d\b',originNet,originNode,destNet,destNode)
+        Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
+
+        StringF(tempStr,'\cPATH: \d/\d\b',1,originNet,originNode)
+        Write(msgPktFileHandle,tempStr,EstrLen(tempStr))
+      ENDIF
       
       ->nul terminate
       StrCopy(tempStr,'')
       Write(msgPktFileHandle,tempStr,1)
       
-      Dispose(msgbuf)
+      flofh:=Open(floFilename,MODE_READWRITE)
+      IF flofh<>0
+        Seek(flofh,0,OFFSET_END)
+        NameFromFH(msgPktFileHandle,tempStr2,255)
+        StringF(tempStr,'^\s\s\n',floPath,FilePart(tempStr2))
+        Write(flofh,tempStr,StrLen(tempStr))
+        Close(flofh)
+      ENDIF
+      
     ENDIF
+    Dispose(msgbuf)
   ENDIF
-ENDPROC
+ENDPROC TRUE
 
-PROC createMessagesBundle(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,packetPass,msgFilename:PTR TO CHAR,tearLine:PTR TO CHAR, originLine:PTR TO CHAR,tzOffset:PTR TO CHAR)
-  DEF i,fh=0
+PROC createEchoMessagesPacket(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,packetPass,tearLine:PTR TO CHAR, originLine:PTR TO CHAR,tzOffset:PTR TO CHAR,netMailConf:PTR TO CHAR,floFilename:PTR TO CHAR)
+  DEF i,n,fh=0
   DEF msgOutPath[255]:STRING
   DEF fBlock:PTR TO fileinfoblock
   DEF fLock
   DEF msgFile[255]:STRING
   DEF null[2]:ARRAY OF CHAR
+  DEF tempStr[255]:STRING
+  DEF msgPacketFilename[255]:STRING
+  DEF netMail,res
 
   IF(fBlock:=AllocDosObject(DOS_FIB,NIL))
     FOR i:=0 TO msgBasePaths.count()-1
-      StringF(msgOutPath,'\sEXT-OUT',msgBasePaths.item(i))
-      IF(fLock:=Lock(msgOutPath,ACCESS_READ))
-        IF(Examine(fLock,fBlock))
-          WHILE(ExNext(fLock,fBlock))
-            StringF(msgFile,'\s/\s',msgOutPath,fBlock.filename)
-            
-            IF fh=0
-              fh:=Open(msgFilename,MODE_READWRITE)
-              IF fh<>0 THEN Seek(fh,-2,OFFSET_END)
-            ENDIF
-            
-            IF fh>0
-              createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,packetPass,fh,msgFile,confNames.item(i),tearLine,originLine,tzOffset)
-              SetProtection(msgFile,FIBF_OTR_DELETE)
-              DeleteFile(msgFile)
-            ENDIF
-          ENDWHILE
-        ENDIF
-        UnLock(fLock)
+      netMail:=FALSE
+      StrCopy(tempStr,confNames.item(i))
+      UpperStr(tempStr)
+      
+      IF StrCmp(tempStr,netMailConf) THEN netMail:=TRUE ELSE netMail:=FALSE
+      
+      IF netMail=FALSE
+        WriteF('  Processing echomail for \s\n',confNames.item(i))
+        StringF(msgOutPath,'\sEXT-OUT',msgBasePaths.item(i))
+        IF(fLock:=Lock(msgOutPath,ACCESS_READ))
+          IF(Examine(fLock,fBlock))
+            WHILE(ExNext(fLock,fBlock))
+              StringF(msgFile,'\s/\s',msgOutPath,fBlock.filename)
               
+              IF fh=0
+                n:=getSystemTime()
+                REPEAT
+                  StringF(msgPacketFilename,'\s\z\h[8].PKT',outboundDir,n)
+                  LowerStr(msgPacketFilename)
+                  n++
+                UNTIL FileLength(msgPacketFilename)=-1
+
+                fh:=Open(msgPacketFilename,MODE_NEWFILE)
+              ENDIF
+              
+              IF fh<>0
+                WriteF('    processing \s\n',msgFile)
+                res:=res OR createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,packetPass,fh,msgFile,confNames.item(i),tearLine,originLine,tzOffset,FALSE,floFilename)
+                SetProtection(msgFile,FIBF_OTR_DELETE)
+                DeleteFile(msgFile)
+              ENDIF
+            ENDWHILE
+          ENDIF
+          UnLock(fLock)
+                
+        ENDIF
       ENDIF
     ENDFOR
     FreeDosObject(DOS_FIB,fBlock)
   ENDIF 
 
   IF fh>0
-    null[0]:=0
-    null[1]:=0
-    Write(fh,null,2)
+    IF res
+      null[0]:=0
+      null[1]:=0
+      Write(fh,null,2)
+    ENDIF
     Close(fh)
   ENDIF
+ENDPROC
+
+PROC createNetMailMessagesPackets(originNode,originNet,originZone,originPoint,attr,cost,packetPass,tzOffset:PTR TO CHAR,netMailConf:PTR TO CHAR,floFilename:PTR TO CHAR)
+  DEF i,n,fh=0
+  DEF msgOutPath[255]:STRING
+  DEF fBlock:PTR TO fileinfoblock
+  DEF fLock
+  DEF msgFile[255]:STRING
+  DEF null[2]:ARRAY OF CHAR
+  DEF tempStr[255]:STRING
+  DEF msgPacketFilename[255]:STRING
+  DEF netMail
+
+  IF(fBlock:=AllocDosObject(DOS_FIB,NIL))
+    FOR i:=0 TO msgBasePaths.count()-1
+      netMail:=FALSE
+      StrCopy(tempStr,confNames.item(i))
+      UpperStr(tempStr)
+      
+      IF StrCmp(tempStr,netMailConf) THEN netMail:=TRUE ELSE netMail:=FALSE
+      
+      IF netMail
+        WriteF('  Processing netmail for \s\n',confNames.item(i))
+        StringF(msgOutPath,'\sEXT-OUT',msgBasePaths.item(i))
+        IF(fLock:=Lock(msgOutPath,ACCESS_READ))
+          IF(Examine(fLock,fBlock))
+            WHILE(ExNext(fLock,fBlock))
+              StringF(msgFile,'\s/\s',msgOutPath,fBlock.filename)
+              
+              IF fh=0
+                n:=getSystemTime()
+                REPEAT
+                  StringF(msgPacketFilename,'\s\z\h[8].PKT',outboundDir,n)
+                  LowerStr(msgPacketFilename)
+                  n++
+                UNTIL FileLength(msgPacketFilename)=-1
+
+                fh:=Open(msgPacketFilename,MODE_NEWFILE)
+              ENDIF
+              
+              IF fh<>0
+                WriteF('    processing \s\n',msgFile)
+                IF createMessagePacket(originNode,0,originNet,0,originZone,0,originPoint,0,attr,cost,packetPass,fh,msgFile,'','','',tzOffset,TRUE,floFilename)
+                  null[0]:=0
+                  null[1]:=0
+                  Write(fh,null,2)
+                ENDIF
+                Close(fh)
+                fh:=0
+
+                SetProtection(msgFile,FIBF_OTR_DELETE)
+                DeleteFile(msgFile)
+              ENDIF
+            ENDWHILE
+          ENDIF
+          UnLock(fLock)
+                
+        ENDIF
+      ENDIF
+    ENDFOR
+    FreeDosObject(DOS_FIB,fBlock)
+  ENDIF 
+
 ENDPROC
 
 PROC formatLongDateTime2(cDateVal,outDateStr,seperatorChar)
@@ -493,7 +632,22 @@ PROC writeMailLine(fh2,lineBuff:PTR TO CHAR)
   ENDIF
 ENDPROC
 
-PROC processPacketFile(filename:PTR TO CHAR) HANDLE
+PROC addNetText(textStr:PTR TO CHAR,zone,net,node,point)
+  DEF netText[100]:STRING
+  IF zone=0
+    StringF(netText,'@\d/\d',net,node)
+  ELSE
+    IF point<>0
+      StringF(netText,'@\d:\d/\d.\d',zone,net,node,point)
+    ELSE
+      StringF(netText,'@\d:\d/\d',zone,net,node)
+    ENDIF
+  ENDIF
+  StrAdd(textStr,netText)
+  
+ENDPROC
+
+PROC processPacketFile(filename:PTR TO CHAR,netMailConf:PTR TO CHAR) HANDLE
   DEF ftnh: ftnHeader
   DEF ms: mailStat
   DEF mh: mailHeader
@@ -510,229 +664,255 @@ PROC processPacketFile(filename:PTR TO CHAR) HANDLE
   DEF lastConfId[255]:STRING
   DEF needToSave
   DEF cnt,maxCnt
+  DEF priv=FALSE
+  DEF netMail=FALSE
+  DEF originZone,destZone,originNet,destNet,originNode,destNode,originPoint,destPoint
+
+  WriteF('processing packet \s\n',filename)
 
   needToSave:=FALSE
   StrCopy(lastConfId,'######')
   
   mf:=Open(filename,MODE_OLDFILE)
   IF mf<>0
-    Seek(mf,58,OFFSET_BEGINNING)
-    buf:=New(35)
-    c:=0
-    REPEAT
-      n:=Fread(mf,buf,2,1)
-      IF (buf[0]=2) AND (buf[1]=0)
-        n:=Fread(mf,buf+2,32,1)
-        buf[34]:=0
-        IF n>0
+    buf:=New(58)
+    n:=Fread(mf,buf,58,1)
+    IF n>0
+      originZone:=buf[46]+Shl(buf[47],8)
+      destZone:=buf[48]+Shl(buf[49],8)
+      originPoint:=buf[50]+Shl(buf[51],8)
+      destPoint:=buf[52]+Shl(buf[53],8)
 
-          AstrCopy(ftnh.msgdate,buf+14,21)
+      Dispose(buf)
+      buf:=New(35)
+      c:=0
+      REPEAT
+        n:=Fread(mf,buf,2,1)
+        IF (buf[0]=2) AND (buf[1]=0)
+          n:=Fread(mf,buf+2,32,1)
+          buf[34]:=0
+          IF n>0
 
-          readString(mf,ftnh.to,36)
-          readString(mf,ftnh.from,36)
-          readString(mf,ftnh.subject,72)
+            IF buf[10] AND 1 THEN priv:=TRUE ELSE priv:=FALSE
+            originNode:=buf[2]+Shl(buf[3],8)
+            destNode:=buf[4]+Shl(buf[5],8)
+            originNet:=buf[6]+Shl(buf[7],8)
+            destNet:=buf[8]+Shl(buf[9],8)
 
-          bufsz:=findBodyLength(mf)
+            AstrCopy(ftnh.msgdate,buf+14,21)
 
-          buf2:=New(bufsz+1)
-          Fread(mf,buf2,bufsz,1)
-          
-          StrCopy(tempStr,'')
-          n:=0
-          WHILE (n<bufsz) AND (buf2[n]<>0) AND (buf2[n]<>10) AND (buf2[n]<>13)
-            StrAdd(tempStr,buf2+n,1)
-            n++
-          ENDWHILE
-          WHILE (n<bufsz) AND ((buf2[n]=0) OR (buf2[n]=10) OR (buf2[n]=13)) DO n++
-          IF StrCmp(tempStr,'AREA:',5)
-            AstrCopy(ftnh.confId,tempStr+5)
-          ELSE
-            AstrCopy(ftnh.confId,'')
-          ENDIF
+            readString(mf,ftnh.to,36)
+            readString(mf,ftnh.from,36)
+            readString(mf,ftnh.subject,72)
 
-          WriteF('id: \d\n',c)
-          WriteF('conf: \s\n',ftnh.confId)
-          WriteF('to: \s\n',ftnh.to)
-          WriteF('from: \s\n',ftnh.from)
-          WriteF('subject: \s\n',ftnh.subject)
-          WriteF('\n')
-          
-          UpperStr(ftnh.confId)
+            bufsz:=findBodyLength(mf)
 
-          IF StrCmp(ftnh.confId,lastConfId)=FALSE
-
-            IF fh>0
-              Close(fh)
-              fh:=0
+            buf2:=New(bufsz+1)
+            Fread(mf,buf2,bufsz,1)
+            
+            StrCopy(tempStr,'')
+            n:=0
+            WHILE (n<bufsz) AND (buf2[n]<>0) AND (buf2[n]<>10) AND (buf2[n]<>13)
+              StrAdd(tempStr,buf2+n,1)
+              n++
+            ENDWHILE
+            WHILE (n<bufsz) AND ((buf2[n]=0) OR (buf2[n]=10) OR (buf2[n]=13)) DO n++
+            IF StrCmp(tempStr,'AREA:',5)
+              AstrCopy(ftnh.confId,tempStr+5)
+            ELSE
+              AstrCopy(ftnh.confId,'')
             ENDIF
-            IF needToSave
-              ms.highMsgNum:=newMsgNum+1
-              StringF(fname,'\sMailStats',msgBase)
-              fh:=Open(fname,MODE_NEWFILE)
-              IF fh<>0
-                Write(fh,ms,SIZEOF mailStat)
+
+            netMail:=FALSE
+            IF StrLen(ftnh.confId)=0
+              AstrCopy(ftnh.confId,netMailConf)
+              netMail:=TRUE
+            ENDIF
+
+            WriteF('id: \d\n',c)
+            WriteF('conf: \s\n',ftnh.confId)
+            WriteF('to: \s\n',ftnh.to)
+            WriteF('from: \s\n',ftnh.from)
+            WriteF('subject: \s\n',ftnh.subject)
+            WriteF('\n')
+            
+            UpperStr(ftnh.confId)
+
+            IF StrCmp(ftnh.confId,lastConfId)=FALSE
+
+              IF fh>0
                 Close(fh)
                 fh:=0
-              ELSE
-                WriteF('Error saving MailStats\n\n')
-                Raise(ERR_WRITE_MAILSTAT)
               ENDIF
-              needToSave:=FALSE
-            ENDIF
-
-            getMsgBasePath(ftnh.confId,msgBase)
-            IF StrLen(msgBase)=0
-              WriteF('FTN conf \s not configured, skipping messages for this conf\n\n',ftnh.confId)
-              StrCopy(ftnConfId,'######')
-            ELSE
-              StrCopy(ftnConfId,ftnh.confId)
-
-              StringF(fname,'\sMailStats',msgBase)
-              IF fh>0 THEN Close(fh)
-              fh:=Open(fname,MODE_READWRITE)
-              IF fh<>0
-                IF Read(fh,ms,SIZEOF mailStat)=0
-                  ms.lowestKey:=1
-                  ms.lowestNotDel:=1
-                  ms.highMsgNum:=1
-                  ms.pad[0]:=0;ms.pad[1]:=0;ms.pad[2]:=0;ms.pad[3]:=0;ms.pad[4]:=0;ms.pad[5]:=0
+              IF needToSave
+                ms.highMsgNum:=newMsgNum+1
+                StringF(fname,'\sMailStats',msgBase)
+                fh:=Open(fname,MODE_NEWFILE)
+                IF fh<>0
                   Write(fh,ms,SIZEOF mailStat)
                   Close(fh)
                   fh:=0
                 ELSE
-                  Close(fh)
-                  fh:=0
+                  WriteF('Error saving MailStats\n\n')
+                  Raise(ERR_WRITE_MAILSTAT)
                 ENDIF
-              ELSE
-                WriteF('Error opening MailStats (\s)\n\n',fname)
-                Raise(ERR_READ_MAILSTAT)
-              ENDIF
-              
-              newMsgNum:=ms.highMsgNum-1
-              StringF(fname,'\sHeaderFile',msgBase)
-              fh:=Open(fname,MODE_READWRITE)
-              IF fh<>0
-                Seek(fh,0,OFFSET_END)
-              ELSE
-                WriteF('Error opening HeaderFile\n\n')
-                Raise(ERR_READ_HEADERFILE)
+                needToSave:=FALSE
               ENDIF
 
-            ENDIF
-            
-          ENDIF
-          
-          StrCopy(lastConfId,ftnh.confId)
-          
-          IF StrCmp(ftnh.confId,ftnConfId)
-            newMsgNum++
-    
-            mh.pad:=0
-            mh.status:="P"
-            mh.msgNumb:=newMsgNum
-         
-            trimRight(ftnh.to,tempStr)
-            fillStrCopy(tempStr,mh.toName,31)
+              getMsgBasePath(ftnh.confId,msgBase)
+              IF StrLen(msgBase)=0
+                WriteF('FTN conf \s not configured, skipping messages for this conf\n\n',ftnh.confId)
+                StrCopy(ftnConfId,'######')
+              ELSE
+                StrCopy(ftnConfId,ftnh.confId)
 
-            trimRight(ftnh.from,tempStr)
-            fillStrCopy(tempStr,mh.fromName,31)
-
-            trimRight(ftnh.subject,tempStr)
-            fillStrCopy(tempStr,mh.subject,31)
-
-            mh.msgDate:=getEncodedDate(ftnh.msgdate)
-            mh.recv:=0
-
-            IF saveMh(fh,mh)<>110
-              WriteF('Error saving mail header for message \d\n',newMsgNum)
-            ENDIF
-            
-            needToSave:=TRUE
-            
-            StringF(fname,'\s\d',msgBase,newMsgNum)
-            fh2:=Open(fname,MODE_NEWFILE)
-            IF fh2<>0
-              i:=n
-              n:=0
-              WHILE i<bufsz
-                IF buf2[i]<>10
-                  buf2[n]:=buf2[i]
-                  n++
-                ENDIF
-                i++
-              ENDWHILE
-              FOR i:=0 TO n-1
-                IF buf2[i]=13 THEN buf2[i]:=10
-              ENDFOR
-              
-              StrCopy(tempStr,'')
-
-              cnt:=0
-              maxCnt:=0
-              FOR i:=0 TO n-1
-                IF buf2[i]=10
-                  IF cnt>maxCnt THEN maxCnt:=cnt
-                  cnt:=0
-                ELSE 
-                  cnt++
-                ENDIF
-              ENDFOR
-              IF cnt>maxCnt THEN maxCnt:=cnt
-              
-              lineBuff:=String(maxCnt+1)
-              i:=0
-              WHILE (i<n)
-                IF (buf2[i]<>10)
-                  StrAdd(lineBuff,buf2+i,1)
-                  i++
+                StringF(fname,'\sMailStats',msgBase)
+                IF fh>0 THEN Close(fh)
+                fh:=Open(fname,MODE_READWRITE)
+                IF fh<>0
+                  IF Read(fh,ms,SIZEOF mailStat)=0
+                    ms.lowestKey:=1
+                    ms.lowestNotDel:=1
+                    ms.highMsgNum:=1
+                    ms.pad[0]:=0;ms.pad[1]:=0;ms.pad[2]:=0;ms.pad[3]:=0;ms.pad[4]:=0;ms.pad[5]:=0
+                    Write(fh,ms,SIZEOF mailStat)
+                    Close(fh)
+                    fh:=0
+                  ELSE
+                    Close(fh)
+                    fh:=0
+                  ENDIF
                 ELSE
-                  writeMailLine(fh2,lineBuff)
-                  StrCopy(lineBuff,'')
-                  i++
+                  WriteF('Error opening MailStats (\s)\n\n',fname)
+                  Raise(ERR_READ_MAILSTAT)
                 ENDIF
-              ENDWHILE
-              IF StrLen(lineBuff)>0
-                writeMailLine(fh2,lineBuff)
+                
+                newMsgNum:=ms.highMsgNum-1
+                StringF(fname,'\sHeaderFile',msgBase)
+                fh:=Open(fname,MODE_READWRITE)
+                IF fh<>0
+                  Seek(fh,0,OFFSET_END)
+                ELSE
+                  WriteF('Error opening HeaderFile\n\n')
+                  Raise(ERR_READ_HEADERFILE)
+                ENDIF
+
               ENDIF
-              DisposeLink(lineBuff)
-              Close(fh2)
-              fh2:=0
-            ELSE
-              WriteF('Error saving message body for message \d\n\n',newMsgNum)
+              
             ENDIF
-            Dispose(buf2)
-            buf2:=0
-          ELSE
-            Seek(mf,bufsz,OFFSET_CURRENT)
+            
+            StrCopy(lastConfId,ftnh.confId)
+            
+            IF StrCmp(ftnh.confId,ftnConfId)
+              newMsgNum++
+      
+              IF priv THEN mh.status:="R" ELSE mh.status:="P"
+              mh.msgNumb:=newMsgNum
+           
+              trimRight(ftnh.to,tempStr)
+              fillStrCopy(tempStr,mh.toName,31)
+
+              trimRight(ftnh.from,tempStr)
+              IF netMail THEN addNetText(tempStr,originZone,originNet,originNode,originPoint)
+              fillStrCopy(tempStr,mh.fromName,31)
+
+              trimRight(ftnh.subject,tempStr)
+              fillStrCopy(tempStr,mh.subject,31)
+
+              mh.msgDate:=getEncodedDate(ftnh.msgdate)
+              mh.recv:=0
+              mh.extMsgNum:=0
+
+              IF saveMh(fh,mh)<>110
+                WriteF('Error saving mail header for message \d\n',newMsgNum)
+              ENDIF
+              
+              needToSave:=TRUE
+              
+              StringF(fname,'\s\d',msgBase,newMsgNum)
+              fh2:=Open(fname,MODE_NEWFILE)
+              IF fh2<>0
+                i:=n
+                n:=0
+                WHILE i<bufsz
+                  IF buf2[i]<>10
+                    buf2[n]:=buf2[i]
+                    n++
+                  ENDIF
+                  i++
+                ENDWHILE
+                FOR i:=0 TO n-1
+                  IF buf2[i]=13 THEN buf2[i]:=10
+                ENDFOR
+                
+                StrCopy(tempStr,'')
+
+                cnt:=0
+                maxCnt:=0
+                FOR i:=0 TO n-1
+                  IF buf2[i]=10
+                    IF cnt>maxCnt THEN maxCnt:=cnt
+                    cnt:=0
+                  ELSE 
+                    cnt++
+                  ENDIF
+                ENDFOR
+                IF cnt>maxCnt THEN maxCnt:=cnt
+                
+                lineBuff:=String(maxCnt+1)
+                i:=0
+                WHILE (i<n)
+                  IF (buf2[i]<>10)
+                    StrAdd(lineBuff,buf2+i,1)
+                    i++
+                  ELSE
+                    writeMailLine(fh2,lineBuff)
+                    StrCopy(lineBuff,'')
+                    i++
+                  ENDIF
+                ENDWHILE
+                IF StrLen(lineBuff)>0
+                  writeMailLine(fh2,lineBuff)
+                ENDIF
+                DisposeLink(lineBuff)
+                Close(fh2)
+                fh2:=0
+              ELSE
+                WriteF('Error saving message body for message \d\n\n',newMsgNum)
+              ENDIF
+              Dispose(buf2)
+              buf2:=0
+            ELSE
+              Seek(mf,bufsz,OFFSET_CURRENT)
+            ENDIF
           ENDIF
+          n:=1
+          c++
+        ELSEIF (buf[0]=0) AND (buf[1]=0)
+          ->double null indicates no more data
+          n:=0
+        ELSE
+          WriteF('Error reading message header from \s invalid message type found\n\n',filename)
+          Raise(ERR_READ_MESSAGES_DAT)
         ENDIF
-        n:=1
-        c++
-      ELSEIF (buf[0]=0) AND (buf[1]=0)
-        ->double null indicates no more data
-        n:=0
-      ELSE
-        WriteF('Error reading message header from \s invalid message type found\n\n',filename)
-        Raise(ERR_READ_MESSAGES_DAT)
-      ENDIF
-    UNTIL (n=0) OR (CtrlC())
-    
-    Close(fh)
-    fh:=0
+      UNTIL (n=0) OR (CtrlC())
+      Close(fh)
+      fh:=0
    
-    IF needToSave
-      ms.highMsgNum:=newMsgNum+1
-      StringF(fname,'\sMailStats',msgBase)
-      fh:=Open(fname,MODE_NEWFILE)
-      IF fh<>0
-        Write(fh,ms,SIZEOF mailStat)
-        Close(fh)
-        fh:=0
-      ELSE
-        WriteF('Error saving MailStats\n\n')
-        Raise(ERR_WRITE_MAILSTAT)
+      IF needToSave
+        ms.highMsgNum:=newMsgNum+1
+        StringF(fname,'\sMailStats',msgBase)
+        fh:=Open(fname,MODE_NEWFILE)
+        IF fh<>0
+          Write(fh,ms,SIZEOF mailStat)
+          Close(fh)
+          fh:=0
+        ELSE
+          WriteF('Error saving MailStats\n\n')
+          Raise(ERR_WRITE_MAILSTAT)
+        ENDIF
+        needToSave:=FALSE
       ENDIF
-      needToSave:=FALSE
     ENDIF
 
     IF mf>0 THEN Close(mf)
@@ -751,7 +931,7 @@ EXCEPT DO
   IF buf2<>0 THEN Dispose(buf2)
 ENDPROC
 
-PROC processPackets(scanPath:PTR TO CHAR)
+PROC processPackets(scanPath:PTR TO CHAR,netMailConf:PTR TO CHAR)
   DEF packetFilename[255]:STRING
   DEF fname[255]:STRING
   DEF fBlock:PTR TO fileinfoblock
@@ -768,7 +948,8 @@ PROC processPackets(scanPath:PTR TO CHAR)
           UpperStr(tempStr)
           IF StrCmp(tempStr,'.PKT')
             StringF(packetFilename,'\s\s',scanPath,fBlock.filename)
-            IF processPacketFile(packetFilename)
+            WriteF('  processing \s\n',packetFilename)
+            IF processPacketFile(packetFilename,netMailConf)
               SetProtection(packetFilename,FIBF_OTR_DELETE)
               DeleteFile(packetFilename)
             ENDIF
@@ -781,7 +962,7 @@ PROC processPackets(scanPath:PTR TO CHAR)
   ENDIF
 ENDPROC
 
-PROC processBundles(unpackCommand:PTR TO CHAR, scanPath:PTR TO CHAR, tempDir:PTR TO CHAR)
+PROC processBundles(unpackCommand:PTR TO CHAR, scanPath:PTR TO CHAR, netMailConf:PTR TO CHAR)
   DEF cleanUp[255]:STRING
   DEF unpack[255]:STRING
   DEF fname[255]:STRING
@@ -802,10 +983,12 @@ PROC processBundles(unpackCommand:PTR TO CHAR, scanPath:PTR TO CHAR, tempDir:PTR
             IF StrCmp(tempStr,'.PKT')=FALSE
               StringF(bundleFilename,'\s\s',scanPath,fBlock.filename)
 
+              WriteF('processing bundle \s\n',bundleFilename)
+
               StrCopy(unpack,unpackCommand)
               replacestr(unpack,'{filename}',bundleFilename)
               exec(unpack)
-              processPackets(tempDir)
+              processPackets(tempDir,netMailConf)
               StringF(cleanUp,'delete \s ALL',tempDir)
               exec(cleanUp)
 
@@ -874,15 +1057,9 @@ ENDPROC
 
 PROC main() HANDLE
   DEF mode[255]:STRING
-  DEF inboundDir[255]:STRING
-  DEF inboundInsecureDir[255]:STRING
-  DEF outboundDir[255]:STRING
   
   DEF ftnUnpackCommand[255]:STRING
-  
-  DEF tempDir[255]:STRING
- 
- 
+   
   DEF pktPass[8]:STRING
   
   DEF cfgFile[255]:STRING
@@ -890,7 +1067,6 @@ PROC main() HANDLE
   
   DEF fh
   DEF tempStr[255]:STRING
-  DEF msgPacketFilename[255]:STRING
   
   DEF category[255]:STRING
   DEF optionName[255]:STRING
@@ -900,10 +1076,13 @@ PROC main() HANDLE
   DEF tearLine[255]:STRING
   DEF originLine[255]:STRING
   DEF tzOffset[10]:STRING
+  DEF netMailConf[255]:STRING
+  DEF floTemp[255]:STRING
+  DEF floFinal[255]:STRING
   
   DEF eof=FALSE
 
-  WriteF('Ami-Express FTN file processor Copyright 2020 Darren Coles\n')
+  WriteF('Ami-Express FTN file processor (v1.1) Copyright 2022 Darren Coles\n')
   
   myargs:=[0,0]:LONG
   IF rdargs:=ReadArgs('CFG/A',myargs,NIL)
@@ -918,6 +1097,8 @@ PROC main() HANDLE
   confNames:=NEW confNames.stringlist(100)
   msgBasePaths:=NEW msgBasePaths.stringlist(100)
 
+  StrCopy(netMailConf,'NETMAIL')
+
   fh:=Open(cfgFile,MODE_OLDFILE)
   IF fh<>0
 
@@ -931,6 +1112,7 @@ PROC main() HANDLE
       IF StrCmp('MAIN',category) AND StrCmp('OUTBOUND',optionName) THEN StrCopy(outboundDir,optionValue)
       IF StrCmp('MAIN',category) AND StrCmp('UNPACKCMD',optionName) THEN StrCopy(ftnUnpackCommand,optionValue)
       IF StrCmp('MAIN',category) AND StrCmp('TEMPDIR',optionName) THEN StrCopy(tempDir,optionValue)
+      IF StrCmp('MAIN',category) AND StrCmp('FLOPATH',optionName) THEN StrCopy(floPath,optionValue)
 
       IF StrCmp('ORIGINNET',category) AND StrCmp('ZONE',optionName) THEN originZone:=Val(optionValue)
       IF StrCmp('ORIGINNET',category) AND StrCmp('NET',optionName) THEN originNet:=Val(optionValue)
@@ -948,8 +1130,10 @@ PROC main() HANDLE
       IF StrCmp('MISC',category) AND StrCmp('TEAR',optionName) THEN StrCopy(tearLine,optionValue)
       IF StrCmp('MISC',category) AND StrCmp('ORIGIN',optionName) THEN StrCopy(originLine,optionValue)
       IF StrCmp('MISC',category) AND StrCmp('TZOFFSET',optionName) THEN StrCopy(tzOffset,optionValue)
+      IF StrCmp('MISC',category) AND StrCmp('NETMAIL',optionName) THEN StrCopy(netMailConf,optionValue)
     UNTIL StrCmp(category,'CONFS') OR eof
     UpperStr(mode)
+    IF StrLen(floPath)=0 THEN StrCopy(floPath,outboundDir)
 
     IF StrCmp(category,'CONFS')=FALSE
       WriteF('Error reading CONFS data in FTN.cfg\n\n')
@@ -969,20 +1153,35 @@ PROC main() HANDLE
   ENDIF
   
   IF StrCmp(mode,'OUT') OR StrCmp(mode,'BOTH')
-    WriteF('Processing outgoing messages\n')
-    
-    StringF(msgPacketFilename,'\s\z\h[4]\z\h[4].Out',outboundDir,destNet,destNode)
+    WriteF('Processing outgoing messages\n')   
+   
+   StringF(floTemp,'\s\z\h[4]\z\h[4].tmp',outboundDir,destNet,destNode)
+   StringF(floFinal,'\s\z\h[4]\z\h[4].flo',outboundDir,destNet,destNode)
+   LowerStr(floTemp)
+   LowerStr(floFinal)
+   
+    IF FileLength(floFinal)>=0 THEN Rename(floFinal,floTemp)
 
-    ->create messages bundle by scraping confs
-    createMessagesBundle(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,pktPass,msgPacketFilename,tearLine,originLine,tzOffset)    
+    ->create echo messages packet by scraping confs
+    createEchoMessagesPacket(originNode,destNode,originNet,destNet,originZone,destZone,originPoint,destPoint,attr,cost,pktPass,tearLine,originLine,tzOffset,netMailConf,floTemp)
+    createNetMailMessagesPackets(originNode,originNet,originZone,originPoint,attr,cost,pktPass,tzOffset,netMailConf,floTemp)
+
+    IF FileLength(floTemp)>=0 
+      WriteF('about to rename \s to \s\n',floTemp,floFinal)
+      IF Rename(floTemp,floFinal)
+        WriteF('success\n')
+      ELSE
+        WriteF('failed err \d\n', IoErr())
+      ENDIF
+    ENDIF
   ENDIF
   
   IF StrCmp(mode,'IN') OR StrCmp(mode,'BOTH')
     WriteF('Processing incoming messages\n')
-    IF StrLen(inboundDir)>0 THEN processBundles(ftnUnpackCommand,inboundDir,tempDir)
-    IF StrLen(inboundInsecureDir)>0 THEN processBundles(ftnUnpackCommand,inboundInsecureDir,tempDir)
-    IF StrLen(inboundDir)>0 THEN processPackets(inboundDir)
-    IF StrLen(inboundInsecureDir)>0 THEN processPackets(inboundInsecureDir)
+    IF StrLen(inboundDir)>0 THEN processBundles(ftnUnpackCommand,inboundDir,netMailConf)
+    IF StrLen(inboundInsecureDir)>0 THEN processBundles(ftnUnpackCommand,inboundInsecureDir,netMailConf)
+    IF StrLen(inboundDir)>0 THEN processPackets(inboundDir,netMailConf)
+    IF StrLen(inboundInsecureDir)>0 THEN processPackets(inboundInsecureDir,netMailConf)
   ENDIF
   WriteF('All done\n')
 
