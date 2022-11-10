@@ -87,10 +87,14 @@ EXPORT OBJECT userMisc
   uploadBytesBCD[8]:ARRAY OF CHAR
   eMail[50]:ARRAY OF CHAR
   lastDlCPS:LONG
-  unused[142]:ARRAY OF CHAR
-  ->unknown[28]:ARRAY OF CHAR
-  ->nodeFlags[32]:ARRAY OF LONG
-  ->confFlags2[10]:ARRAY OF LONG
+  pwdHash[32]:ARRAY OF CHAR
+  salt[8]:ARRAY OF CHAR
+  pwdType:CHAR
+  forcePwdReset:CHAR
+  accountLocked:CHAR
+  invalidAttempts:CHAR
+  pwdLastUpdated:LONG     
+  unused[94]:ARRAY OF CHAR
 ENDOBJECT
 
 EXPORT OBJECT tempAccess

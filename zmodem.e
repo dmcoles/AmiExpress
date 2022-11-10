@@ -468,7 +468,6 @@ EXPORT OBJECT zmodem_t
 	block_size:LONG
 	max_block_size:LONG
 	max_file_size:LONG		/* 0 = unlimited */
-	log_level:PTR TO INT
 
   user_data:LONG
 	/* Callbacks */
@@ -528,10 +527,6 @@ ENDPROC Not(crc)
 PROC lprintf(zm:PTR TO zmodem_t, level, str:PTR TO CHAR)
   DEF p
 	IF(zm.zm_lputs=NIL) THEN RETURN -1
-
-	IF(zm.log_level<>NIL)
-		IF(level > zm.log_level) THEN RETURN 0
-  ENDIF
   p:=zm.zm_lputs
 ENDPROC p(level,str)
 
@@ -1415,7 +1410,7 @@ PROC zmodem_recv_data32(zm: PTR TO zmodem_t, p: PTR TO CHAR, maxlen, l: PTR TO L
     n++
 	ENDLOOP
   l[]:=l[]+n
-
+  
 	subpkt_type:=c AND $ff
 
 	crc:=ucrc32(subpkt_type,crc)
