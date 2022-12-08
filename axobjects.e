@@ -124,8 +124,9 @@ EXPORT OBJECT zModem
   currentOperation: LONG
   freeDFlag: LONG
   fileList:PTR TO stdlist
-  current: LONG
-  total: LONG
+  currentUL: LONG
+  currentDL: LONG
+  totalDL: LONG
   shouldUpdateDownloadStats: CHAR
   needUpdateDownloadStats: CHAR
 ENDOBJECT
@@ -274,7 +275,7 @@ ENDOBJECT
 EXPORT OBJECT bgCheckData
   semi: ss
   checkedCount: LONG
-  checkedBytes: LONG
+  checkedBytes[8]:ARRAY OF CHAR
 ENDOBJECT
 
 EXPORT OBJECT diskObjectCacheItem

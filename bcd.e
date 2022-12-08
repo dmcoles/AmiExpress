@@ -91,6 +91,29 @@ EXPORT PROC addBCD(bcdTotal:PTR TO CHAR, valToAdd)
   addBCD2(bcdTotal,bcdVal)
 ENDPROC
 
+EXPORT PROC mulBCD(bcdVal:PTR TO CHAR,valToMul)
+  DEF tmpVal[8]:ARRAY OF CHAR
+  DEF i
+  CopyMem(bcdVal,tmpVal,8)
+  convertToBCD(0,bcdVal)
+  WHILE(valToMul)
+    FOR i:=1 TO Mod(valToMul,10)
+      addBCD2(bcdVal,tmpVal)
+    ENDFOR
+
+    valToMul:=Div(valToMul,10)
+    tmpVal[0]:=Shl(tmpVal[0] AND $F,4) OR Shr(tmpVal[1] AND $F0,4)
+    tmpVal[1]:=Shl(tmpVal[1] AND $F,4) OR Shr(tmpVal[2] AND $F0,4)
+    tmpVal[2]:=Shl(tmpVal[2] AND $F,4) OR Shr(tmpVal[3] AND $F0,4)
+    tmpVal[3]:=Shl(tmpVal[3] AND $F,4) OR Shr(tmpVal[4] AND $F0,4)
+    tmpVal[4]:=Shl(tmpVal[4] AND $F,4) OR Shr(tmpVal[5] AND $F0,4)
+    tmpVal[5]:=Shl(tmpVal[5] AND $F,4) OR Shr(tmpVal[6] AND $F0,4)
+    tmpVal[6]:=Shl(tmpVal[6] AND $F,4) OR Shr(tmpVal[7] AND $F0,4)
+    tmpVal[7]:=Shl(tmpVal[7] AND $F,4)
+    
+  ENDWHILE
+ENDPROC
+
 EXPORT PROC divBCD1024(bcdVal:PTR TO CHAR)
 
   DEF decVal[16]:ARRAY OF CHAR
@@ -120,6 +143,36 @@ EXPORT PROC divBCD1024(bcdVal:PTR TO CHAR)
   ENDFOR
 ENDPROC
 
+EXPORT PROC divBCD(dividend:PTR TO CHAR, divisor)
+  DEF decVal[16]:ARRAY OF CHAR
+  DEF i,n=0,v,r
+  
+  FOR i:=0 TO 7
+    decVal[n]:=Shr(dividend[i] AND $f0,4)
+    n++
+    decVal[n]:=dividend[i] AND $f
+    n++
+  ENDFOR
+  
+  v:=0
+  r:=0
+  FOR i:=0 TO 15
+    IF r
+      r:=Mul(r,10)
+      r+=decVal[i];
+    ELSE
+      r:=decVal[i];
+    ENDIF   
+
+    v:=Mul(v,10)
+    IF r>=divisor
+      n:=Div(r,divisor)
+      v+=n
+      r:=r-Mul(n,divisor);
+    ENDIF
+  ENDFOR
+  
+ENDPROC v
 
 EXPORT PROC convertFromBCD(inArray:PTR TO CHAR)
   DEF tempBCD[8]:ARRAY

@@ -33,7 +33,8 @@ MODULE	'socket',
        '*axobjects',
        '*axenums',
        '*tooltypes',
-       '*miscfuncs'
+       '*miscfuncs',
+       '*bcd'
        
  
 EXPORT OBJECT ftpData
@@ -258,23 +259,24 @@ PROC uploadFileStart(ftpData:PTR TO ftpData,fn,resumepos)
   ADD.L #8,A7
 ENDPROC
 
-PROC checkDownloadRatio(ftpData:PTR TO ftpData,fn,pos,res:PTR TO CHAR)
+PROC checkDownloadRatio(ftpData:PTR TO ftpData,fn,flen,res:PTR TO CHAR)
   DEF cdr
   cdr:=ftpData.checkDownloadRatio
   MOVE.L fn,-(A7)
-  MOVE.L pos,-(A7)
+  MOVE.L flen,-(A7)
   MOVE.L res,-(A7)
   cdr()
   ADD.L #12,A7
 ENDPROC D0
 
-PROC downloadFileStart(ftpData:PTR TO ftpData,fn,pos)
+PROC downloadFileStart(ftpData:PTR TO ftpData,fn,flen,pos)
   DEF fs
   fs:=ftpData.downloadFileStart
   MOVE.L fn,-(A7)
+  MOVE.L flen,-(A7)
   MOVE.L pos,-(A7)
   fs()
-  ADD.L #8,A7
+  ADD.L #12,A7
 ENDPROC
 
 PROC uploadFileEnd(ftpData:PTR TO ftpData,fn,result)
@@ -446,17 +448,13 @@ ENDPROC
 
 PROC calcCPS(pd,t,t2)
   DEF cps,td
+  DEF bcdVal[8]:ARRAY OF CHAR
   cps:=0
-  IF t<t2
-    td:=t2-t
-    IF (pd<0) OR (pd>$10000000)
-      pd:=Shr(pd,1) AND $7fffffff
-      td:=Div(td,50)
-      IF td<1 THEN td:=1
-      cps:=Shl(Div(pd,td),1)
-    ELSE
-      cps:=Div(Mul(pd,50),td)     
-    ENDIF
+  td:=t2-t
+  IF td
+    convertToBCD(pd,bcdVal)
+    mulBCD(bcdVal,50)
+    cps:=divBCD(bcdVal,td)
   ELSE
     cps:=pd
   ENDIF
@@ -1619,7 +1617,7 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF buff
   DEF asynclib
   DEF fn[255]:STRING
-  DEF r,l,pos,cps,lastpos
+  DEF r,l,pos,cps,lastpos,flen
   DEF fh
   DEF t,t2,startTime
   DEF candl=TRUE
@@ -1656,7 +1654,9 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
    
     getFileName(ftpData,filename,fn)
     fh:=0
+    flen:=0
     IF StrLen(fn)
+      flen:=getFileSize(fn)
       IF asynclib<>NIL
         writeLineEx(sb,ftp_c, '150 Opening BINARY connection with ASYNC\b\n')
         fh:=OpenAsync(fn,MODE_READ,32768)
@@ -1678,18 +1678,15 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
         pos:=ftpData.restPos
         IF asynclib<>NIL
           SeekAsync(fh,pos,MODE_START)
-          pos:=SeekAsync(fh,0,MODE_CURRENT)
         ELSE
           Seek(fh,pos,OFFSET_BEGINNING)
-          pos:=Seek(fh,0,OFFSET_CURRENT)
         ENDIF
-        IF (ftpData.checkDownloadRatio<>NIL) ANDALSO (checkDownloadRatio(ftpData,fn,pos,res)=FALSE)
+        IF (ftpData.checkDownloadRatio<>NIL) ANDALSO (checkDownloadRatio(ftpData,fn,flen,res)=FALSE)
           StringF(temp,'550 \s\b\n',res)
           writeLineEx(sb,ftp_c,temp)
           candl:=FALSE
-        ELSE
-          IF (ftpData.downloadFileStart<>NIL) THEN downloadFileStart(ftpData,fn,pos)
         ENDIF
+        IF (ftpData.downloadFileStart<>NIL) THEN downloadFileStart(ftpData,fn,flen,pos)
       ENDIF
       IF candl
         buff:=New(32768)
