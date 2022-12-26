@@ -44,7 +44,6 @@ OBJECT httpData
   fileEnd:LONG
   fileProgress:LONG
   fileDupeCheck:LONG
-  xprInfo:LONG
 ENDOBJECT
  
 
@@ -163,52 +162,42 @@ PROC setSockOpt(sb,s,level,optname,optval,optlen )
 ENDPROC D0
 
 PROC fileStart(httpData:PTR TO httpData,fn,pos)
-  DEF fs,xprInfo
+  DEF fs
   fs:=httpData.fileStart
-  xprInfo:=httpData.xprInfo
-  MOVE.L xprInfo,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L pos,-(A7)
   fs()
-  ADD.L #12,A7
+  ADD.L #8,A7
 ENDPROC
 
-PROC fileEnd(httpData:PTR TO httpData,fn)
+PROC fileEnd(httpData:PTR TO httpData,fn,result)
   DEF fe
-  DEF xprInfo
   fe:=httpData.fileEnd
-  xprInfo:=httpData.xprInfo
 
-  MOVE.L xprInfo,-(A7)
   MOVE.L fn,-(A7)
+  MOVE.L result,-(A7)
   fe()
   ADDQ.L #8,A7
 ENDPROC
 
 PROC fileProgress(httpData:PTR TO httpData,fn,pos,cps)
   DEF fp
-  DEF xprInfo
   fp:=httpData.fileProgress
-  xprInfo:=httpData.xprInfo
   
-  MOVE.L xprInfo,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L pos,-(A7)
   MOVE.L cps,-(A7)
   fp()
-  ADD.L #12,A7
+  ADD.L #8,A7
 ENDPROC
 
 PROC fileDupeCheck(httpData:PTR TO httpData,fn)
   DEF fdc
-  DEF xprInfo
   fdc:=httpData.fileDupeCheck
-  xprInfo:=httpData.xprInfo
-  
-  MOVE.L xprInfo,-(A7)
+ 
   MOVE.L fn,-(A7)
   fdc()
-  ADD.L #8,A7
+  ADD.L #4,A7
 ENDPROC D0
 
 PROC aePuts(httpData:PTR TO httpData, s:PTR TO CHAR)
@@ -282,8 +271,8 @@ PROC openSocket(sb,port, reuseable,httpData:PTR TO httpData)
       StringF(tempStr,'/XHTTP: error setting socket options SO_LINGER, error=\d\b\n',errno(sb))
       aePuts(httpData,tempStr)
     ENDIF
-    END optval
-    END optlen
+    END optval[2]
+    END optlen[1]
 
   ENDIF
   
@@ -376,9 +365,8 @@ PROC listFiles(path: PTR TO CHAR,sb,http_c)
   FreeDosObject(DOS_FIB,f_info)
 ENDPROC
 
-PROC generatePage(sb,http_c,httppath:PTR TO CHAR, xprInfo:PTR TO xprData,node,uploadMode)
+PROC generatePage(sb,http_c,httppath:PTR TO CHAR, node,uploadMode,fl:PTR TO stdlist)
   DEF temp[255]:STRING
-  DEF fl:PTR TO stdlist
   DEF fi:PTR TO flagFileItem
   DEF i
 
@@ -410,7 +398,6 @@ PROC generatePage(sb,http_c,httppath:PTR TO CHAR, xprInfo:PTR TO xprData,node,up
     writeLineEx(sb,http_c,'<hr>\b\n')
     writeLineEx(sb,http_c,'<ol>\b\n')
     
-    fl:=xprInfo.fileList
     FOR i:=0 TO fl.count()-1
       fi:=fl.item(i)
       StringF(temp,'<pre><li><a href="\s">\s</a></li></pre>\b\n',FilePart(fi.fileName),FilePart(fi.fileName))
@@ -455,7 +442,7 @@ PROC readMemLine(outBuf:PTR TO CHAR,sb,socket,inBuf:PTR TO CHAR,bufsize:PTR TO L
   ENDWHILE
 ENDPROC StrLen(outBuf)
 
-PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,contentLength,asynclib)
+PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,contentLength)
   DEF buff,fh
   DEF pos,p,readSize,boundaryLen
   DEF fname[255]:STRING
@@ -481,17 +468,17 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
     StrCopy(fname,'')
        
     WHILE((readMemLine(lineBuff,sb,socket,buff,{readSize},{pos},255,bufsize,{contentLength})) > 0)
-      IF (p:=InStr(lineBuff,'filename="'))>=0
+    IF (p:=InStr(lineBuff,'filename="'))>=0
         StrCopy(fname,httpData.workingPath)
-        StrAdd(fname,lineBuff+p+10,ALL)
+        StrAdd(fname,lineBuff+p+10)
         p:=InStr(fname,'"')
         SetStr(fname,p)
-      ENDIF
+    ENDIF
     ENDWHILE
     fh:=0
     IF StrLen(fname)>0
       IF fileDupeCheck(httpData,fname)=FALSE
-        IF asynclib<>NIL
+        IF asynciobase<>NIL
           DeleteFile(fname)
           fh:=OpenAsync(fname,MODE_APPEND,32768)
         ELSE
@@ -509,8 +496,8 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
     REPEAT
       p:=pos
       WHILE (p<(readSize-boundaryLen)) AND (StrCmp(buff+p,boundary,boundaryLen)=FALSE) DO p++
-      IF fh>0
-        IF asynclib<>NIL
+      IF fh<>0
+        IF asynciobase<>NIL
           WriteAsync(fh,buff+pos,p-pos)
         ELSE
           Write(fh,buff+pos,p-pos)
@@ -519,7 +506,7 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
         t2:=fastSystemTime()
         ->only call update maximum every 1 second
         IF (Abs(t2-t))>=50
-          IF asynclib<>NIL
+          IF asynciobase<>NIL
             filepos:=SeekAsync(fh,0,MODE_CURRENT)
           ELSE
             filepos:=Seek(fh,0,OFFSET_CURRENT)
@@ -551,14 +538,15 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
         ENDIF
       ENDIF
     UNTIL loop=FALSE
-    IF fh>0
-      IF asynclib<>NIL
+
+    IF fh<>0
+      IF asynciobase<>NIL
         CloseAsync(fh)
       ELSE
         Close(fh)
       ENDIF
       IF httpData.fileEnd<>NIL
-        fileEnd(httpData,fname)
+        fileEnd(httpData,fname,TRUE)
       ENDIF
     ENDIF
 
@@ -567,7 +555,7 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
 ENDPROC
 
 
-EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sCheckInputPtr, xprInfo:PTR TO xprData, httpFileStartPtr, httpFileEndPtr, httpFileProgressPtr, httpDupeCheckPtr, httpCheckConnection, uploadMode)
+EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, readCharPtr, sCheckInputPtr, httpFileStartPtr, httpFileEndPtr, httpFileProgressPtr, httpDupeCheckPtr, httpCheckConnection, uploadMode, fileList:PTR TO stdlist)
   DEF r,http_s,http_c,sb
   DEF temp[255]:STRING
   DEF httpData:PTR TO httpData
@@ -578,9 +566,9 @@ EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sChe
   DEF boundary[255]:STRING
   DEF spcPos
   DEF fh,buff,l,t,t2,lastpos,pos,cps
-  DEF asynclib
   DEF p,contentLength
   DEF connected=TRUE
+  DEF i,port
   
   httpData:=NEW httpData
   httpData.rest:=0
@@ -598,22 +586,30 @@ EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sChe
   httpData.fileDupeCheck:=httpDupeCheckPtr
   httpData.workingPath:=String(255)
   httpData.hostName:=String(255)
-  httpData.xprInfo:=xprInfo
 
   StrCopy(httpData.hostName,httphost)
-  httpData.port:=httpport
   StrCopy(httpData.workingPath,httppath)
+
+  asynciobase:=OpenLibrary('asyncio.library',0)
   
 	sb:=OpenLibrary('bsdsocket.library',2)
 	IF (sb)
-    StringF(temp,'\b\nHTTP processor started on \s port \d...\b\n',httpData.hostName,httpData.port)
-    aePuts(httpData,temp)
-    aePuts(httpData,'Use Ctrl-C to continue when transfers are complete\b\n\b\n')
   
-    r,http_s:=openSocket(sb,httpport,1,httpData)
+    i:=0
+    REPEAT
+      port:=httpports[i]
+      r,http_s:=openSocket(sb,port,1,httpData)
+      i++
+    UNTIL (r OR (i>=ListLen(httpports)))
+  
+    httpData.port:=port
 
     flg:=FALSE
     IF r
+      StringF(temp,'\b\nHTTP processor started on \s port \d...\b\n',httpData.hostName,port)
+      aePuts(httpData,temp)
+      aePuts(httpData,'Use Ctrl-C to continue when transfers are complete\b\n\b\n')
+      
       ioctlSocket(sb,http_s,FIONBIO,[1])
       rchar:=0
       WHILE (rchar<>3) AND connected
@@ -655,26 +651,24 @@ EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sChe
           
           IF StrLen(getCmd)>0
             IF (spcPos:=InStr(getCmd,' '))>=0 THEN SetStr(getCmd,spcPos)
-            IF StrCmp(getCmd,'/',ALL)
-              generatePage(sb,http_c,httppath,xprInfo,node,uploadMode)
+            IF StrCmp(getCmd,'/')
+              generatePage(sb,http_c,httppath,node,uploadMode,fileList)
               
             ELSEIF (StrCmp(getCmd,'/',1))
-              StringF(temp,'\s\s',httppath,getCmd+1)
-            
-              asynclib:=OpenLibrary('asyncio.library',0)
-              asynciobase:=asynclib
-              
-              IF httpData.fileStart<>NIL
-                fileStart(httpData,temp,FileLength(temp))
-              ENDIF
 
-              IF asynclib<>NIL
+              StringF(temp,'\s\s',httppath,getCmd+1)          
+              
+              IF asynciobase<>NIL
                 fh:=OpenAsync(temp,MODE_READ,32768)
               ELSE
                 fh:=Open(temp,MODE_OLDFILE)
               ENDIF
               
-              IF fh>=0
+              IF fh<>0
+                IF httpData.fileStart<>NIL
+                  fileStart(httpData,temp,FileLength(temp))
+                ENDIF
+
                 writeLineEx(sb,http_c,'HTTP/1.1 200 OK\b\n')
                 writeLineEx(sb,http_c,'content-type: binary/octet-stream\b\n')
                 writeLineEx(sb,http_c,'\b\n')
@@ -685,7 +679,7 @@ EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sChe
                 cps:=0
                 
                 REPEAT
-                  IF asynclib<>NIL
+                  IF asynciobase<>NIL
                     l:=ReadAsync(fh,buff,32768)
                   ELSE
                     l:=Fread(fh,buff,1,32768)
@@ -696,7 +690,7 @@ EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sChe
                       t2:=fastSystemTime()
                       ->only call update maximum every 1 second
                       IF (Abs(t2-t))>=50
-                        IF asynclib<>NIL
+                        IF asynciobase<>NIL
                           pos:=SeekAsync(fh,0,MODE_CURRENT)
                         ELSE
                           pos:=Seek(fh,0,OFFSET_CURRENT)
@@ -711,14 +705,20 @@ EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sChe
                 UNTIL l=0
                 Dispose(buff)
 
-                IF asynclib<>NIL
+                IF asynciobase<>NIL
                   CloseAsync(fh)
                 ELSE
                   Close(fh)
                 ENDIF
                 IF httpData.fileEnd<>NIL
-                  fileEnd(httpData,temp)
+                  fileEnd(httpData,temp,TRUE)
                 ENDIF
+              
+              ELSE              
+                writeLineEx(sb,http_c,'HTTP/1.1 404 Not Found\b\n')
+                writeLineEx(sb,http_c,'content-type: text/plain\b\n')
+                writeLineEx(sb,http_c,'\b\n')
+                writeLineEx(sb,http_c,'File Not found\b\n')
                 
               ENDIF
             ENDIF
@@ -726,12 +726,11 @@ EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sChe
           
           IF StrLen(postCmd)>0
             IF (spcPos:=InStr(postCmd,' '))>=0 THEN SetStr(postCmd,spcPos)
-            IF StrCmp(postCmd,'/',ALL)
-              extractFileData(sb,http_c,httpData,boundary,contentLength,asynclib)
-              generatePage(sb,http_c,httppath,xprInfo,node,uploadMode)
+            IF StrCmp(postCmd,'/')
+              extractFileData(sb,http_c,httpData,boundary,contentLength)
+              generatePage(sb,http_c,httppath,node,uploadMode,fileList)
             ENDIF
           ENDIF
-
           r:=closeSocket(sb,http_c)
         ENDIF
       ENDWHILE
@@ -747,6 +746,8 @@ EXPORT PROC doHttpd(node,httphost,httpport,httppath,aePutsPtr, readCharPtr, sChe
     ENDIF
     CloseLibrary(sb)
 	ENDIF
+  IF asynciobase<>0 THEN CloseLibrary(asynciobase)
+  asynciobase:=NIL
   DisposeLink(httpData.hostName)
   DisposeLink(httpData.workingPath)
   END httpData

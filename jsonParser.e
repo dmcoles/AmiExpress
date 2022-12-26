@@ -121,20 +121,19 @@ PROC jsmn_parse_primitive(parser:PTR TO jsmn_parser, js: PTR TO CHAR,len,tokens,
     ELSEIF (ch="\t") OR (ch="\b") OR (ch="\n") OR (ch=" ") OR (ch=",") OR (ch="]") OR (ch="}")
       found:=TRUE
     ENDIF
-    IF found THEN JUMP foundit
+    EXIT found
 		IF ((ch < 32) OR (ch >= 127))
 			parser.pos:=start
 			RETURN JSMN_ERROR_INVAL
 		ENDIF
     parser.pos:=parser.pos+1
 	ENDWHILE
-  IF JSMN_STRICT
+  IF JSMN_STRICT AND (found=FALSE)
 	/* In strict mode primitive must be followed by a comma/object/array */
     parser.pos:=start
     RETURN JSMN_ERROR_PART
   ENDIF
 
-foundit:
 	IF (tokens = NIL)
 		parser.pos:=parser.pos-1
 		RETURN 0

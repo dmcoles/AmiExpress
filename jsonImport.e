@@ -30,8 +30,8 @@ PROC main() HANDLE
 
   fr:=NIL
 
-  AstrCopy(infile,'',ALL)
-  AstrCopy(outpath,'',ALL)
+  AstrCopy(infile,'')
+  AstrCopy(outpath,'')
 
   myargs:=[0,0,0]:LONG
   IF rdargs:=ReadArgs('CONFIG/K,WRITEPATH/K,CFGFILES/S',myargs,NIL)
@@ -87,7 +87,7 @@ PROC main() HANDLE
 	jsmn_init(p)
   
   fh:=Open(infile,MODE_OLDFILE)
-  IF fh<1
+  IF fh=0
 		WriteF('Could not open json file\n\n')
     RETURN
   ENDIF

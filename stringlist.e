@@ -75,8 +75,7 @@ EXPORT PROC add(stringVal:PTR TO CHAR) OF stringlist
   
   s:=String(StrLen(stringVal))
   StrCopy(s,stringVal)
-  ListAdd(self.items,[0])
-  self.items[c]:=s
+  ListAddItem(self.items,s)
 ENDPROC c
 
 EXPORT PROC setItem(n,stringVal:PTR TO CHAR) OF stringlist

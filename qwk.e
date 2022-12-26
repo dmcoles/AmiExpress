@@ -1,6 +1,10 @@
 
   MODULE 'dos/dos','dos/dostags','dos/datetime'
-  MODULE '*stringlist'
+  MODULE '*stringlist','*axobjects'
+
+#ifndef EVO_3_4_0
+  FATAL 'This should only be compiled with E-VO Amiga E Compiler'
+#endif
 
   DEF confIds=NIL:PTR TO stringlist
   DEF confNames=NIL:PTR TO stringlist
@@ -33,32 +37,12 @@ OBJECT qwkHeader
   netTag: CHAR
 ENDOBJECT
 
-OBJECT mailStat
-  lowestKey : LONG
-  highMsgNum : LONG
-  lowestNotDel : LONG
-  pad[6]:ARRAY OF CHAR
-ENDOBJECT
-
-OBJECT mailHeader
-  status: CHAR
-  msgNumb: LONG
-  toName[31]: ARRAY OF CHAR
-  fromName[31]: ARRAY OF CHAR
-  subject[31]: ARRAY OF CHAR
-  msgDate: LONG
-  recv: LONG
-  pad: CHAR
-ENDOBJECT
-
 PROC exec(fileName:PTR TO CHAR)
-  DEF tags,r
-  tags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG
-  r:=SystemTagList(fileName,tags)
+  DEF r
+  r:=SystemTagList(fileName,[SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,NIL]:LONG)
   IF r=-1
     WriteF('Error executing \s\n\n',fileName)
   ENDIF
-  END tags
 ENDPROC r
 
 PROC replacestr(sourcestring,searchtext,replacetext)
@@ -111,17 +95,10 @@ PROC fillStrCopy(src:PTR TO CHAR,dest:PTR TO CHAR,len)
 ENDPROC
 
 PROC saveMh(fh,mailHeader)
-  DEF result
-  
-  result:=Write(fh,mailHeader,1)    -> STATUS
-  result:=result+Write(fh,mailHeader+110,1)   ->PAD
-  result:=result+Write(fh,mailHeader+2,4)   ->MsgNum
-  result:=result+Write(fh,mailHeader+6,31)   ->toName
-  result:=result+Write(fh,mailHeader+38,31)   ->fromName
-  result:=result+Write(fh,mailHeader+70,31)   ->subject
-  result:=result+Write(fh,mailHeader+110,1)   ->PAD
-  result:=result+Write(fh,mailHeader+102,9)  ->msgdate, recv & pad
-  result:=result+Write(fh,mailHeader+110,1)   ->PAD
+  DEF result,size
+
+  size:=SIZEOF mailHeader
+  result:=Write(fh,mailHeader,size)
 ENDPROC result
 
 PROC getMsgBasePath(confNum,msgBasePath:PTR TO CHAR)
@@ -147,7 +124,7 @@ PROC createMessageDat2(confNum,msgDatFilename:PTR TO CHAR, srcFilename:PTR TO CH
   DEF status,p,i
   fh:=Open(msgDatFilename,MODE_READWRITE)
   
-  IF fh>0
+  IF fh<>0
     Seek(fh,0,OFFSET_END)
     IF Seek(fh,0,OFFSET_CURRENT)=0
       StringF(tempStr,'\l\s[128]',bbsId,'')
@@ -155,7 +132,7 @@ PROC createMessageDat2(confNum,msgDatFilename:PTR TO CHAR, srcFilename:PTR TO CH
     ENDIF
     
     fh2:=Open(srcFilename,MODE_OLDFILE)
-    IF fh2>0
+    IF fh2<>0
     
       ReadStr(fh2,fromName)
       ReadStr(fh2,toName)
@@ -431,12 +408,13 @@ PROC main() HANDLE
   DEF cfgFile[255]:STRING
   DEF needToSave
   DEF myargs:PTR TO LONG,rdargs
+  DEF eof=FALSE
 
   DEF category[255]:STRING
   DEF optionName[255]:STRING
   DEF optionValue[255]:STRING
 
-  WriteF('Ami-Express QWK file processor Copyright 2020 Darren Coles\n')
+  WriteF('Ami-Express QWK file processor (v1.1) Copyright 2022 Darren Coles\n')
   
   myargs:=[0,0]:LONG
   IF rdargs:=ReadArgs('CFG/A',myargs,NIL)
@@ -453,10 +431,10 @@ PROC main() HANDLE
   msgBasePaths:=NEW msgBasePaths.stringlist(100)
 
   fh:=Open(cfgFile,MODE_OLDFILE)
-  IF fh>0
+  IF fh<>0
   
     REPEAT
-      ReadStr(fh,tempStr)
+      eof:=(ReadStr(fh,tempStr)=-1) AND (StrLen(tempStr)=0)
       processConfigLine(tempStr,category,optionName,optionValue)
 
       IF StrCmp('MAIN',category) AND StrCmp('MODE',optionName) THEN StrCopy(mode,optionValue)
@@ -476,8 +454,14 @@ PROC main() HANDLE
       IF StrCmp('MAIN',category) AND StrCmp('MSGFILE',optionName) THEN StrCopy(qwkRepMessageFilename,optionValue)
       IF StrCmp('MAIN',category) AND StrCmp('REPFILE',optionName) THEN StrCopy(qwkOutputFilename,optionValue)
 
-    UNTIL StrCmp(category,'CONFS')
+    UNTIL StrCmp(category,'CONFS') OR eof
     UpperStr(mode)
+
+    IF StrCmp(category,'CONFS')=FALSE
+      WriteF('Error reading CONFS data in Qwk.cfg\n\n')
+      Raise(ERR_NOCFG)
+    ENDIF
+
 
     replacestr(qwkGetCommand,'{bbsid}',bbsId)
     replacestr(qwkPutCommand,'{bbsid}',bbsId)
@@ -570,7 +554,7 @@ PROC main() HANDLE
        
     needToSave:=FALSE
     mf:=Open(qwkMessageFilename,MODE_OLDFILE)
-    IF mf>0
+    IF mf<>0
       Seek(mf,128,OFFSET_BEGINNING)
       buf:=New(128)
       c:=0
@@ -612,7 +596,7 @@ PROC main() HANDLE
               ms.highMsgNum:=newMsgNum+1
               StringF(fname,'\sMailStats',msgBase)
               fh:=Open(fname,MODE_NEWFILE)
-              IF fh>0
+              IF fh<>0
                 Write(fh,ms,SIZEOF mailStat)
                 Close(fh)
                 fh:=0
@@ -633,7 +617,7 @@ PROC main() HANDLE
               StringF(fname,'\sMailStats',msgBase)
               IF fh>0 THEN Close(fh)
               fh:=Open(fname,MODE_READWRITE)
-              IF fh>0
+              IF fh<>0
                 IF Read(fh,ms,SIZEOF mailStat)=0
                   ms.lowestKey:=1
                   ms.lowestNotDel:=1
@@ -654,7 +638,7 @@ PROC main() HANDLE
               newMsgNum:=ms.highMsgNum-1
               StringF(fname,'\sHeaderFile',msgBase)
               fh:=Open(fname,MODE_READWRITE)
-              IF fh>0
+              IF fh<>0
                 Seek(fh,0,OFFSET_END)
               ELSE
                 WriteF('Error opening HeaderFile\n\n')
@@ -673,7 +657,6 @@ PROC main() HANDLE
             buf2:=New(bufsz)
             Read(mf,buf2,bufsz)
      
-            mh.pad:=0
             mh.status:="P"
             mh.msgNumb:=newMsgNum
          
@@ -688,6 +671,7 @@ PROC main() HANDLE
 
             mh.msgDate:=getEncodedDate(qh.msgdate)
             mh.recv:=0
+            mh.extMsgNum:=0
 
             IF saveMh(fh,mh)<>110
               WriteF('Error saving mail header for message \d\n',newMsgNum)
@@ -697,7 +681,7 @@ PROC main() HANDLE
             
             StringF(fname,'\s\d',msgBase,newMsgNum)
             fh2:=Open(fname,MODE_NEWFILE)
-            IF fh2>0
+            IF fh2<>0
               FOR i:=0 TO bufsz-1
                 IF buf2[i]=$e3 THEN buf2[i]:=10
               ENDFOR
@@ -723,7 +707,7 @@ PROC main() HANDLE
         ms.highMsgNum:=newMsgNum+1
         StringF(fname,'\sMailStats',msgBase)
         fh:=Open(fname,MODE_NEWFILE)
-        IF fh>0
+        IF fh<>0
           Write(fh,ms,SIZEOF mailStat)
           Close(fh)
           fh:=0

@@ -3,7 +3,26 @@
   OPT MODULE
 
   MODULE 'dos/dos','dos/dosextens','dos/datetime'
-  MODULE '*axenums','*axconsts','*errors'
+  MODULE '*axenums','*axconsts','*axobjects','*errors'
+
+EXPORT PROC setSingleFDS(fds:PTR TO LONG,socketVal)
+  DEF i,n
+  
+  n:=(socketVal/32)
+  IF (n<0) OR (n>=32) THEN Raise(ERR_FDSRANGE)
+  
+  FOR i:=0 TO 31 DO fds[i]:=0
+  fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
+ENDPROC
+
+EXPORT PROC setFDS(fds:PTR TO LONG,socketVal)
+  DEF n
+  
+  n:=(socketVal/32)
+  IF (n<0) OR (n>=32) THEN Raise(ERR_FDSRANGE)
+  
+  fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
+ENDPROC
 
 EXPORT PROC getFileSize(s: PTR TO CHAR)
 /* returns the file size of a given file or 8192 if an error occured */
@@ -71,39 +90,87 @@ EXPORT PROC checkPathSlash(path)
   ENDIF
 ENDPROC 
 
-EXPORT PROC strCmpi(test1: PTR TO CHAR, test2: PTR TO CHAR, len)
-  /* case insensitive string compare */
-  DEF i,l1,l2
-
-  IF len=ALL
-    l1:=StrLen(test1)
-    l2:=StrLen(test2)
-    IF l1<>l2 THEN RETURN FALSE
-    len:=l1
-  ENDIF
-
-  FOR i:=0 TO len-1
-    IF charToLower(test1[i])<>charToLower(test2[i]) THEN RETURN FALSE
+EXPORT PROC makeIntList(src:PTR TO CHAR)
+  DEF res
+  DEF m=1
+  DEF tmp,i
+  
+  tmp:=String(StrLen(src))
+  
+  FOR i:=0 TO StrLen(src)-1
+    IF src[i]="," THEN m++
   ENDFOR
-ENDPROC TRUE
+  
+  res:=List(m)
+  FOR i:=0 TO StrLen(src)-1
+    IF src[i]=","
+      ListAddItem(res,Val(tmp))
+      StrCopy(tmp,'')
+    ELSE
+      StrAddChar(tmp,src[i])
+    ENDIF
+  ENDFOR
+  IF StrLen(tmp)>0
+    ListAddItem(res,Val(tmp))
+  ENDIF
+  
+  DisposeLink(tmp)
+  
+ENDPROC res
+
+EXPORT PROC upperChars(s:PTR TO CHAR)
+  DEF c
+  WHILE s[]<>0
+    c:=s[]
+    IF (c>="a") AND (c<="z") THEN s[]:=c AND $DF
+    s++
+  ENDWHILE
+ENDPROC
+
+EXPORT PROC removeSlashes(str:PTR TO CHAR)
+  DEF s,i
+  s:=String(StrLen(str))
+  FOR i:=0 TO StrLen(str)-1
+    CONT str[i]="/"
+    StrAddChar(s,str[i])
+  ENDFOR
+  StrCopy(str,s)
+  DisposeLink(s)
+ENDPROC
 
 EXPORT PROC midStr2(dest,src,pos,len)
   IF len>0 THEN MidStr(dest,src,pos,len) ELSE StrCopy(dest,'')
 ENDPROC
 
-EXPORT PROC charToLower(c)
-  /* convert a given char to lowercase */
-  DEF str[1]:STRING
-  str[0]:=c
-  LowerStr(str)
-ENDPROC str[0]
+EXPORT PROC stringCompare(nam: PTR TO CHAR,pat: PTR TO CHAR)
+  DEF p,loop=TRUE
 
-EXPORT PROC charToUpper(c)
-  /* convert a given char to uppercase */
-  DEF str[1]:STRING
-  str[0]:=c
-  UpperStr(str)
-ENDPROC str[0]
+  WHILE loop
+    IF LowerChar(nam[0])=LowerChar(pat[0])
+      IF nam[0]=0 THEN RETURN RESULT_SUCCESS
+      nam++
+      pat++
+    ELSEIF (pat[0]="?") AND (nam[0]<>0)
+      nam++
+      pat++
+    ELSE
+      loop:=FALSE
+    ENDIF
+  ENDWHILE
+
+  IF pat[0]<>"*" THEN RETURN RESULT_FAILURE
+
+  WHILE pat[0]="*"
+    pat++
+    IF pat[0]=0 THEN RETURN RESULT_SUCCESS
+  ENDWHILE
+
+  FOR p:=StrLen(nam)-1 TO 0 STEP -1
+    IF LowerChar(nam[p]) = LowerChar(pat[0])
+      IF stringCompare(nam+p,pat) = RESULT_SUCCESS THEN RETURN RESULT_SUCCESS
+    ENDIF
+  ENDFOR
+ENDPROC RESULT_FAILURE
 
 /* trim spaces from both ends of a string and puts it in the destination estring*/
 EXPORT PROC fullTrim(src:PTR TO CHAR,dest:PTR TO CHAR)
@@ -147,7 +214,7 @@ EXPORT PROC findAssign(name: PTR TO CHAR)
   Forbid()
   WHILE(devicelist.next)
     bStrC(devicelist.name,temp2)
-    IF(strCmpi(temp2,temp,ALL)/* && devicelist->dl_Type!=DLT_DEVICE*/)
+    IF(StriCmp(temp2,temp)/* && devicelist->dl_Type!=DLT_DEVICE*/)
       Permit()
       RETURN 0
     ENDIF 
@@ -169,11 +236,6 @@ PROC bStrC(bstr: PTR TO CHAR,outbuf: PTR TO CHAR)
     outbuf[counter]:=str[loop]
     counter++
   ENDFOR
-ENDPROC
-
-EXPORT PROC listAdd2(list:PTR TO LONG, v)
-  ListAdd(list,[0])
-  list[ListLen(list)-1]:=v
 ENDPROC
 
 /*must be called with EString*/
@@ -209,13 +271,23 @@ PROC asmputchar()
   MOVE.B D0,(A3)+
 ENDPROC
 
+EXPORT PROC dateStampToDateTime(datestamp:PTR TO datestamp) IS (Mul(Mul(datestamp.days+2922,1440),60)+(datestamp.minute*60)+(datestamp.tick/50))+21600
+
+EXPORT PROC dateTimeToDateStamp(dateVal,datestamp:PTR TO datestamp)
+  dateVal:=dateVal-21600
+
+  datestamp.tick:=(dateVal-Mul(Div(dateVal,60),60))
+  datestamp.tick:=Mul(datestamp.tick,50)
+  dateVal:=Div(dateVal,60)
+  datestamp.days:=Div((dateVal),1440)-2922   ->-2922 days between 1/1/70 and 1/1/78
+  datestamp.minute:=dateVal-(Mul(datestamp.days+2922,1440))
+ENDPROC
+
 EXPORT PROC formatUnsignedLong(val,outStr)
-  DEF outputTxt
+  DEF outputTxt[10]:ARRAY OF CHAR
   
-  outputTxt:=NEW [0,0,0,0,0,0,0,0,0,0]:CHAR
   RawDoFmt('%lu',{val},{asmputchar},outputTxt)
   StrCopy(outStr,outputTxt)
-  END outputTxt
 EXPORT ENDPROC
 
 EXPORT PROC formatLongDate(cDateVal,outDateStr)
@@ -224,14 +296,8 @@ EXPORT PROC formatLongDate(cDateVal,outDateStr)
   DEF datestr[10]:STRING
   DEF dateVal
 
-  dateVal:=cDateVal-21600
-
   d:=dt.stamp
-  d.tick:=(dateVal-Mul(Div(dateVal,60),60))
-  d.tick:=Mul(d.tick,50)
-  dateVal:=Div(dateVal,60)
-  d.days:=Div((dateVal),1440)-2922   ->-2922 days between 1/1/70 and 1/1/78
-  d.minute:=dateVal-(Mul(d.days+2922,1440))
+  dateTimeToDateStamp(cDateVal,d)
 
   dt.format:=FORMAT_USA
   dt.flags:=0
@@ -251,14 +317,8 @@ EXPORT PROC formatLongTime(cDateVal,outDateStr)
   DEF time[10]:STRING
   DEF dateVal
 
-  dateVal:=cDateVal-21600
-
   d:=dt.stamp
-  d.tick:=(dateVal-Mul(Div(dateVal,60),60))
-  d.tick:=Mul(d.tick,50)
-  dateVal:=Div(dateVal,60)
-  d.days:=Div((dateVal),1440)-2922   ->-2922 days between 1/1/70 and 1/1/78
-  d.minute:=dateVal-(Mul(d.days+2922,1440))
+  dateTimeToDateStamp(cDateVal,d)
 
   dt.format:=FORMAT_USA
   dt.flags:=0
@@ -280,14 +340,8 @@ EXPORT PROC formatLongDateTime(cDateVal,outDateStr)
   DEF timestr[10]:STRING
   DEF dateVal
 
-  dateVal:=cDateVal-21600
-
   d:=dt.stamp
-  d.tick:=(dateVal-Mul(Div(dateVal,60),60))
-  d.tick:=Mul(d.tick,50)
-  dateVal:=Div(dateVal,60)
-  d.days:=Div((dateVal),1440)-2922   ->-2922 days between 1/1/70 and 1/1/78
-  d.minute:=dateVal-(Mul(d.days+2922,1440))
+  dateTimeToDateStamp(cDateVal,d)
 
   dt.format:=FORMAT_DOS
   dt.flags:=0
@@ -309,14 +363,8 @@ EXPORT PROC formatCDateTime(cDateVal,outDateStr)
   DEF timestr[10]:STRING
   DEF dateVal
 
-  dateVal:=cDateVal-21600
-
   d:=dt.stamp
-  d.tick:=(dateVal-Mul(Div(dateVal,60),60))
-  d.tick:=Mul(d.tick,50)
-  dateVal:=Div(dateVal,60)
-  d.days:=Div((dateVal),1440)-2922   ->-2922 days between 1/1/70 and 1/1/78
-  d.minute:=dateVal-(Mul(d.days+2922,1440))
+  dateTimeToDateStamp(cDateVal,d)
 
   dt.format:=FORMAT_DOS
   dt.flags:=0
@@ -337,14 +385,8 @@ EXPORT PROC formatLongDateTime2(cDateVal,outDateStr,seperatorChar)
   DEF timestr[10]:STRING
   DEF dateVal
 
-  dateVal:=cDateVal-21600
-
   d:=dt.stamp
-  d.tick:=(dateVal-Mul(Div(dateVal,60),60))
-  d.tick:=Mul(d.tick,50)
-  dateVal:=Div(dateVal,60)
-  d.days:=Div((dateVal),1440)-2922   ->-2922 days between 1/1/70 and 1/1/78
-  d.minute:=dateVal-(Mul(d.days+2922,1440))
+  dateTimeToDateStamp(cDateVal,d)
 
   dt.format:=FORMAT_USA
   dt.flags:=0
@@ -358,13 +400,51 @@ EXPORT PROC formatLongDateTime2(cDateVal,outDateStr,seperatorChar)
   ENDIF
 ENDPROC FALSE
 
+EXPORT PROC decodeDateStr(datestr:PTR TO CHAR)
+  DEF dtstr[20]:STRING
+  DEF y=0,m=0,d=0
+  
+  StrCopy(dtstr,datestr)
+
+  dtstr[2]:=" "
+  dtstr[5]:=" "
+  m:=Val(dtstr)
+  d:=Val(dtstr+3)
+  y:=Val(dtstr+6)
+
+  IF (y<100) AND (y>TWODIGITYEARSWITCHOVER) THEN y:=1900+y ELSE y:=2000+y
+ENDPROC m,d,y
+
+EXPORT PROC encodeDate(m,d,y)
+  DEF dt : datetime
+  DEF datestr[20]:STRING
+  DEF r
+  DEF ds:PTR TO datestamp
+  StringF(datestr,'\z\r\d[2]-\z\r\d[2]-\z\r\d[2]',m,d,Mod(y,100))
+
+  dt.format:=FORMAT_USA
+  dt.flags:=0
+  dt.strday:=0
+  dt.strtime:=0
+  dt.strdate:=datestr
+  r:=StrToDate(dt)
+  ds:=dt.stamp
+  ds.minute:=0
+  ds.tick:=0
+ENDPROC dateStampToDateTime(ds)
+
 ->returns a numeric value of the date suitable for comparing to other dates
 EXPORT PROC getDateCompareVal(datestr:PTR TO CHAR)
   DEF month,day,year
+  DEF dtstr[20]:STRING
 
-  month:=Val(datestr)
-  day:=Val(datestr+3)
-  year:=Val(datestr+6)
+  StrCopy(dtstr,datestr)
+  dtstr[2]:=" "
+  dtstr[5]:=" "
+
+  month:=Val(dtstr)
+  day:=Val(dtstr+3)
+  year:=Val(dtstr+6)
 
   IF (year>TWODIGITYEARSWITCHOVER) THEN year:=1900+year ELSE year:=2000+year
 
@@ -372,6 +452,14 @@ ENDPROC Mul(year,10000)+Mul(month,100)+day
 
 EXPORT PROC isupper(c)
 ENDPROC (c>="A") AND (c<="Z")
+
+EXPORT PROC fastSystemTime()
+  DEF currDate: datestamp
+  DEF startds:PTR TO datestamp
+
+  startds:=DateStamp(currDate)
+
+ENDPROC Mul(startds.minute,3000)+startds.tick
 
 ->returns system date converted to c time format
 EXPORT PROC getSystemDate()
@@ -381,11 +469,12 @@ EXPORT PROC getSystemDate()
 
   startds:=DateStamp(currDate)
 
-  s4:=(Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50))+21600
+  s4:=dateStampToDateTime(startds)
+  ->s4:=(Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50))+21600
   ->2922 days between 1/1/70 and 1/1/78
 ENDPROC Mul(Div(s4,86400),86400)
 
-->returns system time converted to c time format
+->returns system time converted to c time format and ticks
 EXPORT PROC getSystemTime()
   DEF currDate: datestamp
   DEF startds:PTR TO datestamp
@@ -394,25 +483,6 @@ EXPORT PROC getSystemTime()
   ->2922 days between 1/1/70 and 1/1/78
 
 ENDPROC (Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50))+21600,Mod(startds.tick,50)
-
-->returns system time converted to c time format and ticks
-EXPORT PROC getSystemTime2()
-  DEF currDate: datestamp
-  DEF startds:PTR TO datestamp
-  DEF s1,s2,s3,s4
-
-  startds:=DateStamp(currDate)
-
-  s1:=startds.days+2922
-  s1:=Mul(1440,s1)
-  s1:=Mul(60,s1)
-  s2:=Mul(60,startds.minute)
-  s3:=startds.tick/50
-  s4:=Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50)
-
-  ->2922 days between 1/1/70 and 1/1/78
-
-ENDPROC s4+21600,Mod(startds.tick,50)
 
 EXPORT PROC fileWriteLn(fh,str: PTR TO CHAR)
   DEF stat
@@ -425,26 +495,6 @@ EXPORT PROC fileWrite(fh,str: PTR TO CHAR)
   s:=Write(fh,str,StrLen(str))
   IF s<>StrLen(str) THEN RETURN RESULT_FAILURE
 ENDPROC RESULT_SUCCESS
-
-EXPORT PROC strCpy(dest: PTR TO CHAR, source: PTR TO CHAR, len)
-  DEF c,endfound=FALSE
-  DEF i
-  IF len=ALL
-    AstrCopy(dest,source,ALL)
-  ELSE
-    FOR i:=0 TO len-1
-      c:=source[i]
-      IF (c=0) OR (i=(len-1)) THEN endfound:=TRUE
-      IF endfound THEN c:=0
-      dest[i]:=c
-    ENDFOR
-  ENDIF
-ENDPROC
-
-EXPORT PROC strAddChar(dest,source)
-  StrAdd(dest,' ')
-  dest[EstrLen(dest)-1]:=source
-ENDPROC
 
 EXPORT PROC countSpaces(str:PTR TO CHAR)
   DEF i,count=0
@@ -575,3 +625,88 @@ EXPORT PROC byteSignExtend(n)
   r:=n AND 255
   IF r>127 THEN r:=-(256-r)
 ENDPROC r
+
+EXPORT PROC parsePatternNoCase2(source:PTR TO CHAR,dest:PTR TO CHAR, len)
+  DEF s:PTR TO CHAR
+  DEF t[1]:STRING
+  DEF c,i,r
+  
+  c:=StrLen(source)
+  FOR i:=0 TO c-1
+    StrCopy(t,source+i,1)
+    IF InStr('()|~[]%',t)>=0 THEN c++
+  ENDFOR
+
+  s:=String(c)
+  FOR i:=0 TO StrLen(source)-1
+    StrCopy(t,source+i,1)
+    IF InStr('()|~[]%',t)>=0 THEN StrAddChar(s,39)
+    StrAdd(s,t)
+  ENDFOR
+  r:=ParsePatternNoCase(s,dest,len)
+  DisposeLink(s)
+ENDPROC r
+
+EXPORT PROC stripAnsi(s: PTR TO CHAR, d: PTR TO CHAR, resetit, strip, ansi:PTR TO ansi)
+  DEF i,j,k,p,c
+  IF resetit
+    ansi.ansicode:=0
+    RETURN
+  ENDIF
+
+  i:=StrLen(s)
+  j:=0
+  k:=0
+  WHILE(j<i)
+    c:=s[j]
+    IF((c=13) AND (strip<>0))
+      j++
+      ansi.ansicode:=0
+    ELSEIF((ansi.ansicode=0) AND (c<>""))
+      d[k]:=c
+      j++
+      k++
+    ELSE
+      IF(ansi.ansicode)
+        ansi.buf[ansi.ansicode]:=c
+        IF((ansi.ansicode=1) AND (c<>"["))
+          ansi.ansicode:=ansi.ansicode+1
+
+          p:=0
+          ansi.buf[ansi.ansicode]:=0
+          WHILE(ansi.buf[p]<>0)
+            d[k]:=ansi.buf[p]
+            k++
+            p++
+          ENDWHILE
+          ansi.ansicode:=0
+        ELSE
+          SELECT c
+            CASE "m"
+              ansi.ansicode:=0
+            DEFAULT
+              ansi.ansicode:=ansi.ansicode+1
+              IF(((c>="A") AND (c<="Z")) OR ((c>="a") AND (c<="z")) OR (ansi.ansicode>30))
+                p:=0
+                ansi.buf[ansi.ansicode]:=0
+                WHILE(ansi.buf[p]<>0)
+                  d[k]:=ansi.buf[p]
+                  k++
+                  p++
+                ENDWHILE
+                ansi.ansicode:=0
+              ENDIF
+          ENDSELECT
+        ENDIF
+      ELSEIF(c="")
+        ansi.buf[0]:=""
+        ansi.ansicode:=1
+      ENDIF
+      j++
+    ENDIF
+  ENDWHILE
+  d[k]:=0
+
+  ->ensure estring length is updated
+  SetStr(d,StrLen(d))
+ENDPROC
