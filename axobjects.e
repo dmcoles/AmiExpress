@@ -94,7 +94,9 @@ EXPORT OBJECT userMisc
   accountLocked:CHAR
   invalidAttempts:CHAR
   pwdLastUpdated:LONG     
-  unused[94]:ARRAY OF CHAR
+  lastIP:LONG
+  ipMask:LONG
+  unused[86]:ARRAY OF CHAR
 ENDOBJECT
 
 EXPORT OBJECT tempAccess

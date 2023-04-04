@@ -991,8 +991,8 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, fileNames:PTR TO stringlist,
     
       IF(Fgets(fh,tempstr,255)<>NIL) AND (StrLen(tempstr)>0)
         tempstr[255]:=0
-        SetStr(tempstr,StrLen(tempstr))
-        IF (tempstr[0]<>32) AND (tempstr[0]<>0) AND (tempstr[0]<>"\n")
+        SetStr(tempstr,StrLen(tempstr))      
+        IF (dirLineNewFile(tempstr))
           t:=TrimStr(tempstr+14)
           spPos:=InStr(t,' ')               
           StrCopy(dtStr,TrimStr(t+spPos))
@@ -1013,7 +1013,7 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, fileNames:PTR TO stringlist,
     found:=FALSE
     REPEAT
       IF StrLen(tempstr)>0
-        IF (tempstr[0]<>32) AND (tempstr[0]<>0) AND (tempstr[0]<>"\n")
+        IF dirLineNewFile(tempstr)
         
           IF found=FALSE
             t:=TrimStr(tempstr+14)
@@ -1656,7 +1656,7 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
     fh:=0
     flen:=0
     IF StrLen(fn)
-      flen:=getFileSize(fn)
+      flen:=FileLength(fn)
       IF asynclib<>NIL
         writeLineEx(sb,ftp_c, '150 Opening BINARY connection with ASYNC\b\n')
         fh:=OpenAsync(fn,MODE_READ,32768)

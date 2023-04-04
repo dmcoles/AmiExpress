@@ -152,7 +152,7 @@ DEF ulTTTM=0
 DEF dlTTTM=0
 DEF dTBT[8]:ARRAY OF CHAR
 DEF uTBT[8]:ARRAY OF CHAR
-DEF beenUDd=0
+DEF beenUDd=FALSE
 DEF lcFileXfr=0
 DEF recFileNames:PTR TO stringlist
 DEF skipdFiles:PTR TO stringlist
@@ -2489,7 +2489,7 @@ PROC loadTranslator(translator:PTR TO translator,fileName)
   DEF tempstr2[255]:STRING
   DEF tempstr3[255]:STRING
 
-  fsize:=getFileSize(fileName)
+  fsize:=FileLength(fileName)
   translator.translationText:=New(fsize+4)     ->allocate some memory, two extra bytes for ending colon and space and some in case there is no newline
   workMem:=New(fsize+2)     ->allocate some memory (two extra bytes in case there is no newline at the end of the file)
   fh:=Open(fileName,MODE_OLDFILE)
@@ -4302,7 +4302,6 @@ PROC runDoor(cmd,type,command,tooltype,params,resident,doorTrap,privcmd,pri=0,st
       WHILE(msg:=GetMsg(mp))
         msgcmd:=msg.command
 
-        stripAnsi(msg.string,tempstring,0,0,ansi)
 
         StringF(tempstring,'msg request: \d',msgcmd)
         debugLog(LOG_DEBUG,tempstring)
@@ -7980,6 +7979,7 @@ PROC processLoggingOff()
   pagedFlag:=FALSE
   chatFlag:=FALSE
   blockOLM:=FALSE
+  beenUDd:=FALSE
   IF(sopt.toggles[TOGGLES_QUIETSTART])
     quietFlag:=TRUE
   ELSE
@@ -12306,7 +12306,7 @@ PROC flagFrom(s: PTR TO CHAR)
   StringF(tempStr,'\sdir\d',currentConfDir,maxDirs)
   IF(fp:=Open(tempStr,MODE_OLDFILE))<>0
     WHILE(((ReadStr(fp,tempStr)<>-1) OR (StrLen(tempStr)>0)) AND (stat<>1))
-      IF(StrLen(tempStr)>0) AND (tempStr[0]<>" ")
+      IF(dirLineNewFile(tempStr))
         i:=0
         WHILE((i<StrLen(tempStr)) AND (tempStr[i]<>" "))
           tempStr2[i]:=tempStr[i]
@@ -12791,7 +12791,8 @@ PROC statPrint(s: PTR TO CHAR)
 
   IF(dStatBar AND (statWriteIO<>NIL))
     IF(bitPlanes<3)
-      stripAnsi(s,str,0,0,ansi)
+      StrCopy(str,s)
+      stripAnsi2(str)
       statWriteIO.data:=str
       statWriteIO.length:=-1
       statWriteIO.command:=CMD_WRITE
@@ -14885,7 +14886,7 @@ PROC ftpDownloadFileStart(fileName:PTR TO CHAR,filelen,resume)
     zModemInfo.freeDFlag:=FALSE
     AstrCopy(zModemInfo.fileName,fn,255)
   ENDIF
-
+  
   zModemInfo.filesize:=filelen
   zModemInfo.resumePos:=resume
   zModemInfo.transPos:=0
@@ -14927,7 +14928,7 @@ PROC ftpDownloadFileEnd(fileName:PTR TO CHAR, result)
   IF ftpConn
     dlTTTM:=Div(dlTTTM,50)
     IF result     
-      StringF(tempStr,'\t 1 file(s), \dk bytes, \d minutes \d seconds \d cps, N/A % efficiency.',Shr(zModemInfo.filesize-zModemInfo.resumePos,10) AND $003fffff,Div(dlTTTM,60),Mod(dlTTTM,60),tTCPS)
+      StringF(tempStr,'\t 1 files, \dk bytes, \d minutes \d seconds \d cps, N/A % efficiency.',Shr(zModemInfo.filesize-zModemInfo.resumePos,10) AND $003fffff,Div(dlTTTM,60),Mod(dlTTTM,60),tTCPS)
       callersLog(tempStr)
       udLog(tempStr)
     ELSE
@@ -15792,6 +15793,7 @@ PROC displayUserToCallersLog(udonly)
   IF(udonly=FALSE)
     loggedOnUser.timesCalled:=loggedOnUser.timesCalled+1
     callersLog(tempStr)
+    saveIPAddr()
     IF(logonType>=LOGON_TYPE_REMOTE) AND (checkToolTypeExists(TOOLTYPE_NODE,node,'LOG_HOST'))
       StringF(tempStr,'\tTelnet login address: \s (\s)',hostName,hostIP)
       callersLog(tempStr)
@@ -15802,8 +15804,30 @@ PROC displayUserToCallersLog(udonly)
 
 ENDPROC
 
-PROC isascii(n)
-ENDPROC n<=127
+PROC saveIPAddr()
+  DEF v[5]:STRING
+  DEF i,v2, ip,p, p2
+  p:=0
+  ip:=0
+  FOR i:=0 TO 3
+    IF p>=0
+      p2:=InStr(hostIP,'.',p)
+      v2:=0
+      IF p2>=0
+        StrCopy(v,hostIP+p,p2-p)
+        p:=p2+1
+      ELSE
+        StrCopy(v,hostIP+p)
+        p:=StrLen(hostIP)
+      ENDIF
+      v2:=Val(v)
+      ip:=Shl(ip,8) OR v2
+    ENDIF    
+  ENDFOR
+  loggedOnUserMisc.lastIP:=ip
+ENDPROC
+
+PROC isascii(n) IS n<=127
 
 ->gets the actual name of a file (eg. you pass it a filename and it finds the correct case for it, so you can preserve the case)
 PROC getFileName(s: PTR TO CHAR)
@@ -15869,7 +15893,7 @@ PROC fileCopy(from,to)
   DEF tempstr[255]:STRING
   ->if(Rename(from,to)) return(2);
 
-  buf,bufsize:=dynAllocate(getFileSize(from)+8192)
+  buf,bufsize:=dynAllocate(FileLength(from)+8192)
   IF(buf<>NIL)
     /* got a buffer full of mem */
     IF(fhs:=Open(to,MODE_OLDFILE))
@@ -17213,7 +17237,7 @@ PROC scanHoldDesc()
     lcFileXfr:=TRUE
     aePuts('Preparing Lost Carrier File(s) for File Description(s)\b\n\b\n')
     WHILE((ReadStr(fi,string)<>-1) OR (StrLen(string)>0))
-      IF(string[0]<>" ")
+      IF(dirLineNewFile(string))
         IF ((p:=InStr(string,' '))>=0) THEN SetStr(string,p)
         
         StringF(text,'\sLCFILES/\s',currentConfDir,string)
@@ -18768,9 +18792,9 @@ PROC uploadaFile(uLFType,cmd,attach,alreadyUploaded=FALSE)            -> JOE
     tTEFF:=0
     tTCPS:=0
 
-    IF(beenUDd=0)
+    IF(beenUDd=FALSE)
       displayUserToCallersLog(1)
-      beenUDd:=1
+      beenUDd:=TRUE
     ENDIF
 
     fileReceive(path,uLFType)     /* path of upload */
@@ -19334,7 +19358,7 @@ PROC doBackgroundCheck(fname:PTR TO CHAR)
             Close(fh)
           ENDIF
 
-          fsize:=getFileSize(fileName)
+          fsize:=FileLength(fileName)
 
 
           status2:=RESULT_NOT_ALLOWED
@@ -22301,7 +22325,7 @@ PROC conferenceMaintenance()
   getConfLocation(conf,confLoc)
   getMailStatFile(conf,msgBase)
   getConfDbFileName(conf,msgBase,tempstr)
-  size:=Div(getFileSize(tempstr),SIZEOF confBase)
+  size:=Div(FileLength(tempstr),SIZEOF confBase)
 
   REPEAT
     conCursorOff()
@@ -22447,7 +22471,7 @@ PROC conferenceMaintenance()
           aePuts('[18;2H[0mResizing, Please Standby')
           resizeConfDB(conf,msgBase,n)
           getConfDbFileName(conf,msgBase,tempstr)
-          size:=Div(getFileSize(tempstr),SIZEOF confBase)
+          size:=Div(FileLength(tempstr),SIZEOF confBase)
         ENDIF
       CASE "E"
         IF dirCacheEnabled
@@ -22512,7 +22536,7 @@ PROC conferenceMaintenance()
         getMailStatFile(conf,msgBase)
         getConfLocation(conf,confLoc)
         getConfDbFileName(conf,msgBase,tempstr)
-        size:=Div(getFileSize(tempstr),SIZEOF confBase)
+        size:=Div(FileLength(tempstr),SIZEOF confBase)
       CASE "+"
         msgBase:=msgBase+1
         IF msgBase>getConfMsgBaseCount(conf)
@@ -22524,7 +22548,7 @@ PROC conferenceMaintenance()
         getMailStatFile(conf,msgBase)
         getConfLocation(conf,confLoc)
         getConfDbFileName(conf,msgBase,tempstr)
-        size:=Div(getFileSize(tempstr),SIZEOF confBase)
+        size:=Div(FileLength(tempstr),SIZEOF confBase)
     ENDSELECT
     aePuts('[18;2H                                     ')
 
@@ -22756,6 +22780,10 @@ PROC displayAccount(who:LONG, page, hoozer:PTR TO user, hoozer2: PTR TO userKeys
     StringF(tempStr,'[5;4H[32mPwd Type ......[36m:[0m \s',tempStr2)
     aePuts(tempStr)
 
+    formatIP(hoozer3.lastIP,tempStr2)
+    StringF(tempStr,'[5;39H[32mLast IP Addr ..[36m:[0m \s',tempStr2)
+    aePuts(tempStr)
+
   ENDIF
   
   displayAccountActions(who)
@@ -22975,6 +23003,10 @@ PROC displayAccountInfo(who:LONG, page,hoozer:PTR TO user, hoozer2:PTR TO userKe
     ENDSELECT
     
     StringF(tempStr,'[5;21H\s',tempStr2)
+    aePuts(tempStr)
+
+    formatIP(hoozer3.lastIP,tempStr2)
+    StringF(tempStr,'[5;56H\l\s',tempStr2)
     aePuts(tempStr)
 
   ENDIF
@@ -26534,7 +26566,7 @@ PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,match
       found:=0
       currpos:=Seek(fh2,0,OFFSET_CURRENT)
       WHILE(Fgets(fh2,dirline,255)<>NIL)
-        IF(dirline[0]<>" ")
+        IF(dirLineNewFile(dirline))
           StrCopy(compareFname,dirline,12)
           UpperStr(compareFname)
           IF(StrCmp(compareFname,padfname)) AND (currpos=matchposition)
@@ -26733,7 +26765,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
           found:=0
           currpos:=Seek(fh2,0,OFFSET_CURRENT)
           WHILE(Fgets(fh2,dirline,255)<>NIL)
-            IF(dirline[0]<>" ")
+            IF(dirLineNewFile(dirline))
               StrCopy(compareFname,dirline,12)
               UpperStr(compareFname)
               IF(StrCmp(compareFname,padfname)) AND (currpos=matchposition)
@@ -26742,7 +26774,7 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
                 brk:=FALSE
                 ->we've found our file in the source dir, scan the dest dir for the correct position to put it
                 WHILE(Fgets(fh4,dirline2,255)<>NIL)
-                  IF(dirline2[0]<>" ")
+                  IF(dirLineNewFile(dirline2))
                     StrCopy(tempstr,dirline2)
                     tempstr[13]:=" "
                     parseParams(tempstr)
@@ -26984,7 +27016,7 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,searchList: PTR TO stringli
         RETURN RESULT_FAILURE,0,0
       ENDIF
     ENDIF
-    IF(StrLen(image)>0) AND (image[0]<>" ")
+    IF(dirLineNewFile(image))
       StrCopy(dirfname,image,12)
       StrCopy(tempStr,image,12)
       i:=0
@@ -27030,7 +27062,7 @@ PROC maintenanceFileSearch(holddir,fname:PTR TO CHAR,searchList: PTR TO stringli
       aePuts(image)
       aePuts('\b\n')
       prev:=Seek(fi,0,OFFSET_CURRENT)
-      WHILE(Fgets(fi,image,252)<>NIL) AND (image[0]=" ") AND (count<max_desclines)
+      WHILE(Fgets(fi,image,252)<>NIL) AND (dirLineNewFile(image)=FALSE) AND (count<max_desclines)
         stripReturn(image)
         aePuts(image)
         aePuts('\b\n')
@@ -27109,7 +27141,7 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
       ENDSELECT
     ENDIF
     stripReturn(image)
-    IF (StrLen(image)>0) AND (image[0]<>" ")
+    IF (dirLineNewFile(image))
       IF (x<100)
         current:=myzip+Shl(x,8)+1   ->ln(1,x)
         current[0]:=0
@@ -27493,7 +27525,7 @@ PROC myNewFiles(params)
     WHILE(Fgets(fp1,c,250)<>NIL)
       c[250]:=0
       SetStr(c,StrLen(c))
-      IF((c[0]=" ") OR (c[0]=0) OR(c[0]="\n")) THEN JUMP fgetnext
+      IF(dirLineNewFile(c)=FALSE) THEN JUMP fgetnext
 
       parseParams(c)
       IF(parsedParams.count()>0) THEN StrCopy(fn,parsedParams.item(0))
@@ -29865,9 +29897,10 @@ ENDPROC
 PROC doNewUserQuestions()
   DEF filename[200]:STRING, afilename[200]:STRING
   DEF ch,stat,lock
-  DEF c[200]:STRING,string[200]:STRING,datestr[20]:STRING
+  DEF c[200]:STRING,string[200]:STRING,datestr[20]:STRING,timestr[20]:STRING
   DEF fp2,fp1
   DEF temp1[255]:STRING
+  DEF calldate
 
   StringF(filename,'\sNode\d/Script\d',cmds.bbsLoc,node,onlineBaud)
   IF checkToolTypeExists(TOOLTYPE_NODE,node,'CENTRAL_ANSWERS')
@@ -29884,13 +29917,15 @@ qAgain:
 
   StringF(string,'\sNode\d/TempAns',cmds.bbsLoc,node)
 
-  IF((fp1:=Open(string,MODE_READWRITE))=0) THEN RETURN RESULT_GOODBYE
-  Seek(fp1,0,OFFSET_END)
+  IF((fp1:=Open(string,MODE_NEWFILE))=0) THEN RETURN RESULT_GOODBYE
 
-  formatLongDateTime(getSystemTime(),datestr)
+  calldate:=getSystemTime()
+  formatLongDate(calldate,datestr)
+  formatLongTime(calldate,timestr)
+
 
   fileWriteLn(fp1,'**************************************************************')
-  StringF(temp1,'\s [\d] \s (\s) \s',datestr,loggedOnUser.slotNumber,loggedOnUser.name,connectString,loggedOnUser.location)
+  StringF(temp1,'\s (\s) [\d] \s (\s) \s',datestr,timestr,loggedOnUser.slotNumber,loggedOnUser.name,connectString,loggedOnUser.location)
   fileWriteLn(fp1,temp1)
   Close(fp1)
 

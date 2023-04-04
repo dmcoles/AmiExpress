@@ -268,7 +268,7 @@ EXPORT PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
         do:=GetDefDiskObject(WBPROJECT)
       ENDIF
       IF do<>NIL
-        fileBuf:=New(getFileSize(fn2)+1)     ->allow an extra char in case file does not end in LF
+        fileBuf:=New(FileLength(fn2)+1)     ->allow an extra char in case file does not end in LF
 
         fh:=Open(fn2,MODE_OLDFILE)
         IF fh<>0
