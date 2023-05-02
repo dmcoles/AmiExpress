@@ -404,14 +404,6 @@ RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
       ERR_ASL  IF AllocAslRequest()=NIL
 
-PROC countTags(tags:PTR TO LONG)
-  DEF n=0
-  WHILE tags[n]<>TAG_DONE
-    n:=n+2
-  ENDWHILE
-  n++
-ENDPROC
-
 PROC calcEfficiency(cps,baud)
   DEF res
   IF cps>21474836
@@ -1639,7 +1631,7 @@ PROC asl(s: PTR TO CHAR,slines=NIL:PTR TO stringlist) HANDLE
   ENDIF
 EXCEPT DO
   IF fr THEN FreeAslRequest(fr)
-  IF tags THEN END tags[countTags(tags)]
+  IF tags THEN FastDisposeList(tags)
   IF aslbase THEN CloseLibrary(aslbase)
   SELECT exception
     CASE ERR_ASL
@@ -3276,7 +3268,7 @@ PROC startProcess(exestring, stacksize, priority, async, doorTrap)
   
   filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,doorTrapFH,SYS_ASYNCH,async,NP_STACKSIZE,stacksize,NP_PRIORITY,priority,TAG_DONE]
   temp:=SystemTagList(exestring,filetags)
-  END filetags[countTags(filetags)]
+  FastDisposeList(filetags)
  
   IF (byteSignExtend(cmds.taskPri)<=priority)
     SetTaskPri(task,cmds.taskPri)
@@ -6618,18 +6610,18 @@ PROC runExecuteOn(execOn:PTR TO CHAR)
   
   StringF(toolTypeText,'EXECUTE_ON_\s',execOn)
   IF (readToolType(TOOLTYPE_BBSCONFIG,0,toolTypeText,tempstr1))
-    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,TAG_DONE]:LONG
+    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,FALSE,TAG_DONE]
     processMci(tempstr1,tempstr2)
     SystemTagList(tempstr2,filetags)
-    END filetags[countTags(filetags)]
+    FastDisposeList(filetags)
   ENDIF
 
   StringF(toolTypeText,'EXECUTE_ASYNC_ON_\s',execOn)
   IF (readToolType(TOOLTYPE_BBSCONFIG,0,toolTypeText,tempstr1))
-    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,TAG_DONE]:LONG
+    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,TAG_DONE]
     processMci(tempstr1,tempstr2)
     SystemTagList(tempstr2,filetags)
-    END filetags[countTags(filetags)]
+    FastDisposeList(filetags)
   ENDIF
 ENDPROC
 
@@ -7047,7 +7039,7 @@ PROC toggleStatusDisplay()
       ENDIF
       statChatFlag()
     ENDIF
-    END tags[countTags(tags)]
+    FastDisposeList(tags)
     IF pubLock THEN UnlockPubScreen(NIL,pubLock)
   ENDIF
 ENDPROC
@@ -9123,7 +9115,7 @@ PROC remoteShell() HANDLE
   StringF(temp,'newshell fifo:\s/rwkecs',fifoName)
   tags:=NEW [SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,1,TAG_DONE]
   SystemTagList(temp,tags)
-  END tags[countTags(tags)]
+  FastDisposeList(tags)
 
   pmask:=Shl(1,ioSink.sigbit)
 
@@ -14638,7 +14630,7 @@ PROC updateZDisplay()
 
       DrawBevelBoxA(windowZmodem.rport,9,129,316,10,tags2)
       FreeVisualInfo(vi)
-      END tags2[countTags(tags2)]
+      FastDisposeList(tags2)
       CloseLibrary(gadtoolsbase)
     ENDIF
 
@@ -16208,7 +16200,7 @@ PROC hydstatus(hyd:PTR TO hydra_t,xmit)
 
     DrawBevelBoxA(rport,9,129,276,10,tags2)
     FreeVisualInfo(vi)
-    END tags2[countTags(tags2)]
+    FastDisposeList(tags2)
     CloseLibrary(gadtoolsbase)
   ENDIF
 ENDPROC/*hydra_status()*/
@@ -16677,10 +16669,10 @@ PROC createBackgroundFileCheckThread()
   bgStack:=readToolTypeInt(TOOLTYPE_NODE,node,'BGFILECHECKSTACK')
   IF bgStack<=0 THEN bgStack:=20000
 
-  tags:=NEW [NP_ENTRY,{backgroundFileCheckThread},NP_STACKSIZE,bgStack,TAG_DONE]:LONG
+  tags:=NEW [NP_ENTRY,{backgroundFileCheckThread},NP_STACKSIZE,bgStack,TAG_DONE]
   Forbid()
   proc:=CreateNewProc(tags)
-  END tags[countTags(tags)]
+  FastDisposeList(tags)
   IF proc<>NIL
     saveA4(proc.task,{threadtasksA4})
   ELSE
@@ -17698,7 +17690,7 @@ PROC batchasl(where: PTR TO CHAR) HANDLE
   ENDIF
 EXCEPT DO
   IF fr THEN FreeAslRequest(fr)
-  IF tags THEN END tags[countTags(tags)]
+  IF tags THEN FastDisposeList(tags)
   IF aslbase THEN CloseLibrary(aslbase)
   SELECT exception
     CASE ERR_ASL
@@ -18330,11 +18322,11 @@ debugLog(LOG_ERROR,'debug10d2')
   StrAdd(options,checkFile)
   StringF(fileName,'\sOutPut_Of_Test',nodeWorkDir)
   IF((fi:=Open(fileName,MODE_NEWFILE)))<>0
-    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,fi,NP_STACKSIZE,stack,NP_PRIORITY,pri,TAG_DONE]:LONG
+    filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,fi,NP_STACKSIZE,stack,NP_PRIORITY,pri,TAG_DONE]
 debugLog(LOG_ERROR,'debug10d3')
     SystemTagList(options,filetags)
 debugLog(LOG_ERROR,'debug10d4')
-    END filetags[countTags(filetags)]
+    FastDisposeList(filetags)
     Close(fi)
 
 debugLog(LOG_ERROR,'debug10d5')
@@ -18344,12 +18336,12 @@ debugLog(LOG_ERROR,'debug10d6')
     IF(readToolType(TOOLTYPE_FCHECK,temp,'SCRIPT',s))
       StrAdd(s,' ')
       IF(fi:=Open('NIL:',MODE_NEWFILE))<>0
-        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,fi,NP_STACKSIZE,stack,NP_PRIORITY,pri,TAG_DONE]:LONG
+        filetags:=NEW [SYS_INPUT,0,SYS_OUTPUT,fi,NP_STACKSIZE,stack,NP_PRIORITY,pri,TAG_DONE]
 debugLog(LOG_ERROR,'debug10d7')
         StringF(options,'\s \s \s \d',s,checkFile,FilePart(checkFile),node)
         SystemTagList(options,filetags)
 debugLog(LOG_ERROR,'debug10d8')
-        END filetags[countTags(filetags)]
+        FastDisposeList(filetags)
         Close(fi)
       ENDIF
     ENDIF
@@ -30242,7 +30234,7 @@ PROC openHydraStat()
   ENDIF
   
   hydraWindow1:=OpenWindowTagList(NIL,tags)
-  END tags[countTags(tags)]
+  FastDisposeList(tags)
 
   IF (hydraWindow1) AND (fontHandle<>NIL) THEN SetFont(hydraWindow1.rport,fontHandle)
 
@@ -30282,7 +30274,7 @@ PROC openHydraStat()
 
   hydraWindow2:=OpenWindowTagList(NIL,tags)
   IF (hydraWindow2) AND (fontHandle<>NIL) THEN SetFont(hydraWindow2.rport,fontHandle)
-  END tags[countTags(tags)]
+  FastDisposeList(tags)
 
   IF pub 
     tags:=NEW [WA_CLOSEGADGET,1,
@@ -30320,7 +30312,7 @@ PROC openHydraStat()
 
   hydraWindow3:=OpenWindowTagList(NIL,tags)
   IF (hydraWindow3) AND (fontHandle<>NIL) THEN SetFont(hydraWindow3.rport,fontHandle)
-  END tags[countTags(tags)]
+  FastDisposeList(tags)
 
   initHydraStatCon()
 
@@ -30443,11 +30435,11 @@ PROC openZmodemStat()
 
       DrawBevelBoxA(windowZmodem.rport,9,129,316,10,tags2)
       FreeVisualInfo(vi)
-      END tags2[countTags(tags2)]
+      FastDisposeList(tags2)
       CloseLibrary(gadtoolsbase)
     ENDIF
   ENDIF
-  END tags[countTags(tags)]
+  FastDisposeList(tags)
 
 ENDPROC
 
@@ -30585,7 +30577,7 @@ PROC openExpressScreen()
               SA_COLORS,cols,
               TAG_DONE]
       screen:=OpenScreenTagList(NIL,opentags)
-      END opentags[countTags(opentags)]
+      FastDisposeList(opentags)
 
       END pens[pensize]
       END cols[colsize]
@@ -30610,7 +30602,7 @@ PROC openExpressScreen()
        WA_IDCMP,IDCMP_CLOSEWINDOW,
        TAG_DONE]
       windowClose:=OpenWindowTagList(NIL,opentags)
-      END opentags[countTags(opentags)]
+      FastDisposeList(opentags)
     ENDIF
 
     IF windowClose=NIL THEN RETURN ERR_WINDOW
@@ -30637,7 +30629,7 @@ PROC openExpressScreen()
         WA_FLAGS,WFLG_ACTIVATE,
         TAG_DONE]
       window:=OpenWindowTagList(NIL,opentags)
-      END opentags[countTags(opentags)]
+      FastDisposeList(opentags)
       IF (window) AND (fontHandle<>NIL) THEN SetFont(window.rport,fontHandle)
     ELSE
       opentags:=NEW [WA_BORDERLESS,1,WA_CUSTOMSCREEN,screen,
@@ -30650,7 +30642,7 @@ PROC openExpressScreen()
         WA_FLAGS,WFLG_ACTIVATE,
         TAG_DONE]
       window:=OpenWindowTagList(NIL,opentags)
-      END opentags[countTags(opentags)]
+      FastDisposeList(opentags)
     ENDIF
   ENDIF
 

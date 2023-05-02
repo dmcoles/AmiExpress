@@ -454,11 +454,11 @@ EXPORT PROC initssl(createctx) HANDLE
 
   tags:=NEW [AMISSL_ERRNOPTR,{sslerrno},AMISSL_SOCKETBASE,socketbase,0]
   IF (InitAmiSSLA(tags) <> 0)
-    END tags[5]
+    FastDisposeList(tags)
     WriteF('Couldn''t initialize AmiSSL!\n');
     Raise(ERR_SSL)
   ENDIF
-  END tags[5]
+  FastDisposeList(tags)
 
   /* Basic intialization. Next few steps (up to SSL_new()) need
    * to be done only once per AmiSSL opener.

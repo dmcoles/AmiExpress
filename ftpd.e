@@ -2046,7 +2046,7 @@ PROC createThread(num,node,sockid,ftpData:PTR TO ftpData)
   DEF name[255]:STRING
   
   StringF(name,'ftpThread\d-\d',node,num)
-  tags:=NEW [NP_ENTRY,{ftpThread},NP_NAME,name,NP_STACKSIZE,10000,0]:LONG
+  tags:=NEW [NP_ENTRY,{ftpThread},NP_NAME,name,NP_STACKSIZE,10000,0]
  
   ftpData.sockId:=sockid
 
@@ -2054,7 +2054,7 @@ PROC createThread(num,node,sockid,ftpData:PTR TO ftpData)
   proc:=CreateNewProc(tags)
   saveA4(proc,ftpData,node)
   Permit()
- END tags[7]
+  FastDisposeList(tags)
 ENDPROC
 
 EXPORT PROC ftpServerMode(ftpData:PTR TO ftpData, ftp_c,ftpHost:PTR TO CHAR,uploadPath:PTR TO CHAR,ftpDataPorts:PTR TO LONG,filenameCAPS)
