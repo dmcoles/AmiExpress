@@ -40,7 +40,7 @@ DEF serverin
 
 DEF singleNode=0: PTR TO singlePort
 DEF masterNode=0: PTR TO multiPort
-DEF debug=FALSE
+
 DEF consoleDebugLevel=LOG_NONE
 DEF debugLogLevel=LOG_ERROR
 DEF inputLogging=FALSE
@@ -944,7 +944,7 @@ PROC setNewPassword(user:PTR TO user, userMisc:PTR TO userMisc, newpass:PTR TO C
   ELSEIF checkToolType(TOOLTYPE_BBSCONFIG,0,'PASSWORD_SECURITY','PBKDF2_10000')
     passType:=PWD_PBKDF2_10000
   ELSE
-    passType:=PWD_PBKDF2_100
+    passType:=PWD_LEGACY
   ENDIF
   
   userMisc.pwdType:=passType
@@ -1559,7 +1559,7 @@ PROC getPass2(prompt: PTR TO CHAR,password:PTR TO CHAR,userPwd, max:LONG,outstr=
           ELSEIF checkToolType(TOOLTYPE_BBSCONFIG,0,'PASSWORD_SECURITY','PBKDF2_10000')
             passType:=PWD_PBKDF2_10000
           ELSE
-            passType:=PWD_PBKDF2_100
+            passType:=PWD_LEGACY
           ENDIF
     
           IF loggedOnUserMisc.pwdType<>passType
@@ -7545,6 +7545,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       loggedOnUserMisc:=NEW loggedOnUserMisc
       loadAccount(1,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
       masterLoadPointers(loggedOnUser)
+      setEnvStat(ENV_SYSOP)
       conferenceMaintenance()
       END loggedOnUser
       END loggedOnUserKeys
@@ -12505,7 +12506,7 @@ PROC checkFIBForFileSize(fullPath:PTR TO CHAR, checkConfNum, fBlock:PTR TO filei
   ENDIF
 ENDPROC dp
 
-PROC checkForFileSize(checkFilename:PTR TO CHAR, checkConfNum, tfsizeList:PTR TO stdlist, freeDFlagList:PTR TO stdlist, cfn:PTR TO stdlist, z)
+PROC checkForFileSize(checkFilename:PTR TO CHAR, subDirs:PTR TO CHAR, checkConfNum, tfsizeList:PTR TO stdlist, freeDFlagList:PTR TO stdlist, cfn:PTR TO stdlist, z)
 
   DEF stat,pstat=1,i
   DEF fflag=0,wflag=0,doflag=0
@@ -12594,13 +12595,15 @@ jumpIn:
     IF(wflag=0)
       IF(sysopdl=0)
         StrCopy(final,path)
+        StrAdd(final,subDirs)
+        checkPathSlash(final)
         StrAdd(final,checkFilename)
       ELSE
         StrCopy(final,checkFilename)
         IF(findAssign(final)) THEN JUMP outst
       ENDIF
       StringF(ramDir,'RAM:DirCaches/Conf\dDir\d',checkConfNum,drivenum-1)
-      IF fileExists(ramDir)
+      IF (StrLen(subDirs)=0) AND (fileExists(ramDir))
         ft:=Open(ramDir,MODE_OLDFILE)
         IF ft<>0
           fLock:=NIL
@@ -12629,7 +12632,7 @@ jumpIn:
     IF(doflag)
       IF fLock=NIL
         StringF(ramDir,'RAM:DirCaches/Conf\dDir\d',checkConfNum,drivenum-1)
-        IF fileExists(ramDir)
+        IF (StrLen(subDirs)=0) AND (fileExists(ramDir))
           ft:=Open(ramDir,MODE_OLDFILE)
         ENDIF
         IF((fLock:=Lock(final,ACCESS_READ))=0)
@@ -12657,6 +12660,7 @@ debugcount:=0
           xit:=ExNext(fLock,fBlock)=0
         ELSE
           xit:=(Fgets(ft,tempstr,255)=0)
+          IF (StrLen(tempstr)>18) AND (tempstr[8]=" ") AND (tempstr[17]=" ") THEN StrCopy(tempstr,tempstr+18)
         ENDIF
         EXIT xit
 
@@ -12676,8 +12680,13 @@ gotit:
             IF(sysopdl)
               StrCopy(final,checkFilename)
             ELSE
+            
+              StrCopy(final,path)
+              StrAdd(final,subDirs)
+              checkPathSlash(final)
+            
               IF ft<>0
-                StringF(final,'\s\s',path,tempstr)
+                StrAdd(final,tempstr)
                 fLock2:=Lock(final,ACCESS_READ)
                 IF fLock2
                   Examine(fLock2,fBlock)
@@ -12686,7 +12695,7 @@ gotit:
                   res:=FALSE
                 ENDIF
               ELSE
-                StringF(final,'\s\s',path,fBlock.filename)
+                StrAdd(final,fBlock.filename)
               ENDIF
             ENDIF
 
@@ -12826,42 +12835,6 @@ ENDPROC regServer()
 PROC regServer()
   DEF port:PTR TO mp
   DEF tempstr[255]:STRING
-
-  IF debug
-    cmds:=NEW cmds
-    AstrCopy(cmds.bbsLoc,'BBS:',41)
-
-    loadAccount(1,tempUser,tempUserKeys,tempUserMisc)
-
-    AstrCopy(cmds.bbsName,'somebbs',41)
-
-    AstrCopy(cmds.sysopName,tempUser.name,31)
-
-    StringF(mybbsLoc,'\s','someplace')
-
-    sopt:=NEW sopt
-
-    sopt.leftEdge:=0
-    sopt.topEdge:=0
-    sopt.width:=640
-    sopt.height:=256
-    sopt.bitPlanes:=3
-
-    readToolType(TOOLTYPE_NODE,node,'SCREENS',tempstr)
-    AstrCopy(sopt.nodeScreens,tempstr)
-
-    sopt.statBar:=0
-
-    sopt.toggles[TOGGLES_RED1]:=FALSE
-    sopt.toggles[TOGGLES_MULTICOM]:=FALSE
-    sopt.iconify:=FALSE
-
-    cmds.numConf:=4
-
-    cmds.openingBaud:=115200
-    cmds.taskPri:=240
-    RETURN
-  ENDIF
 
   masterMsg.command:=SV_START
   WHILE((port:=FindPort('AE.Master'))=NIL) AND (SetSignal(0,SIGBREAKF_CTRL_C)=0)
@@ -15153,12 +15126,12 @@ PROC ftpAuth(userName:PTR TO CHAR,password:PTR TO CHAR)
   IF StriCmp(userName,loggedOnUser.name,31)=FALSE THEN RETURN FALSE
 ENDPROC checkUserPassword(loggedOnUser,loggedOnUserMisc,password)
 
-PROC ftpFindFile(filename:PTR TO CHAR,outFullFilename:PTR TO CHAR)
+PROC ftpFindFile(filename:PTR TO CHAR,subdirs:PTR TO CHAR, outFullFilename:PTR TO CHAR)
   DEF fileList:PTR TO stdlist
   DEF fileItem:PTR TO flagFileItem
   
   fileList:=NEW fileList.stdlist(1)
-  checkForFileSize(filename,-1,NIL,NIL,fileList,0)
+  checkForFileSize(filename,subdirs,-1,NIL,NIL,fileList,0)
   IF fileList.count()>0
     fileItem:=fileList.item(0)   
     StrCopy(outFullFilename,fileItem.fileName)
@@ -15755,7 +15728,7 @@ PROC checklist(lfnames: PTR TO stdlist, sizeList:PTR TO stdlist, freeDFlagList:P
   FOR i:=0 TO lfnames.count()-1
     item:=lfnames.item(i)
     IF(StrLen(item.fileName)>0)
-      status:=checkForFileSize(item.fileName,item.confNum,sizeList,freeDFlagList,clrfinal,0)
+      status:=checkForFileSize(item.fileName,'',item.confNum,sizeList,freeDFlagList,clrfinal,0)
       IF((status=RESULT_SIGNALLED) OR (status=RESULT_PRIVATE)) THEN RETURN RESULT_SUCCESS
     ENDIF
   ENDFOR
@@ -19911,7 +19884,7 @@ arestart:
       ENDFOR
     ENDIF
 
-    status:=checkForFileSize(tempStr,currentConf,tfsizes,freeDFlags,finalList,0)
+    status:=checkForFileSize(tempStr,'',currentConf,tfsizes,freeDFlags,finalList,0)
     IF((status=RESULT_FAILURE) OR (status=RESULT_SIGNALLED) OR (status=RESULT_PRIVATE))
       Throw(ERR_EXCEPT,RESULT_SUCCESS)
     ENDIF
@@ -22297,6 +22270,65 @@ PROC resizeConfDB(confnum,msgBaseNum,newSize)
   END cb2
 ENDPROC
 
+PROC makeFtpDirCache(confLoc:PTR TO CHAR, confnum, dirnum, dlpath:PTR TO CHAR, subdir:PTR TO CHAR)
+  DEF dirCache[255]:STRING
+  DEF fh
+  DEF lock
+  DEF f_info: PTR TO fileinfoblock
+  DEF stat=0
+  DEF tempstr[255]:STRING
+  DEF tempstr2[255]:STRING
+  DEF i,s,t
+  
+  WriteF('dlpath=\s\n',dlpath)
+  
+  f_info:=AllocDosObject(DOS_FIB,NIL)
+  IF(f_info)=NIL
+    RETURN
+  ENDIF
+
+  lock:=Lock(dlpath,ACCESS_READ)
+  IF(lock)=0
+    FreeDosObject(DOS_FIB,f_info)
+    RETURN
+  ENDIF
+
+  IF(Examine(lock,f_info))=0
+    UnLock(lock)
+    FreeDosObject(DOS_FIB,f_info)
+    RETURN
+  ENDIF
+
+  StringF(dirCache,'\sDirCaches/Conf\dDir\d\s\s',confLoc,confnum,dirnum,IF StrLen(subdir)>0 THEN '_' ELSE '',subdir)
+  fh:=Open(dirCache,MODE_NEWFILE)
+  IF fh<>0
+    IF(f_info.direntrytype>0)
+      WHILE(((ExNext(lock,f_info))<>0))
+        IF (StrCmp('.dircache',f_info.filename)=FALSE)
+          t:=dateStampToDateTime(f_info.datestamp)
+          s:=f_info.size
+          IF (f_info.direntrytype>0)
+            IF s=0 
+              StringF(tempstr,'\s\s/',dlpath,f_info.filename)
+              StringF(tempstr2,'\s\s\s',subdir,IF StrLen(subdir)>0 THEN '_' ELSE '',f_info.filename)
+              makeFtpDirCache(confLoc,confnum,dirnum,tempstr,tempstr2)
+              s:=-1
+            ENDIF
+          ENDIF
+          StringF(tempstr,'\z\h[8] \z\h[8] \s\n',t,s,f_info.filename)
+          WriteF(tempstr)
+          Write(fh,tempstr,StrLen(tempstr))
+        ENDIF
+      ENDWHILE
+    ENDIF
+    Close(fh)
+  ENDIF
+  
+  UnLock(lock)
+  FreeDosObject(DOS_FIB,f_info)
+  
+ENDPROC
+
 PROC conferenceMaintenance()
   DEF conf,flag=0,ch,size,n,f,m
   DEF tempstr[255]:STRING
@@ -22309,6 +22341,7 @@ PROC conferenceMaintenance()
   DEF lock,fh
   DEF num,num2,match
   DEF msgBase
+  DEF flg2
 
   conf:=1
   msgBase:=1
@@ -22507,9 +22540,15 @@ PROC conferenceMaintenance()
             ENDWHILE
           
             IF match=FALSE
-              StringF(tempstr,'LIST FILES LFORMAT %N "\s" >"\sDirCaches/Conf\dDir\d"',path,confLoc,conf,num-1)
-              Execute(tempstr,0,0)
-              StringF(tempstr,'COPY "\sDirCaches/Conf\dDir\d" ram:DirCaches/',confLoc,conf,num-1)
+            
+              IF checkToolTypeExists(TOOLTYPE_CONF,conf,'FTP_NO_DIRLIST')
+                makeFtpDirCache(confLoc,conf,num-1,path,'')
+              ELSE
+                StringF(tempstr,'LIST FILES LFORMAT %N "\s" >"\sDirCaches/Conf\dDir\d"',path,confLoc,conf,num-1)
+                Execute(tempstr,0,0)
+              ENDIF
+              
+              StringF(tempstr,'COPY "\sDirCaches/Conf\dDir\d#?" ram:DirCaches/',confLoc,conf,num-1)
               Execute(tempstr,0,0)
             ENDIF
             StringF(path,'DLPATH.\d',num++)
@@ -28279,6 +28318,7 @@ PROC processFtpLogon()
     StrCopy(sendStr,'430 That account has problems\b\n')
     telnetSend(sendStr,EstrLen(sendStr))
     state:=STATE_LOGGING_OFF
+    RETURN
   ENDIF
 
   IF ftpAuth(userName,password)=FALSE
@@ -28436,6 +28476,7 @@ PROC processFtpLoggedOnUser()
   DEF cnums:PTR TO stdlist
   DEF confULBlock:PTR TO stringlist
   DEF ftpData:PTR TO ftpData
+  DEF res
   
   setEnvStat(ENV_IDLE)
 
@@ -28527,7 +28568,14 @@ PROC processFtpLoggedOnUser()
     ENDIF
   ENDFOR
 
-  IF readToolType(TOOLTYPE_XFERLIB,'FTP','FTPHOST',tempstr)=FALSE
+  res:=FALSE
+  FOR i:=0 TO xprLib.count()-1
+    IF(StriCmp(xprLib.item(i),'FTP'))
+      IF readToolType(TOOLTYPE_XFERLIB,i,'FTPHOST',tempstr) THEN res:=TRUE
+    ENDIF
+  ENDFOR
+
+  IF res=FALSE
     IF readToolType(TOOLTYPE_BBSCONFIG,'','FTPHOST',tempstr)=FALSE
       StrCopy(tempstr,'127.0.0.1')
     ENDIF
@@ -28805,7 +28853,7 @@ PROC checkPassword()
         purgeLineEnd()
         IF(lfh:=Open('NIL:',MODE_OLDFILE))<>0
           StringF(tempStr,'\sUtils/uucico -D \s -U \d -Getty -xx',cmds.bbsLoc,cmds.serDev,cmds.serDevUnit)
-          Execute(tempStr,IF debug THEN 0 ELSE lfh,IF debug THEN 0 ELSE lfh)
+          Execute(tempStr,lfh,lfh)
           Close(lfh)
         ENDIF
         purgeLineStart()
@@ -30881,7 +30929,7 @@ PROC main() HANDLE
   IF StrLen(arg1)>0
     node:=Val(arg1)
   ELSE
-    debug:=TRUE
+    Raise(ERR_NODEPARAM)
   ENDIF
 
   stripAnsi(0,0,1,0,ansi)
@@ -31360,7 +31408,7 @@ PROC main() HANDLE
     SetTaskPri(FindTask(0),cmds.taskPri)
   ENDIF
 
-  IF (debug) OR (sopt.iconify=FALSE) THEN openExpressScreen()
+  IF (sopt.iconify=FALSE) THEN openExpressScreen()
 
   formatLongDateTime(getSystemTime(),tempstr)
   StringF(tempstr2,'####### BBS Node \d started on \s #######\n',node,tempstr)
@@ -31537,6 +31585,8 @@ PROC main() HANDLE
     debugLog(LOG_ERROR,tempstr)
   CASE ERR_FDSRANGE
     debugLog(LOG_ERROR,'FDS Range error')
+  CASE ERR_NODEPARAM
+    WriteF('Express should not be launched manually\n.') 
   CASE "NIL"
     StringF(tempstr,'NIL pointer error at line \d',exceptioninfo)
     debugLog(LOG_ERROR,tempstr) 

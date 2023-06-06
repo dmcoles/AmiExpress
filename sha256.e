@@ -1,5 +1,8 @@
 OPT MODULE 
 
+CONST SHA1_DIGEST_SIZE=20
+CONST SIZE_OF_SHA_1_CHUNK=64
+
 CONST SIZE_OF_SHA_256_HASH=32
 CONST SIZE_OF_SHA_256_CHUNK=64
 CONST TOTAL_LEN_LEN=8
@@ -11,6 +14,12 @@ OBJECT sha_256
   space_left:LONG
   total_len:LONG
   h[8]:ARRAY OF LONG
+ENDOBJECT
+
+OBJECT sha1_ctx
+  state[5]:ARRAY OF LONG
+  count[2]:ARRAY OF LONG
+  buffer[SIZE_OF_SHA_1_CHUNK]:ARRAY OF CHAR
 ENDOBJECT
 
 /*
@@ -30,6 +39,11 @@ PROC right_rot(value, count)
  ROR.L D1,D0
 ENDPROC D0
 
+PROC left_rot(value, count)
+ MOVE.L value,D0
+ MOVE.L count,D1
+ ROL.L D1,D0
+ENDPROC D0
 /*
  * @brief Update a hash value under calculation with a new chunk of data.
  * @param h Pointer to the first hash item, of a total of eight.
@@ -112,9 +126,192 @@ PROC consume_chunk(h:PTR TO LONG, p:PTR TO CHAR)
 	FOR i:=0 TO 7 DO h[i]:=h[i]+ah[i]
 ENDPROC
 
-/*
- * Public functions. See header file for documentation.
- */
+/* blk0() and blk() perform the initial expand. */
+/* I got the idea of expanding during the round function from SSLeay */
+#define blk0(i) block[i]
+#define blk(i) (block[i AND 15]:= left_rot(Eor(Eor(Eor(block[(i+13) AND 15],block[(i+8) AND 15]),block[(i+2) AND 15]),block[i AND 15]),1))
+
+/* (R0+R1), R2, R3, R4 are the different operations used in SHA1 */
+
+#define r0(v, w, x, y, z, i) z:=z+Eor(w AND Eor(x,y),y)+blk0(i)+$5a827999+left_rot(v,5)
+#define r1(v, w, x, y, z, i) z:=z+Eor(w AND Eor(x,y),y)+blk(i)+$5a827999+left_rot(v,5)
+#define r2(v, w, x, y, z, i) z:=z+Eor(Eor(w,x),y)+blk(i)+$6ed9eba1+left_rot(v,5)
+#define r3(v, w, x, y, z, i) z:=z+(((w OR x) AND y) OR (w AND x))+blk(i)+$8f1bbcdc+left_rot(v,5)
+#define r4(v, w, x, y, z, i) z:=z+Eor(Eor(w,x),y)+blk(i)+$ca62c1d6+left_rot(v,5)
+
+PROC sha1_transform(state:PTR TO LONG,buffer:PTR TO CHAR)
+  DEF a,b,c,d,e
+  DEF block[16]:ARRAY OF LONG
+  
+  CopyMem(buffer,block,64)
+
+  /* Copy context->state[] to working vars */
+  a:=state[0]
+  b:=state[1]
+  c:=state[2]
+  d:=state[3]
+  e:=state[4]
+
+  /* 4 rounds of 20 operations each. Loop unrolled. */
+  r0(a, b, c, d, e, 0);b:=left_rot(b,30)
+  r0(e, a, b, c, d, 1);a:=left_rot(a,30)
+  r0(d, e, a, b, c, 2);e:=left_rot(e,30)
+  r0(c, d, e, a, b, 3);d:=left_rot(d,30)
+  r0(b, c, d, e, a, 4);c:=left_rot(c,30)
+  r0(a, b, c, d, e, 5);b:=left_rot(b,30)
+  r0(e, a, b, c, d, 6);a:=left_rot(a,30)
+  r0(d, e, a, b, c, 7);e:=left_rot(e,30)
+  r0(c, d, e, a, b, 8);d:=left_rot(d,30)
+  r0(b, c, d, e, a, 9);c:=left_rot(c,30)
+  r0(a, b, c, d, e, 10);b:=left_rot(b,30)
+  r0(e, a, b, c, d, 11);a:=left_rot(a,30)
+  r0(d, e, a, b, c, 12);e:=left_rot(e,30)
+  r0(c, d, e, a, b, 13);d:=left_rot(d,30)
+  r0(b, c, d, e, a, 14);c:=left_rot(c,30)
+  r0(a, b, c, d, e, 15);b:=left_rot(b,30)
+  r1(e, a, b, c, d, 16);a:=left_rot(a,30)
+  r1(d, e, a, b, c, 17);e:=left_rot(e,30)
+  r1(c, d, e, a, b, 18);d:=left_rot(d,30)
+  r1(b, c, d, e, a, 19);c:=left_rot(c,30)
+  r2(a, b, c, d, e, 20);b:=left_rot(b,30)
+  r2(e, a, b, c, d, 21);a:=left_rot(a,30)
+  r2(d, e, a, b, c, 22);e:=left_rot(e,30)
+  r2(c, d, e, a, b, 23);d:=left_rot(d,30)
+  r2(b, c, d, e, a, 24);c:=left_rot(c,30)
+  r2(a, b, c, d, e, 25);b:=left_rot(b,30)
+  r2(e, a, b, c, d, 26);a:=left_rot(a,30)
+  r2(d, e, a, b, c, 27);e:=left_rot(e,30)
+  r2(c, d, e, a, b, 28);d:=left_rot(d,30)
+  r2(b, c, d, e, a, 29);c:=left_rot(c,30)
+  r2(a, b, c, d, e, 30);b:=left_rot(b,30)
+  r2(e, a, b, c, d, 31);a:=left_rot(a,30)
+  r2(d, e, a, b, c, 32);e:=left_rot(e,30)
+  r2(c, d, e, a, b, 33);d:=left_rot(d,30)
+  r2(b, c, d, e, a, 34);c:=left_rot(c,30)
+  r2(a, b, c, d, e, 35);b:=left_rot(b,30)
+  r2(e, a, b, c, d, 36);a:=left_rot(a,30)
+  r2(d, e, a, b, c, 37);e:=left_rot(e,30)
+  r2(c, d, e, a, b, 38);d:=left_rot(d,30)
+  r2(b, c, d, e, a, 39);c:=left_rot(c,30)
+  r3(a, b, c, d, e, 40);b:=left_rot(b,30)
+  r3(e, a, b, c, d, 41);a:=left_rot(a,30)
+  r3(d, e, a, b, c, 42);e:=left_rot(e,30)
+  r3(c, d, e, a, b, 43);d:=left_rot(d,30)
+  r3(b, c, d, e, a, 44);c:=left_rot(c,30)
+  r3(a, b, c, d, e, 45);b:=left_rot(b,30)
+  r3(e, a, b, c, d, 46);a:=left_rot(a,30)
+  r3(d, e, a, b, c, 47);e:=left_rot(e,30)
+  r3(c, d, e, a, b, 48);d:=left_rot(d,30)
+  r3(b, c, d, e, a, 49);c:=left_rot(c,30)
+  r3(a, b, c, d, e, 50);b:=left_rot(b,30)
+  r3(e, a, b, c, d, 51);a:=left_rot(a,30)
+  r3(d, e, a, b, c, 52);e:=left_rot(e,30)
+  r3(c, d, e, a, b, 53);d:=left_rot(d,30)
+  r3(b, c, d, e, a, 54);c:=left_rot(c,30)
+  r3(a, b, c, d, e, 55);b:=left_rot(b,30)
+  r3(e, a, b, c, d, 56);a:=left_rot(a,30)
+  r3(d, e, a, b, c, 57);e:=left_rot(e,30)
+  r3(c, d, e, a, b, 58);d:=left_rot(d,30)
+  r3(b, c, d, e, a, 59);c:=left_rot(c,30)
+  r4(a, b, c, d, e, 60);b:=left_rot(b,30)
+  r4(e, a, b, c, d, 61);a:=left_rot(a,30)
+  r4(d, e, a, b, c, 62);e:=left_rot(e,30)
+  r4(c, d, e, a, b, 63);d:=left_rot(d,30)
+  r4(b, c, d, e, a, 64);c:=left_rot(c,30)
+  r4(a, b, c, d, e, 65);b:=left_rot(b,30)
+  r4(e, a, b, c, d, 66);a:=left_rot(a,30)
+  r4(d, e, a, b, c, 67);e:=left_rot(e,30)
+  r4(c, d, e, a, b, 68);d:=left_rot(d,30)
+  r4(b, c, d, e, a, 69);c:=left_rot(c,30)
+  r4(a, b, c, d, e, 70);b:=left_rot(b,30)
+  r4(e, a, b, c, d, 71);a:=left_rot(a,30)
+  r4(d, e, a, b, c, 72);e:=left_rot(e,30)
+  r4(c, d, e, a, b, 73);d:=left_rot(d,30)
+  r4(b, c, d, e, a, 74);c:=left_rot(c,30)
+  r4(a, b, c, d, e, 75);b:=left_rot(b,30)
+  r4(e, a, b, c, d, 76);a:=left_rot(a,30)
+  r4(d, e, a, b, c, 77);e:=left_rot(e,30)
+  r4(c, d, e, a, b, 78);d:=left_rot(d,30)
+  r4(b, c, d, e, a, 79);c:=left_rot(c,30)
+
+  /* Add the working vars back into context.state[] */
+  state[0]:=state[0]+a
+  state[1]:=state[1]+b
+  state[2]:=state[2]+c
+  state[3]:=state[3]+d
+  state[4]:=state[4]+e
+
+  /* Wipe variables */
+  a:=0
+  b:=0
+  c:=0
+  d:=0
+  e:=0
+
+ENDPROC
+
+PROC sha1_init(context:PTR TO sha1_ctx)
+  /* SHA1 initialization constants */
+  context.state[0]:=$67452301
+  context.state[1]:=$efcdab89
+  context.state[2]:=$98badcfe
+  context.state[3]:=$10325476
+  context.state[4]:=$c3d2e1f0
+  context.count[0]:=0
+  context.count[1]:=0
+ENDPROC
+
+PROC sha1_update(context:PTR TO sha1_ctx, p,len)
+  DEF data:PTR TO CHAR
+  DEF i,j
+  data:=p
+
+  j:=(Shr(context.count[0],3)) AND 63
+  context.count[0]:=context.count[0] + Shl(len,3)
+  IF (context.count[0] < Shl(len,3))
+    context.count[1]:=context.count[1]+1
+  ENDIF
+  context.count[1]:=context.count[1] + Lsr(len,29)
+  IF ((j + len) > 63)
+    i:=64 - j
+    CopyMem(data, context.buffer+j, i)
+    sha1_transform(context.state, context.buffer)
+    WHILE ((i+63)<len)
+      sha1_transform(context.state, data + i)
+      i+=64
+    ENDWHILE
+    j:= 0
+  ELSE
+    i:=0
+  ENDIF
+  CopyMem(data+i, context.buffer+j, len - i)
+ENDPROC
+
+PROC sha1_final(digest:PTR TO CHAR, context:PTR TO sha1_ctx) 
+  DEF i
+  DEF finalcount[8]:ARRAY OF CHAR
+
+  FOR i:=0 TO 7
+    finalcount[i]:= ((Shr(context.count[(IF i >= 4 THEN 0 ELSE 1)],((3 - (i AND 3)) * 8))) AND 255)
+  ENDFOR
+  sha1_update(context, [128]:CHAR, 1)
+  WHILE ((context.count[0] AND 504) <> 448)
+    sha1_update(context, [0]:CHAR, 1)
+  ENDWHILE
+  sha1_update(context, finalcount, 8) /* Should cause SHA1_Transform */
+  FOR i:=0 TO SHA1_DIGEST_SIZE-1
+      digest[i]:=((Shr(context.state[Shr(i,2)],((3 - (i AND 3)) * 8))) AND 255)
+  ENDFOR
+
+  /* Wipe variables */
+  i:=0
+  MemFill(context.buffer,64,0)
+  MemFill(context.state,20,0)
+  MemFill(context.count,8,0)
+  MemFill(finalcount,8,0)    /* SWR */
+
+  sha1_transform(context.state, context.buffer);
+ENDPROC
 
 PROC sha_256_init(sha_256:PTR TO sha_256, hash:PTR TO CHAR)
 	sha_256.hash:=hash
@@ -215,6 +412,16 @@ PROC sha_256_close(sha_256:PTR TO sha_256)
 	
 ENDPROC sha_256.hash
 
+EXPORT PROC calc_sha_1(hash:PTR TO CHAR, input, len)
+  DEF context:PTR TO sha1_ctx
+  
+  NEW context
+  sha1_init(context)
+  sha1_update(context, input, len)
+  sha1_final(hash,context)
+  END context
+ENDPROC
+
 EXPORT PROC calc_sha_256(hash:PTR TO CHAR, input, len)
   DEF sha_256:PTR TO sha_256
   
@@ -254,10 +461,37 @@ kdata:  LONG $428a2f98, $71374491, $b5c0fbcf, $e9b5dba5, $3956c25b, $59f111f1, $
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/*
- * HMAC-SHA-1 (from RFC 2202).
- */
-PROC hmac_sha1(text:PTR TO CHAR, text_len, key:PTR TO CHAR, key_len, digest:PTR TO CHAR)
+EXPORT PROC hmac_sha1(text:PTR TO CHAR, text_len, key:PTR TO CHAR, key_len, digest:PTR TO CHAR)
+  DEF k_pad:PTR TO CHAR
+  DEF tk[SHA1_DIGEST_SIZE]:ARRAY OF CHAR
+  DEF i
+
+  k_pad:=New(SIZE_OF_SHA_1_CHUNK+text_len)
+
+  IF (key_len > SIZE_OF_SHA_1_CHUNK)
+    calc_sha_1(tk,key, key_len)
+    key:=tk
+    key_len:=SHA1_DIGEST_SIZE
+  ENDIF
+
+  CopyMem(key,k_pad, key_len)
+  CopyMem(text,k_pad+SIZE_OF_SHA_1_CHUNK, text_len)
+  FOR i:=0 TO SIZE_OF_SHA_1_CHUNK-1 DO k_pad[i]:=Eor(k_pad[i],$36)
+
+  calc_sha_1(digest,k_pad, SIZE_OF_SHA_1_CHUNK+text_len)
+  Dispose(k_pad)
+
+  k_pad:=New(SIZE_OF_SHA_1_CHUNK+SHA1_DIGEST_SIZE)
+  CopyMem(key,k_pad,key_len)
+  CopyMem(digest, k_pad+SIZE_OF_SHA_1_CHUNK, SHA1_DIGEST_SIZE)
+
+  FOR i:=0 TO SIZE_OF_SHA_1_CHUNK-1 DO k_pad[i]:=Eor(k_pad[i],$5c)
+
+  calc_sha_1(digest,k_pad, SIZE_OF_SHA_1_CHUNK+SHA1_DIGEST_SIZE)
+  Dispose(k_pad)
+ENDPROC
+
+EXPORT PROC hmac_sha256(text:PTR TO CHAR, text_len, key:PTR TO CHAR, key_len, digest:PTR TO CHAR)
   DEF k_pad:PTR TO CHAR
   DEF tk[SIZE_OF_SHA_256_HASH]:ARRAY OF CHAR
   DEF i
@@ -314,11 +548,11 @@ EXPORT PROC pkcs5_pbkdf2(pass:PTR TO CHAR, pass_len, salt:PTR TO CHAR, salt_len,
       asalt[salt_len+2]:=Shr(count,8)
       asalt[salt_len+3]:=count AND 255
 
-      hmac_sha1(asalt, salt_len + 4, pass, pass_len, d1)     
+      hmac_sha256(asalt, salt_len + 4, pass, pass_len, d1)     
       CopyMem(d1,obuf,SIZE_OF_SHA_256_HASH)
 
       FOR i:=1 TO rounds-1
-        hmac_sha1(d1, SIZE_OF_SHA_256_HASH, pass, pass_len, d2)
+        hmac_sha256(d1, SIZE_OF_SHA_256_HASH, pass, pass_len, d2)
         CopyMem(d2,d1,SIZE_OF_SHA_256_HASH)
         FOR j:=0 TO SIZE_OF_SHA_256_HASH-1
           obuf[j]:=Eor(obuf[j],d1[j])
