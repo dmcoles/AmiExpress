@@ -4193,7 +4193,7 @@ PROC runDoor(cmd,type,command,tooltype,params,resident,doorTrap,privcmd,pri=0,st
   StrCopy(runOnExit,'')
   StrCopy(runOnExit2,'')
 
-  IF (resident=FALSE) AND ((type<>DOORTYPE_MCI) OR (StrLen(cmd)>0))
+  IF (resident=FALSE) AND ((type<>DOORTYPE_MCI) AND (StrLen(cmd)>0))
     IF (fileExists(cmd)=FALSE)
       IF privcmd=FALSE
         aePuts('\b\nError, can''t locate Custom Command\b\n')
@@ -5513,10 +5513,8 @@ PROC processMciCmd(mcidata,len,pos,outdata = NIL)
       pos:=pos+nval+t
     ELSEIF StrCmp(cmd,'SM_',3)
       pos:=pos+3
-      IF outdata=NIL
-        nval:=EstrLen(cmd)-3
-        midStr2(currentMenuName,mcidata,pos,nval)
-      ENDIF
+      nval:=EstrLen(cmd)-3
+      midStr2(currentMenuName,mcidata,pos,nval)
       pos:=pos+EstrLen(currentMenuName)+t
     ELSEIF StrCmp(cmd,'q')
       pos:=pos+1+t
