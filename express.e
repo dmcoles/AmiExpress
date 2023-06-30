@@ -396,6 +396,11 @@ DEF currentMenuName[255]:STRING
 DEF defaultMenuName[255]:STRING
 DEF menuPause=TRUE
 
+DEF telnetUsername[100]:STRING
+DEF telnetPassword[100]:STRING
+DEF telnetUsernamePrompt[100]:STRING
+DEF telnetPasswordPrompt[100]:STRING
+
 DEF quietDownload=FALSE
 DEF unknownValue=0
 DEF memConf=0:PTR TO LONG ->shared with tooltypes.e
@@ -928,8 +933,6 @@ ENDPROC TRUE
 
 PROC setNewPassword(user:PTR TO user, userMisc:PTR TO userMisc, newpass:PTR TO CHAR)
   DEF passType
-  DEF tempStr
-  DEF i
   
   IF checkToolType(TOOLTYPE_BBSCONFIG,0,'PASSWORD_SECURITY','LEGACY')
     passType:=PWD_LEGACY
@@ -977,10 +980,9 @@ PROC setNewPassword(user:PTR TO user, userMisc:PTR TO userMisc, newpass:PTR TO C
 ENDPROC
 
 PROC checkUserPassword(user:PTR TO user, userMisc:PTR TO userMisc, testpass:PTR TO CHAR) 
-  DEF tempStr
   DEF tmpHash[32]:ARRAY OF CHAR
   DEF tempPass[100]:STRING
-  DEF i,res,maxAttempts
+  DEF res,maxAttempts
   SELECT userMisc.pwdType
     CASE PWD_LEGACY
       StrCopy(tempPass,testpass)
@@ -2367,7 +2369,7 @@ PROC readMayGetChar(msgport, checkTelnet, whereto)
   temp:=0
   
   IF checkTelnet AND (telnetSocket>=0)
-    IF Recv(telnetSocket,whereto,1,0)=1
+    IF Recv(telnetSocket,whereto,1,0)=1   
       temp:=whereto[]
       IF (lastIAC=0) AND (temp=255)
         lastIAC:=1
@@ -3031,7 +3033,7 @@ PROC telnetConnect(host:PTR TO CHAR,port)
   DEF tlastIAC2=FALSE
   DEF tlastIAC3=FALSE
   DEF last
-  DEF c,c2
+  DEF c,c2,ch
   DEF cmd1,cmd2
   DEF sigs
 
@@ -3135,29 +3137,32 @@ PROC telnetConnect(host:PTR TO CHAR,port)
     IF checkInput()
       c:=0
       WHILE (checkInput()) AND (c<100)
-        ibuf[c]:=readChar(1,0,TRUE)
-        IF (ibuf[c]=UPARROW) AND (c<97)
-          ibuf[c]:=27
-          ibuf[c+1]:="["
-          ibuf[c+2]:="A"
-          c:=c+2
-        ELSEIF (ibuf[c]=DOWNARROW) AND (c<97)
-          ibuf[c]:=27
-          ibuf[c+1]:="["
-          ibuf[c+2]:="B"
-          c:=c+2
-        ELSEIF (ibuf[c]=RIGHTARROW) AND (c<97)
-          ibuf[c]:=27
-          ibuf[c+1]:="["
-          ibuf[c+2]:="C"
-          c:=c+2
-        ELSEIF (ibuf[c]=LEFTARROW) AND (c<97)
-          ibuf[c]:=27
-          ibuf[c+1]:="["
-          ibuf[c+2]:="D"
-          c:=c+2
+        ch:=readChar(1,0,TRUE)
+        IF ch>=0
+          ibuf[c]:=ch
+          IF (ibuf[c]=UPARROW) AND (c<97)
+            ibuf[c]:=27
+            ibuf[c+1]:="["
+            ibuf[c+2]:="A"
+            c:=c+2
+          ELSEIF (ibuf[c]=DOWNARROW) AND (c<97)
+            ibuf[c]:=27
+            ibuf[c+1]:="["
+            ibuf[c+2]:="B"
+            c:=c+2
+          ELSEIF (ibuf[c]=RIGHTARROW) AND (c<97)
+            ibuf[c]:=27
+            ibuf[c+1]:="["
+            ibuf[c+2]:="C"
+            c:=c+2
+          ELSEIF (ibuf[c]=LEFTARROW) AND (c<97)
+            ibuf[c]:=27
+            ibuf[c+1]:="["
+            ibuf[c+2]:="D"
+            c:=c+2
+          ENDIF
+          c++
         ENDIF
-        c++
       ENDWHILE
       conCursorOn()
 
@@ -3175,6 +3180,9 @@ PROC telnetConnect(host:PTR TO CHAR,port)
       e:=Errno()
       IF e<>35 THEN done:=TRUE
     ELSEIF b>0
+      readBuffer[b]:=0
+      ->hexdump(readBuffer,b)
+      
       c:=0
       c2:=0
       REPEAT
@@ -3230,6 +3238,21 @@ PROC telnetConnect(host:PTR TO CHAR,port)
         
       UNTIL c>=b
       IF c2>0 THEN aePuts2(readBuffer,c2)
+      IF (StrLen(telnetUsername)>0) AND (StrLen(telnetUsernamePrompt)>0)
+        IF InStr(readBuffer,telnetUsernamePrompt)>=0
+          StringF(tempstr,'\s\b\n',telnetUsername)
+          Send(s,tempstr,EstrLen(tempstr),0)
+          StrCopy(telnetUsername,'')
+        ENDIF
+      ENDIF     
+      IF (StrLen(telnetPassword)>0) AND (StrLen(telnetPasswordPrompt)>0)
+        IF InStr(readBuffer,telnetPasswordPrompt)>=0
+          StringF(tempstr,'\s\b\n',telnetPassword)
+          Send(s,tempstr,EstrLen(tempstr),0)
+          StrCopy(telnetPassword,'')
+        ENDIF
+      ENDIF
+      
     ENDIF
     
     IF((logonType>=LOGON_TYPE_REMOTE) AND (checkCarrier()=FALSE)) THEN done:=TRUE
@@ -4073,6 +4096,14 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,tooltype,command,privcmd,params,n
       ENDIF
     CASE TELNET_CONNECT
       telnetConnect(msg.string,msg.data)
+    CASE TELNET_USERNAME_PROMPT
+      StrCopy(telnetUsernamePrompt,msg.string)
+    CASE TELNET_USERNAME
+      StrCopy(telnetUsername,msg.string)
+    CASE TELNET_PASSWORD_PROMPT
+      StrCopy(telnetPasswordPrompt,msg.string)
+    CASE TELNET_PASSWORD
+      StrCopy(telnetPassword,msg.string)
     CASE GET_CMD_TOOLTYPE
       StrCopy(tempstring,'')
       msg.data:=readToolType(tooltype,command,msg.string,tempstring)
@@ -5513,8 +5544,10 @@ PROC processMciCmd(mcidata,len,pos,outdata = NIL)
       pos:=pos+nval+t
     ELSEIF StrCmp(cmd,'SM_',3)
       pos:=pos+3
-      nval:=EstrLen(cmd)-3
-      midStr2(currentMenuName,mcidata,pos,nval)
+      IF outdata=NIL
+        nval:=EstrLen(cmd)-3
+        midStr2(currentMenuName,mcidata,pos,nval)
+      ENDIF
       pos:=pos+EstrLen(currentMenuName)+t
     ELSEIF StrCmp(cmd,'q')
       pos:=pos+1+t
@@ -6620,6 +6653,63 @@ PROC runExecuteOn(execOn:PTR TO CHAR)
     processMci(tempstr1,tempstr2)
     SystemTagList(tempstr2,filetags)
     FastDisposeList(filetags)
+  ENDIF
+ENDPROC
+
+PROC doUploadNotify()
+  DEF str[255]:STRING
+  DEF string[255]:STRING
+  runExecuteOn('UPLOAD')
+  
+  IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_UPLOAD')) AND (StrLen(mailOptions.sysopEmail)>0)
+    StringF(str,'\s: Ami-Express upload notification',cmds.bbsName)
+    StringF(string,'This is a notification that \s from \s has uploaded\n\n',loggedOnUser.name,loggedOnUser.location)
+    sendMail(str,string,FALSE, NIL,0,mailOptions.sysopEmail)
+  ENDIF
+ENDPROC
+
+PROC doCommentNotify(fromName:PTR TO CHAR, subject:PTR TO CHAR)
+  DEF tempStr[255]:STRING
+  DEF tempStr2[255]:STRING
+  runExecuteOn('SYSOP_COMMENT')
+  IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_SYSOP_COMMENT')) AND (StrLen(mailOptions.sysopEmail)>0)
+    StringF(tempStr,'\s: Ami-Express sysop message notification',cmds.bbsName)
+    StringF(tempStr2,'This is a notification that \s has sent you a message.\n\nSubject: \s\n\n',fromName,subject)
+    sendMail(tempStr,tempStr2,TRUE, msgBuf,lines,mailOptions.sysopEmail)
+  ENDIF
+ENDPROC
+
+PROC doLogonNotify()
+  DEF tempStr[255]:STRING
+  DEF tempStr2[255]:STRING
+  runExecuteOn('LOGON')
+  IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_LOGON')) AND (StrLen(mailOptions.sysopEmail)>0)
+    StringF(tempStr,'\s: Ami-Express logon notification',cmds.bbsName)
+    StringF(tempStr2,'This is a notification that \s from \s has logged on\n\n',loggedOnUser.name,loggedOnUser.location)
+    sendMail(tempStr,tempStr2,FALSE, NIL,0,mailOptions.sysopEmail)
+  ENDIF
+ENDPROC
+
+PROC doNewUserNotify()
+  DEF tempStr[255]:STRING
+  DEF tempStr2[255]:STRING
+  runExecuteOn('NEW_USER')
+ 
+  IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_NEW_USER')) AND (StrLen(mailOptions.sysopEmail)>0)
+    StringF(tempStr,'\s: Ami-Express new user notification',cmds.bbsName)
+    StringF(tempStr2,'This is a notification that a new user called \s from \s has registered.',loggedOnUser.name,loggedOnUser.location)
+    sendMail(tempStr,tempStr2,FALSE,msgBuf,lines,mailOptions.sysopEmail)
+  ENDIF
+ENDPROC
+
+PROC doLogoffNotify()
+  DEF tempstr[255]:STRING
+  DEF tempstr2[255]:STRING
+  runExecuteOn('LOGOFF')
+  IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_LOGOFF')) AND (StrLen(mailOptions.sysopEmail)>0)
+    StringF(tempstr,'\s: Ami-Express logoff notification',cmds.bbsName)
+    StringF(tempstr2,'This is a notification that \s from \s has logged off\n\n',loggedOnUser.name,loggedOnUser.location)
+    sendMail(tempstr,tempstr2,FALSE, NIL,0,mailOptions.sysopEmail)
   ENDIF
 ENDPROC
 
@@ -7960,7 +8050,6 @@ ENDPROC
 
 PROC processLoggingOff()
   DEF tempstr[255]:STRING
-  DEF tempstr2[255]:STRING
 
   writeLogoffLog('logging off 1 (start)',TRUE)
 
@@ -8051,14 +8140,8 @@ PROC processLoggingOff()
     saveAccount(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc,0,0) /* Reseave users account after logoff */
 
     writeLogoffLog('logging off 13',FALSE)
-    runExecuteOn('LOGOFF')
 
-    writeLogoffLog('logging off 14',FALSE)
-    IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_LOGOFF')) AND (StrLen(mailOptions.sysopEmail)>0)
-      StringF(tempstr,'\s: Ami-Express logoff notification',cmds.bbsName)
-      StringF(tempstr2,'This is a notification that \s from \s has logged off\n\n',loggedOnUser.name,loggedOnUser.location)
-      sendMail(tempstr,tempstr2,FALSE, NIL,0,mailOptions.sysopEmail)
-    ENDIF
+    doLogoffNotify()
 
     StrCopy(reservedName,'')
 
@@ -8111,6 +8194,11 @@ PROC processLoggingOff()
   Delay(50)
   stateData:=0
   writeLogoffLog('logging off 22',FALSE)
+
+  StrCopy(telnetUsername,'')
+  StrCopy(telnetPassword,'')
+  StrCopy(telnetUsernamePrompt,'')
+  StrCopy(telnetPasswordPrompt,'')
 
   quickFlag:=FALSE
   ansiColour:=TRUE
@@ -10546,12 +10634,7 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
     UnLock(msgbaselock)
 
     IF (tempUser.slotNumber=1)
-      runExecuteOn('SYSOP_COMMENT')
-      IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_SYSOP_COMMENT')) AND (StrLen(mailOptions.sysopEmail)>0)
-        StringF(tempStr,'\s: Ami-Express sysop message notification',cmds.bbsName)
-        StringF(tempStr2,'This is a notification that \s has sent you a message.\n\nSubject: \s\n\n',mh.fromName,mh.subject)
-        sendMail(tempStr,tempStr2,TRUE, msgBuf,lines,mailOptions.sysopEmail)
-      ENDIF
+      doCommentNotify(mh.fromName,mh.subject)
     ENDIF
 
     IF(rzmsg)
@@ -12750,7 +12833,6 @@ gotit:
       fLock:=0
       IF(z=1) THEN JUMP outst
     ENDIF
-nxt:
     StringF(tempstr,'DLPATH.\d',drivenum++)
 
   UNTIL pstat=0
@@ -12832,7 +12914,6 @@ ENDPROC regServer()
 
 PROC regServer()
   DEF port:PTR TO mp
-  DEF tempstr[255]:STRING
 
   masterMsg.command:=SV_START
   WHILE((port:=FindPort('AE.Master'))=NIL) AND (SetSignal(0,SIGBREAKF_CTRL_C)=0)
@@ -13505,10 +13586,16 @@ ENDPROC RESULT_GOODBYE
 /*PROC hexdump(buf,size)
   DEF i,j
   FOR i:=0 TO size-1
-    WriteF('\h[2] ',buf[i])
-    IF Mod(i,16)=15 
-      j:=i-15
-      IF j<0 THEN j:=0
+    WriteF('\r\z\h[2] ',buf[i])
+    IF (Mod(i,16)=15) OR (i=(size-1))
+      IF (i=size-1)
+        j:=i
+        WHILE (Mod(j,16)<15)
+          WriteF('   ')
+          j++
+        ENDWHILE
+      ENDIF
+      j:=i & $fffffff0
       REPEAT
         IF (buf[j]<32) OR (buf[j]>127)
           WriteF('.')
@@ -14816,7 +14903,13 @@ PROC ftpUploadFileEnd(fileName:PTR TO CHAR,success)
     ELSE
       callersLog('\tUpload Failed..')
     ENDIF  
-  
+
+    IF (tTCPS > loggedOnUserKeys.upCPS2)
+      loggedOnUserKeys.upCPS2:=tTCPS
+      IF tTCPS>65535 THEN tTCPS:=65535
+      loggedOnUserKeys.oldUpCPS:=tTCPS
+    ENDIF
+
     FOR i:=0 TO skipdFiles.count()-1
       StringF(str,'\tSkipped \s',skipdFiles.item(i))
       callersLog(str)
@@ -14898,6 +14991,13 @@ PROC ftpDownloadFileEnd(fileName:PTR TO CHAR, result)
       callersLog('\tDownload Failed..')
       udLog('\tDownload Failed..')
     ENDIF
+  ENDIF
+
+  /* is this baud higher then max cps down ? */
+  IF(tTCPS > loggedOnUserKeys.dnCPS2)
+    loggedOnUserKeys.dnCPS2:=tTCPS
+    IF tTCPS>65535 THEN tTCPS:=65535
+    loggedOnUserKeys.oldDnCPS:=tTCPS
   ENDIF
 
   IF (result)
@@ -18807,13 +18907,7 @@ PROC uploadaFile(uLFType,cmd,attach,alreadyUploaded=FALSE)            -> JOE
     callersLog(str)
     udLog(str)
        
-    runExecuteOn('UPLOAD')
-    
-    IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_UPLOAD')) AND (StrLen(mailOptions.sysopEmail)>0)
-      StringF(str,'\s: Ami-Express logoff notification',cmds.bbsName)
-      StringF(string,'This is a notification that \s from \s has logged off\n\n',loggedOnUser.name,loggedOnUser.location)
-      sendMail(str,string,FALSE, NIL,0,mailOptions.sysopEmail)
-    ENDIF
+    doUploadNotify()
   ELSE
     callersLog('\tUpload Failed..')
     udLog('\tUpload Failed..')
@@ -19985,7 +20079,7 @@ breakd:
   aePuts(string)
   aePuts('\b\n\b\n')
 
-  /* is this baud higher then max cps up ? */
+  /* is this baud higher then max cps down ? */
   IF(pcps > loggedOnUserKeys.dnCPS2)
     loggedOnUserKeys.dnCPS2:=pcps
     IF pcps>65535 THEN pcps:=65535
@@ -20915,6 +21009,17 @@ PROC findUserAnswers(which,answersFilename:PTR TO CHAR)
   IF (i>MAXNODES) OR (lock=0) THEN StrCopy(answersFilename,'')
 ENDPROC StrLen(answersFilename)>0
 
+PROC checkChanges(changes)
+  DEF ch
+  IF changes=FALSE THEN RETURN TRUE
+  aePuts('You have unsaved changes. Do you wish to lose them (Y/N)? ')
+  ch:=readChar(INPUT_TIMEOUT)
+  IF(ch<0) THEN RETURN TRUE
+  aePuts('[F[E[K')
+  
+  IF((ch="Y") OR (ch="y")) THEN RETURN TRUE
+ENDPROC FALSE
+
 PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: PTR TO userMisc,f6)
 
   DEF flag, command
@@ -20923,6 +21028,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
   DEF checkLock
   DEF page=0
   DEF value1,value2
+  DEF changes=FALSE
 
   nofkeys:=1
   displayAccount(which,page,hoozer,hoozer2,hoozer3,f6)
@@ -20954,31 +21060,41 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
 
     SELECT command
       CASE "\t"
-        flag:=2
+        IF f6 ORELSE checkChanges(changes)
+          flag:=2
+        ENDIF
       CASE "X"         /* NO-SAVE */
-        aePuts('[JNo-Save\b\n')
-        flag:=1
+        IF f6 ORELSE checkChanges(changes)
+          aePuts('[JNo-Save\b\n')
+          flag:=1
+        ENDIF
       CASE " "
         page:=Eor(page,1)
         sendCLS()
         displayAccount(which,page,hoozer,hoozer2,hoozer3,f6)
       CASE "+"
         IF(onlineEdit=FALSE)
-          which:=which+1
-          IF(loadAccount(which,hoozer,hoozer2,hoozer3)<>RESULT_FAILURE)
-            displayAccountInfo(which,page,hoozer,hoozer2,hoozer3,f6)
-          ELSE
-            which:=1
-            loadAccount(which,hoozer,hoozer2,hoozer3)
-            displayAccountInfo(which,page,hoozer,hoozer2,hoozer3,f6)
+          IF checkChanges(changes)
+            which:=which+1
+            changes:=FALSE
+            IF(loadAccount(which,hoozer,hoozer2,hoozer3)<>RESULT_FAILURE)
+              displayAccountInfo(which,page,hoozer,hoozer2,hoozer3,f6)
+            ELSE
+              which:=1
+              loadAccount(which,hoozer,hoozer2,hoozer3)
+              displayAccountInfo(which,page,hoozer,hoozer2,hoozer3,f6)
+            ENDIF
           ENDIF
         ENDIF
       CASE "-"
         IF(onlineEdit=FALSE)
-          which:=which-1
-          IF(which<1) THEN which:=findLastAccount()
-          loadAccount(which,hoozer,hoozer2,hoozer3)
-          displayAccountInfo(which,page,hoozer,hoozer2,hoozer3,f6)
+          IF checkChanges(changes)
+            which:=which-1
+            changes:=FALSE
+            IF(which<1) THEN which:=findLastAccount()
+            loadAccount(which,hoozer,hoozer2,hoozer3)
+            displayAccountInfo(which,page,hoozer,hoozer2,hoozer3,f6)
+          ENDIF
         ENDIF
       CASE "~" /* SAVE */
         aePuts('[JSave\b\n')
@@ -21002,6 +21118,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
           StringF(tempStr,'\tLOCAL  Account Maintenance on Account \d',hoozer.slotNumber)
         ENDIF
         callersLog(tempStr)
+        changes:=FALSE
       CASE "!" /* Credit Maintenance */
         creditMaintenance(which,hoozer,hoozer2,hoozer3,f6)
         displayAccount(which,page,hoozer,hoozer2,hoozer3,f6)
@@ -21030,6 +21147,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
 
           StringF(tempStr,'[JPreset \d. ',preset)
           aePuts(tempStr)
+          changes:=TRUE
 
           hoozer.newUser:=0
           applyPreset(hoozer,TOOLTYPE_PRESET,preset)
@@ -21058,6 +21176,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
           stat:=which
           hoozer.slotNumber:=0
           hoozer2.number:=0
+          changes:=TRUE
 
           stat:=saveAccount(hoozer,hoozer2,hoozer3,stat,1)
           IF(stat<>RESULT_SUCCESS) THEN  aePuts('Can''t Save account\b\n')
@@ -21066,6 +21185,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
           flag:=0
         CASE "9"                       /* RE-ACTIVATE */
           aePuts('[JRe-Activate\b\n')
+          changes:=TRUE
           hoozer.slotNumber:=which
           flag:=0
       ENDSELECT
@@ -21079,18 +21199,21 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
             AstrCopy(hoozer.name,tempStr,31)
             UpperStr(tempStr)
             AstrCopy(hoozer2.userName,tempStr,31)
+            changes:=TRUE
             flag:=0
           CASE "B"             /* Real Name */
             aePuts('[2;56H')
             StrCopy(tempStr,hoozer3.realName)
             lineInput('',tempStr,25,INPUT_TIMEOUT,tempStr)
             AstrCopy(hoozer3.realName,tempStr,26)
+            changes:=TRUE
             flag:=0
           CASE "C"             /* Location */
             aePuts('[3;10H')
             StrCopy(tempStr,hoozer.location)
             lineInput('',tempStr,29,INPUT_TIMEOUT,tempStr)
             AstrCopy(hoozer.location,tempStr,30)
+            changes:=TRUE
             flag:=0
           CASE "D" /* PASS */
             IF((logonType>=LOGON_TYPE_REMOTE) AND (f6=FALSE))
@@ -21107,6 +21230,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
                 IF StrLen(tempStr)>0
                   setNewPassword(hoozer,hoozer3,tempStr)
                   hoozer3.pwdLastUpdated:=getSystemTime()
+                  changes:=TRUE
                 ENDIF
               ENDIF
             ELSE
@@ -21120,6 +21244,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
               IF StrLen(tempStr)>0
                 setNewPassword(hoozer,hoozer3,tempStr)
                 hoozer3.pwdLastUpdated:=getSystemTime()
+                changes:=TRUE
               ENDIF
             ENDIF
             flag:=0
@@ -21128,16 +21253,19 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
             StrCopy(tempStr,hoozer.phoneNumber)
             lineInput('',tempStr,12,INPUT_TIMEOUT,tempStr)
             AstrCopy(hoozer.phoneNumber,tempStr,13)
+            changes:=TRUE
             flag:=0
           CASE "F" /* conference access */
             aePuts('[4;56H')
             StrCopy(tempStr,hoozer.conferenceAccess)
             lineInput('',tempStr,9,INPUT_TIMEOUT,tempStr)
             AstrCopy(hoozer.conferenceAccess,tempStr,10)
+            changes:=TRUE
             flag:=0
           CASE "G" /* RATIO */
             aePuts('[5;21H')
             hoozer.secLibrary:=numberInput(hoozer.secLibrary)
+            changes:=TRUE
             flag:=0
           CASE "H" /* SEC_Level */
             IF((logonType>=LOGON_TYPE_REMOTE) AND (f6=FALSE))
@@ -21149,6 +21277,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
               aePuts('[5;56H')
               hoozer.secStatus:=numberInput(hoozer.secStatus)
             ENDIF
+            changes:=TRUE
             flag:=0
           CASE "I"  /* Ratio Type */
             aePuts('[6;21H')
@@ -21162,49 +21291,58 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
             IF(hoozer.secBoard=0) THEN aePuts(' [32m<-[33mByte[32m)[0m')
             IF(hoozer.secBoard=1) THEN aePuts(' [32m<-[33mB/F[32m)[0m ')
             IF(hoozer.secBoard=2) THEN aePuts(' [32m<-[33mFile[32m)[0m')
+            changes:=TRUE
             flag:=0
           CASE "J"                 /* conference ReJoin */
             aePuts('[6;56H')
             value1,value2:=rJoinInput(hoozer.confRJoin, hoozer.msgBaseRJoin)
             hoozer.confRJoin:=value1
             hoozer.msgBaseRJoin:=value2
+            changes:=TRUE
             flag:=0
           CASE "K"                 /* UPLOADS */
             aePuts('[7;21H')
             hoozer.uploads:=numberInput(hoozer.uploads)
+            changes:=TRUE
             flag:=0
           CASE "L" /* MESSAGES_POSTED */
             aePuts('[7;56H')
             hoozer.messagesPosted:=numberInput(hoozer.messagesPosted)
+            changes:=TRUE
             flag:=0
           CASE "M" /* DOWNLOADS */
             aePuts('[8;21H')
             hoozer.downloads:=numberInput(hoozer.downloads)
+            changes:=TRUE
             flag:=0
           CASE "N" /* New user ??  */
             aePuts('[8;56H   [8;56H')
             command:=yesNo(0)
             IF(command)   THEN hoozer.newUser:=1 ELSE hoozer.newUser:=0
+            changes:=TRUE
             flag:=0
           CASE "#"
             aePuts('[6;71H')
             hoozer.timesCalled:=numberInput(hoozer.timesCalled)
+            changes:=TRUE
             flag:=0
           CASE "%"
             aePuts('[7;71H')
             hoozer2.timesOnToday:=numberInput(getTodaysCalls(hoozer,hoozer2))
+            changes:=TRUE
             flag:=0
           CASE "O" /* Bytes Uploaded */
             aePuts('[9;21H')
 
             bcdNumberInput(hoozer3.uploadBytesBCD)
             hoozer.bytesUpload:=convertFromBCD(hoozer3.uploadBytesBCD)
-
+            changes:=TRUE
             flag:=0
           CASE "P" /* Bytes Downloaded */
             aePuts('[10;21H')
             bcdNumberInput(hoozer3.downloadBytesBCD)
             hoozer.bytesDownload:=convertFromBCD(hoozer3.downloadBytesBCD)
+            changes:=TRUE
             flag:=0
           CASE "Q" /* Daily Bytes Limit */
             aePuts('[11;21H         [11;21H')
@@ -21216,6 +21354,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
             hoozer.dailyBytesLimit:=longNumberInput(hoozer.dailyBytesLimit)
             hoozer.todaysBytesLimit:=hoozer.dailyBytesLimit
             IF hoozer.todaysBytesLimit<>0 THEN hoozer.todaysBytesLimit:=hoozer.todaysBytesLimit+temp
+            changes:=TRUE
             flag:=0
           CASE "R" /* Time_Total */
             aePuts('[12;17H')
@@ -21227,15 +21366,19 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
                 hoozer.timeTotal:=hoozer.timeLimit
               ENDIF
             ENDIF
+            changes:=TRUE
+            flag:=0;
           CASE "S"         /* zero upcps rate */
             aePuts('[12;47H')
             hoozer2.upCPS2:=longNumberInput(hoozer2.upCPS2)
             IF hoozer2.upCPS2>65535 THEN hoozer2.oldUpCPS:=65535 ELSE hoozer2.oldUpCPS:=hoozer2.upCPS2
+            changes:=TRUE
             flag:=0;
           CASE "T"         /* zero dncps rate */
             aePuts('[12;69H')
             hoozer2.dnCPS2:=longNumberInput(hoozer2.dnCPS2)
             IF hoozer2.dnCPS2>65535 THEN hoozer2.oldDnCPS:=65535 ELSE hoozer2.oldDnCPS:=hoozer2.dnCPS2
+            changes:=TRUE
             flag:=0
           CASE "U" /* Time_Limit */
             aePuts('[13;17H')
@@ -21250,6 +21393,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
             IF(loggedOnUser.slotNumber=hoozer.slotNumber)
               timeLimit:=hoozer.timeTotal-hoozer.timeUsed
             ENDIF
+            changes:=TRUE
             flag:=0
           CASE "V" /* TIME_USED */
             aePuts('[13;51H')
@@ -21257,10 +21401,12 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
             IF(loggedOnUser.slotNumber=hoozer.slotNumber)
               timeLimit:=hoozer.timeTotal-hoozer.timeUsed
             ENDIF
+            changes:=TRUE
             flag:=0;
           CASE "W" /*uucpa*/
             aePuts('[13;76H')
             hoozer.uucpa:=uucpNumberInput(hoozer.uucpa)
+            changes:=TRUE
             flag:=0
           CASE "Y" /* chat limit */
             aePuts('[14;17H')
@@ -21268,11 +21414,13 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
             hoozer.chatLimit:=Mul(numberInput(Div(hoozer.chatLimit,60)),60)
             hoozer.chatRemain:=hoozer.chatLimit-temp
             IF hoozer.chatRemain<0 THEN hoozer.chatRemain:=0
+            changes:=TRUE
             flag:=0
           CASE "Z" /* chat used */
             aePuts('[14;51H')
             hoozer.chatRemain:=hoozer.chatLimit-Mul(numberInput(Div(hoozer.chatLimit-hoozer.chatRemain,60)),60)
             IF hoozer.chatRemain<0 THEN hoozer.chatRemain:=0
+            changes:=TRUE
             flag:=0
         ENDSELECT
       ELSEIF page=1
@@ -21284,20 +21432,24 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
             AstrCopy(hoozer.name,tempStr,31)
             UpperStr(tempStr)
             AstrCopy(hoozer2.userName,tempStr,31)
+            changes:=TRUE
             flag:=0
           CASE "B"             /* Password reset */
             aePuts('[3;21H   [3;21H')
             command:=yesNo(0)
             IF(command)   THEN hoozer3.forcePwdReset:=1 ELSE hoozer3.forcePwdReset:=0
+            changes:=TRUE
             flag:=0
           CASE "C"             /* account locked */
             aePuts('[3;56H   [3;56H')
             command:=yesNo(0)
             IF(command)   THEN hoozer3.accountLocked:=1 ELSE hoozer3.accountLocked:=0
+            changes:=TRUE
             flag:=0
           CASE "D" /* invalid attempts */
             aePuts('[4;21H')
             hoozer3.invalidAttempts:=numberInput(hoozer3.invalidAttempts)
+            changes:=TRUE
             flag:=0
         ENDSELECT
       ENDIF
@@ -21547,6 +21699,7 @@ PROC creditMaintenance(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, 
   DEF yesno[3]:STRING
   DEF flag=FALSE,remain,ch,stat
   DEF checkLock
+  DEF changes=FALSE
 
   IF (logonType=LOGON_TYPE_REMOTE) AND (checkSecurity(ACS_CREDIT_ACCESS)=FALSE) AND (f6=FALSE)
     RETURN 0
@@ -21616,16 +21769,16 @@ PROC creditMaintenance(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, 
 
     ch:=readChar(INPUT_TIMEOUT)
 
-    aePuts('[17;2H                                     ')
+    aePuts('[17;2H                                     [17;2H')
 
     IF(ch<0) THEN RETURN ch
     ch:=UpperChar(ch)
 
     SELECT ch
       CASE "\t"
-        flag:=2
+        IF f6 ORELSE checkChanges(changes) THEN flag:=2
       CASE "X"
-        flag:=1
+        IF f6 ORELSE checkChanges(changes) THEN flag:=1
     ENDSELECT
 
     IF checkLock
@@ -21633,29 +21786,38 @@ PROC creditMaintenance(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, 
         CASE "1"
           aePuts('[8;22H')
           hoozer.creditDays:=numberInput(hoozer.creditDays)
+          changes:=TRUE
         CASE "2"
           aePuts('[9;22H')
           hoozer.creditAmount:=numberInput(hoozer.creditAmount)
+          changes:=TRUE
         CASE "3"
           aePuts('[10;27H')
           hoozer.creditTotalToDate:=numberInput(hoozer.creditTotalToDate)
           hoozer.creditTotalDate:=getSystemDate()
+          changes:=TRUE
         CASE "4"
           hoozer.creditTracking:=Eor(hoozer.creditTracking,TRACK_UPLOADS_BIT)
+          changes:=TRUE
         CASE "5"
           hoozer.creditTracking:=Eor(hoozer.creditTracking,TRACK_DOWNLOADS_BIT)
+          changes:=TRUE
         CASE "U"
           hoozer.creditTotalToDate:=hoozer.creditTotalToDate+hoozer.creditAmount
           hoozer.creditTotalDate:=getSystemDate()
+          changes:=TRUE
         CASE "R"
           hoozer.creditStartDate:=getSystemDate()
+          changes:=TRUE
         CASE "T"
           hoozer.creditDays:=0
+          changes:=TRUE
         CASE "~"
           IF (logonType<LOGON_TYPE_REMOTE) OR (f6=TRUE)
             IF (hoozer.creditDays>0) AND (hoozer.creditStartDate=0) THEN hoozer.creditStartDate:=getSystemDate()
 
             aePuts('[17;2HSaving Account...')
+            changes:=FALSE
 
             formatLongDate(getSystemDate(),currdatestr)
             formatLongTime(getSystemDate(),currtimestr)
@@ -21698,6 +21860,7 @@ PROC conferenceAccounting(hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
   DEF i,m,flag=0,conf,msgbase,ch,oldval
   DEF checkLock
   DEF oldBCD[8]:ARRAY OF CHAR
+  DEF changes=FALSE
 
   IF loggedOnUser<>NIL THEN masterSavePointers(loggedOnUser)
 
@@ -21869,7 +22032,9 @@ PROC conferenceAccounting(hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
         ENDIF
 
       CASE "\t"
-        flag:=1
+        IF checkChanges(changes)
+          flag:=1
+        ENDIF
     ENDSELECT
 
     IF checkLock
@@ -21877,6 +22042,7 @@ PROC conferenceAccounting(hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
         CASE "G"
           aePuts('[6;21H')
           cb.ratio:=numberInput(cb.ratio)
+          changes:=TRUE
         CASE "I"
           aePuts('[7;21H')
           cb.ratioType:=numberInput(cb.ratioType)
@@ -21884,16 +22050,19 @@ PROC conferenceAccounting(hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
             sendBELL()
             cb.ratioType:=0
           ENDIF
+          changes:=TRUE
         CASE "K"
           aePuts('[8;21H')
           oldval:=cb.upload
           cb.upload:=numberInput(cb.upload)
           IF(checkSecurity(ACS_CONFERENCE_ACCOUNTING)) THEN hoozer.uploads:=hoozer.uploads-oldval+cb.upload
+          changes:=TRUE
         CASE "M"
           aePuts('[9;21H')
           oldval:=cb.downloads
           cb.downloads:=numberInput(cb.downloads)
           IF(checkSecurity(ACS_CONFERENCE_ACCOUNTING)) THEN hoozer.downloads:=hoozer.downloads-oldval+cb.downloads
+          changes:=TRUE
         CASE "O"
           aePuts('[10;21H')
 
@@ -21907,6 +22076,7 @@ PROC conferenceAccounting(hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
             addBCD2(hoozer3.uploadBytesBCD,cb.uploadBytesBCD)
             hoozer.bytesUpload:=convertFromBCD(hoozer3.uploadBytesBCD)
           ENDIF
+          changes:=TRUE
         CASE "P"
           aePuts('[11;21H')
           FOR i:=0 TO 7
@@ -21919,15 +22089,18 @@ PROC conferenceAccounting(hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
             addBCD2(hoozer3.downloadBytesBCD,cb.downloadBytesBCD)
             hoozer.bytesDownload:=convertFromBCD(hoozer3.downloadBytesBCD)
           ENDIF
+          changes:=TRUE
         CASE "L"
           aePuts('[12;21H')
           oldval:=cb.messagesPosted
           cb.messagesPosted:=numberInput(cb.messagesPosted)
           hoozer.messagesPosted:=hoozer.messagesPosted-oldval+cb.messagesPosted
+          changes:=TRUE
         CASE "~"
           aePuts('[JSave\b\n')
 
           masterSavePointers(hoozer)
+          changes:=FALSE
 
           IF (logonType>=LOGON_TYPE_REMOTE)
             StringF(tempstr,'\tREMOTE Conference Maintenance on Account \d, Conference \s',hoozer.slotNumber,conf)
@@ -22273,13 +22446,10 @@ PROC makeFtpDirCache(confLoc:PTR TO CHAR, confnum, dirnum, dlpath:PTR TO CHAR, s
   DEF fh
   DEF lock
   DEF f_info: PTR TO fileinfoblock
-  DEF stat=0
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
-  DEF i,s,t
-  
-  WriteF('dlpath=\s\n',dlpath)
-  
+  DEF s,t
+   
   f_info:=AllocDosObject(DOS_FIB,NIL)
   IF(f_info)=NIL
     RETURN
@@ -22339,7 +22509,6 @@ PROC conferenceMaintenance()
   DEF lock,fh
   DEF num,num2,match
   DEF msgBase
-  DEF flg2
 
   conf:=1
   msgBase:=1
@@ -28374,6 +28543,8 @@ PROC processFtpLogon()
   loggedOnUserKeys.baud:=19200
   masterLoadPointers(loggedOnUser)
 
+  doLogonNotify()
+
   statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
 
   IF (StrLen(mybbsLoc)>0)
@@ -29447,12 +29618,7 @@ logonLoop:
   ENDIF
       
   IF logonType>=LOGON_TYPE_REMOTE
-    runExecuteOn('LOGON')
-    IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_LOGON')) AND (StrLen(mailOptions.sysopEmail)>0)
-      StringF(tempStr,'\s: Ami-Express logon notification',cmds.bbsName)
-      StringF(tempStr2,'This is a notification that \s from \s has logged on\n\n',loggedOnUser.name,loggedOnUser.location)
-      sendMail(tempStr,tempStr2,FALSE, NIL,0,mailOptions.sysopEmail)
-    ENDIF
+    doLogonNotify()
   ENDIF
 
   statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
@@ -29726,14 +29892,7 @@ PROC newUserAccount(userName: PTR TO CHAR)
   clearMsgPointers()
   masterSavePointers(loggedOnUser)
 
-  runExecuteOn('NEW_USER')
-  
-  IF (checkToolTypeExists(TOOLTYPE_BBSCONFIG,0,'MAIL_ON_NEW_USER')) AND (StrLen(mailOptions.sysopEmail)>0)
-    StringF(tempStr,'\s: Ami-Express new user notification',cmds.bbsName)
-    StringF(tempStr2,'This is a notification that a new user called \s from \s has registered.',loggedOnUser.name,loggedOnUser.location)
-    sendMail(tempStr,tempStr2,FALSE,msgBuf,lines,mailOptions.sysopEmail)
-  ENDIF
-
+  doNewUserNotify()
   IF displayScreen(SCREEN_JOINED) THEN doPause()
 ENDPROC stat
 
