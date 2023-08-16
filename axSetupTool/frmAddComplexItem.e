@@ -4,7 +4,7 @@ OPT PREPROCESS
 MODULE 'muimaster' , 'libraries/mui'
 MODULE 'tools/boopsi','dos/dos','libraries/asl'
 MODULE 'utility/tagitem' , 'utility/hooks', 'tools/installhook'
-MODULE '*axedit','*frmBase','*controls','*/stringlist','*tooltypes','*configobject'
+MODULE '*axedit','*frmBase','*controls','*/stringlist','*tooltypes','*configobject','*helpText'
 
 EXPORT OBJECT frmAddComplexItem OF frmBase
   lblAreaName: LONG
@@ -179,7 +179,7 @@ PROC editArea(acpName,areaName,oldArea:PTR TO area, existingAreas:PTR TO stdlist
     StringF(tempStr,'NAME.\d',i)
     readToolType(self.confConfig,tempStr,confName)
 
-    NEW control.createCheckBox(confName,'',self.app.app,self.setChangedHook,self)
+    NEW control.createCheckBox(confName,ACCESS_AREA_NAME,self.app.app,self.setChangedHook,self)
 
     self.confControls.add(control)
     control.addToGroup(self.grpAreaSettings)
@@ -281,9 +281,9 @@ PROC editAccess(acpName,accessName,oldAccessLevel:PTR TO accessLevel, existingAc
 
   FOR i:=0 TO ListLen(acsValues)-1
     IF i=0
-      NEW control.createStringInt(acsNames[i],'',self.app.app,self.setChangedHook,self)
+      NEW control.createStringInt(acsNames[i],ACCESS_NAME_MAX_PAGES,self.app.app,self.setChangedHook,self)
     ELSE
-      NEW control.createCheckBox(acsNames[i],'',self.app.app,self.setChangedHook,self)
+      NEW control.createCheckBox(acsNames[i],ACCESS_NAME,self.app.app,self.setChangedHook,self)
     ENDIF
     accessControls.add(control)
     accessControlCodes.add(acsValues[i])
@@ -402,39 +402,39 @@ PROC editFileCheck(acpName,fCheckName,oldfCheck:PTR TO fChecker,existingFchecker
 
   newfChecker:=0
 
-  NEW controlChecker.createString('Checker','',self.app.app,self.setChangedHook,self)
+  NEW controlChecker.createString('Checker',CHECKER_NAME,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlChecker)
-  NEW controlError1.createString('Error 1','',self.app.app,self.setChangedHook,self)
+  NEW controlError1.createString('Error 1',CHECKER_ERROR,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlError1)
-  NEW controlError2.createString('Error 2','',self.app.app,self.setChangedHook,self)
+  NEW controlError2.createString('Error 2',CHECKER_ERROR,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlError2)
-  NEW controlError3.createString('Error 3','',self.app.app,self.setChangedHook,self)
+  NEW controlError3.createString('Error 3',CHECKER_ERROR,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlError3)
-  NEW controlError4.createString('Error 4','',self.app.app,self.setChangedHook,self)
+  NEW controlError4.createString('Error 4',CHECKER_ERROR,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlError4)
-  NEW controlError5.createString('Error 5','',self.app.app,self.setChangedHook,self)
+  NEW controlError5.createString('Error 5',CHECKER_ERROR,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlError5)
-  NEW controlError6.createString('Error 6','',self.app.app,self.setChangedHook,self)
+  NEW controlError6.createString('Error 6',CHECKER_ERROR,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlError6)
-  NEW controlError7.createString('Error 7','',self.app.app,self.setChangedHook,self)
+  NEW controlError7.createString('Error 7',CHECKER_ERROR,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlError7)
-  NEW controlError8.createString('Error 8','',self.app.app,self.setChangedHook,self)
+  NEW controlError8.createString('Error 8',CHECKER_ERROR,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlError8)
-  NEW controlError9.createString('Error 9','',self.app.app,self.setChangedHook,self)
+  NEW controlError9.createString('Error 9',CHECKER_ERROR,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlError9)
-  NEW controlError10.createString('Error 10','',self.app.app,self.setChangedHook,self)
+  NEW controlError10.createString('Error 10',CHECKER_ERROR,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlError10)
   
-  NEW controlOptions.createString('Options','',self.app.app,self.setChangedHook,self)
+  NEW controlOptions.createString('Options',CHECKER_OPTIONS,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlOptions)
   
-  NEW controlPriority.createStringInt('Priority','',self.app.app,self.setChangedHook,self)
+  NEW controlPriority.createStringInt('Priority',CHECKER_PRIORITY,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlPriority)
   
-  NEW controlScript.createString('Script','',self.app.app,self.setChangedHook,self)
+  NEW controlScript.createString('Script',CHECKER_SCRIPT,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlScript)
   
-  NEW controlStack.createStringInt('Stack','',self.app.app,self.setChangedHook,self)
+  NEW controlStack.createStringInt('Stack',CHECKER_STACK,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlStack)
 
   FOR i:=0 TO fCheckControls.count()-1
@@ -561,19 +561,19 @@ PROC editProtocol(acpName,protocolName,oldProtocol:PTR TO protocol,existingProto
 
   newProtocol:=0
 
-  NEW controlOptions.createString('Options','',self.app.app,self.setChangedHook,self)
+  NEW controlOptions.createString('Options',PROTOCOL_OPTIONS,self.app.app,self.setChangedHook,self)
   protocolControls.add(controlOptions)
-  NEW controlRxWindow.createStringInt('Hydra Rx Window','',self.app.app,self.setChangedHook,self)
+  NEW controlRxWindow.createStringInt('Hydra Rx Window',HYDRA_RX_WINDOW,self.app.app,self.setChangedHook,self)
   protocolControls.add(controlRxWindow)
-  NEW controlTxWindow.createStringInt('Hydra Tx Window','',self.app.app,self.setChangedHook,self)
+  NEW controlTxWindow.createStringInt('Hydra Tx Window',HYDRA_TX_WINDOW,self.app.app,self.setChangedHook,self)
   protocolControls.add(controlTxWindow)
-  NEW controlHttpHost.createString('Http Host','',self.app.app,self.setChangedHook,self)
+  NEW controlHttpHost.createString('Http Host',HTTP_HOSTNAME,self.app.app,self.setChangedHook,self)
   protocolControls.add(controlHttpHost)
-  NEW controlHttpTemp.createDirSelect('Http TempDir','',self.app.app,self.setChangedHook,self)
+  NEW controlHttpTemp.createDirSelect('Http TempDir',HTTP_TEMPDIR,self.app.app,self.setChangedHook,self)
   protocolControls.add(controlHttpTemp)
-  NEW controlFtpHost.createString('Ftp Host','',self.app.app,self.setChangedHook,self)
+  NEW controlFtpHost.createString('Ftp Host',FTP_HOSTNAME,self.app.app,self.setChangedHook,self)
   protocolControls.add(controlFtpHost)
-  NEW controlFtpAuth.createCheckBox('Ftp Authentication','',self.app.app,self.setChangedHook,self)
+  NEW controlFtpAuth.createCheckBox('Ftp Authentication',FTP_AUTH,self.app.app,self.setChangedHook,self)
   protocolControls.add(controlFtpAuth)
   
   FOR i:=0 TO protocolControls.count()-1
@@ -703,44 +703,44 @@ PROC editCommand(acpName,commandName,commandFolder,oldCommand:PTR TO command,exi
 
   installhook( self.setChangedHook, {setChangedFlag})    
 
-  NEW controlName.createString('Name','',self.app.app,self.setChangedHook,self)
+  NEW controlName.createString('Name',COMMAND_NAME,self.app.app,self.setChangedHook,self)
   commandControls.add(controlName)
-  NEW controlLocation.createString('Location','',self.app.app,self.setChangedHook,self)
+  NEW controlLocation.createString('Location',COMMAND_LOCATION,self.app.app,self.setChangedHook,self)
   commandControls.add(controlLocation)
-  NEW controlAccess.createStringInt('Access','',self.app.app,self.setChangedHook,self)
+  NEW controlAccess.createStringInt('Access',COMMAND_ACCESS,self.app.app,self.setChangedHook,self)
   commandControls.add(controlAccess)
-  NEW controlInternal.createString('Internal','',self.app.app,self.setChangedHook,self)
+  NEW controlInternal.createString('Internal',COMMAND_INTERNAL,self.app.app,self.setChangedHook,self)
   commandControls.add(controlInternal)
-  NEW controlMimicVer.createString('Mimic Version','',self.app.app,self.setChangedHook,self)
+  NEW controlMimicVer.createString('Mimic Version',COMMAND_MIMIC_VER,self.app.app,self.setChangedHook,self)
   commandControls.add(controlMimicVer)
-  NEW controlPassword.createString('Password','',self.app.app,self.setChangedHook,self)
+  NEW controlPassword.createString('Password',COMMAND_PASSWORD,self.app.app,self.setChangedHook,self)
   commandControls.add(controlPassword)
-  NEW controlPassParams.createCycle('Pass Params','',['N/A','No execute','Swap and retain','Swap, retain and redo','Bypass BBSCMD',0],self.app.app,self.setChangedHook,self)
+  NEW controlPassParams.createCycle('Pass Params',COMMAND_PASS_PARAMS,['N/A','No execute','Swap and retain','Swap, retain and redo','Bypass BBSCMD',0],self.app.app,self.setChangedHook,self)
   commandControls.add(controlPassParams)
-  NEW controlPriority.createStringInt('Priority','',self.app.app,self.setChangedHook,self)
+  NEW controlPriority.createStringInt('Priority',COMMAND_PRIORITY,self.app.app,self.setChangedHook,self)
   commandControls.add(controlPriority)
-  NEW controlStack.createStringInt('Stack','',self.app.app,self.setChangedHook,self)
+  NEW controlStack.createStringInt('Stack',COMMAND_STACK,self.app.app,self.setChangedHook,self)
   commandControls.add(controlStack)
-  NEW controlType.createCycle('Type','',typeList,self.app.app,self.setChangedHook,self)
+  NEW controlType.createCycle('Type',COMMAND_TYPE,typeList,self.app.app,self.setChangedHook,self)
   commandControls.add(controlType)
-  NEW controlBanner.createString('Banner','',self.app.app,self.setChangedHook,self)
+  NEW controlBanner.createString('Banner',COMMAND_BANNER,self.app.app,self.setChangedHook,self)
   commandControls.add(controlBanner)
 
-  NEW controlResident.createCheckBox('Resident','',self.app.app,self.setChangedHook,self)
+  NEW controlResident.createCheckBox('Resident',COMMAND_RESIDENT,self.app.app,self.setChangedHook,self)
   commandControls.add(controlResident)
-  NEW controlQuickMode.createCheckBox('Quick Mode','',self.app.app,self.setChangedHook,self)
+  NEW controlQuickMode.createCheckBox('Quick Mode',COMMAND_QUICK_MODE,self.app.app,self.setChangedHook,self)
   commandControls.add(controlQuickMode)
-  NEW controlTrapon.createCheckBox('Trap On','',self.app.app,self.setChangedHook,self)
+  NEW controlTrapon.createCheckBox('Trap On',COMMAND_TRAP_ON,self.app.app,self.setChangedHook,self)
   commandControls.add(controlTrapon)
-  NEW controlExpertMode.createCheckBox('Expert mode','',self.app.app,self.setChangedHook,self)
+  NEW controlExpertMode.createCheckBox('Expert mode',COMMAND_EXPERT_MODE,self.app.app,self.setChangedHook,self)
   commandControls.add(controlExpertMode)
-  NEW controlDoorSilent.createCheckBox('Silent','',self.app.app,self.setChangedHook,self)
+  NEW controlDoorSilent.createCheckBox('Silent',COMMAND_SILENT,self.app.app,self.setChangedHook,self)
   commandControls.add(controlDoorSilent)
-  NEW controlLogInputs.createCheckBox('Log Inputs','',self.app.app,self.setChangedHook,self)
+  NEW controlLogInputs.createCheckBox('Log Inputs',COMMAND_LOG_INPUTS,self.app.app,self.setChangedHook,self)
   commandControls.add(controlLogInputs)
-  NEW controlScriptCheck.createCheckBox('Script Check','',self.app.app,self.setChangedHook,self)
+  NEW controlScriptCheck.createCheckBox('Script Check',COMMAND_SCRIPT_CHECK,self.app.app,self.setChangedHook,self)
   commandControls.add(controlScriptCheck)
-  NEW controlMultiNode.createCheckBox('Multinode','',self.app.app,self.setChangedHook,self)
+  NEW controlMultiNode.createCheckBox('Multinode',COMMAND_MULTINODE,self.app.app,self.setChangedHook,self)
   commandControls.add(controlMultiNode)
 
   FOR i:=0 TO commandControls.count()-1
@@ -873,15 +873,15 @@ PROC editMsgbase(acpName,msgbaseName,oldMsgbase:PTR TO msgbase) OF frmAddComplex
 
   newMsgbase:=0
 
-  NEW controlMsgbaseLocation.createDirSelect('Location','',self.app.app,self.setChangedHook,self)
+  NEW controlMsgbaseLocation.createDirSelect('Location',MSGBASE_LOCATION,self.app.app,self.setChangedHook,self)
   msgbaseControls.add(controlMsgbaseLocation)
-  NEW controlExtSend.createCheckBox('Send External','',self.app.app,self.setChangedHook,self)
+  NEW controlExtSend.createCheckBox('Send External',MSGBASE_SEND_EXTERNAL,self.app.app,self.setChangedHook,self)
   msgbaseControls.add(controlExtSend)
-  NEW controlUserNames.createCheckBox('Uses Usernames','',self.app.app,self.setChangedHook,self)
+  NEW controlUserNames.createCheckBox('Uses Usernames',MSGBASE_USES_USERNAMES,self.app.app,self.setChangedHook,self)
   msgbaseControls.add(controlUserNames)
-  NEW controlRealNames.createCheckBox('Uses real names','',self.app.app,self.setChangedHook,self)
+  NEW controlRealNames.createCheckBox('Uses real names',MSGBASE_USES_REALNAMES,self.app.app,self.setChangedHook,self)
   msgbaseControls.add(controlRealNames)
-  NEW controlInternetNames.createCheckBox('Uses internet names','',self.app.app,self.setChangedHook,self)
+  NEW controlInternetNames.createCheckBox('Uses internet names',MSGBASE_USES_INETNAMES,self.app.app,self.setChangedHook,self)
   msgbaseControls.add(controlInternetNames)
 
   FOR i:=0 TO msgbaseControls.count()-1

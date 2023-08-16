@@ -5,7 +5,7 @@ OPT PREPROCESS
 MODULE 'muimaster' , 'libraries/mui','dos/dos','dos/dostags','dos/dosextens'
 MODULE 'tools/boopsi','workbench/workbench','icon','intuition/classusr'
 MODULE 'utility/tagitem','utility/hooks','exec/lists','tools/installhook'
-MODULE '*axedit','*frmBase','*tooltypes','*controls','*miscfuncs'
+MODULE '*axedit','*frmBase','*tooltypes','*controls','*miscfuncs','*helpText'
 
 OBJECT timeItem
   baudStr:PTR TO CHAR
@@ -349,228 +349,226 @@ ENDPROC
 PROC addControls() OF frmNodeEdit
   DEF control: PTR TO control
 
-  NEW control.createStringInt('Node Priority','intPriority',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('Node Priority',NODE_PRIORITY,self.app.app,self.setChangedHook,self)
   self.intPriority:=control
-  NEW control.createString('bExpress file','strNodeStart',self.app.app,self.setChangedHook,self)
+  NEW control.createString('bExpress file',NODE_EXPRESS_FILE,self.app.app,self.setChangedHook,self)
   self.strNodeStart:=control
-  NEW control.createString('System Password','strSystemPassword',self.app.app,self.setChangedHook,self)
+  NEW control.createString('System Password',NODE_SYSTEM_PASSWORD,self.app.app,self.setChangedHook,self)
   self.strSystemPassword:=control
-  NEW control.createString('System Password Prompt','strSystemPasswordPrompt',self.app.app,self.setChangedHook,self)
+  NEW control.createString('System Password Prompt',NODE_SYSTEM_PASSWORD_PROMPT,self.app.app,self.setChangedHook,self)
   self.strSystemPasswordPrompt:=control
-  NEW control.createString('New User Password','strNewuserPassword',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('New User Password',NODE_NEW_USER_PASSWORD,self.app.app,self.setChangedHook,self) 
   self.strNewuserPassword:=control
-  NEW control.createString('Name Prompt','strNamePrompt',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Name Prompt',NODE_NAME_PROMPT,self.app.app,self.setChangedHook,self) 
   self.strNamePrompt:=control
-  NEW control.createString('Name Prompt2','strNamePrompt2',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Name Prompt2',NODE_NAME_PROMPT2,self.app.app,self.setChangedHook,self) 
   self.strNamePrompt2:=control
-  NEW control.createString('Password Prompt','strPasswordPrompt',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Password Prompt',NODE_PASSWORD_PROMPT,self.app.app,self.setChangedHook,self) 
   self.strPasswordPrompt:=control
-  NEW control.createString('Password Prompt','strPasswordPrompt',self.app.app,self.setChangedHook,self) 
-  self.strPasswordPrompt:=control
-  NEW control.createDirSelect('Screens Path','paScreens',self.app.app,self.setChangedHook,self) 
+  NEW control.createDirSelect('Screens Path',NODE_SCREENS_PATH,self.app.app,self.setChangedHook,self) 
   self.paScreens:=control
-  NEW control.createStringInt('Auto Validate Preset','intAutoValPreset',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('Auto Validate Preset',NODE_AUTO_VAL_PRESET,self.app.app,self.setChangedHook,self) 
   self.intAutoValPreset:=control
-  NEW control.createStringInt('Auto Validate Delay','intAutoValDelay',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('Auto Validate Delay',NODE_AUTO_VAL_DELAY,self.app.app,self.setChangedHook,self) 
   self.intAutoValDelay:=control
-  NEW control.createString('Auto Validate Password','strAutoValPassword',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Auto Validate Password',NODE_AUTO_VAL_PASSWORD,self.app.app,self.setChangedHook,self) 
   self.strAutoValPassword:=control
-  NEW control.createStringInt('FTP Port','intFtpPort',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('FTP Port',NODE_FTP_PORT,self.app.app,self.setChangedHook,self) 
   self.intFtpPort:=control
-  NEW control.createStringInt('FTP Data Port','intFtpDataPort',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('FTP Data Port',NODE_FTP_DATA_PORT,self.app.app,self.setChangedHook,self) 
   self.intFtpDataPort:=control
-  NEW control.createStringInt('HTTP Port','intHttpPort',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('HTTP Port',NODE_HTTP_PORT,self.app.app,self.setChangedHook,self) 
   self.intHttpPort:=control
-  NEW control.createCycle('UL Credit','intKeepUlCredit',['Default','Grant additional time',0],self.app.app,self.setChangedHook,self) 
+  NEW control.createCycle('UL Credit',NODE_KEEP_UL_CREDIT,['Default','Grant additional time',0],self.app.app,self.setChangedHook,self) 
   self.intKeepUlCredit:=control
-  NEW control.createStringInt('Max Message Length','intMaxMsgLen',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('Max Message Length',NODE_MAX_MSG_LEN,self.app.app,self.setChangedHook,self) 
   self.intMaxMsgLen:=control
-  NEW control.createStringInt('Max Message Queue','intMaxMsgQueue',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('Max Message Queue',NODE_MAX_MSG_QUEUE,self.app.app,self.setChangedHook,self) 
   self.intMaxMsgQueue:=control
-  NEW control.createDirSelect('Playpen Path','paPlaypen',self.app.app,self.setChangedHook,self) 
+  NEW control.createDirSelect('Playpen Path',NODE_PLAYPEN_PATH,self.app.app,self.setChangedHook,self) 
   self.paPlaypen:=control
-  NEW control.createStringInt('Ring Count','intRingCount',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('Ring Count',NODE_RING_COUNT,self.app.app,self.setChangedHook,self) 
   self.intRingCount:=control
-  NEW control.createString('Remote Password','strRemotePassword',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Remote Password',NODE_REMOTE_PASSWORD,self.app.app,self.setChangedHook,self) 
   self.strRemotePassword:=control
-  NEW control.createStringInt('Sysop Chat Colour','intSysopChatColour',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('Sysop Chat Colour',NODE_SYSOP_CHAT_COLOUR,self.app.app,self.setChangedHook,self) 
   self.intSysopChatColour:=control
-  NEW control.createStringInt('User Chat Colour','intUserChatColour',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('User Chat Colour',NODE_USER_CHAT_COLOUR,self.app.app,self.setChangedHook,self) 
   self.intUserChatColour:=control
-  NEW control.createFileSelect('User Data File','fnUserDataName',self.app.app,self.setChangedHook,self) 
+  NEW control.createFileSelect('User Data File',NODE_USER_DATA_FILE,self.app.app,self.setChangedHook,self) 
   self.fnUserDataName:=control
-  NEW control.createFileSelect('User Misc file','fnUserMiscName',self.app.app,self.setChangedHook,self) 
+  NEW control.createFileSelect('User Misc file',NODE_USER_MISC_FILE,self.app.app,self.setChangedHook,self) 
   self.fnUserMiscName:=control
-  NEW control.createFileSelect('User Keys File','fnUserKeysName',self.app.app,self.setChangedHook,self) 
+  NEW control.createFileSelect('User Keys File',NODE_USER_KEYS_FILE,self.app.app,self.setChangedHook,self) 
   self.fnUserKeysName:=control
-  NEW control.createDirSelect('Local Upload Path','paLocalUlPath',self.app.app,self.setChangedHook,self) 
+  NEW control.createDirSelect('Local Upload Path',NODE_LOCAL_UPLOAD_PATH,self.app.app,self.setChangedHook,self) 
   self.paLocalUlPath:=control
-  NEW control.createStringInt('Timeout override','intOverrideTimeout',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('Timeout override',NODE_OVERRIDE_TIMEOUT,self.app.app,self.setChangedHook,self) 
   self.intOverrideTimeout:=control
-  NEW control.createString('Force Ansi','strForceAnsi',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Force Ansi',NODE_FORCE_ANSI,self.app.app,self.setChangedHook,self) 
   self.strForceAnsi:=control
-  NEW control.createStringInt('BG Checker Stack','intBGFilecheckStack',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('BG Checker Stack',NODE_BG_FILECHECK_STACK,self.app.app,self.setChangedHook,self) 
   self.intBGFilecheckStack:=control
-  NEW control.createString('Console Input Device','strConInputDev',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Console Input Device',NODE_CON_IN_DEVICE,self.app.app,self.setChangedHook,self) 
   self.strConInputDev:=control
-  NEW control.createString('Console Output Device','strConOutputDev',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Console Output Device',NODE_CON_OUT_DEVICE,self.app.app,self.setChangedHook,self) 
   self.strConOutputDev:=control
-  NEW control.createString('Screen Pens','strScreenPens',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Screen Pens',NODE_SCREEN_PENS,self.app.app,self.setChangedHook,self) 
   self.strScreenPens:=control
-  NEW control.createString('Conf DB','strConfDb',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Conf DB',NODE_CONF_DB_FILE,self.app.app,self.setChangedHook,self) 
   self.strConfDb:=control
-  NEW control.createFileSelect('Files Not Allowed','fnFilesNotAllowed',self.app.app,self.setChangedHook,self) 
+  NEW control.createFileSelect('Files Not Allowed',NODE_NOT_ALLOWED_FILE,self.app.app,self.setChangedHook,self) 
   self.fnFilesNotAllowed:=control
-  NEW control.createString('First Command','strFirstCommand',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('First Command',NODE_FIRST_COMMAND,self.app.app,self.setChangedHook,self) 
   self.strFirstCommand:=control
-  NEW control.createStringInt('Serial Cache Size','intSerialCacheSize',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('Serial Cache Size',NODE_SERIAL_CACHE_SIZE,self.app.app,self.setChangedHook,self) 
   self.intSerialCacheSize:=control
   
-  NEW control.createCheckBox('Callers Log','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Callers Log',NODE_CALLERSLOG,self.app.app,self.setChangedHook,self)
   self.boolCallersLog:=control
 
-  NEW control.createCheckBox('Capitalise Filenames','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Capitalise Filenames',NODE_CAPS_FILENAMES,self.app.app,self.setChangedHook,self)
   self.boolCapitalFilenames:=control
   
-  NEW control.createCheckBox('Def Screens','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Def Screens',NODE_DEF_SCREENS,self.app.app,self.setChangedHook,self)
   self.boolDefScreens:=control
   
-  NEW control.createCheckBox('Debug Logs','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Debug Logs',NODE_DEBUG_LOGS,self.app.app,self.setChangedHook,self)
   self.boolDebugLog:=control
 
-  NEW control.createCheckBox('Door Logs','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Door Logs',NODE_DOOR_LOGS,self.app.app,self.setChangedHook,self)
   self.boolDoorLog:=control
-  NEW control.createCheckBox('Startup Logs','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Startup Logs',NODE_STARTUP_LOGS,self.app.app,self.setChangedHook,self)
   self.boolStartLog:=control
-  NEW control.createCheckBox('UL/DL Logs','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('UL/DL Logs',NODE_UD_LOGS,self.app.app,self.setChangedHook,self)
   self.boolUDLog:=control
-  NEW control.createCheckBox('Chat on','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Chat on',NO_CHAT_ON,self.app.app,self.setChangedHook,self)
   self.boolChatOn:=control
-  NEW control.createCheckBox('No Quick Logons','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('No Quick Logons',NODE_NO_QUICK_LOGON,self.app.app,self.setChangedHook,self)
   self.boolDisableQuickLogon:=control
-  NEW control.createCheckBox('Node Idle','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Node Idle',NODE_IDLE,self.app.app,self.setChangedHook,self)
   self.boolIdleNode:=control
-  NEW control.createCheckBox('Prompt For Mailscan','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Prompt For Mailscan',NODE_MSCAN_PROMPT,self.app.app,self.setChangedHook,self)
   self.boolMailscanPrompt:=control
-  NEW control.createCheckBox('Disable Timeout','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Disable Timeout',NODE_NO_TIMEOUT,self.app.app,self.setChangedHook,self)
   self.boolNoTimeout:=control
-  NEW control.createCheckBox('Quiet','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Quiet',NODE_QUIET,self.app.app,self.setChangedHook,self)
   self.boolQuietNode:=control
-  NEW control.createCheckBox('Stealth','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Stealth',NODE_STEALTH,self.app.app,self.setChangedHook,self)
   self.boolStealthNode:=control
-  NEW control.createCheckBox('Show Password Fails','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Show Password Fails',NODE_SHOW_PWFAILS,self.app.app,self.setChangedHook,self)
   self.boolShowPwFail:=control
-  NEW control.createCheckBox('Sentby Files','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Sentby Files',NODE_SENTBY_FILES,self.app.app,self.setChangedHook,self)
   self.boolSentByFiles:=control
-  NEW control.createCheckBox('Enable Native Telnet','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Enable Native Telnet',NODE_TELNET,self.app.app,self.setChangedHook,self)
   self.boolTelnet:=control
-  NEW control.createCheckBox('Enable Ftp','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Enable Ftp',NODE_FTP,self.app.app,self.setChangedHook,self)
   self.boolFtp:=control
-  NEW control.createCheckBox('Enable TelnetD','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Enable TelnetD',NODE_TELNETD,self.app.app,self.setChangedHook,self)
   self.boolTelnetD:=control
-  NEW control.createCheckBox('Enable TelserD','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Enable TelserD',NODE_TELSERD,self.app.app,self.setChangedHook,self)
   self.boolTelserD:=control
-  NEW control.createCheckBox('Usernumber Logon','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Usernumber Logon',NODE_USERNUM_LOGON,self.app.app,self.setChangedHook,self)
   self.boolUserNumLogin:=control
-  NEW control.createCheckBox('View Passwords','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('View Passwords',NODE_VIEW_PWDS,self.app.app,self.setChangedHook,self)
   self.boolViewPassword:=control
-  NEW control.createCheckBox('Log IP/Hostnames','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Log IP/Hostnames',NODE_LOG_IP,self.app.app,self.setChangedHook,self)
   self.boolLogHost:=control
-  NEW control.createCheckBox('Log Inputs','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Log Inputs',NODE_LOG_INPUTS,self.app.app,self.setChangedHook,self)
   self.boolLogInputs:=control
-  NEW control.createCheckBox('No node commodity','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('No node commodity',NODE_DISABLE_COMMODITY,self.app.app,self.setChangedHook,self)
   self.boolNoCx:=control
-  NEW control.createCheckBox('Central Answers','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Central Answers',NODE_CENTRAL_ANSWERS,self.app.app,self.setChangedHook,self)
   self.boolCentralAnswers:=control
-  NEW control.createCheckBox('Disable IEMSI','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Disable IEMSI',NODE_DISABLE_IEMSI,self.app.app,self.setChangedHook,self)
   self.boolDisableIemsi:=control
-  NEW control.createCheckBox('No MCI Messages','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('No MCI Messages',NODE_NO_MCI_MSG,self.app.app,self.setChangedHook,self)
   self.boolNoMciMsg:=control
-  NEW control.createCheckBox('No wildcards','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('No wildcards',NODE_NO_WILDCARDS,self.app.app,self.setChangedHook,self)
   self.boolNoWildcard:=control
-  NEW control.createCheckBox('Own partuploads','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Own partuploads',NODE_OWN_PARTUPLOADS,self.app.app,self.setChangedHook,self)
   self.boolOwnPartFiles:=control
-  NEW control.createCheckBox('Phone Check','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Phone Check',NODE_PHONE_CHECK,self.app.app,self.setChangedHook,self)
   self.boolPhoneCheck:=control
-  NEW control.createCheckBox('RAM Work','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('RAM Work',NODE_RAM_WORK,self.app.app,self.setChangedHook,self)
   self.boolRamWork:=control
-  NEW control.createCheckBox('Console Debug','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Console Debug',NODE_CONSOLE_DEBUG,self.app.app,self.setChangedHook,self)
   self.boolConsoleDebug:=control
-  NEW control.createCheckBox('No Emails','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('No Emails',NODE_NO_EMAILS,self.app.app,self.setChangedHook,self)
   self.boolNoEmails:=control
-  NEW control.createCheckBox('OwnDevUnit','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('OwnDevUnit',NODE_OWNDEVUNIT,self.app.app,self.setChangedHook,self)
   self.boolOwnDevunit:=control
-  NEW control.createCheckBox('Show Cache Stats','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Show Cache Stats',NODE_SHOW_CACHE_STATS,self.app.app,self.setChangedHook,self)
   self.boolShowCacheStats:=control
-  NEW control.createCheckBox('Trapdoor','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Trapdoor',NODE_TRAPDOOR,self.app.app,self.setChangedHook,self)
   self.boolTrapDoor:=control
-  NEW control.createCheckBox('Trap Serial','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Trap Serial',NODE_TRAP_SERIAL,self.app.app,self.setChangedHook,self)
   self.boolTrapSerial:=control
-  NEW control.createCheckBox('No Rad Boogie','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('No Rad Boogie',NODE_NORADBOOGIE,self.app.app,self.setChangedHook,self)
   self.boolNoRadBoogie:=control
 
   //serial device settings
-  NEW control.createString('Serial Device','strSerialDevice',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Serial Device',NODE_SERIAL_DEVICE,self.app.app,self.setChangedHook,self) 
   self.strSerialDevice:=control
-  NEW control.createStringInt('Serial Device Unit','intSerialUnit',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('Serial Device Unit',NODE_SERIAL_DEV_UNIT,self.app.app,self.setChangedHook,self) 
   self.intSerialUnit:=control
-  NEW control.createStringInt('Serial Baud','intSerialBaud',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('Serial Baud',NODE_SERIAL_BAUD,self.app.app,self.setChangedHook,self) 
   self.intSerialBaud:=control
-  NEW control.createCheckBox('2232Patch','boolA2232Patch',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('2232Patch',NODE_A2232PATCH,self.app.app,self.setChangedHook,self)
   self.boolA2232Patch:=control
-  NEW control.createCheckBox('No Purge Line','boolNoPurgeLine',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('No Purge Line',NODE_NO_PURGE_LINE,self.app.app,self.setChangedHook,self)
   self.boolNoPurgeLine:=control
-  NEW control.createCheckBox('Repurge','boolRepurge',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Repurge',NODE_REPURGE,self.app.app,self.setChangedHook,self)
   self.boolRepurge:=control
-  NEW control.createCheckBox('Logoff Reset','boolLogoffReset',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Logoff Reset',NODE_LOGOFF_RESET,self.app.app,self.setChangedHook,self)
   self.boolLogoffReset:=control
-  NEW control.createCheckBox('True Reset','boolTrueReset',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('True Reset',NODE_TRUE_RESET,self.app.app,self.setChangedHook,self)
   self.boolTrueReset:=control
   
   //modem settings
-  NEW control.createString('Modem Init String','strModemInit',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Modem Init String',NODE_MODEM_INIT,self.app.app,self.setChangedHook,self) 
   self.strModemInit:=control
-  NEW control.createString('Modem Reset String','strModemReset',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Modem Reset String',NODE_MODEM_RESET,self.app.app,self.setChangedHook,self) 
   self.strModemReset:=control
-  NEW control.createString('Modem Ring String','strModemRing',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Modem Ring String',NODE_MODEM_RING,self.app.app,self.setChangedHook,self) 
   self.strModemRing:=control
-  NEW control.createString('Modem Answer String','strModemAnswer',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Modem Answer String',NODE_MODEM_ANSWER,self.app.app,self.setChangedHook,self) 
   self.strModemAnswer:=control
-  NEW control.createString('Modem Offhook String','strModemOffhook',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Modem Offhook String',NODE_MODEM_OFFHOOK,self.app.app,self.setChangedHook,self) 
   self.strModemOffhook:=control
 
-  NEW control.createString('NRAMS1','strNRAMS1',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('NRAMS1',NODE_MODEM_NRAMS,self.app.app,self.setChangedHook,self) 
   self.strNRAMS1:=control
-  NEW control.createString('NRAMS2','strNRAMS2',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('NRAMS2',NODE_MODEM_NRAMS,self.app.app,self.setChangedHook,self) 
   self.strNRAMS2:=control
-  NEW control.createString('NRAMS3','strNRAMS3',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('NRAMS3',NODE_MODEM_NRAMS,self.app.app,self.setChangedHook,self) 
   self.strNRAMS3:=control
-  NEW control.createString('NRAMS4','strNRAMS4',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('NRAMS4',NODE_MODEM_NRAMS,self.app.app,self.setChangedHook,self) 
   self.strNRAMS4:=control
 
 
   //window settings
-  NEW control.createCycle('Number of Colours','intNumColours',['2','4','8','16',0],self.app.app,self.setChangedHook,self) 
+  NEW control.createCycle('Number of Colours',NODE_WIN_COLOURS,['2','4','8','16',0],self.app.app,self.setChangedHook,self) 
   self.intNumColours:=control
-  NEW control.createStringInt('Left Edge','intWinLeftEdge',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('Left Edge',NODE_WIN_LEFT,self.app.app,self.setChangedHook,self) 
   self.intWinLeftEdge:=control
-  NEW control.createStringInt('Top Edge','intWinTopEdge',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('Top Edge',NODE_WIN_TOP,self.app.app,self.setChangedHook,self) 
   self.intWinTopEdge:=control
-  NEW control.createStringInt('Width','intWinWidth',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('Width',NODE_WIN_WIDTH,self.app.app,self.setChangedHook,self) 
   self.intWinWidth:=control
-  NEW control.createStringInt('Height','intWinHeight',self.app.app,self.setChangedHook,self) 
+  NEW control.createStringInt('Height',NODE_WIN_HEIGHT,self.app.app,self.setChangedHook,self) 
   self.intWinHeight:=control
-  NEW control.createString('Pubscreen','strWinPubScreen',self.app.app,self.setChangedHook,self) 
+  NEW control.createString('Pubscreen',NODE_WIN_PUBSCREEN,self.app.app,self.setChangedHook,self) 
   self.strWinPubScreen:=control
-  NEW control.createCheckBox('Iconified','boolWinIconified',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Iconified',NODE_WIN_ICONIFIED,self.app.app,self.setChangedHook,self)
   self.boolWinIconified:=control
-  NEW control.createCheckBox('Interlace','boolWinInterlace',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Interlace',NODE_WIN_INTERLACE,self.app.app,self.setChangedHook,self)
   self.boolWinInterlace:=control
-  NEW control.createCheckBox('Status bar','boolWinStatusBar',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Status bar',NODE_WIN_STATUSBAR,self.app.app,self.setChangedHook,self)
   self.boolWinStatusBar:=control
-  NEW control.createCheckBox('Bring To Front','boolWinToFront',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Bring To Front',NODE_WIN_TO_FRONT,self.app.app,self.setChangedHook,self)
   self.boolWinToFront:=control
-  NEW control.createModeSelect('DisplayId','strDisplayId',self.app.app,self.setChangedHook,self)
+  NEW control.createModeSelect('DisplayId',NODE_DISPLAY_ID,self.app.app,self.setChangedHook,self)
   self.strDisplayId:=control
 
   self.controlList1:= [self.intPriority,self.strNodeStart,self.strSystemPassword,self.strSystemPasswordPrompt,self.strNewuserPassword,

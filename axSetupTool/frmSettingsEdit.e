@@ -4,7 +4,7 @@ OPT PREPROCESS
 MODULE 'muimaster' , 'libraries/mui'
 MODULE 'tools/boopsi','workbench/workbench','icon','intuition/classusr'
 MODULE 'utility/tagitem','utility/hooks','tools/installhook','exec/lists'
-MODULE '*axedit','*frmBase','*tooltypes','*controls','*miscfuncs','*/stringlist'
+MODULE '*axedit','*frmBase','*tooltypes','*controls','*miscfuncs','*/stringlist','*helpText'
 
 
 EXPORT OBJECT frmSettingsEdit OF frmBase
@@ -166,128 +166,128 @@ PROC addSystemControls() OF frmSettingsEdit
   DEF languageList:PTR TO LONG
   DEF i
 
-  NEW control.createString('bBBS Name','strBBSName',self.app.app,self.setChangedHook,self)
+  NEW control.createString('bBBS Name',SYS_BBS_NAME,self.app.app,self.setChangedHook,self)
   self.strBBSName:=control
 
-  NEW control.createString('bBBS Location','strBBSLocation',self.app.app,self.setChangedHook,self)
+  NEW control.createString('bBBS Location',SYS_BBS_LOCATION,self.app.app,self.setChangedHook,self)
   self.strBBSLocation:=control
   
-  NEW control.createString('bSysop Name','strSysopName',self.app.app,self.setChangedHook,self)
+  NEW control.createString('bSysop Name',SYS_SYSOP_NAME,self.app.app,self.setChangedHook,self)
   self.strSysopName:=control
 
-  NEW control.createString('Default Menu','strDefaultMenu',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Default Menu',SYS_DEFAULT_MENU,self.app.app,self.setChangedHook,self)
   self.strDefaultMenu:=control
 
-  NEW control.createDirSelect('Local Upload Path','paLocalULPath',self.app.app,self.setChangedHook,self)
+  NEW control.createDirSelect('Local Upload Path',SYS_LOCAL_UPLOAD_PATH,self.app.app,self.setChangedHook,self)
   self.paLocalULPath:=control
 
-  NEW control.createStringInt('Auto Validate Preset','intAutoValPreset',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('Auto Validate Preset',SYS_AUTO_VAL_PRESET,self.app.app,self.setChangedHook,self)
   self.intAutoValPreset:=control
 
-  NEW control.createStringInt('Auto Validate Delay','intAutoValDelay',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('Auto Validate Delay',SYS_AUTO_VAL_DELAY,self.app.app,self.setChangedHook,self)
   self.intAutoValDelay:=control
 
-  NEW control.createString('Auto Validate Password','strAutoValPassword',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Auto Validate Password',SYS_AUTO_VAL_PASSWORD,self.app.app,self.setChangedHook,self)
   self.strAutoValPassword:=control
   
   self.cyLanguage:=0
   IF ListLen(self.languages)>1
-      NEW control.createCycle('Host Language','cyLanguage',self.languages,self.app.app,self.setChangedHook,self)
+      NEW control.createCycle('Host Language',SYS_LANGUAGE,self.languages,self.app.app,self.setChangedHook,self)
     self.cyLanguage:=control
   ENDIF
 
-  NEW control.createCheckBox('Credit by KB','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Credit by KB',SYS_CREDIT_BY_KB,self.app.app,self.setChangedHook,self)
   self.boolCreditByKb:=control
 
-  NEW control.createCheckBox('Long who','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Long who',SYS_LONG_WHO,self.app.app,self.setChangedHook,self)
   self.boolLongWho:=control
 
-  NEW control.createCycle('New Accounts','cyNewAccounts',['Append','Overwrite',0],self.app.app,self.setChangedHook,self)
+  NEW control.createCycle('New Accounts',SYS_NEW_ACCOUNTS,['Append','Overwrite',0],self.app.app,self.setChangedHook,self)
   self.cyNewAccounts:=control
 
-  NEW control.createCycle('Timeout Recorded as','boolTimeoutLc',['Lost Carrier','Normal Logoff',0],self.app.app,self.setChangedHook,self)
+  NEW control.createCycle('Timeout Recorded as',SYS_TIMEOUT_LC,['Lost Carrier','Normal Logoff',0],self.app.app,self.setChangedHook,self)
   self.boolTimeoutLc:=control
   
-  NEW control.createString('Registered to','strRegKey',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Registered to',SYS_REGKEY,self.app.app,self.setChangedHook,self)
   self.strRegKey:=control
   
-  NEW control.createCheckBox('Convert to MB','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Convert to MB',SYS_CONVERT_TO_MB,self.app.app,self.setChangedHook,self)
   self.boolConvertToMb:=control
 
-  NEW control.createCheckBox('Quiet Join','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Quiet Join',SYS_QUIET_JOIN,self.app.app,self.setChangedHook,self)
   self.boolQuietJoin:=control
 
-  NEW control.createCheckBox('Relative Conferences','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Relative Conferences',SYS_RELATIVE_CONFS,self.app.app,self.setChangedHook,self)
   self.boolRelativeConfs:=control
 
-  NEW control.createString('SMTP server address','strSmtpHost',self.app.app,self.setChangedHook,self)
+  NEW control.createString('SMTP server address',SYS_SMTP_SERVER,self.app.app,self.setChangedHook,self)
   self.strSmtpHost:=control
-  NEW control.createStringInt('SMTP server port','intSmtpPort',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('SMTP server port',SYS_SMTP_PORT,self.app.app,self.setChangedHook,self)
   self.intSmtpPort:=control
-  NEW control.createString('SMTP server username','strSmtpUsername',self.app.app,self.setChangedHook,self)
+  NEW control.createString('SMTP server username',SYS_SMTP_USERNAME,self.app.app,self.setChangedHook,self)
   self.strSmtpUsername:=control
-  NEW control.createString('SMTP server password','strSmtpPassword',self.app.app,self.setChangedHook,self)
+  NEW control.createString('SMTP server password',SYS_SMTP_PASSWORD,self.app.app,self.setChangedHook,self)
   self.strSmtpPassword:=control
-  NEW control.createCheckBox('Use SSL for emails','boolSmtpSSL',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Use SSL for emails',SYS_SSL_EMAILS,self.app.app,self.setChangedHook,self)
   self.boolSmtpSSL:=control
-  NEW control.createString('Sysops email address','strSysopEmail',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Sysops email address',SYS_SYSOP_EMAIL,self.app.app,self.setChangedHook,self)
   self.strSysopEmail:=control
-  NEW control.createString('BBS email address','strBbsEmail',self.app.app,self.setChangedHook,self)
+  NEW control.createString('BBS email address',SYS_BBS_EMAIL,self.app.app,self.setChangedHook,self)
   self.strBbsEmail:=control
-  NEW control.createCheckBox('Email on sysop page','boolMailOnPage',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Email on sysop page',SYS_EMAIL_ON_SYSOP_PAGE,self.app.app,self.setChangedHook,self)
   self.boolMailOnPage:=control
-  NEW control.createCheckBox('Email on comment','boolMailOnComment',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Email on comment',SYS_EMAIL_ON_COMMENT,self.app.app,self.setChangedHook,self)
   self.boolMailOnComment:=control
-  NEW control.createCheckBox('Email on logon','boolMailOnLogon',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Email on logon',SYS_EMAIL_ON_LOGON,self.app.app,self.setChangedHook,self)
   self.boolMailOnLogon:=control
-  NEW control.createCheckBox('Email on logoff','boolMailOnLogoff',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Email on logoff',SYS_EMAIL_ON_LOGOFF,self.app.app,self.setChangedHook,self)
   self.boolMailOnLogoff:=control
-  NEW control.createCheckBox('Email on new user','boolMailOnNewUser',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Email on new user',SYS_EMAIL_ON_NEW_USER,self.app.app,self.setChangedHook,self)
   self.boolMailOnNewUser:=control
-  NEW control.createCheckBox('Email on upload','boolMailOnUpload',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Email on upload',SYS_EMAIL_ON_UPLOAD,self.app.app,self.setChangedHook,self)
   self.boolMailOnUpload:=control
-  NEW control.createCheckBox('Email on password fail','boolMailOnPwdFail',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Email on password fail',SYS_EMAIL_ON_PW_FAIL,self.app.app,self.setChangedHook,self)
   self.boolMailOnPwdFail:=control
-  NEW control.createDirSelect('Language base folder','paLanguageBase',self.app.app,self.setChangedHook,self)
+  NEW control.createDirSelect('Language base folder',SYS_LANG_BASE_PATH,self.app.app,self.setChangedHook,self)
   self.paLanguageBase:=control
-  NEW control.createDirSelect('History folder','paHistory',self.app.app,self.setChangedHook,self)
+  NEW control.createDirSelect('History folder',SYS_HISTORY_PATH,self.app.app,self.setChangedHook,self)
   self.paHistory:=control
-  NEW control.createDirSelect('User notes folder','paUserNotes',self.app.app,self.setChangedHook,self)
+  NEW control.createDirSelect('User notes folder',SYS_USER_NOTES_PATH,self.app.app,self.setChangedHook,self)
   self.paUserNotes:=control
-  NEW control.createStringInt('Hold access level','intHoldAccess',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('Hold access level',SYS_HOLD_ACCESS_LEVEL,self.app.app,self.setChangedHook,self)
   self.intHoldAccess:=control
-  NEW control.createString('File Diz Cmd','strFileDizSysCmd',self.app.app,self.setChangedHook,self)
+  NEW control.createString('File Diz Cmd',SYS_FILEDIZ_CMD,self.app.app,self.setChangedHook,self)
   self.strFileDizSysCmd:=control
-  NEW control.createString('FTP host name','strFtpHost',self.app.app,self.setChangedHook,self)
+  NEW control.createString('FTP host name',SYS_FTP_HOST,self.app.app,self.setChangedHook,self)
   self.strFtpHost:=control
 
-  NEW control.createString('Execute on new user','strExecOnNewUser',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute on new user',SYS_EXEC_ON_NEW_USER,self.app.app,self.setChangedHook,self)
   self.strExecOnNewUser:=control
-  NEW control.createString('Execute async on new user','strExecAOnNewUser',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute async on new user',SYS_EXECA_ON_NEW_USER,self.app.app,self.setChangedHook,self)
   self.strExecAOnNewUser:=control
-  NEW control.createString('Execute on sysop page','strExecOnPage',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute on sysop page',SYS_EXEC_ON_SYSOP_PAGE,self.app.app,self.setChangedHook,self)
   self.strExecOnPage:=control
-  NEW control.createString('Execute async on sysop page','strExecAOnPage',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute async on sysop page',SYS_EXECA_ON_SYSOP_PAGE,self.app.app,self.setChangedHook,self)
   self.strExecAOnPage:=control
-  NEW control.createString('Execute on connect','strExecOnConnect',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute on connect',SYS_EXEC_ON_CONNECT,self.app.app,self.setChangedHook,self)
   self.strExecOnConnect:=control
-  NEW control.createString('Execute async on connect','strExecAOnConnect',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute async on connect',SYS_EXECA_ON_CONNECT,self.app.app,self.setChangedHook,self)
   self.strExecAOnConnect:=control
-  NEW control.createString('Execute on logon','strExecOnLogon',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute on logon',SYS_EXEC_ON_LOGON,self.app.app,self.setChangedHook,self)
   self.strExecOnLogon:=control
-  NEW control.createString('Execute async on logon','strExecAOnLogon',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute async on logon',SYS_EXECA_ON_LOGON,self.app.app,self.setChangedHook,self)
   self.strExecAOnLogon:=control
-  NEW control.createString('Execute on logoff','strExecOnLogoff',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute on logoff',SYS_EXEC_ON_LOGOFF,self.app.app,self.setChangedHook,self)
   self.strExecOnLogoff:=control
-  NEW control.createString('Execute async on logoff','strExecAOnLogoff',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute async on logoff',SYS_EXECA_ON_LOGOFF,self.app.app,self.setChangedHook,self)
   self.strExecAOnLogoff:=control
-  NEW control.createString('Execute on comment','strExecOnComment',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute on comment',SYS_EXEC_ON_COMMENT,self.app.app,self.setChangedHook,self)
   self.strExecOnComment:=control
-  NEW control.createString('Execute async on comment','strExecAOnComment',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute async on comment',SYS_EXECA_ON_COMMENT,self.app.app,self.setChangedHook,self)
   self.strExecAOnComment:=control
-  NEW control.createString('Execute on upload','strExecOnUpload',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute on upload',SYS_EXEC_ON_UPLOAD,self.app.app,self.setChangedHook,self)
   self.strExecOnUpload:=control
-  NEW control.createString('Execute async on upload','strExecAOnUpload',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute async on upload',SYS_EXECA_ON_UPLOAD,self.app.app,self.setChangedHook,self)
   self.strExecAOnUpload:=control
 
   self.controlList:=[self.strBBSName,self.strBBSLocation,self.strSysopName,self.strRegKey,self.cyNewAccounts,self.strDefaultMenu,
@@ -330,58 +330,58 @@ PROC addServerControls() OF frmSettingsEdit
   DEF tempStr[255]:STRING
   DEF i
 
-  NEW control.createDirSelect('bBBS Path','paBBSPath',self.app.app,self.setChangedHook,self)
+  NEW control.createDirSelect('bBBS Path',SYS_BBS_PATH,self.app.app,self.setChangedHook,self)
   self.paBBSPath:=control
 
-  NEW control.createStringInt('Stack size','intStack',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('Stack size',SYS_STACK,self.app.app,self.setChangedHook,self)
   self.intStack:=control
 
-  NEW control.createStringInt('Priority','intPriority',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('Priority',SYS_PRIORITY,self.app.app,self.setChangedHook,self)
   self.intPriority:=control
 
-  NEW control.createCheckBox('Start Iconified','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Start Iconified',SYS_START_ICONIFIED,self.app.app,self.setChangedHook,self)
   self.boolIconified:=control
 
-  NEW control.createStringInt('Iconify Left','intIconifyLeft',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('Iconify Left',SYS_ICONIFY_LEFT,self.app.app,self.setChangedHook,self)
   self.intIconifyLeft:=control
 
-  NEW control.createStringInt('Iconify Top','intIconifyTop',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('Iconify Top',SYS_ICONIFY_TOP,self.app.app,self.setChangedHook,self)
   self.intIconifyTop:=control
  
-  NEW control.createCheckBox('Do not move','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Do not move',SYS_DO_NOT_MOVE,self.app.app,self.setChangedHook,self)
   self.boolDoNotMove:=control
 
-  NEW control.createCheckBox('Multicom port','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Multicom port',SYS_MULTICOM,self.app.app,self.setChangedHook,self)
   self.boolMulticom:=control
 
-  NEW control.createCheckBox('AE Shell','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('AE Shell',SYS_AE_SHELL,self.app.app,self.setChangedHook,self)
   self.boolAEShell:=control
 
-  NEW control.createCheckBox('Disable commodity','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Disable commodity',SYS_NO_COMMODITY,self.app.app,self.setChangedHook,self)
   self.boolNoCx:=control
 
-  NEW control.createCheckBox('Don''t save state','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Don''t save state',SYS_DONT_SAVE_STATE,self.app.app,self.setChangedHook,self)
   self.boolNoSaveState:=control
 
-  NEW control.createStringInt('Telnet Port Number','intTelnetPort',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('Telnet Port Number',SYS_TELNET_PORT,self.app.app,self.setChangedHook,self)
   self.intTelnetPort:=control
 
-  NEW control.createStringInt('FTP Port Number','intFtpPort',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('FTP Port Number',SYS_FTP_PORT,self.app.app,self.setChangedHook,self)
   self.intFtpPort:=control
 
-  NEW control.createString('ACP Font','strAcpFont',self.app.app,self.setChangedHook,self)
+  NEW control.createString('ACP Font',SYS_ACP_FONT,self.app.app,self.setChangedHook,self)
   self.strAcpFont:=control
 
-  NEW control.createString('Execute on startup','strExecOnStart',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Execute on startup',SYS_EXEC_ON_STARTUP,self.app.app,self.setChangedHook,self)
   self.strExecOnStart:=control
 
-  NEW control.createStringInt('DOS check time','intDosCheckTime',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('DOS check time',SYS_DOS_CHECK_TIME,self.app.app,self.setChangedHook,self)
   self.intDosCheckTime:=control
 
-  NEW control.createStringInt('DOS ban time','intDosBanTime',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('DOS ban time',SYS_DOS_BAN_TIME,self.app.app,self.setChangedHook,self)
   self.intDosBanTime:=control
 
-  NEW control.createStringInt('DOS check trigger','intDosCheckTrigger',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('DOS check trigger',SYS_DOS_CHECK_TRIGGER,self.app.app,self.setChangedHook,self)
   self.intDosCheckTrig:=control
 
   NEW list.stdlist(self.nodeCount)
@@ -407,29 +407,29 @@ PROC addServerControls() OF frmSettingsEdit
 
   FOR i:=0 TO self.nodeCount-1
     StringF(tempStr,'Node \d Location',i)
-    NEW control.createString(tempStr,'strNodexLoc',self.app.app,self.setChangedHook,self)
+    NEW control.createString(tempStr,SYS_NODE_X_LOC,self.app.app,self.setChangedHook,self)
     self.nodeLocs.add(control)
     StringF(tempStr,'Node \d Name',i)
-    NEW control.createString(tempStr,'strNodexName',self.app.app,self.setChangedHook,self)
+    NEW control.createString(tempStr,SYS_NODE_X_NAME,self.app.app,self.setChangedHook,self)
     self.nodeNames.add(control)
     StringF(tempStr,'Node \d Sysop',i)
-    NEW control.createString(tempStr,'strNodexSysop',self.app.app,self.setChangedHook,self)
+    NEW control.createString(tempStr,SYS_NODE_X_SYSOP,self.app.app,self.setChangedHook,self)
     self.nodeSysops.add(control)
   ENDFOR
   
   FOR i:=1 TO 15
     StringF(tempStr,'Button \d Name',i)
-    NEW control.createString(tempStr,'strButtonxName',self.app.app,self.setChangedHook,self)
+    NEW control.createString(tempStr,SYS_BUTTON_NAME,self.app.app,self.setChangedHook,self)
     self.buttonNames.add(control)
     StringF(tempStr,'Button \d Command',i)
-    NEW control.createString(tempStr,'strButtonxCommand',self.app.app,self.setChangedHook,self)
+    NEW control.createString(tempStr,SYS_BUTTON_COMMAND,self.app.app,self.setChangedHook,self)
     self.buttonCommands.add(control)
 
     StringF(tempStr,'Nutton \d Name',i)
-    NEW control.createString(tempStr,'strNuttonxName',self.app.app,self.setChangedHook,self)
+    NEW control.createString(tempStr,SYS_NUTTON_NAME,self.app.app,self.setChangedHook,self)
     self.nuttonNames.add(control)
     StringF(tempStr,'Nutton \d Command',i)
-    NEW control.createString(tempStr,'strNuttonxCommand',self.app.app,self.setChangedHook,self)
+    NEW control.createString(tempStr,SYS_NUTTON_COMMAND,self.app.app,self.setChangedHook,self)
     self.nuttonCommands.add(control)
   ENDFOR
 
@@ -525,19 +525,19 @@ ENDPROC
 PROC addZoomControls() OF frmSettingsEdit
   DEF control: PTR TO control
 
-  NEW control.createString('BBS Number','strBbsNumber',self.app.app,self.setChangedHook,self)
+  NEW control.createString('BBS Number',SYS_QWK_BBS_NUMBER,self.app.app,self.setChangedHook,self)
   self.strBbsNumber:=control
-  NEW control.createString('BBS Address','strBbsAddress',self.app.app,self.setChangedHook,self)
+  NEW control.createString('BBS Address',SYS_QWK_BBS_ADDRESS,self.app.app,self.setChangedHook,self)
   self.strBbsAddress:=control
-  NEW control.createString('BBS ID','strBbsId',self.app.app,self.setChangedHook,self)
+  NEW control.createString('BBS ID',SYS_QWK_BBS_ID,self.app.app,self.setChangedHook,self)
   self.strBbsId:=control
-  NEW control.createString('QWK Zip command','strQwkZip',self.app.app,self.setChangedHook,self)
+  NEW control.createString('QWK Zip command',SYS_QWK_ZIP_COMMAND,self.app.app,self.setChangedHook,self)
   self.strQwkZip:=control
-  NEW control.createString('QWK LHA command','strQwkLha',self.app.app,self.setChangedHook,self)
+  NEW control.createString('QWK LHA command',SYS_QWK_LHA_COMMAND,self.app.app,self.setChangedHook,self)
   self.strQwkLha:=control
-  NEW control.createString('ASCII Zip command','strAscZip',self.app.app,self.setChangedHook,self)
+  NEW control.createString('ASCII Zip command',SYS_ASC_ZIP_COMMAND,self.app.app,self.setChangedHook,self)
   self.strAscZip:=control
-  NEW control.createString('ASCII LHA command','strAscLha',self.app.app,self.setChangedHook,self)
+  NEW control.createString('ASCII LHA command',SYS_ASC_LHA_COMMAND,self.app.app,self.setChangedHook,self)
   self.strAscLha:=control
 
   self.controlList:=[self.strBbsNumber,self.strBbsAddress,self.strBbsId, self.strQwkZip, self.strQwkLha, self.strAscZip, self.strAscLha]

@@ -1,4 +1,4 @@
-OPT OSVERSION = 37,STACK=60000
+OPT OSVERSION = 37,STACK=60000,LARGE
 OPT PREPROCESS
 
 /*
@@ -22,7 +22,7 @@ MODULE 'utility/tagitem'
 MODULE 'tools/boopsi'
 MODULE 'icon'
 
-MODULE '*frmMain','*axedit'
+MODULE '*frmMain','*axedit','*helpText'
 
 PROC main() HANDLE
   DEF frmMain: PTR TO frmMain
@@ -32,12 +32,20 @@ PROC main() HANDLE
 
   NEW app.create(NIL)
 
+  helpTextInitialise()
+
   NEW frmMain.create(app)
   frmMain.domain()
 
 EXCEPT DO
 
   SELECT exception
+
+    CASE "HLP"
+      SELECT exceptioninfo
+        CASE "LIST"
+          error_simple( 'error: Increase help text list size' )
+      ENDSELECT
 
     CASE "LIB"
 
@@ -88,6 +96,8 @@ EXCEPT DO
   app.dispose()
   END app
   END frmMain
+  helpTextDeinitialise()
+
 	IF iconbase		THEN CloseLibrary( iconbase )
   IF muimasterbase  THEN CloseLibrary( muimasterbase )
 ENDPROC

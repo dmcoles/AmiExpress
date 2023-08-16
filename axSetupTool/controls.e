@@ -1,6 +1,7 @@
   OPT MODULE
 
 MODULE 'muimaster','libraries/mui','tools/boopsi','intuition/classusr','utility/hooks','tools/installhook','libraries/asl'
+MODULE '*helpText'
 
 EXPORT ENUM TYPE_STRING,TYPE_INT,TYPE_CYCLE,TYPE_CHECKBOX,TYPE_DIRSELECT,TYPE_FILESELECT,TYPE_MODESELECT
 EXPORT OBJECT control
@@ -24,7 +25,10 @@ PROC makeLabel(caption,helpText) OF control
   End
 ENDPROC lbl
 
-EXPORT PROC createString(labelCaption,helpText,app,changeHook, window) OF control
+EXPORT PROC createString(labelCaption,helpTextId,app,changeHook, window) OF control
+  DEF helpText
+  
+  helpText:=getHelpText(helpTextId)
   self.hook:=0
   self.hook2:=0
   self.muiLabel:=self.makeLabel(labelCaption,helpText)
@@ -44,7 +48,10 @@ EXPORT PROC createString(labelCaption,helpText,app,changeHook, window) OF contro
   self.type:=TYPE_STRING
 ENDPROC
 
-EXPORT PROC createStringInt(labelCaption,helpText,app,changeHook, window) OF control
+EXPORT PROC createStringInt(labelCaption,helpTextId,app,changeHook, window) OF control
+  DEF helpText
+  
+  helpText:=getHelpText(helpTextId)
   self.hook:=0
   self.hook2:=0
   self.muiLabel:=self.makeLabel(labelCaption,helpText)
@@ -64,7 +71,10 @@ EXPORT PROC createStringInt(labelCaption,helpText,app,changeHook, window) OF con
   self.type:=TYPE_INT
 ENDPROC
 
-EXPORT PROC createCycle(labelCaption,helpText,values,app,changeHook, window) OF control
+EXPORT PROC createCycle(labelCaption,helpTextId,values,app,changeHook, window) OF control
+  DEF helpText
+  
+  helpText:=getHelpText(helpTextId)
   self.hook:=0
   self.hook2:=0
   self.muiLabel:=self.makeLabel(labelCaption,helpText)
@@ -85,7 +95,10 @@ EXPORT PROC createCycle(labelCaption,helpText,values,app,changeHook, window) OF 
   self.type:=TYPE_CYCLE
 ENDPROC
 
-EXPORT PROC createCheckBox(labelCaption,helpText,app,changeHook, window) OF control
+EXPORT PROC createCheckBox(labelCaption,helpTextId,app,changeHook, window) OF control
+  DEF helpText
+  
+  helpText:=getHelpText(helpTextId)
   self.hook:=0
   self.hook2:=0
   self.muiLabel:=self.makeLabel(labelCaption,helpText)
@@ -119,8 +132,11 @@ PROC setaslflags() OF control
   
 ENDPROC TRUE
 
-EXPORT PROC createDirSelect(labelCaption,helpText,app,changeHook, window) OF control
+EXPORT PROC createDirSelect(labelCaption,helpTextId,app,changeHook, window) OF control
   DEF hook:PTR TO hook
+  DEF helpText
+  
+  helpText:=getHelpText(helpTextId)
   self.muiLabel:=self.makeLabel(labelCaption,helpText)
   self.group:=NIL
   NEW hook
@@ -146,7 +162,10 @@ EXPORT PROC createDirSelect(labelCaption,helpText,app,changeHook, window) OF con
   self.type:=TYPE_DIRSELECT
 ENDPROC
 
-EXPORT PROC createFileSelect(labelCaption,helpText,app,changeHook, window) OF control
+EXPORT PROC createFileSelect(labelCaption,helpTextId,app,changeHook, window) OF control
+  DEF helpText
+  
+  helpText:=getHelpText(helpTextId)
   self.hook:=0
   self.hook2:=0  
   self.muiLabel:=self.makeLabel(labelCaption,helpText)
@@ -202,8 +221,11 @@ PROC getmodeid() OF control
   set(control,MUIA_String_Contents,str)
 ENDPROC 
 
-EXPORT PROC createModeSelect(labelCaption,helpText,app,changeHook, window) OF control
+EXPORT PROC createModeSelect(labelCaption,helpTextId,app,changeHook, window) OF control
   DEF hook:PTR TO hook
+  DEF helpText
+  
+  helpText:=getHelpText(helpTextId)
   NEW hook
   self.hook:=hook
   NEW hook

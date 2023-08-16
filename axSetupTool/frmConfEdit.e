@@ -4,7 +4,7 @@ OPT PREPROCESS
 MODULE 'muimaster' , 'libraries/mui','dos'
 MODULE 'tools/boopsi','workbench/workbench','icon','intuition/classusr'
 MODULE 'utility/tagitem','utility/hooks','tools/installhook','exec/lists'
-MODULE '*axedit','*frmBase','*tooltypes','*controls','*miscfuncs','*frmAddComplexItem','*configObject','*/stringlist'
+MODULE '*axedit','*frmBase','*tooltypes','*controls','*miscfuncs','*frmAddComplexItem','*configObject','*/stringlist','*helpText'
 
 EXPORT OBJECT frmConfEdit OF frmBase
   confConfig         : PTR TO CHAR
@@ -519,70 +519,70 @@ ENDPROC
 PROC addControls() OF frmConfEdit
   DEF control: PTR TO control
 
-  NEW control.createString('bConference Name','strConfName2',self.app.app,self.setChangedHook,self)
+  NEW control.createString('bConference Name',CONF_NAME,self.app.app,self.setChangedHook,self)
   self.strConfName2:=control
 
-  NEW control.createDirSelect('bConference Path','paConfPath',self.app.app,self.setChangedHook,self)
+  NEW control.createDirSelect('bConference Path',CONF_PATH,self.app.app,self.setChangedHook,self)
   self.paConfPath:=control
 
-  NEW control.createCheckBox('Free Downloads','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Free Downloads',CONF_FREE_DL,self.app.app,self.setChangedHook,self)
   self.boolFreeDownloads:=control
 
-  NEW control.createString('Forward Systop Mail','strForwardMail',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Forward Systop Mail',CONF_FORWARD_MAIL,self.app.app,self.setChangedHook,self)
   self.strForwardMail:=control
 
-  NEW control.createCheckBox('Always Do Mail Scan','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Always Do Mail Scan',CONF_FORCE_MSCAN,self.app.app,self.setChangedHook,self)
   self.boolForceNewscan:=control
 
-  NEW control.createCheckBox('Use Usernames','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Use Usernames',CONF_USE_USERNAMES,self.app.app,self.setChangedHook,self)
   self.boolUseUsernames:=control
   
-  NEW control.createCheckBox('Use Internet Names','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Use Internet Names',CONF_USE_INETNAMES,self.app.app,self.setChangedHook,self)
   self.boolUseInternetNames:=control
 
-  NEW control.createString('Menu Prompt','strMenuPrompt',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Use Real Names',CONF_USE_REALNAMES,self.app.app,self.setChangedHook,self)
+  self.boolUseRealname:=control 
+
+  NEW control.createString('Menu Prompt',CONF_MENU_PROMPT,self.app.app,self.setChangedHook,self)
   self.strMenuPrompt:=control
 
-  NEW control.createString('Upload Prompt','strUploadPrompt',self.app.app,self.setChangedHook,self)
+  NEW control.createString('Upload Prompt',CONF_UPLOAD_PROMPT,self.app.app,self.setChangedHook,self)
   self.strUploadPrompt:=control
 
-  NEW control.createDirSelect('Local Upload Path','paLocalULPath',self.app.app,self.setChangedHook,self)
+  NEW control.createDirSelect('Local Upload Path',CONF_LOCAL_UPLOAD_PATH,self.app.app,self.setChangedHook,self)
   self.paLocalULPath:=control
 
-  NEW control.createStringInt('FTP Dir Days','intFtpDirDays',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('FTP Dir Days',FTP_DIR_DAYS,self.app.app,self.setChangedHook,self)
   self.intFtpDirDays:=control
 
-  NEW control.createString('FTP Dir Name','strFtpDirName',self.app.app,self.setChangedHook,self)
+  NEW control.createString('FTP Dir Name',CONF_FTP_DIR_NAME,self.app.app,self.setChangedHook,self)
   self.strFtpDirName:=control
 
-  NEW control.createCheckBox('Custom Mail','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Custom Mail',CONF_CUSTOM_MAIL,self.app.app,self.setChangedHook,self)
   self.boolCustomMail:=control
 
-  NEW control.createCheckBox('Never Do Mailscan','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Never Do Mailscan',CONF_NEVER_MSCAN,self.app.app,self.setChangedHook,self)
   self.boolNoNewscan:=control
 
-  NEW control.createCheckBox('Default New Mailscan','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Default New Mailscan',CONF_DEFAULT_NEW_MSCAN,self.app.app,self.setChangedHook,self)
   self.boolDefaultNewscan:=control 
   
-  NEW control.createCheckBox('Default New Filescan','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Default New Filescan',CONF_DEFAULT_NEW_FSCAN,self.app.app,self.setChangedHook,self)
   self.boolDefaultNewfiles:=control 
   
-  NEW control.createCheckBox('Default Zoom','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Default Zoom',CONF_DEFAULT_ZOOM,self.app.app,self.setChangedHook,self)
   self.boolDefaultZoom:=control 
-
-  NEW control.createCheckBox('Use Real Names','',self.app.app,self.setChangedHook,self)
-  self.boolUseRealname:=control 
-  
-  NEW control.createCheckBox('Always Show New Files','',self.app.app,self.setChangedHook,self)
+ 
+  NEW control.createCheckBox('Always Show New Files',CONF_ALWAYS_NEW_FILES,self.app.app,self.setChangedHook,self)
   self.boolShowNewFiles:=control 
 
-  NEW control.createCheckBox('Never Show New Files','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Never Show New Files',CONF_NEVER_NEW_FILES,self.app.app,self.setChangedHook,self)
   self.boolNoNewFiles:=control 
 
-  NEW control.createCheckBox('Disable FTP Uploads','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Disable FTP Uploads',CONF_FTP_UL_DISABLE,self.app.app,self.setChangedHook,self)
   self.boolNoFtpUploads:=control 
   
-  NEW control.createCheckBox('Ftp Dirlist','',self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('Ftp Dirlist',CONF_FTP_DIRLIST,self.app.app,self.setChangedHook,self)
   self.boolFtpNoDirlist:=control 
 
   self.controlList:=[self.strConfName2,self.paConfPath,self.strForwardMail,self.strMenuPrompt,self.strUploadPrompt,self.paLocalULPath,

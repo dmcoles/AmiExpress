@@ -205,7 +205,7 @@ ENDPROC -1
 
 EXPORT PROC checkToolTypeExists(toolType,key)
   DEF nodeFile[255]:STRING
-  DEF do: diskobject
+  DEF do: PTR TO diskobject
   DEF tooltypes
   DEF s: PTR TO CHAR
   DEF result=FALSE

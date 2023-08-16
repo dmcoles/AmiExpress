@@ -4,7 +4,7 @@ OPT PREPROCESS
 MODULE 'muimaster' , 'libraries/mui'
 MODULE 'tools/boopsi','workbench/workbench','icon','intuition/classusr'
 MODULE 'utility/tagitem','utility/hooks','tools/installhook','exec/lists','dos/dos'
-MODULE '*axedit','*frmBase','*tooltypes','*controls','*miscfuncs','*/stringlist'
+MODULE '*axedit','*frmBase','*tooltypes','*controls','*miscfuncs','*/stringlist','*helpText'
 
 
 EXPORT OBJECT frmPresetsEdit OF frmBase
@@ -91,28 +91,28 @@ ENDPROC
 PROC addPresetControls() OF frmPresetsEdit
   DEF control: PTR TO control
 
-  NEW control.createCycle('bArea Name','strAreaName',['',0],self.app.app,self.setChangedHook,self)
+  NEW control.createCycle('bArea Name',PRESET_AREA_NAME,['',0],self.app.app,self.setChangedHook,self)
   self.strAreaName:=control
 
-  NEW control.createStringInt('bAccess Level','intAccessLevel',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('bAccess Level',PRESET_ACCESS_LEVEL,self.app.app,self.setChangedHook,self)
   self.intAccessLevel:=control
 
-  NEW control.createStringInt('bInitial Conf','intConfrJoin',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('bInitial Conf',PRESET_CONF_RJOIN,self.app.app,self.setChangedHook,self)
   self.intConfrJoin:=control
 
-  NEW control.createStringInt('Initial Msgbase','intMsgbaserJoin',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('Initial Msgbase',PRESET_MESSAGEBASE_RJOIN,self.app.app,self.setChangedHook,self)
   self.intMsgbaserJoin:=control
   
-  NEW control.createStringInt('Daily Byte Limit','intDailyBytes',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('Daily Byte Limit',PRESET_DAILY_BYTES,self.app.app,self.setChangedHook,self)
   self.intDailyBytes:=control
   
-  NEW control.createStringInt('Ratio Type','intRatioType',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('Ratio Type',PRESET_RATIO_TYPE,self.app.app,self.setChangedHook,self)
   self.intRatioType:=control
 
-  NEW control.createStringInt('Ratio','intRatio',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('Ratio',PRESET_RATIO,self.app.app,self.setChangedHook,self)
   self.intRatio:=control
 
-  NEW control.createStringInt('Time Limit','intTimeLimit',self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('Time Limit',PRESET_TIME_LIMIT,self.app.app,self.setChangedHook,self)
   self.intTimeLimit:=control
 
   self.controlList:=[self.strAreaName,self.intAccessLevel,self.intConfrJoin,self.intMsgbaserJoin,

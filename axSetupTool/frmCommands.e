@@ -96,11 +96,11 @@ ENDPROC
 
 PROC editCommands(acpConfigName:PTR TO CHAR) OF frmCommands
   DEF nodeCount,confCount,i
-  DEF btn:PTR TO LONG
   DEF btnText[255]:STRING
-  DEF btnList:stdlist
   DEF bbsPath[255]:STRING
   DEF confConfig[255]:STRING
+  DEF btn:PTR TO LONG
+  DEF btnList:PTR TO stdlist
   
   self.acpConfigName:=acpConfigName
   set(self.app.grpCommands, MUIA_Group_Columns , 3)
