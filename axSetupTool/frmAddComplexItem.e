@@ -149,6 +149,8 @@ PROC editArea(acpName,areaName,oldArea:PTR TO area, existingAreas:PTR TO stdlist
 
   set( self.btnSave,MUIA_Disabled,MUI_TRUE)
 
+  set(self.winMain,MUIA_Window_Width,MUIV_Window_Width_Screen(50))
+
   NEW existingList.stringlist(existingAreas.count())
   self.existingItems:=existingList
   FOR i:=0 TO existingAreas.count()-1
@@ -252,6 +254,8 @@ PROC editAccess(acpName,accessName,oldAccessLevel:PTR TO accessLevel, existingAc
   set( self.lblAreaName, MUIA_Text_Contents,'Access Level')
 
   set( self.btnSave,MUIA_Disabled,MUI_TRUE)
+
+  set(self.winMain,MUIA_Window_Width,MUIV_Window_Width_Screen(50))
 
   NEW existingList.stringlist(existingAccessLevels.count())
   self.existingItems:=existingList
@@ -380,6 +384,8 @@ PROC editFileCheck(acpName,fCheckName,oldfCheck:PTR TO fChecker,existingFchecker
 
   set( self.btnSave,MUIA_Disabled,MUI_TRUE)
 
+  set(self.winMain,MUIA_Window_Width,MUIV_Window_Width_Screen(50))
+
   NEW existingList.stringlist(existingFcheckers.count())
   self.existingItems:=existingList
   FOR i:=0 TO existingFcheckers.count()-1
@@ -402,7 +408,7 @@ PROC editFileCheck(acpName,fCheckName,oldfCheck:PTR TO fChecker,existingFchecker
 
   newfChecker:=0
 
-  NEW controlChecker.createString('Checker',CHECKER_NAME,self.app.app,self.setChangedHook,self)
+  NEW controlChecker.createFileSelect('Checker',CHECKER_FILE,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlChecker)
   NEW controlError1.createString('Error 1',CHECKER_ERROR,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlError1)
@@ -431,7 +437,7 @@ PROC editFileCheck(acpName,fCheckName,oldfCheck:PTR TO fChecker,existingFchecker
   NEW controlPriority.createStringInt('Priority',CHECKER_PRIORITY,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlPriority)
   
-  NEW controlScript.createString('Script',CHECKER_SCRIPT,self.app.app,self.setChangedHook,self)
+  NEW controlScript.createFileSelect('Script',CHECKER_SCRIPT,self.app.app,self.setChangedHook,self)
   fCheckControls.add(controlScript)
   
   NEW controlStack.createStringInt('Stack',CHECKER_STACK,self.app.app,self.setChangedHook,self)
@@ -538,6 +544,8 @@ PROC editProtocol(acpName,protocolName,oldProtocol:PTR TO protocol,existingProto
   set( self.lblAreaName, MUIA_Text_Contents,'Protocol')
 
   set( self.btnSave,MUIA_Disabled,MUI_TRUE)
+
+  set(self.winMain,MUIA_Window_Width,MUIV_Window_Width_Screen(50))
 
   NEW existingList.stringlist(existingProtocols.count())
   self.existingItems:=existingList
@@ -656,7 +664,6 @@ PROC editCommand(acpName,commandName,commandFolder,oldCommand:PTR TO command,exi
   DEF controlDoorSilent:PTR TO control
   DEF controlLogInputs:PTR TO control
   DEF controlScriptCheck:PTR TO control
-  DEF controlMultiNode:PTR TO control
   DEF controlBanner:PTR TO control
   DEF typeList:PTR TO LONG
   DEF existingList:PTR TO stringlist
@@ -676,6 +683,8 @@ PROC editCommand(acpName,commandName,commandFolder,oldCommand:PTR TO command,exi
   set( self.lblAreaName, MUIA_Text_Contents,'Command')
 
   set( self.btnSave,MUIA_Disabled,MUI_TRUE)
+
+  set(self.winMain,MUIA_Window_Width,MUIV_Window_Width_Screen(50))
 
   NEW existingList.stringlist(existingCommands.count())
   self.existingItems:=existingList
@@ -717,7 +726,7 @@ PROC editCommand(acpName,commandName,commandFolder,oldCommand:PTR TO command,exi
   commandControls.add(controlPassword)
   NEW controlPassParams.createCycle('Pass Params',COMMAND_PASS_PARAMS,['N/A','No execute','Swap and retain','Swap, retain and redo','Bypass BBSCMD',0],self.app.app,self.setChangedHook,self)
   commandControls.add(controlPassParams)
-  NEW controlPriority.createStringInt('Priority',COMMAND_PRIORITY,self.app.app,self.setChangedHook,self)
+  NEW controlPriority.createString('Priority',COMMAND_PRIORITY,self.app.app,self.setChangedHook,self)
   commandControls.add(controlPriority)
   NEW controlStack.createStringInt('Stack',COMMAND_STACK,self.app.app,self.setChangedHook,self)
   commandControls.add(controlStack)
@@ -740,8 +749,6 @@ PROC editCommand(acpName,commandName,commandFolder,oldCommand:PTR TO command,exi
   commandControls.add(controlLogInputs)
   NEW controlScriptCheck.createCheckBox('Script Check',COMMAND_SCRIPT_CHECK,self.app.app,self.setChangedHook,self)
   commandControls.add(controlScriptCheck)
-  NEW controlMultiNode.createCheckBox('Multinode',COMMAND_MULTINODE,self.app.app,self.setChangedHook,self)
-  commandControls.add(controlMultiNode)
 
   FOR i:=0 TO commandControls.count()-1
     control:=commandControls.item(i)
@@ -778,7 +785,6 @@ PROC editCommand(acpName,commandName,commandFolder,oldCommand:PTR TO command,exi
     controlDoorSilent.setValue(oldCommand.doorSilent)
     controlLogInputs.setValue(oldCommand.logInputs)
     controlScriptCheck.setValue(oldCommand.scriptCheck)
-    controlMultiNode.setValue(oldCommand.multiNode)
     controlBanner.setValue(oldCommand.banner)
   ENDIF
   self.changed:=FALSE
@@ -814,7 +820,6 @@ PROC editCommand(acpName,commandName,commandFolder,oldCommand:PTR TO command,exi
     newCommand.doorSilent:=controlDoorSilent.getValue()
     newCommand.logInputs:=controlLogInputs.getValue()
     newCommand.scriptCheck:=controlScriptCheck.getValue()
-    newCommand.multiNode:=controlMultiNode.getValue()
     StrCopy(newCommand.banner,controlBanner.getValue())
   ENDIF
   
@@ -857,6 +862,8 @@ PROC editMsgbase(acpName,msgbaseName,oldMsgbase:PTR TO msgbase) OF frmAddComplex
   set( self.lblAreaName, MUIA_Text_Contents,'Name')
 
   set( self.btnSave,MUIA_Disabled,MUI_TRUE)
+
+  set(self.winMain,MUIA_Window_Width,MUIV_Window_Width_Screen(50))
 
   self.acpName:=acpName
 

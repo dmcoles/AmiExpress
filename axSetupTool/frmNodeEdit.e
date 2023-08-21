@@ -48,11 +48,10 @@ EXPORT OBJECT frmNodeEdit OF frmBase
   intAutoValPreset   : PTR TO control
   intAutoValDelay    : PTR TO control
   strAutoValPassword : PTR TO control
-  intFtpPort         : PTR TO control
-  intFtpDataPort     : PTR TO control
-  intHttpPort        : PTR TO control
+  strFtpPort         : PTR TO control
+  strFtpDataPort     : PTR TO control
+  strHttpPort        : PTR TO control
   intKeepUlCredit    : PTR TO control
-  intMaxMsgLen       : PTR TO control
   intMaxMsgQueue     : PTR TO control
   paPlaypen          : PTR TO control
   intRingCount       : PTR TO control
@@ -373,16 +372,14 @@ PROC addControls() OF frmNodeEdit
   self.intAutoValDelay:=control
   NEW control.createString('Auto Validate Password',NODE_AUTO_VAL_PASSWORD,self.app.app,self.setChangedHook,self) 
   self.strAutoValPassword:=control
-  NEW control.createStringInt('FTP Port',NODE_FTP_PORT,self.app.app,self.setChangedHook,self) 
-  self.intFtpPort:=control
-  NEW control.createStringInt('FTP Data Port',NODE_FTP_DATA_PORT,self.app.app,self.setChangedHook,self) 
-  self.intFtpDataPort:=control
-  NEW control.createStringInt('HTTP Port',NODE_HTTP_PORT,self.app.app,self.setChangedHook,self) 
-  self.intHttpPort:=control
+  NEW control.createString('FTP Port(s)',NODE_FTP_PORT,self.app.app,self.setChangedHook,self) 
+  self.strFtpPort:=control
+  NEW control.createString('FTP Data Port(s)',NODE_FTP_DATA_PORT,self.app.app,self.setChangedHook,self) 
+  self.strFtpDataPort:=control
+  NEW control.createString('HTTP Port(s)',NODE_HTTP_PORT,self.app.app,self.setChangedHook,self) 
+  self.strHttpPort:=control
   NEW control.createCycle('UL Credit',NODE_KEEP_UL_CREDIT,['Default','Grant additional time',0],self.app.app,self.setChangedHook,self) 
   self.intKeepUlCredit:=control
-  NEW control.createStringInt('Max Message Length',NODE_MAX_MSG_LEN,self.app.app,self.setChangedHook,self) 
-  self.intMaxMsgLen:=control
   NEW control.createStringInt('Max Message Queue',NODE_MAX_MSG_QUEUE,self.app.app,self.setChangedHook,self) 
   self.intMaxMsgQueue:=control
   NEW control.createDirSelect('Playpen Path',NODE_PLAYPEN_PATH,self.app.app,self.setChangedHook,self) 
@@ -573,7 +570,7 @@ PROC addControls() OF frmNodeEdit
 
   self.controlList1:= [self.intPriority,self.strNodeStart,self.strSystemPassword,self.strSystemPasswordPrompt,self.strNewuserPassword,
                        self.strNamePrompt,self.strNamePrompt2,self.strPasswordPrompt,self.paScreens,self.intAutoValPreset,self.intAutoValDelay,
-                       self.strAutoValPassword,self.intFtpPort,self.intFtpDataPort,self.intHttpPort,self.intKeepUlCredit,self.intMaxMsgLen,
+                       self.strAutoValPassword,self.strFtpPort,self.strFtpDataPort,self.strHttpPort,self.intKeepUlCredit,
                        self.intMaxMsgQueue,self.paPlaypen,self.intRingCount,self.strRemotePassword,self.intSysopChatColour,self.intUserChatColour,
                        self.fnUserDataName,self.fnUserMiscName,self.fnUserKeysName,self.paLocalUlPath,self.strForceAnsi,self.intOverrideTimeout,
                        self.intBGFilecheckStack,self.strConInputDev,self.strConOutputDev,self.strScreenPens,self.strConfDb,self.fnFilesNotAllowed,
@@ -842,15 +839,14 @@ PROC saveChanges() OF frmNodeEdit
   writeToolType(nodeStr,'AUTOVAL_PRESET',self.intAutoValPreset.getValue())
   writeToolType(nodeStr,'AUTOVAL_DELAY',self.intAutoValDelay.getValue())
   writeToolType(nodeStr,'AUTOVAL_PASSWORD',self.strAutoValPassword.getValue())
-  writeToolType(nodeStr,'FTPPORT',self.intFtpPort.getValue())
-  writeToolType(nodeStr,'FTPDATAPORT',self.intFtpDataPort.getValue())
-  writeToolType(nodeStr,'HTTPPORT',self.intHttpPort.getValue())
+  writeToolType(nodeStr,'FTPPORT',self.strFtpPort.getValue())
+  writeToolType(nodeStr,'FTPDATAPORT',self.strFtpDataPort.getValue())
+  writeToolType(nodeStr,'HTTPPORT',self.strHttpPort.getValue())
 
   val:=self.intKeepUlCredit.getValueIndex()
   StringF(tempStr,'\d',val)
   writeToolType(nodeStr,'KEEP_UPLOAD_CREDIT',tempStr)
 
-  writeToolType(nodeStr,'MAX_MSG_LEN',self.intMaxMsgLen.getValue())
   writeToolType(nodeStr,'MAX_MSG_QU',self.intMaxMsgQueue.getValue())
   writeToolType(nodeStr,'PLAYPEN',self.paPlaypen.getValue())
   writeToolType(nodeStr,'RINGCOUNT',self.intRingCount.getValue())
@@ -1113,18 +1109,16 @@ PROC loadNode(node) OF frmNodeEdit
   readToolType(nodeStr,'AUTOVAL_PASSWORD',tooltypeValue)
   self.strAutoValPassword.setValue(tooltypeValue)
 
-  val:=readToolTypeInt(nodeStr,'FTPPORT')
-  self.intFtpPort.setValue(val)
-  val:=readToolTypeInt(nodeStr,'FTPDATAPORT')
-  self.intFtpDataPort.setValue(val)
-  val:=readToolTypeInt(nodeStr,'HTTPPORT')
-  self.intHttpPort.setValue(val)
+  readToolType(nodeStr,'FTPPORT',tooltypeValue)
+  self.strFtpPort.setValue(tooltypeValue)
+  readToolType(nodeStr,'FTPDATAPORT',tooltypeValue)
+  self.strFtpDataPort.setValue(tooltypeValue)
+  readToolType(nodeStr,'HTTPPORT',tooltypeValue)
+  self.strHttpPort.setValue(tooltypeValue)
   val:=readToolTypeInt(nodeStr,'KEEP_UPLOAD_CREDIT')
   IF val<>1 THEN val:=0
   self.intKeepUlCredit.setValueIndex(val)
-  val:=readToolTypeInt(nodeStr,'MAX_MSG_LEN')
-  self.intMaxMsgLen.setValue(val)
-  val:=readToolTypeInt(nodeStr,'MAX_MSG_QU')
+  val:=readToolTypeInt(nodeStr,'MAX_MSG_QUE')
   self.intMaxMsgQueue.setValue(val)
   readToolType(nodeStr,'PLAYPEN',tooltypeValue)
   self.paPlaypen.setValue(tooltypeValue)

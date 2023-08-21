@@ -582,7 +582,7 @@ PROC addControls() OF frmConfEdit
   NEW control.createCheckBox('Disable FTP Uploads',CONF_FTP_UL_DISABLE,self.app.app,self.setChangedHook,self)
   self.boolNoFtpUploads:=control 
   
-  NEW control.createCheckBox('Ftp Dirlist',CONF_FTP_DIRLIST,self.app.app,self.setChangedHook,self)
+  NEW control.createCheckBox('FTP No Dirlist',CONF_FTP_NO_DIRLIST,self.app.app,self.setChangedHook,self)
   self.boolFtpNoDirlist:=control 
 
   self.controlList:=[self.strConfName2,self.paConfPath,self.strForwardMail,self.strMenuPrompt,self.strUploadPrompt,self.paLocalULPath,
