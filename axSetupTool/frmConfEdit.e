@@ -1047,6 +1047,29 @@ PROC editConfs(acpName) OF frmConfEdit
   set( self.btnUlPathRemove , MUIA_Disabled , MUI_TRUE)
   set( self.btnDlPathRemove , MUIA_Disabled , MUI_TRUE)
 
+  set( self.lvDownloadPaths , MUIA_ShortHelp , getHelpText(DLPATHS_LVIEW))
+  set( self.btnDlPathAdd , MUIA_ShortHelp , getHelpText(DLPATHS_ADD))
+  set( self.btnDlPathRemove , MUIA_ShortHelp , getHelpText(DLPATHS_DELETE))
+  set(self.strDownloadPath, MUIA_ShortHelp , getHelpText(DLPATHS_TEXT))
+
+  set( self.lvUploadPaths , MUIA_ShortHelp , getHelpText(ULPATHS_LVIEW))
+  set( self.btnUlPathAdd , MUIA_ShortHelp , getHelpText(ULPATHS_ADD))
+  set( self.btnUlPathRemove , MUIA_ShortHelp , getHelpText(ULPATHS_DELETE))
+  set(self.strUploadPath, MUIA_ShortHelp , getHelpText(ULPATHS_TEXT))
+
+  set( self.lvMsgBases , MUIA_ShortHelp , getHelpText(MBASE_LVIEW))
+  set( self.btnAddMsgbase , MUIA_ShortHelp , getHelpText(MBASE_ADD))
+  set( self.btnEditMsgbase , MUIA_ShortHelp , getHelpText(MBASE_EDIT))
+  set( self.btnRemoveMsgbase , MUIA_ShortHelp , getHelpText(MBASE_DELETE))
+
+  set( self.btnFirstConf, MUIA_ShortHelp , getHelpText(CONF_FIRST))
+  set( self.btnPrevConf, MUIA_ShortHelp , getHelpText(CONF_PREV))
+  set( self.btnNextConf, MUIA_ShortHelp , getHelpText(CONF_NEXT))
+  set( self.btnLastConf, MUIA_ShortHelp , getHelpText(CONF_LAST))
+  set( self.btnAddConf, MUIA_ShortHelp , getHelpText(CONF_ADD))
+  set( self.btnCloneConf, MUIA_ShortHelp , getHelpText(CONF_CLONE))
+  set( self.btnRemoveConf, MUIA_ShortHelp , getHelpText(CONF_DEL))
+
   installhook( self.setChangedHook, {setChangedFlag})    
   self.addControls()
   self.addNotifications()

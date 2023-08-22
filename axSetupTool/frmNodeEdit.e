@@ -1303,6 +1303,14 @@ PROC editNodes(acpName) OF frmNodeEdit
   installhook( closeHook, {canClose})    
   self.closeHook:=closeHook
 
+  set( self.btnFirstNode, MUIA_ShortHelp , getHelpText(NODE_FIRST))
+  set( self.btnPrevNode, MUIA_ShortHelp , getHelpText(NODE_PREV))
+  set( self.btnNextNode, MUIA_ShortHelp , getHelpText(NODE_NEXT))
+  set( self.btnLastNode, MUIA_ShortHelp , getHelpText(NODE_LAST))
+  set( self.btnAddNode, MUIA_ShortHelp , getHelpText(NODE_ADD))
+  set( self.btnCloneNode, MUIA_ShortHelp , getHelpText(NODE_CLONE))
+  set( self.btnRemoveNode, MUIA_ShortHelp , getHelpText(NODE_DEL))
+
   self.timesList:=[
     ['300',self.app.str300start,self.app.str300end]:timeItem,
     ['1200',self.app.str1200start,self.app.str1200end]:timeItem,
@@ -1323,6 +1331,8 @@ PROC editNodes(acpName) OF frmNodeEdit
     ['57600',self.app.str57600start,self.app.str57600end]:timeItem,
     ['115200',self.app.str115200start,self.app.str115200end]:timeItem]
 
+  ForAll({timeItem},self.timesList,`set( timeItem.startControl, MUIA_ShortHelp , getHelpText(NODE_TIME_START)))
+  ForAll({timeItem},self.timesList,`set( timeItem.endControl, MUIA_ShortHelp , getHelpText(NODE_TIME_END)))
   ForAll({timeItem},self.timesList,`domethod( timeItem.startControl,[MUIM_Notify,MUIA_String_Contents,MUIV_EveryTime,self.app.app,3,MUIM_CallHook,self.setChangedHook,self]))
   ForAll({timeItem},self.timesList,`domethod( timeItem.endControl,[MUIM_Notify,MUIA_String_Contents,MUIV_EveryTime,self.app.app,3,MUIM_CallHook,self.setChangedHook,self]))
 

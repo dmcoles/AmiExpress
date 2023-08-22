@@ -5,7 +5,7 @@ MODULE 'muimaster' , 'libraries/mui'
 MODULE 'tools/boopsi','workbench/workbench','icon','dos/dos'
 MODULE 'utility/tagitem' , 'utility/hooks','tools/installhook'
 
-MODULE '*axedit','*frmBase','*tooltypes','*frmAddItem','*frmAddComplexItem','*/stringlist','*miscfuncs','*configobject'
+MODULE '*axedit','*frmBase','*tooltypes','*frmAddItem','*frmAddComplexItem','*/stringlist','*miscfuncs','*configobject','*helpText'
 
 EXPORT OBJECT frmEditList OF frmBase
   oldcount           : INT
@@ -621,7 +621,6 @@ PROC screenitemEdit() OF frmEditList
     StringF(tempStr,'\s (\s)',v1,v2)
     domethod( self.lList , [ MUIM_List_Remove, entry ] )
     domethod( self.lList , [ MUIM_List_InsertSingle , tempStr , entry ] )
-    set(self.lList,MUIA_List_Active,entry)
     self.extensions.setItem(entry,v2)
     self.titles.setItem(entry,v1)
     self.changed:=TRUE
@@ -813,6 +812,12 @@ PROC editComputers(acpName) OF frmEditList
   set( self.btnItemAdd , MUIA_Disabled , MUI_TRUE)
   set(self.strItem, MUIA_String_Contents,'')
 
+  set( self.lvList , MUIA_ShortHelp , getHelpText(COMPS_LVIEW))
+  set( self.btnItemAdd , MUIA_ShortHelp , getHelpText(COMPS_ADD))
+  set( self.btnItemEdit , MUIA_ShortHelp , getHelpText(COMPS_EDIT))
+  set( self.btnItemRemove , MUIA_ShortHelp , getHelpText(COMPS_DELETE))
+  set(self.strItem, MUIA_ShortHelp , getHelpText(COMPS_NAME))
+
   domethod( self.lList , [ MUIM_List_Clear] )
 
   set( self.winMain, MUIA_Window_Title,'Edit Computers')
@@ -896,6 +901,12 @@ PROC editNamesNotAllowed(acpName) OF frmEditList
   set( self.btnItemEdit , MUIA_Disabled , MUI_TRUE)
   set( self.btnItemAdd , MUIA_Disabled , MUI_TRUE)
   set(self.strItem, MUIA_String_Contents,'')
+
+  set( self.lvList , MUIA_ShortHelp , getHelpText(NNA_LVIEW))
+  set( self.btnItemAdd , MUIA_ShortHelp , getHelpText(NNA_ADD))
+  set( self.btnItemEdit , MUIA_ShortHelp , getHelpText(NNA_EDIT))
+  set( self.btnItemRemove , MUIA_ShortHelp , getHelpText(NNA_DELETE))
+  set(self.strItem, MUIA_ShortHelp , getHelpText(NNA_NAME))
 
   domethod( self.lList , [ MUIM_List_Clear] )
 
@@ -984,6 +995,12 @@ PROC editDrives(acpName) OF frmEditList
   set( self.btnItemAdd , MUIA_Disabled , MUI_TRUE)
   set(self.strItem, MUIA_String_Contents,'')
 
+  set( self.lvList , MUIA_ShortHelp , getHelpText(DRV_LVIEW))
+  set( self.btnItemAdd , MUIA_ShortHelp , getHelpText(DRV_ADD))
+  set( self.btnItemEdit , MUIA_ShortHelp , getHelpText(DRV_EDIT))
+  set( self.btnItemRemove , MUIA_ShortHelp , getHelpText(DRV_DELETE))
+  set(self.strItem, MUIA_ShortHelp , getHelpText(DRV_NAME))
+
   domethod( self.lList , [ MUIM_List_Clear] )
 
   set( self.winMain, MUIA_Window_Title,'Edit Drives')
@@ -1071,6 +1088,12 @@ PROC editLanguages(acpName) OF frmEditList
   set( self.btnItemEdit , MUIA_Disabled , MUI_TRUE)
   set( self.btnItemAdd , MUIA_Disabled , MUI_TRUE)
   set(self.strItem, MUIA_String_Contents,'')
+
+  set( self.lvList , MUIA_ShortHelp , getHelpText(LANG_LVIEW))
+  set( self.btnItemAdd , MUIA_ShortHelp , getHelpText(LANG_ADD))
+  set( self.btnItemEdit , MUIA_ShortHelp , getHelpText(LANG_EDIT))
+  set( self.btnItemRemove , MUIA_ShortHelp , getHelpText(LANG_DELETE))
+  set(self.strItem, MUIA_ShortHelp , getHelpText(LANG_NAME))
 
   domethod( self.lList , [ MUIM_List_Clear] )
 
@@ -1166,6 +1189,11 @@ PROC editScreens(acpName) OF frmEditList
   set( self.btnItemEdit , MUIA_Disabled , MUI_TRUE)
   set( self.btnItemAdd , MUIA_Disabled , FALSE)
   set(self.strItem, MUIA_String_Contents,'')
+
+  set( self.lvList , MUIA_ShortHelp , getHelpText(SCRN_LVIEW))
+  set( self.btnItemAdd , MUIA_ShortHelp , getHelpText(SCRN_ADD))
+  set( self.btnItemEdit , MUIA_ShortHelp , getHelpText(SCRN_EDIT))
+  set( self.btnItemRemove , MUIA_ShortHelp , getHelpText(SCRN_DELETE))
 
   domethod( self.lList , [ MUIM_List_Clear] )
 
@@ -1386,6 +1414,11 @@ PROC editAreas(acpName) OF frmEditList
   set( self.btnItemAdd , MUIA_Disabled , FALSE)
   set(self.strItem, MUIA_String_Contents,'')
 
+  set( self.lvList , MUIA_ShortHelp , getHelpText(AREAS_LVIEW))
+  set( self.btnItemAdd , MUIA_ShortHelp , getHelpText(AREAS_ADD))
+  set( self.btnItemEdit , MUIA_ShortHelp , getHelpText(AREAS_EDIT))
+  set( self.btnItemRemove , MUIA_ShortHelp , getHelpText(AREAS_DELETE))
+
   domethod( self.lList , [ MUIM_List_Clear] )
 
   set( self.winMain, MUIA_Window_Title,'Edit Areas')
@@ -1585,6 +1618,10 @@ PROC editAccessLevel(acpName) OF frmEditList
   set( self.winMain, MUIA_Window_Title,'Edit Access Levels')
   set( self.winMain, MUIA_Window_ID, "FALS")
 
+  set( self.lvList , MUIA_ShortHelp , getHelpText(ACS_LVIEW))
+  set( self.btnItemAdd , MUIA_ShortHelp , getHelpText(ACS_ADD))
+  set( self.btnItemEdit , MUIA_ShortHelp , getHelpText(ACS_EDIT))
+  set( self.btnItemRemove , MUIA_ShortHelp , getHelpText(ACS_DELETE))
 
   self.setupButtonClick(self.btnItemAdd,self.btnAddClick,{accessLevelitemAdd})
   self.setupButtonClick(self.btnItemEdit,self.btnEditClick,{accessLevelitemEdit})
@@ -1795,6 +1832,11 @@ PROC editFileCheckers(acpName) OF frmEditList
   set( self.btnItemAdd , MUIA_Disabled , FALSE)
   set(self.strItem, MUIA_String_Contents,'')
 
+  set( self.lvList , MUIA_ShortHelp , getHelpText(FCHK_LVIEW))
+  set( self.btnItemAdd , MUIA_ShortHelp , getHelpText(FCHK_ADD))
+  set( self.btnItemEdit , MUIA_ShortHelp , getHelpText(FCHK_EDIT))
+  set( self.btnItemRemove , MUIA_ShortHelp , getHelpText(FCHK_DELETE))
+
   domethod( self.lList , [ MUIM_List_Clear] )
 
   set( self.winMain, MUIA_Window_Title,'Edit File Checkers')
@@ -1998,6 +2040,11 @@ PROC editProtocols(acpName) OF frmEditList
   set( self.btnItemEdit , MUIA_Disabled , MUI_TRUE)
   set( self.btnItemAdd , MUIA_Disabled , FALSE)
   set(self.strItem, MUIA_String_Contents,'')
+
+  set( self.lvList , MUIA_ShortHelp , getHelpText(PCOL_LVIEW))
+  set( self.btnItemAdd , MUIA_ShortHelp , getHelpText(PCOL_ADD))
+  set( self.btnItemEdit , MUIA_ShortHelp , getHelpText(PCOL_EDIT))
+  set( self.btnItemRemove , MUIA_ShortHelp , getHelpText(PCOL_DELETE))
 
   domethod( self.lList , [ MUIM_List_Clear] )
 
@@ -2241,6 +2288,11 @@ PROC editCommands(acpName,commandFolder) OF frmEditList
   set( self.btnItemAdd , MUIA_Disabled , FALSE)
   set(self.strItem, MUIA_String_Contents,'')
 
+  set( self.lvList , MUIA_ShortHelp , getHelpText(CMDS_LVIEW))
+  set( self.btnItemAdd , MUIA_ShortHelp , getHelpText(CMDS_ADD))
+  set( self.btnItemEdit , MUIA_ShortHelp , getHelpText(CMDS_EDIT))
+  set( self.btnItemRemove , MUIA_ShortHelp , getHelpText(CMDS_DELETE))
+
   domethod( self.lList , [ MUIM_List_Clear] )
 
   set( self.winMain, MUIA_Window_Title,editStr)
@@ -2329,6 +2381,11 @@ PROC editConnectionStrings(acpName) OF frmEditList
   set( self.btnItemEdit , MUIA_Disabled , MUI_TRUE)
   set( self.btnItemAdd , MUIA_Disabled , FALSE)
   set(self.strItem, MUIA_String_Contents,'')
+
+  set( self.lvList , MUIA_ShortHelp , getHelpText(CONN_LVIEW))
+  set( self.btnItemAdd , MUIA_ShortHelp , getHelpText(CONN_ADD))
+  set( self.btnItemEdit , MUIA_ShortHelp , getHelpText(CONN_EDIT))
+  set( self.btnItemRemove , MUIA_ShortHelp , getHelpText(CONN_DELETE))
 
   domethod( self.lList , [ MUIM_List_Clear] )
 
@@ -2442,6 +2499,12 @@ PROC editRestricted(acpName) OF frmEditList
   set( self.winMain, MUIA_Window_Title,'Edit Restricted Files')
   set( self.winMain, MUIA_Window_ID, "FRST")
 
+  set( self.lvList , MUIA_ShortHelp , getHelpText(RESTRICT_LVIEW))
+  set( self.btnItemAdd , MUIA_ShortHelp , getHelpText(RESTRICT_ADD))
+  set( self.btnItemEdit , MUIA_ShortHelp , getHelpText(RESTRICT_EDIT))
+  set( self.btnItemRemove , MUIA_ShortHelp , getHelpText(RESTRICT_DELETE))
+  set(self.strItem, MUIA_ShortHelp , getHelpText(RESTRICT_TEXT))
+
   set(self.app.grp_arrange,MUIA_Group_Columns,1)
   set(self.strItem,MUIA_ShowMe,MUI_TRUE)
   set(self.app.grp_computers_add,MUIA_Group_Horiz,MUI_TRUE)
@@ -2522,6 +2585,12 @@ PROC editBackup(acpName) OF frmEditList
   set( self.btnItemEdit , MUIA_Disabled , MUI_TRUE)
   set( self.btnItemAdd , MUIA_Disabled , MUI_TRUE)
   set(self.strItem, MUIA_String_Contents,'')
+
+  set( self.lvList , MUIA_ShortHelp , getHelpText(BACKUP_LVIEW))
+  set( self.btnItemAdd , MUIA_ShortHelp , getHelpText(BACKUP_ADD))
+  set( self.btnItemEdit , MUIA_ShortHelp , getHelpText(BACKUP_EDIT))
+  set( self.btnItemRemove , MUIA_ShortHelp , getHelpText(BACKUP_DELETE))
+  set(self.strItem, MUIA_ShortHelp , getHelpText(BACKUP_TEXT))
 
   domethod( self.lList , [ MUIM_List_Clear] )
 

@@ -146,6 +146,8 @@ PROC editArea(acpName,areaName,oldArea:PTR TO area, existingAreas:PTR TO stdlist
   set( self.winMain, MUIA_Window_ID, "FARE")
 
   set( self.lblAreaName, MUIA_Text_Contents,'Area Name')
+  set( self.lblAreaName, MUIA_ShortHelp , getHelpText(AREAS_NAME))
+  set( self.txtAreaName, MUIA_ShortHelp , getHelpText(AREAS_NAME))
 
   set( self.btnSave,MUIA_Disabled,MUI_TRUE)
 
@@ -252,6 +254,8 @@ PROC editAccess(acpName,accessName,oldAccessLevel:PTR TO accessLevel, existingAc
   set( self.winMain, MUIA_Window_ID, "FACS")
   
   set( self.lblAreaName, MUIA_Text_Contents,'Access Level')
+  set( self.lblAreaName, MUIA_ShortHelp , getHelpText(ACS_NAME))
+  set( self.txtAreaName, MUIA_ShortHelp , getHelpText(ACS_NAME))
 
   set( self.btnSave,MUIA_Disabled,MUI_TRUE)
 
@@ -381,6 +385,8 @@ PROC editFileCheck(acpName,fCheckName,oldfCheck:PTR TO fChecker,existingFchecker
   set( self.winMain, MUIA_Window_ID, "EFCH")
   
   set( self.lblAreaName, MUIA_Text_Contents,'File Type')
+  set( self.lblAreaName, MUIA_ShortHelp , getHelpText(FCHK_NAME))
+  set( self.txtAreaName, MUIA_ShortHelp , getHelpText(FCHK_NAME))
 
   set( self.btnSave,MUIA_Disabled,MUI_TRUE)
 
@@ -542,6 +548,8 @@ PROC editProtocol(acpName,protocolName,oldProtocol:PTR TO protocol,existingProto
   set( self.winMain, MUIA_Window_ID, "EPCL")
   
   set( self.lblAreaName, MUIA_Text_Contents,'Protocol')
+  set( self.lblAreaName, MUIA_ShortHelp , getHelpText(PCOL_NAME))
+  set( self.txtAreaName, MUIA_ShortHelp , getHelpText(PCOL_NAME))
 
   set( self.btnSave,MUIA_Disabled,MUI_TRUE)
 
@@ -681,6 +689,8 @@ PROC editCommand(acpName,commandName,commandFolder,oldCommand:PTR TO command,exi
   set( self.winMain, MUIA_Window_ID, "ECMD")
   
   set( self.lblAreaName, MUIA_Text_Contents,'Command')
+  set( self.lblAreaName, MUIA_ShortHelp , getHelpText(CMDS_NAME))
+  set( self.txtAreaName, MUIA_ShortHelp , getHelpText(CMDS_NAME))
 
   set( self.btnSave,MUIA_Disabled,MUI_TRUE)
 
@@ -860,6 +870,9 @@ PROC editMsgbase(acpName,msgbaseName,oldMsgbase:PTR TO msgbase) OF frmAddComplex
   set( self.winMain, MUIA_Window_ID, "EMBS")
   
   set( self.lblAreaName, MUIA_Text_Contents,'Name')
+
+  set( self.lblAreaName, MUIA_ShortHelp , getHelpText(MBASE_NAME))
+  set( self.txtAreaName, MUIA_ShortHelp , getHelpText(MBASE_NAME))
 
   set( self.btnSave,MUIA_Disabled,MUI_TRUE)
 

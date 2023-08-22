@@ -47,6 +47,27 @@ EXPORT ENUM ACCESS_NAME_MAX_PAGES,ACCESS_NAME,ACCESS_AREA_NAME,CHECKER_FILE,CHEC
     SYS_NODE_X_LOC,SYS_NODE_X_NAME,SYS_NODE_X_SYSOP,SYS_BUTTON_NAME,SYS_BUTTON_COMMAND,
     SYS_NUTTON_NAME,SYS_NUTTON_COMMAND,SYS_QWK_BBS_NUMBER,SYS_QWK_BBS_ADDRESS,SYS_QWK_BBS_ID,
     SYS_QWK_ZIP_COMMAND,SYS_QWK_LHA_COMMAND,SYS_ASC_ZIP_COMMAND,SYS_ASC_LHA_COMMAND,
+    SYS_FTP_PORT2,SYS_FTP_DATA_PORT,SYS_HTTP_PORT,
+    BACKUP_LVIEW,BACKUP_ADD,BACKUP_EDIT,BACKUP_DELETE,BACKUP_TEXT,
+    RESTRICT_LVIEW,RESTRICT_ADD,RESTRICT_EDIT,RESTRICT_DELETE,RESTRICT_TEXT,
+    DLPATHS_LVIEW,DLPATHS_ADD,DLPATHS_DELETE,DLPATHS_TEXT,
+    ULPATHS_LVIEW,ULPATHS_ADD,ULPATHS_DELETE,ULPATHS_TEXT,
+    MBASE_LVIEW,MBASE_ADD,MBASE_EDIT,MBASE_DELETE,MBASE_NAME,
+    ACS_LVIEW,ACS_ADD,ACS_EDIT,ACS_DELETE,ACS_NAME,
+    AREAS_LVIEW,AREAS_ADD,AREAS_EDIT,AREAS_DELETE,AREAS_NAME,
+    PRESET_NUMBER,
+    CMDS_LVIEW,CMDS_ADD,CMDS_EDIT,CMDS_DELETE,CMDS_NAME,
+    COMPS_LVIEW,COMPS_ADD,COMPS_EDIT,COMPS_DELETE,COMPS_NAME,
+    PCOL_LVIEW,PCOL_ADD,PCOL_EDIT,PCOL_DELETE,PCOL_NAME,
+    NNA_LVIEW,NNA_ADD,NNA_EDIT,NNA_DELETE,NNA_NAME,
+    SCRN_LVIEW,SCRN_ADD,SCRN_EDIT,SCRN_DELETE,SCRN_NAME,SCRN_EXT,
+    LANG_LVIEW,LANG_ADD,LANG_EDIT,LANG_DELETE,LANG_NAME,
+    DRV_LVIEW,DRV_ADD,DRV_EDIT,DRV_DELETE,DRV_NAME,
+    FCHK_LVIEW,FCHK_ADD,FCHK_EDIT,FCHK_DELETE,FCHK_NAME,
+    CONN_LVIEW,CONN_ADD,CONN_EDIT,CONN_DELETE,CONN_TEXT,CONN_BAUD,
+    CONF_FIRST,CONF_PREV,CONF_NEXT,CONF_LAST,CONF_ADD,CONF_DEL,CONF_CLONE,
+    NODE_FIRST,NODE_PREV,NODE_NEXT,NODE_LAST,NODE_ADD,NODE_DEL,NODE_CLONE,
+    NODE_TIME_START,NODE_TIME_END,
     END_OF_LIST
 
 EXPORT DEF helpTexts:PTR TO LONG
@@ -117,14 +138,14 @@ EXPORT PROC helpTextInitialise()
   addHelp(SYS_ICONIFY_LEFT,'Defines the left pixel position that the iconified /X image is displayed.')
   addHelp(SYS_ICONIFY_TOP,'Defines the top pixel position that the iconified /X image is displayed.')
   addHelp(SYS_TELNET_PORT,'Defines the port used for native telnet.')
-  addHelp(SYS_FTP_PORT,'Defines the port used for the newer ftp server (which was introduced in version 5.5.0).')
+  addHelp(SYS_FTP_PORT2,'Defines the port used for the newer ftp server (which was introduced in version 5.5.0).')
   addHelp(SYS_DOS_CHECK_TIME,'Defines the timeframe for the denial of service protection checks (in seconds).')
   addHelp(SYS_DOS_BAN_TIME,'Defines the length of the ban (in seconds) after a denial of service attack.')
   addHelp(SYS_DOS_CHECK_TRIGGER,'Defines the trigger level for the denial of service protection. If a user attempts to connect a certain number of times in the given time period their ip will be banned.')
   addHelp(COMMAND_PASS_PARAMS,'Controls the way the internal commands are executed.')
   addHelp(COMMAND_TYPE,'Door executable type.')
   addHelp(NODE_KEEP_UL_CREDIT,'Controls how upload credits are awarded.')
-  addHelp(NODE_WIN_COLOURS,'Controls screen pens.')
+  addHelp(NODE_WIN_COLOURS,'Number of colours for the node screen.')
   addHelp(PRESET_AREA_NAME,'Sets the area for the preset.')
   addHelp(SYS_LANGUAGE,'Sets the host language for the system. This is used by the auto-translation feature.')
   addHelp(SYS_NEW_ACCOUNTS,'Controls how new accounts are created.')
@@ -254,73 +275,177 @@ EXPORT PROC helpTextInitialise()
   addHelp(CONF_MENU_PROMPT,'Override the menu prompt for this conference.')
   addHelp(CONF_UPLOAD_PROMPT,'Display this message after the prompt to enter the file description when the user uplaods.')
   addHelp(CONF_FTP_DIR_NAME,'Defines an alternative name for the conference folder for the FTP server (useful if your conference name has extended characters).')
+  addHelp(NODE_EXPRESS_FILE,'Defines the path to the express file. This should normally be set to either BBS:EXPRESS or just EXPRESS if you have made express resident.')
+  addHelp(NODE_SYSTEM_PASSWORD,'Defines the system password in use on this node.')
+  addHelp(NODE_SYSTEM_PASSWORD_PROMPT,'Defines the prompt for the system password.')
+  addHelp(NODE_NEW_USER_PASSWORD,'Defines the new user password in use on this node.')
+  addHelp(NODE_NAME_PROMPT,'Controls the second part of the name prompt eg enter your "username".')
+  addHelp(NODE_NAME_PROMPT2,'Use this to completely override the name prompt with this text.')
+  addHelp(NODE_PASSWORD_PROMPT,'Override the password prompt. If blank it will default to "Password:".')
+  addHelp(NODE_AUTO_VAL_PASSWORD,'Defines an auto validation password to be used on this node.')
+  addHelp(NODE_REMOTE_PASSWORD,'Remote shell password. Recommended to use this if you allow shell access.')
+  addHelp(NODE_FORCE_ANSI,'Force ansi mode for this node. User will not be prompted and ansi mode will be set to this eg N will force no ansi.')
+  addHelp(NODE_CON_IN_DEVICE,'Specify the device name used for console input.')
+  addHelp(NODE_CON_OUT_DEVICE,'Specify the device name used for console output.')
+  addHelp(NODE_SCREEN_PENS,'Define the screen pens for this node which controls how the window elements are drawn.')
+  addHelp(NODE_CONF_DB_FILE,'Override the conf.db file.')
+  addHelp(NODE_FIRST_COMMAND,'Execute this AmigaDOS command at node startup. You may also include mci codes in this string.')
+  addHelp(NODE_SERIAL_DEVICE,'Serial device name used for this node.')
+  addHelp(NODE_MODEM_INIT,'String sent to the modem to initialise.')
+  addHelp(NODE_MODEM_RESET,'String sent to the modem to do a reset.')
+  addHelp(NODE_MODEM_RING,'String expected from the modem in the event of an incoming call.')
+  addHelp(NODE_MODEM_ANSWER,'String sent to the modem to answer an incoming call.')
+  addHelp(NODE_MODEM_OFFHOOK,'Command string to take teh modem off hook.')
+  addHelp(NODE_MODEM_NRAMS,'Command string that is used to set the defaults for your modem.')
+  addHelp(NODE_WIN_PUBSCREEN,'Name of the public screen used for this nodes output.')
+  addHelp(SYS_BBS_NAME,'Sets the name of the BBS that is shown to the user when they connect.')
+  addHelp(SYS_BBS_LOCATION,'Sets the bbs geographic location that is shown to the user when they connect.')
+  addHelp(SYS_SYSOP_NAME,'Sets the name of the sysop of the bbs.')
+  addHelp(SYS_DEFAULT_MENU,'Sets the default menu name (will default to MENU if left blank).')
+  addHelp(SYS_AUTO_VAL_PASSWORD,'Sets the auto validation password for all nodes.')
+  addHelp(SYS_REGKEY,'Sets the registration name. This is displayed to the user as part of the welcome message.')
+  addHelp(SYS_SMTP_SERVER,'Sets the smtp server used by the bbs to send notification emails.')
+  addHelp(SYS_SMTP_USERNAME,'Sets the user name for the smtp server used to send notification emails.')
+  addHelp(SYS_SMTP_PASSWORD,'Sets the password for the smtp server used to send notification emails.')
+  addHelp(SYS_SYSOP_EMAIL,'Sets the email address to which notification emails are sent.')
+  addHelp(SYS_BBS_EMAIL,'Sets the from email address for notification emails,')
+  addHelp(SYS_FILEDIZ_CMD,'Defines which examine door is actually the file id processor.')
+  addHelp(SYS_FTP_HOST,'Sets the ftp host name for the ftp server.')
+  addHelp(SYS_EXEC_ON_NEW_USER,'Execute this AmigaDos command when a new user registers.')
+  addHelp(SYS_EXECA_ON_NEW_USER,'Execute this AmigaDos command asynchronously when a new user registers.')
+  addHelp(SYS_EXEC_ON_SYSOP_PAGE,'Execute this AmigaDos command when a user pages the sysop.')
+  addHelp(SYS_EXECA_ON_SYSOP_PAGE,'Execute this AmigaDos command asynchronously when a user pages the sysop.')
+  addHelp(SYS_EXEC_ON_CONNECT,'Execute this AmigaDos command whenever someone connects.')
+  addHelp(SYS_EXECA_ON_CONNECT,'Execute this AmigaDos command asynchronously whenever someone connects.')
+  addHelp(SYS_EXEC_ON_LOGON,'Execute this AmigaDos command when a user sucessfully connects.')
+  addHelp(SYS_EXECA_ON_LOGON,'Execute this AmigaDos command asynchronously when a user sucessfully connects.')
+  addHelp(SYS_EXEC_ON_LOGOFF,'Execute this AmigaDos command when a user logs off.')
+  addHelp(SYS_EXECA_ON_LOGOFF,'Execute this AmigaDos command asynchronously when a user logs off.')
+  addHelp(SYS_EXEC_ON_COMMENT,'Execute this AmigaDos command when a user leaves a sysop comment.')
+  addHelp(SYS_EXECA_ON_COMMENT,'Execute this AmigaDos command asynchronously when a user leaves a sysop comment.')
+  addHelp(SYS_EXEC_ON_UPLOAD,'Execute this AmigaDos command when a user completes an upload.')
+  addHelp(SYS_EXECA_ON_UPLOAD,'Execute this AmigaDos command asynchronously when a user completes an upload.')
+  addHelp(SYS_ACP_FONT,'Set the name of the font used by ACP.')
+  addHelp(SYS_EXEC_ON_STARTUP,'Execute this AmigaDos command when ACP has completed startup.')
+  addHelp(SYS_NODE_X_LOC,'Override the geographic location of the bbs at the node level. Normally leave this blank.')
+  addHelp(SYS_NODE_X_NAME,'Override the name of the bbs at the node level. Normally leave this blank.')
+  addHelp(SYS_NODE_X_SYSOP,'Override the sysop of the bbs at the node level. Normally leave this blank.')
+  addHelp(SYS_BUTTON_NAME,'Set a custom button name.')
+  addHelp(SYS_BUTTON_COMMAND,'Set a custom button command.')
+  addHelp(SYS_NUTTON_NAME,'Set a custom alternative button name.')
+  addHelp(SYS_NUTTON_COMMAND,'Set a custom alternative button command.')
+  addHelp(SYS_QWK_BBS_NUMBER,'Sets the bbs number used for qwk mail packets.')
+  addHelp(SYS_QWK_BBS_ADDRESS,'Sets the bbs address used for qwk mail packets.')
+  addHelp(SYS_QWK_BBS_ID,'Sets the bbs id used for qwk mail packets.')
+  addHelp(SYS_QWK_ZIP_COMMAND,'Sets the zip command used for creating qwk mail packets.')
+  addHelp(SYS_QWK_LHA_COMMAND,'Sets the lha command used for creating qwk mail packets.')
+  addHelp(SYS_ASC_ZIP_COMMAND,'Sets the zip command used for creating ascii mail packets.')
+  addHelp(SYS_ASC_LHA_COMMAND,'Sets the lha command used for creating ascii mail packets.')
+  addHelp(SYS_FTP_PORT,'FTP Port used for all nodes for the old ftp protocol server.')
+  addHelp(SYS_FTP_DATA_PORT,'FTP Data port used for all nodes for both ftp server types.')
+  addHelp(SYS_HTTP_PORT,'HTTP port used for all nodes for the HTTP server.')
+  addHelp(BACKUP_LVIEW,'List files that are backed up at system startup.')
+  addHelp(BACKUP_ADD,'Add a new file to be backed up.')
+  addHelp(BACKUP_EDIT,'Edit the file to be backed up.')
+  addHelp(BACKUP_DELETE,'Remove a file from the list.')
+  addHelp(BACKUP_TEXT,'Enter the filename of the new file to be backed up.')
+  addHelp(RESTRICT_LVIEW,'List files that are restricted from all downloads.')
+  addHelp(RESTRICT_ADD,'Add a new restricted file.')
+  addHelp(RESTRICT_EDIT,'Edit the restricted file.')
+  addHelp(RESTRICT_DELETE,'Remove a file from the list.')
+  addHelp(RESTRICT_TEXT,'Enter the filename of the new restrcited file.')
+  addHelp(DLPATHS_LVIEW,'List of download paths for this conference.')
+  addHelp(DLPATHS_ADD,'Add a new downlload path.')
+  addHelp(DLPATHS_DELETE,'Remove the download path.')
+  addHelp(DLPATHS_TEXT,'Enter the new download path.')
+  addHelp(ULPATHS_LVIEW,'List of upload paths for this conference.')
+  addHelp(ULPATHS_ADD,'Add a new upload path.')
+  addHelp(ULPATHS_DELETE,'Remove the upload path.')
+  addHelp(ULPATHS_TEXT,'Enter the new upload path.')
+  addHelp(MBASE_LVIEW,'List of message bases in this conference.')
+  addHelp(MBASE_ADD,'Add a new message base.')
+  addHelp(MBASE_EDIT,'Edit current message base.')
+  addHelp(MBASE_DELETE,'Delete current message base.')
+  addHelp(MBASE_NAME,'Message base name.')
+  addHelp(ACS_LVIEW,'List of access levels.')
+  addHelp(ACS_ADD,'Add a new access level.')
+  addHelp(ACS_EDIT,'Edit existing access level.')
+  addHelp(ACS_DELETE,'Delete an access level.')
+  addHelp(ACS_NAME,'Access level.')
+  addHelp(AREAS_LVIEW,'List of security areas.')
+  addHelp(AREAS_ADD,'Add a new security area.')
+  addHelp(AREAS_EDIT,'Edit existing security area.')
+  addHelp(AREAS_DELETE,'Remove a security area.')
+  addHelp(AREAS_NAME,'Area name.')
+  addHelp(PRESET_NUMBER,'Preset number.')
+  addHelp(CMDS_LVIEW,'List of commands.')
+  addHelp(CMDS_ADD,'Add a new command.')
+  addHelp(CMDS_EDIT,'Edit selected command.')
+  addHelp(CMDS_DELETE,'Delete selected command.')
+  addHelp(CMDS_NAME,'Command name.')
+  addHelp(COMPS_LVIEW,'List of computer types.')
+  addHelp(COMPS_ADD,'Add new computer type.')
+  addHelp(COMPS_EDIT,'Edit computer type.')
+  addHelp(COMPS_DELETE,'Remove a computer type.')
+  addHelp(COMPS_NAME,'Computer name.')
+  addHelp(PCOL_LVIEW,'List of file transfer protocols.')
+  addHelp(PCOL_ADD,'Add a new transfer protocol.')
+  addHelp(PCOL_EDIT,'Edit file transfer protocol.')
+  addHelp(PCOL_DELETE,'Remove file transfer protocol.')
+  addHelp(PCOL_NAME,'Protocol name.')
+  addHelp(NNA_LVIEW,'List of names not allowed.')
+  addHelp(NNA_ADD,'Add new name.')
+  addHelp(NNA_EDIT,'Edit existing name.')
+  addHelp(NNA_DELETE,'Remove name.')
+  addHelp(NNA_NAME,'Name.')
+  addHelp(SCRN_LVIEW,'List of screen types.')
+  addHelp(SCRN_ADD,'Add new screen type.')
+  addHelp(SCRN_EDIT,'Edit screen type.')
+  addHelp(SCRN_DELETE,'Delete a screen type.')
+  addHelp(SCRN_NAME,'Screen type name.')
+  addHelp(SCRN_EXT,'Screen type file extension.')
+  addHelp(LANG_LVIEW,'List of system languages.')
+  addHelp(LANG_ADD,'Add a new system language.')
+  addHelp(LANG_EDIT,'Edit system language.')
+  addHelp(LANG_DELETE,'Remove a system language.')
+  addHelp(LANG_NAME,'Language name.')
+  addHelp(DRV_LVIEW,'List of drives used by the bbs.')
+  addHelp(DRV_ADD,'Add a new bbs drive.')
+  addHelp(DRV_EDIT,'Edit a bbs drive.')
+  addHelp(DRV_DELETE,'Remove a bbs drive.')
+  addHelp(DRV_NAME,'BBS Drive name.')
+  addHelp(FCHK_LVIEW,'List of file checkers.')
+  addHelp(FCHK_ADD,'Add a new file checker.')
+  addHelp(FCHK_EDIT,'Edit the file checker.')
+  addHelp(FCHK_DELETE,'Remove a file checker.')
+  addHelp(FCHK_NAME,'File checker file extension.')
+  addHelp(CONN_LVIEW,'List of connection strings.')
+  addHelp(CONN_ADD,'Add a connection string.')
+  addHelp(CONN_EDIT,'Edit a connection string.')
+  addHelp(CONN_DELETE,'Delete a connection string.')
+  addHelp(CONN_TEXT,'Connection string.')
+  addHelp(CONN_BAUD,'Equivalent baud rate.')
+  addHelp(CONF_FIRST,'Move to the first conference.')
+  addHelp(CONF_PREV,'Move to the previous conference.')
+  addHelp(CONF_NEXT,'Move to the next conference.')
+  addHelp(CONF_LAST,'Move to the last conference.')
+  addHelp(CONF_ADD,'Add a new conference.')
+  addHelp(CONF_CLONE,'Add a new conference as a clone of the current conference.')
+  addHelp(CONF_DEL,'Delete the conference. (can only delete the last one)')
+  addHelp(NODE_FIRST,'Move to the first node.')
+  addHelp(NODE_PREV,'Move to the previous node.')
+  addHelp(NODE_NEXT,'Move to the next node.')
+  addHelp(NODE_LAST,'Move to the last node.')
+  addHelp(NODE_ADD,'Add a new node.')
+  addHelp(NODE_CLONE,'Add a new node as a clone of the current node.')
+  addHelp(NODE_DEL,'Delete the node. (can only delete the last one)')
+  addHelp(NODE_TIME_START,'Connections (at this speed) are allowed starting from this time. Leave blank to allow at any time')
+  addHelp(NODE_TIME_END,'Connections (at this speed) are allowed until this time. Leave blank to allow at any time')
+
 /*
-,
-    NODE_EXPRESS_FILE,
-    NODE_SYSTEM_PASSWORD,
-    NODE_SYSTEM_PASSWORD_PROMPT,
-    NODE_NEW_USER_PASSWORD,
-    NODE_NAME_PROMPT,
-    NODE_NAME_PROMPT2,
-    NODE_PASSWORD_PROMPT,
-    NODE_AUTO_VAL_PASSWORD,
-    NODE_REMOTE_PASSWORD,
-    NODE_FORCE_ANSI,
-    NODE_CON_IN_DEVICE,
-    NODE_CON_OUT_DEVICE,
-    NODE_SCREEN_PENS,
-    NODE_CONF_DB_FILE,
-    NODE_FIRST_COMMAND,
-    NODE_SERIAL_DEVICE,
-    NODE_MODEM_INIT,
-    NODE_MODEM_RESET,
-    NODE_MODEM_RING,
-    NODE_MODEM_ANSWER,
-    NODE_MODEM_OFFHOOK,
-    NODE_MODEM_NRAMS,
-    NODE_WIN_PUBSCREEN,
-    SYS_BBS_NAME,
-    SYS_BBS_LOCATION,
-    SYS_SYSOP_NAME,
-    SYS_DEFAULT_MENU,
-    SYS_AUTO_VAL_PASSWORD,
-    SYS_REGKEY,
-    SYS_SMTP_SERVER,
-    SYS_SMTP_USERNAME,
-    SYS_SMTP_PASSWORD,
-    SYS_SYSOP_EMAIL,
-    SYS_BBS_EMAIL,
-    SYS_FILEDIZ_CMD,
-    SYS_FTP_HOST,
-    SYS_EXEC_ON_NEW_USER,
-    SYS_EXECA_ON_NEW_USER,
-    SYS_EXEC_ON_SYSOP_PAGE,
-    SYS_EXECA_ON_SYSOP_PAGE,
-    SYS_EXEC_ON_CONNECT,
-    SYS_EXECA_ON_CONNECT,
-    SYS_EXEC_ON_LOGON,
-    SYS_EXECA_ON_LOGON,
-    SYS_EXEC_ON_LOGOFF,
-    SYS_EXECA_ON_LOGOFF,
-    SYS_EXEC_ON_COMMENT,
-    SYS_EXECA_ON_COMMENT,
-    SYS_EXEC_ON_UPLOAD,
-    SYS_EXECA_ON_UPLOAD,
-    SYS_ACP_FONT,
-    SYS_EXEC_ON_STARTUP,
-    SYS_NODE_X_LOC,
-    SYS_NODE_X_NAME,
-    SYS_NODE_X_SYSOP,
-    SYS_BUTTON_NAME,
-    SYS_BUTTON_COMMAND,
-    SYS_NUTTON_NAME,
-    SYS_NUTTON_COMMAND,
-    SYS_QWK_BBS_NUMBER,
-    SYS_QWK_BBS_ADDRESS,
-    SYS_QWK_BBS_ID,
-    SYS_QWK_ZIP_COMMAND,
-    SYS_QWK_LHA_COMMAND,
-    SYS_ASC_ZIP_COMMAND,
-    SYS_ASC_LHA_COMMAND,*/
+    CONF_FIRST,CONF_PREV,CONF_NEXT,CONF_LAST,CONF_ADD,CONF_DEL,
+    NODE_FIRST,NODE_PREV,NODE_NEXT,NODE_LAST,NODE_ADD,NODE_DEL,*/
+
+
 ENDPROC
 

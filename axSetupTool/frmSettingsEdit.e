@@ -59,6 +59,9 @@ EXPORT OBJECT frmSettingsEdit OF frmBase
   intHoldAccess    : PTR TO control
   strFileDizSysCmd : PTR TO control
   strFtpHost       : PTR TO control
+  strFtpPort       : PTR TO control
+  strFtpDataPort   : PTR TO control
+  strHttpPort      : PTR TO control
   strExecOnNewUser : PTR TO control
   strExecAOnNewUser: PTR TO control
   strExecOnPage    : PTR TO control
@@ -260,7 +263,12 @@ PROC addSystemControls() OF frmSettingsEdit
   self.strFileDizSysCmd:=control
   NEW control.createString('FTP host name',SYS_FTP_HOST,self.app.app,self.setChangedHook,self)
   self.strFtpHost:=control
-
+  NEW control.createString('FTP port(s)',SYS_FTP_PORT,self.app.app,self.setChangedHook,self)
+  self.strFtpPort:=control
+  NEW control.createString('FTP data port(s)',SYS_FTP_DATA_PORT,self.app.app,self.setChangedHook,self)
+  self.strFtpDataPort:=control
+  NEW control.createString('HTTP port(s)',SYS_HTTP_PORT,self.app.app,self.setChangedHook,self)
+  self.strHttpPort:=control
   NEW control.createString('Execute on new user',SYS_EXEC_ON_NEW_USER,self.app.app,self.setChangedHook,self)
   self.strExecOnNewUser:=control
   NEW control.createString('Execute async on new user',SYS_EXECA_ON_NEW_USER,self.app.app,self.setChangedHook,self)
@@ -295,8 +303,9 @@ PROC addSystemControls() OF frmSettingsEdit
                     self.strSmtpHost,self.intSmtpPort,self.strSmtpUsername,self.strSmtpPassword,self.boolSmtpSSL,self.strSysopEmail,
                     self.strBbsEmail,self.boolMailOnPage,self.boolMailOnComment,self.boolMailOnLogon,self.boolMailOnLogoff,self.boolMailOnNewUser,
                     self.boolMailOnUpload,self.boolMailOnPwdFail,self.paLanguageBase,self.paHistory,self.paUserNotes,self.intHoldAccess,
-                    self.strFileDizSysCmd,self.strFtpHost,self.strExecOnNewUser,self.strExecAOnNewUser,self.strExecOnPage,self.strExecAOnPage,
-                    self.strExecOnConnect,self.strExecAOnConnect,self.strExecOnLogon,self.strExecAOnLogon,self.strExecOnLogoff,self.strExecAOnLogoff,
+                    self.strFileDizSysCmd,self.strFtpHost,self.strFtpPort,self.strFtpDataPort,self.strHttpPort,self.strExecOnNewUser,
+                    self.strExecAOnNewUser,self.strExecOnPage,self.strExecAOnPage,self.strExecOnConnect,self.strExecAOnConnect,
+                    self.strExecOnLogon,self.strExecAOnLogon,self.strExecOnLogoff,self.strExecAOnLogoff,
                     self.strExecOnComment,self.strExecAOnComment,self.strExecOnUpload,self.strExecAOnUpload,
                     self.boolCreditByKb,self.boolLongWho,self.boolConvertToMb,self.boolQuietJoin,self.boolRelativeConfs]
 
@@ -366,7 +375,7 @@ PROC addServerControls() OF frmSettingsEdit
   NEW control.createStringInt('Telnet Port Number',SYS_TELNET_PORT,self.app.app,self.setChangedHook,self)
   self.intTelnetPort:=control
 
-  NEW control.createStringInt('FTP Port Number',SYS_FTP_PORT,self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('FTP Port Number',SYS_FTP_PORT2,self.app.app,self.setChangedHook,self)
   self.intFtpPort:=control
 
   NEW control.createString('ACP Font',SYS_ACP_FONT,self.app.app,self.setChangedHook,self)
@@ -662,7 +671,9 @@ PROC saveSystemChanges() OF frmSettingsEdit
   writeToolType(self.bbsConfigName,'HOLD_ACCESS_LEVEL',self.intHoldAccess.getValue())
   writeToolType(self.bbsConfigName,'FILEDIZ_SYSCMD',self.strFileDizSysCmd.getValue())
   writeToolType(self.bbsConfigName,'FTPHOST',self.strFtpHost.getValue())
-  
+  writeToolType(self.bbsConfigName,'FTPPORT',self.strFtpPort.getValue())
+  writeToolType(self.bbsConfigName,'FTPDATAPORT',self.strFtpDataPort.getValue())
+  writeToolType(self.bbsConfigName,'HTTPPORT',self.strHttpPort.getValue()) 
   writeToolType(self.bbsConfigName,'EXECUTE_ON_NEW_USER',self.strExecOnNewUser.getValue())
   writeToolType(self.bbsConfigName,'EXECUTE_ASYNC_ON_NEW_USER',self.strExecAOnNewUser.getValue())
   writeToolType(self.bbsConfigName,'EXECUTE_ON_SYSOP_PAGE',self.strExecOnPage.getValue())
@@ -922,6 +933,12 @@ PROC editSystemSettings(acpName:PTR TO CHAR) OF frmSettingsEdit
   self.strFileDizSysCmd.setValue(tempstr)
   readToolType(self.bbsConfigName,'FTPHOST',tempstr)
   self.strFtpHost.setValue(tempstr)
+  readToolType(self.bbsConfigName,'FTPPORT',tempstr)
+  self.strFtpPort.setValue(tempstr)
+  readToolType(self.bbsConfigName,'FTPDATAPORT',tempstr)
+  self.strFtpDataPort.setValue(tempstr)
+  readToolType(self.bbsConfigName,'HTTPPORT',tempstr)
+  self.strHttpPort.setValue(tempstr)
   readToolType(self.bbsConfigName,'EXECUTE_ON_NEW_USER',tempstr)
   self.strExecOnNewUser.setValue(tempstr)
   readToolType(self.bbsConfigName,'EXECUTE_ASYNC_ON_NEW_USER',tempstr)

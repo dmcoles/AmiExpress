@@ -26,12 +26,24 @@ EXPORT OBJECT frmMain OF frmBase
   btnBackupClickHook: hook
   btnRestrictClickHook: hook
   btnExitClickHook: hook
+  btnAboutClickHook: hook
 ENDOBJECT
 
 PROC exitbuttonPressed() OF frmMain
   MOVE.L (A1),self
   GetA4()
   domethod(self.app.app,[MUIM_Application_ReturnID,MUIA_Window_CloseRequest])
+ENDPROC
+
+PROC aboutbuttonPressed() OF frmMain
+  DEF win
+  MOVE.L (A1),self
+  GetA4()
+  get(self.winMain,MUIA_Window_Window,{win})
+  EasyRequestArgs( win , [ 20 , 0 ,
+                  'About Ami-Express Setup Tool' ,
+                  'This tool can assist you in configuring\nalmost every aspect of Ami-Express.\n\n(c)2023 Darren Coles.',
+                  '_OK' ] , NIL , NIL )
 ENDPROC
 
 PROC computersbuttonPressed() OF frmMain
@@ -337,6 +349,19 @@ PROC domain() OF frmMain
   self.setupButtonClick(self.app.btnExit,self.btnExitClickHook,{exitbuttonPressed})
   self.setupButtonClick(self.app.btnRestrict,self.btnRestrictClickHook,{restrictbuttonPressed})
   self.setupButtonClick(self.app.btnBackup,self.btnBackupClickHook,{backupbuttonPressed})
+  self.setupButtonClick(self.app.btnAbout,self.btnAboutClickHook,{aboutbuttonPressed})
+
+	domethod( self.app.mnlabel1Exit , [
+		MUIM_Notify , MUIA_Menuitem_Trigger, MUIV_EveryTime,
+		self.app.mnlabel1Exit,
+		3,
+    MUIM_CallHook , self.btnExitClickHook, self ] )
+
+	domethod( self.app.mnlabel1About , [
+		MUIM_Notify , MUIA_Menuitem_Trigger, MUIV_EveryTime,
+		self.app.mnlabel1About,
+		3,
+    MUIM_CallHook , self.btnAboutClickHook, self ] )
 
   set( self.app.btnUsers, MUIA_Text_Contents,'Unused')
   set( self.app.btnUsers, MUIA_Disabled , MUI_TRUE)

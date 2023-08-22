@@ -2,49 +2,16 @@ OPT OSVERSION = 37,STACK=60000,LARGE
 OPT PREPROCESS
 
 /*
-  ftpport ftpdataport httpport missing in bbsconfig
+  ftpport ftpdataport httpport missing in bbsconfig 
+  window.pubscreen can be WINDOW.PUBSCREEN or WINDOW.PUBSCREEN=
 
-  backup files listview + buttons help text
-  restricted files listview + buttons help text
-  node navigation buttons help text
-  conf download paths listview + buttons help text
-  conf upload paths listview + buttons help text
-  messagebase paths listview + buttons help text
-  conf navigation buttons help text
-  access levels listview + buttons help text
-  messagebase name help text
-  access level help text
-  areas listview + buttons help text
-  area name help text
-  preset list 1-9 help text
-  commands listview + buttons help text
-  command name help text
-  computers listview + buttons help text
-  computer name help text
-  protocols listview + buttons help text
-  protocol name help text
-  names not allowed listview + buttons help text
-  name not allowed help text
-  screen types listview + buttons help text
-  screen type + extension help texts
-  languages listview + buttons help text
-  languages help text
-  drives listview + buttons help text
-  drives help text
-  file checkers listview + buttons help text
-  file checker name help text
-  connect strings listview + buttons help text
-  connect string + baud help text
-
-  about / help screens
-  exit menu
-  help texts
+  help screens
+  restart bbs
 
   user editor
   callers log viewer
   msgbase viewer
   screens viewer
-  restart nodes/server
 */
 
 ->/////////////////////////////////////////////////////////////////////////////

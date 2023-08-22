@@ -32,7 +32,7 @@ frmBase.m:		frmBase.e axedit.m
 frmMain.m:		frmMain.e frmBase.m axedit.m frmEditList.m frmNodeEdit.m frmConfEdit.m frmSettingsEdit.m frmAccess.m frmCommands.m
 							$(compiler) frmMain $(options)
 
-frmEditList.m:	frmEditList.e frmAddItem.m frmBase.m frmAddComplexItem.m tooltypes.m axedit.m stringlist.m miscfuncs.m configobject.m
+frmEditList.m:	frmEditList.e frmAddItem.m frmBase.m frmAddComplexItem.m tooltypes.m axedit.m stringlist.m miscfuncs.m configobject.m helpText.m
 							$(compiler) frmEditList $(options)
 
 frmSettingsEdit.m:	frmSettingsEdit.e frmBase.m tooltypes.m axedit.m controls.m miscfuncs.m stringlist.m helpText.m
@@ -41,7 +41,7 @@ frmSettingsEdit.m:	frmSettingsEdit.e frmBase.m tooltypes.m axedit.m controls.m m
 frmPresetsEdit.m:	frmPresetsEdit.e frmBase.m tooltypes.m axedit.m controls.m miscfuncs.m stringlist.m helpText.m
 							$(compiler) frmPresetsEdit $(options)
 
-frmAddItem.m:	frmAddItem.e frmBase.m axedit.m
+frmAddItem.m:	frmAddItem.e frmBase.m axedit.m helpText.m
 							$(compiler) frmAddItem $(options)
 
 frmAddComplexItem.m:	frmAddComplexItem.e frmBase.m axedit.m controls.m stringlist.m tooltypes.m configobject.m helpText.m

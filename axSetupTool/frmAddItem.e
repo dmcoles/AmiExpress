@@ -4,7 +4,7 @@ OPT PREPROCESS
 MODULE 'muimaster' , 'libraries/mui'
 MODULE 'tools/boopsi','dos/dos','libraries/asl'
 MODULE 'utility/tagitem' , 'utility/hooks', 'tools/installhook'
-MODULE '*axedit','*frmBase'
+MODULE '*axedit','*frmBase','*helpText'
 
 EXPORT OBJECT frmAddItem OF frmBase
   lblItemDetail1: LONG
@@ -80,6 +80,11 @@ PROC addScreen(title) OF frmAddItem
   set( self.lblItemDetail1, MUIA_Text_Contents,'Screen Title')
   set( self.lblItemDetail2, MUIA_Text_Contents,'Extension')
 
+  set( self.lblItemDetail1, MUIA_ShortHelp , getHelpText(SCRN_NAME))
+  set( self.txtItemDetail1, MUIA_ShortHelp , getHelpText(SCRN_NAME))
+  set( self.lblItemDetail2, MUIA_ShortHelp , getHelpText(SCRN_EXT))
+  set( self.txtItemDetail2, MUIA_ShortHelp , getHelpText(SCRN_EXT))
+
   set( self.btnSave,MUIA_Disabled,FALSE)
 
   set( self.txtItemDetail1, MUIA_String_Contents,title)
@@ -101,6 +106,11 @@ PROC editScreen(title,extension) OF frmAddItem
   set( self.winMain, MUIA_Window_Title,'Edit Screen')
   set( self.lblItemDetail1, MUIA_Text_Contents,'Screen Title')
   set( self.lblItemDetail2, MUIA_Text_Contents,'Extension')
+
+  set( self.lblItemDetail1, MUIA_ShortHelp , getHelpText(SCRN_NAME))
+  set( self.txtItemDetail1, MUIA_ShortHelp , getHelpText(SCRN_NAME))
+  set( self.lblItemDetail2, MUIA_ShortHelp , getHelpText(SCRN_EXT))
+  set( self.txtItemDetail2, MUIA_ShortHelp , getHelpText(SCRN_EXT))
 
   set( self.btnSave,MUIA_Disabled,MUI_TRUE)
 
@@ -128,6 +138,12 @@ PROC editConnectionString(connectString,baudString) OF frmAddItem
 
   set( self.txtItemDetail1, MUIA_String_Contents,connectString)
   set( self.txtItemDetail2, MUIA_String_Contents,baudString)
+
+  set( self.lblItemDetail1, MUIA_ShortHelp , getHelpText(CONN_TEXT))
+  set( self.txtItemDetail1, MUIA_ShortHelp , getHelpText(CONN_TEXT))
+  set( self.lblItemDetail2, MUIA_ShortHelp , getHelpText(CONN_BAUD))
+  set( self.txtItemDetail2, MUIA_ShortHelp , getHelpText(CONN_BAUD))
+
 
   self.addNotifications()
   

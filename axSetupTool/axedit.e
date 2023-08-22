@@ -21,6 +21,9 @@ EXPORT OBJECT app_obj
 	app                         :	PTR TO LONG
 	winMain                     :	PTR TO LONG
 	mn_label_1                  :	PTR TO LONG
+	mnlabel1Help                :	PTR TO LONG
+	mnlabel1About               :	PTR TO LONG
+	mnlabel1Exit                :	PTR TO LONG
 	mnlabel1Donotremovefolder1  :	PTR TO LONG
 	mnlabel1Removefolder1       :	PTR TO LONG
 	mnlabel1Ask1                :	PTR TO LONG
@@ -185,27 +188,26 @@ ENDOBJECT
 ->/////////////////////////////////////////////////////////////////////////////
 PROC create( display : PTR TO app_display ) OF app_obj
 
-	DEF mnlabel1File , mnlabel1Help , mnlabel1About , mnlabel1Exit
-	DEF mnlabel1Settings , mnlabel1ConferenceDelete , grOUP_ROOT_0
-	DEF gr_grp_1 , gr_grp_2 , im_label_2 , grOUP_ROOT_2
-	DEF gr_confselect , obj_aux0 , obj_aux1 , obj_aux2 , obj_aux3
-	DEF gr_grp_13 , gr_downloadpaths , gr_grp_20 , gr_uploadpaths
-	DEF gr_grp_22 , gr_messagebases , gr_grp_46 , gr_save
-	DEF grOUP_ROOT_3 , gr_nodeSelect , obj_aux4 , obj_aux5
-	DEF lbl300start , lbl300end , lbl1200start , lbl1200end
-	DEF lbl2400start , lbl2400end , lbl4800start , lbl4800end
-	DEF lbl9600start , lbl9600end , lbl12000start , lbl12000end
-	DEF lbl14400start , lbl14400end , lbl16800start , lbl16800end
-	DEF lbl19200start , lbl19200end , lbl21600start , lbl21600end
-	DEF lbl24000start , lbl24000end , lbl26400start , lbl26400end
-	DEF lbl28800start , lbl28800end , lbl31200start , lbl31200end
-	DEF lbl33600start , lbl33600end , lbl38400start , lbl38400end
-	DEF lbl57600start , lbl57600end , lbl115200start , lbl115200end
-	DEF gr_nodesave , grp_root_listitems , space_28 , gr_grp_28
-	DEF grOUP_ROOT_5 , grOUP_ROOT_6 , gr_settingsSaveCancel
-	DEF grOUP_ROOT_7 , gr_item_buttons , grOUP_ROOT_8 , gr_grp_39
-	DEF gr_grp_36 , gr_grp_38 , grOUP_ROOT_9 , gr_grp_43
-	DEF gr_area_save
+	DEF mnlabel1File , mnlabel1Settings , mnlabel1ConferenceDelete
+	DEF grOUP_ROOT_0 , gr_grp_1 , gr_grp_2 , im_label_2
+	DEF grOUP_ROOT_2 , gr_confselect , obj_aux0 , obj_aux1
+	DEF obj_aux2 , obj_aux3 , gr_grp_13 , gr_downloadpaths
+	DEF gr_grp_20 , gr_uploadpaths , gr_grp_22 , gr_messagebases
+	DEF gr_grp_46 , gr_save , grOUP_ROOT_3 , gr_nodeSelect
+	DEF obj_aux4 , obj_aux5 , lbl300start , lbl300end , lbl1200start
+	DEF lbl1200end , lbl2400start , lbl2400end , lbl4800start
+	DEF lbl4800end , lbl9600start , lbl9600end , lbl12000start
+	DEF lbl12000end , lbl14400start , lbl14400end , lbl16800start
+	DEF lbl16800end , lbl19200start , lbl19200end , lbl21600start
+	DEF lbl21600end , lbl24000start , lbl24000end , lbl26400start
+	DEF lbl26400end , lbl28800start , lbl28800end , lbl31200start
+	DEF lbl31200end , lbl33600start , lbl33600end , lbl38400start
+	DEF lbl38400end , lbl57600start , lbl57600end , lbl115200start
+	DEF lbl115200end , gr_nodesave , grp_root_listitems , space_28
+	DEF gr_grp_28 , grOUP_ROOT_5 , grOUP_ROOT_6
+	DEF gr_settingsSaveCancel , grOUP_ROOT_7 , gr_item_buttons
+	DEF grOUP_ROOT_8 , gr_grp_39 , gr_grp_36 , gr_grp_38
+	DEF grOUP_ROOT_9 , gr_grp_43 , gr_area_save
 
 	self.stR_TX_label_0              := '\ec/X\nSetup Tool'
 	self.stR_gr_conf_pages           := [
@@ -335,23 +337,23 @@ PROC create( display : PTR TO app_display ) OF app_obj
 		Child , gr_grp_2 ,
 	End
 
-	mnlabel1Help := MenuitemObject ,
+	self.mnlabel1Help := MenuitemObject ,
 		MUIA_Menuitem_Title , 'Help' ,
 	End
 
-	mnlabel1About := MenuitemObject ,
+	self.mnlabel1About := MenuitemObject ,
 		MUIA_Menuitem_Title , 'About' ,
 	End
 
-	mnlabel1Exit := MenuitemObject ,
+	self.mnlabel1Exit := MenuitemObject ,
 		MUIA_Menuitem_Title , 'Exit' ,
 	End
 
 	mnlabel1File := MenuitemObject ,
 		MUIA_Menuitem_Title , 'File' ,
-		MUIA_Family_Child , mnlabel1Help ,
-		MUIA_Family_Child , mnlabel1About ,
-		MUIA_Family_Child , mnlabel1Exit ,
+		MUIA_Family_Child , self.mnlabel1Help ,
+		MUIA_Family_Child , self.mnlabel1About ,
+		MUIA_Family_Child , self.mnlabel1Exit ,
 	End
 
 	self.mnlabel1Donotremovefolder1 := MenuitemObject ,

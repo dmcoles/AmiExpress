@@ -363,6 +363,7 @@ PROC editPresets(acpName:PTR TO CHAR) OF frmPresetsEdit
 
   set( self.winMain, MUIA_Window_Title,'Edit Presets')
   set(self.raPreset,MUIA_Radio_Active,0)
+  set(self.raPreset, MUIA_ShortHelp , getHelpText(PRESET_NUMBER))
 
   self.changed:=FALSE
   self.loadPreset(1)
