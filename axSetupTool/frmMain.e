@@ -35,16 +35,14 @@ PROC exitbuttonPressed() OF frmMain
   domethod(self.app.app,[MUIM_Application_ReturnID,MUIA_Window_CloseRequest])
 ENDPROC
 
+
 PROC aboutbuttonPressed() OF frmMain
   DEF win
   MOVE.L (A1),self
   GetA4()
-  get(self.winMain,MUIA_Window_Window,{win})
-  EasyRequestArgs( win , [ 20 , 0 ,
-                  'About Ami-Express Setup Tool' ,
-                  'This tool can assist you in configuring\nalmost every aspect of Ami-Express.\n\n(c)2023 Darren Coles.',
-                  '_OK' ] , NIL , NIL )
+  Mui_RequestA(0,self.winMain,0,'About Ami-Express Setup Tool' ,'*Ok','This tool can assist you in configuring\nalmost every aspect of Ami-Express.\n\n(c)2023 Darren Coles.',0)
 ENDPROC
+
 
 PROC computersbuttonPressed() OF frmMain
   DEF listEdit:PTR TO frmEditList

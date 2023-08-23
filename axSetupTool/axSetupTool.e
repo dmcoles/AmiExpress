@@ -2,10 +2,11 @@ OPT OSVERSION = 37,STACK=60000,LARGE
 OPT PREPROCESS
 
 /*
-  ftpport ftpdataport httpport missing in bbsconfig 
   window.pubscreen can be WINDOW.PUBSCREEN or WINDOW.PUBSCREEN=
 
-  help screens
+  help screen
+  add warning about incorrect rexxdoor if nodes>10
+  add warning to restart on exit if ACP running
   restart bbs
 
   user editor

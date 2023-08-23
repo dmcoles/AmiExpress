@@ -94,19 +94,15 @@ PROC canClose() OF frmAddComplexItem
 ENDPROC TRUE
 
 PROC canSave() OF frmAddComplexItem
-  DEF win,newName,i
+  DEF newName,i
   
   MOVE.L (A1),self
   GetA4()
 
-  get(self.winMain,MUIA_Window_Window,{win})
   get(self.txtAreaName, MUIA_String_Contents,{newName})
 
   IF self.existingItems ANDALSO self.existingItems.contains(newName)
-    EasyRequestArgs( win , [ 20 , 0 ,
-                  'Error' ,
-                  'An item already exists with this name.',
-                  '_OK' ] , NIL , NIL )
+    Mui_RequestA(0,self.winMain,0,'Error','*Ok','An item already exists with this name.',0)
     RETURN FALSE
   ENDIF
 ENDPROC TRUE
@@ -114,10 +110,8 @@ ENDPROC TRUE
 PROC unsavedChangesWarning() OF frmAddComplexItem
   DEF win
   get(self.winMain,MUIA_Window_Window,{win})
-  IF EasyRequestArgs( win , [ 20 , 0 ,
-                  'Unsaved changes' ,
-                  'You have unsaved changes,\nif you continue you will lose them.',
-                  '_OK|_CANCEL' ] , NIL , NIL )=0 THEN RETURN FALSE
+  IF Mui_RequestA(0,self.winMain,0,'Unsaved changes','*OK|CANCEL','You have unsaved changes,\nif you continue you will lose them.',0)=0 THEN RETURN FALSE
+
 ENDPROC TRUE
 
 PROC editArea(acpName,areaName,oldArea:PTR TO area, existingAreas:PTR TO stdlist) OF frmAddComplexItem

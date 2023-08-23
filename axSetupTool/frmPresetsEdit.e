@@ -164,49 +164,33 @@ PROC canClose() OF frmPresetsEdit
 ENDPROC TRUE
 
 PROC unsavedChangesWarning() OF frmPresetsEdit
-  DEF win
-  get(self.winMain,MUIA_Window_Window,{win})
-  IF EasyRequestArgs(	win , [ 20 , 0 ,
-									'Unsaved changes' ,
-									'You have unsaved changes,\nif you continue you will lose them.',
-									'_OK|_CANCEL' ] , NIL , NIL )=0 THEN RETURN FALSE
+  IF Mui_RequestA(0,self.winMain,0,'Unsaved changes',
+    '*OK|CANCEL','You have unsaved changes,\nif you continue you will lose them.',0)=0 THEN RETURN FALSE
 ENDPROC TRUE
 
 PROC savePresetChanges() OF frmPresetsEdit
   DEF tempStr[255]:STRING
   DEF bbsPath[255]:STRING
   DEF presetStr[20]:STRING
-  DEF win
 
   MOVE.L (A1),self
   GetA4()
 
-  get(self.winMain,MUIA_Window_Window,{win})
-
   fullTrim(self.areaNames[self.strAreaName.getValueIndex()],tempStr)
   IF EstrLen(tempStr)=0
-    EasyRequestArgs(  win , [ 20 , 0 ,
-                  'Error' ,
-                  'Area Name is a mandatory field',
-                  '_OK' ] , NIL , NIL )
+    Mui_RequestA(0,self.winMain,0,'Error','*OK','Area Name is a mandatory field',0)
     RETURN
   ENDIF
 
   fullTrim(self.intAccessLevel.getValue(),tempStr)
   IF EstrLen(tempStr)=0
-    EasyRequestArgs(  win , [ 20 , 0 ,
-                  'Error' ,
-                  'Acces Level is a mandatory field',
-                  '_OK' ] , NIL , NIL )
+    Mui_RequestA(0,self.winMain,0,'Error','*OK','Acces Level is a mandatory field',0)
     RETURN
   ENDIF
 
   fullTrim(self.intConfrJoin.getValue(),tempStr)
   IF EstrLen(tempStr)=0
-    EasyRequestArgs(  win , [ 20 , 0 ,
-                  'Error' ,
-                  'Initial Conf is a mandatory field',
-                  '_OK' ] , NIL , NIL )
+    Mui_RequestA(0,self.winMain,0,'Error','*OK','Initial Conf is a mandatory field',0)
     RETURN
   ENDIF
  

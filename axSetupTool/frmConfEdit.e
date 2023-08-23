@@ -654,30 +654,18 @@ PROC canClose() OF frmConfEdit
 ENDPROC TRUE
 
 PROC unsavedChangesWarning() OF frmConfEdit
-  DEF win
-  get(self.winMain,MUIA_Window_Window,{win})
-  IF EasyRequestArgs( win , [ 20 , 0 ,
-                  'Unsaved changes' ,
-                  'You have unsaved changes,\nif you continue you will lose them.',
-                  '_OK|_CANCEL' ] , NIL , NIL )=0 THEN RETURN FALSE
+  IF Mui_RequestA(0,self.winMain,0,'Unsaved changes',
+    '*OK|CANCEL','You have unsaved changes,\nif you continue you will lose them.',0)=0 THEN RETURN FALSE
 ENDPROC TRUE
 
 PROC deleteConfWarning() OF frmConfEdit
-  DEF win
-  get(self.winMain,MUIA_Window_Window,{win})
-    IF EasyRequestArgs(	win , [ 20 , 0 ,
-									'Warning' ,
-									'Are you sure you wish to delete this conference?',
-									'_Yes|No' ] , NIL , NIL )=0 THEN RETURN FALSE
+  IF Mui_RequestA(0,self.winMain,0,'Warning',
+    '*Yes|No','Are you sure you wish to delete this conference?',0)=0 THEN RETURN FALSE
 ENDPROC TRUE
 
 PROC deleteConfFolderRequest() OF frmConfEdit
-  DEF win
-  get(self.winMain,MUIA_Window_Window,{win})
-    IF EasyRequestArgs(	win , [ 20 , 0 ,
-									'Warning' ,
-									'Do you wish to also remove the Conf folder contents?',
-									'_Yes|No' ] , NIL , NIL )=0 THEN RETURN FALSE
+  IF Mui_RequestA(0,self.winMain,0,'Warning',
+    '*Yes|No','Do you wish to also remove the Conf folder contents?',0)=0 THEN RETURN FALSE
 ENDPROC TRUE
 
 PROC saveChanges() OF frmConfEdit
@@ -695,19 +683,13 @@ PROC saveChanges() OF frmConfEdit
 
   fullTrim(self.strConfName2.getValue(),tempStr)
   IF EstrLen(tempStr)=0
-    EasyRequestArgs(  window , [ 20 , 0 ,
-                  'Error' ,
-                  'Conference Name is a mandatory field',
-                  '_OK' ] , NIL , NIL )
+    Mui_RequestA(0,self.winMain,0,'Error','*OK','Conference Name is a mandatory field',0)
     RETURN
   ENDIF
 
   fullTrim(self.paConfPath.getValue(),tempStr)
   IF EstrLen(tempStr)=0
-    EasyRequestArgs(  window , [ 20 , 0 ,
-                  'Error' ,
-                  'Conference Path is a mandatory field',
-                  '_OK' ] , NIL , NIL )
+    Mui_RequestA(0,self.winMain,0,'Error','*OK','Conference Path is a mandatory field',0)
     RETURN
   ENDIF
 

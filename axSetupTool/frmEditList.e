@@ -746,10 +746,8 @@ PROC canClose() OF frmEditList
 ENDPROC TRUE
 
 PROC unsavedChangesWarning() OF frmEditList
-    IF EasyRequestArgs(	NIL , [ 20 , 0 ,
-									'Unsaved changes' ,
-									'You have unsaved changes,\nif you continue you will lose them.',
-									'_OK|_CANCEL' ] , NIL , NIL )=0 THEN RETURN FALSE
+  IF Mui_RequestA(0,self.winMain,0,'Unsaved changes',
+    '*OK|CANCEL','You have unsaved changes,\nif you continue you will lose them.',0)=0 THEN RETURN FALSE
 ENDPROC TRUE
 
 

@@ -705,48 +705,29 @@ PROC canClose() OF frmNodeEdit
 ENDPROC TRUE
 
 PROC unsavedChangesWarning() OF frmNodeEdit
-  DEF win
-  get(self.winMain,MUIA_Window_Window,{win})
-    IF EasyRequestArgs(	win , [ 20 , 0 ,
-									'Unsaved changes' ,
-									'You have unsaved changes,\nif you continue you will lose them.',
-									'_OK|_CANCEL' ] , NIL , NIL )=0 THEN RETURN FALSE
+  IF Mui_RequestA(0,self.winMain,0,'Unsaved changes',
+    '*OK|CANCEL','You have unsaved changes,\nif you continue you will lose them.',0)=0 THEN RETURN FALSE
 ENDPROC TRUE
 
 PROC deleteNodeWarning() OF frmNodeEdit
-  DEF win
-  get(self.winMain,MUIA_Window_Window,{win})
-    IF EasyRequestArgs(	win , [ 20 , 0 ,
-									'Warning' ,
-									'Are you sure you wish to delete this node?',
-									'_Yes|No' ] , NIL , NIL )=0 THEN RETURN FALSE
+  IF Mui_RequestA(0,self.winMain,0,'Warning','*Yes|No','Are you sure you wish to delete this node?',0)=0 THEN RETURN FALSE
 ENDPROC TRUE
 
 PROC deleteNodeFolderRequest() OF frmNodeEdit
-  DEF win
-  get(self.winMain,MUIA_Window_Window,{win})
-    IF EasyRequestArgs(	win , [ 20 , 0 ,
-									'Warning' ,
-									'Do you wish to also remove the Node folder contents?',
-									'_Yes|No' ] , NIL , NIL )=0 THEN RETURN FALSE
+  IF Mui_RequestA(0,self.winMain,0,'Warning','*Yes|No','Do you wish to also remove the Node folder contents?',0)=0 THEN RETURN FALSE
 ENDPROC TRUE
 
 PROC validateTime(timeStr:PTR TO CHAR,startControl,endControl) OF frmNodeEdit
-  DEF win
   DEF timeVal,timeEntry
   DEF errorText[255]:STRING
 
-  get(self.winMain,MUIA_Window_Window,{win})
   get(startControl, MUIA_String_Contents,{timeEntry})
   
   IF StrLen(timeEntry)>0
     timeVal:=Val(timeEntry)
     IF (Mod(timeVal,100)>59) OR (timeVal>2359) OR (timeVal<0)
       StringF(errorText,'You have entered an invalid time for \s baud start time',timeStr)
-      EasyRequestArgs(	win , [ 20 , 0 ,
-                    'Error ' ,
-                    errorText,
-                    'OK' ] , NIL , NIL )
+      Mui_RequestA(0,self.winMain,0,'Error','*OK',errorText,0)
       RETURN FALSE
     ENDIF
   ENDIF
@@ -757,10 +738,7 @@ PROC validateTime(timeStr:PTR TO CHAR,startControl,endControl) OF frmNodeEdit
     timeVal:=Val(timeEntry)
     IF (Mod(timeVal,100)>59) OR (timeVal>2359) OR (timeVal<0)
       StringF(errorText,'You have entered an invalid time for \s baud end time',timeStr)
-      EasyRequestArgs(	win , [ 20 , 0 ,
-                    'Error ' ,
-                    errorText,
-                    'OK' ] , NIL , NIL )
+      Mui_RequestA(0,self.winMain,0,'Error','*OK',errorText,0)
       RETURN FALSE
     ENDIF
   ENDIF
@@ -776,20 +754,15 @@ PROC saveChanges() OF frmNodeEdit
   DEF windowTooltype[255]:STRING
   DEF timeTooltype[255]:STRING
   DEF timeItem:PTR TO timeItem
-  DEF window  
   DEF val
   
   MOVE.L (A1),self
   GetA4()
   
-  get(self.winMain,MUIA_Window_Window,{window})
 
   fullTrim(self.strNodeStart.getValue(),tempStr)
   IF EstrLen(tempStr)=0
-    EasyRequestArgs(  window , [ 20 , 0 ,
-                  'Error' ,
-                  'Express File is a mandatory field',
-                  '_OK' ] , NIL , NIL )
+    Mui_RequestA(0,self.winMain,0,'Error','*OK','Express File is a mandatory field',0)
     RETURN
   ENDIF
 
@@ -802,8 +775,6 @@ PROC saveChanges() OF frmNodeEdit
   readToolType(self.acpName,'BBS_LOCATION',bbsPath)
   StringF(nodeStr,'\sNode\d',bbsPath,self.currNode)
   
-  get(self.winMain,MUIA_Window_Window,{window})
-
   IF (self.newNode)
     //create the folder structure
     makeDir(nodeStr)
