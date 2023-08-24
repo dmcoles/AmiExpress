@@ -32,6 +32,7 @@ PROC btnClick() OF frmCommands
   DEF btn,text
   MOVE.L (A1),self
   MOVE.L 4(A1),btn
+  GetA4()
   
   btn:=self.btnList.item(btn)
   get( btn, MUIA_Text_Contents, {text})
@@ -41,7 +42,6 @@ PROC btnClick() OF frmCommands
   editList.editCommands(self.acpConfigName,text+5)
   END editList
   self.wake()
-  GetA4()
 ENDPROC
 
 PROC goBBSCmd() OF frmCommands

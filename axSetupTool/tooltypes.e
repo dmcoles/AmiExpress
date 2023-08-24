@@ -4,6 +4,7 @@ OPT PREPROCESS
 MODULE 'workbench/workbench','icon','*/stringlist','dos/dos'
 
 DEF diskObjectCache:PTR TO stdlist
+DEF changesMade
 
 EXPORT OBJECT diskObjectCacheItem
   fileName:PTR TO CHAR
@@ -95,6 +96,7 @@ EXPORT PROC writeToolType(toolType,key,newValue=-1,force=FALSE)
       ENDIF
     ENDIF
     WriteF('update tooltype \s \s = \s\n',toolType,key,newValue)
+    changesMade:=TRUE
     
     count:=0
     IF oldtooltypes
@@ -134,6 +136,7 @@ EXPORT PROC writeToolType(toolType,key,newValue=-1,force=FALSE)
     ENDFOR
     IF needToAdd
       WriteF('added \s\n',newItem)
+      changesMade:=TRUE
       cacheObj.changed:=TRUE
       oldtooltypes[count]:=StrClone(newItem)
       ListAddItem(oldtooltypes,0)
@@ -191,6 +194,7 @@ EXPORT PROC deleteToolType(toolType,key)
 
     IF changed
       WriteF('delete tooltype \s \s\n',toolType,key)
+      changesMade:=TRUE
     ENDIF
   ENDIF
 ENDPROC
@@ -224,6 +228,7 @@ ENDPROC result
 
 EXPORT PROC initialiseCache()
   diskObjectCache:=NEW diskObjectCache.stdlist(100)
+  changesMade:=FALSE
 ENDPROC
 
 EXPORT PROC deInitialiseCache()
@@ -437,3 +442,8 @@ EXPORT PROC saveCachedChanges()
   ENDFOR
 ENDPROC
 
+EXPORT PROC clearChangeFlag()
+  changesMade:=FALSE
+ENDPROC
+
+EXPORT PROC getChangeFlag() IS changesMade

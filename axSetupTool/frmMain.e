@@ -4,7 +4,7 @@ OPT PREPROCESS
 MODULE 'muimaster' , 'libraries/mui'
 MODULE 'tools/boopsi','dos/dos','libraries/asl','dos/var'
 MODULE 'utility/tagitem' , 'utility/hooks', 'tools/installhook'
-MODULE '*axedit','*frmBase','*frmEditList','*frmNodeEdit','*frmConfEdit','*frmSettingsEdit','*frmAccess','*frmCommands','*tooltypes'
+MODULE '*axedit','*frmBase','*frmEditList','*frmNodeEdit','*frmConfEdit','*frmSettingsEdit','*frmAccess','*frmCommands','*frmTools','*tooltypes'
 
 EXPORT OBJECT frmMain OF frmBase
   acpConfigName: PTR TO CHAR
@@ -27,6 +27,7 @@ EXPORT OBJECT frmMain OF frmBase
   btnRestrictClickHook: hook
   btnExitClickHook: hook
   btnAboutClickHook: hook
+  btnToolsClickHook: hook
 ENDOBJECT
 
 PROC exitbuttonPressed() OF frmMain
@@ -41,6 +42,19 @@ PROC aboutbuttonPressed() OF frmMain
   MOVE.L (A1),self
   GetA4()
   Mui_RequestA(0,self.winMain,0,'About Ami-Express Setup Tool' ,'*Ok','This tool can assist you in configuring\nalmost every aspect of Ami-Express.\n\n(c)2023 Darren Coles.',0)
+ENDPROC
+
+PROC toolsbuttonPressed() OF frmMain
+  DEF frmTools:PTR TO frmTools
+  MOVE.L (A1),self
+  GetA4()
+
+  self.sleep()
+  NEW frmTools.create(self.app)
+  frmTools.tools(self.acpConfigName)
+  END frmTools
+  self.wake()
+  
 ENDPROC
 
 
@@ -269,10 +283,46 @@ PROC create(app:PTR TO app_obj) OF frmMain
   set (app.mnlabel1Ask2, MUIA_Menuitem_Exclude, 3)
 ENDPROC
 
-PROC domain() OF frmMain
+PROC canClose() OF frmMain
+  DEF tempStr[255]:STRING
+  DEF configOk=TRUE
+
+  MOVE.L (A1),self
+  GetA4()
+
+  readToolType(self.acpConfigName,'SYSOP_NAME',tempStr)
+  IF StrLen(tempStr)=0 THEN configOk:=FALSE
+
+  readToolType(self.acpConfigName,'BBS_LOCATION',tempStr)
+  IF StrLen(tempStr)=0 THEN configOk:=FALSE
+
+  readToolType(self.acpConfigName,'BBS_NAME',tempStr)
+  IF StrLen(tempStr)=0 THEN configOk:=FALSE
+
+  readToolType(self.acpConfigName,'BBS_GEOGRAPHIC',tempStr)
+  IF StrLen(tempStr)=0 THEN configOk:=FALSE
+
+  IF configOk=FALSE
+    IF Mui_RequestA(0,self.winMain,0,'Warning' ,'*Ok|Cancel','You have not cofigured the minimal settings to allow Ami-Express to start up.. Are you sure you wish to exit?',0)=0 THEN RETURN FALSE
+  ENDIF
+  
+  IF(FindPort('AE.Master')) AND getChangeFlag()
+    Mui_RequestA(0,self.winMain,0,'Warning','*OK','ACP is running and changes have been made.\nA restart of the bbs is recommended.',0)
+  ENDIF
+  
+ENDPROC TRUE
+
+PROC doMain() OF frmMain
   DEF fh,fr:PTR TO filerequester
   DEF tempStr[200]:STRING
+  DEF nodeCount
+  DEF closeHook:PTR TO hook
+
   DEF v
+
+  NEW closeHook
+  installhook( closeHook, {canClose})    
+  self.closeHook:=closeHook
 
   GetVar('axSetupEditor_prefs',tempStr,200,0)
   SetStr(tempStr)
@@ -348,6 +398,7 @@ PROC domain() OF frmMain
   self.setupButtonClick(self.app.btnRestrict,self.btnRestrictClickHook,{restrictbuttonPressed})
   self.setupButtonClick(self.app.btnBackup,self.btnBackupClickHook,{backupbuttonPressed})
   self.setupButtonClick(self.app.btnAbout,self.btnAboutClickHook,{aboutbuttonPressed})
+  self.setupButtonClick(self.app.btnTools,self.btnToolsClickHook,{toolsbuttonPressed})
 
 	domethod( self.app.mnlabel1Exit , [
 		MUIM_Notify , MUIA_Menuitem_Trigger, MUIV_EveryTime,
@@ -365,6 +416,12 @@ PROC domain() OF frmMain
   set( self.app.btnUsers, MUIA_Disabled , MUI_TRUE)
 
   initialiseCache()
+
+  nodeCount:=readToolTypeInt(self.acpConfigName,'NODES')
+  IF (nodeCount>10) AND (FileLength('bbs:utils/rexxdoor')=16068)
+    Mui_RequestA(self.app.app,0,0,'Warning','*OK','The version of rexxdoor you are using\nis not compatible with more than 10 nodes.',0)
+  ENDIF
+
   self.showModal()
 
   get (self.app.mnlabel1Donotremovefolder1, MUIA_Menuitem_Checked,{v})
@@ -407,5 +464,5 @@ PROC domain() OF frmMain
   deInitialiseCache()
 
   DisposeLink(self.acpConfigName)
-
+  END closeHook
 ENDPROC

@@ -29,8 +29,11 @@ controls.m:		controls.e helpText.m
 frmBase.m:		frmBase.e axedit.m
 							$(compiler) frmBase $(options)
 
-frmMain.m:		frmMain.e frmBase.m axedit.m frmEditList.m frmNodeEdit.m frmConfEdit.m frmSettingsEdit.m frmAccess.m frmCommands.m
+frmMain.m:		frmMain.e frmBase.m axedit.m frmEditList.m frmNodeEdit.m frmConfEdit.m frmSettingsEdit.m frmAccess.m frmCommands.m frmTools.m
 							$(compiler) frmMain $(options)
+
+frmTools.m:		frmTools.e frmBAse.m axedit.m tooltypes.m
+							$(compiler) frmTools $(options)
 
 frmEditList.m:	frmEditList.e frmAddItem.m frmBase.m frmAddComplexItem.m tooltypes.m axedit.m stringlist.m miscfuncs.m configobject.m helpText.m
 							$(compiler) frmEditList $(options)
@@ -65,4 +68,4 @@ helpText.m:	helpText.e
 configobject.m:	configobject.e stringlist.m
 							$(compiler) configobject $(options)
 clean:
-							delete axSetupTool axedit.m frmAddItem.m frmPresetsEdit.m frmBase.m frmMain.m frmAddComplexItem.m frmEditList.m frmNodeEdit.m frmConfEdit.m frmSettingsEdit.m tooltypes.m controls.m frmAccess.m frmCommands.m miscfuncs.m /stringlist.m configobject.m helpText.m
+							delete axSetupTool axedit.m frmAddItem.m frmPresetsEdit.m frmBase.m frmMain.m frmAddComplexItem.m frmEditList.m frmNodeEdit.m frmConfEdit.m frmSettingsEdit.m tooltypes.m controls.m frmAccess.m frmCommands.m miscfuncs.m /stringlist.m configobject.m helpText.m frmTools.m

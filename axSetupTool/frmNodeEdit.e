@@ -141,7 +141,8 @@ EXPORT OBJECT frmNodeEdit OF frmBase
   intWinLeftEdge     : PTR TO control
   intWinTopEdge      : PTR TO control
   intWinWidth        : PTR TO control
-  intWinHeight        : PTR TO control
+  intWinHeight       : PTR TO control
+  boolWinPubScreen   : PTR TO control
   strWinPubScreen    : PTR TO control
   boolWinIconified   : PTR TO control
   boolWinInterlace   : PTR TO control
@@ -219,6 +220,9 @@ PROC cloneNewNode() OF frmNodeEdit
     self.nodeCount:=self.nodeCount+1
     self.currNode:=self.nodeCount-1
 
+    self.checkRexxDoor()
+
+
     StringF(tempStr,'\d',self.currNode)
     set(self.strNodeNumber, MUIA_String_Contents,tempStr)
 
@@ -232,6 +236,12 @@ PROC cloneNewNode() OF frmNodeEdit
   ENDIF
 ENDPROC
 
+PROC checkRexxDoor() OF frmNodeEdit
+  IF (self.nodeCount>10) AND (FileLength('bbs:utils/rexxdoor')=16068)
+    Mui_RequestA(self.app.app,0,0,'Warning','*OK','The version of rexxdoor you are using\nis not compatible with more than 10 nodes.',0)
+  ENDIF
+ENDPROC
+
 PROC createNewNode() OF frmNodeEdit
   MOVE.L (A1),self
   GetA4()
@@ -240,6 +250,9 @@ PROC createNewNode() OF frmNodeEdit
     self.changed:=TRUE
     self.newNode:=TRUE
     self.nodeCount:=self.nodeCount+1
+
+    self.checkRexxDoor()
+    
     set( self.btnNodeSave,MUIA_Disabled,FALSE)
     set( self.btnAddNode,MUIA_Disabled,MUI_TRUE)
     set( self.btnCloneNode,MUIA_Disabled,MUI_TRUE)
@@ -555,6 +568,8 @@ PROC addControls() OF frmNodeEdit
   self.intWinWidth:=control
   NEW control.createStringInt('Height',NODE_WIN_HEIGHT,self.app.app,self.setChangedHook,self) 
   self.intWinHeight:=control
+  NEW control.createCheckBox('Use default pubscreen',NODE_WIN_DEFPUBSCREEN,self.app.app,self.setChangedHook,self) 
+  self.boolWinPubScreen:=control
   NEW control.createString('Pubscreen',NODE_WIN_PUBSCREEN,self.app.app,self.setChangedHook,self) 
   self.strWinPubScreen:=control
   NEW control.createCheckBox('Iconified',NODE_WIN_ICONIFIED,self.app.app,self.setChangedHook,self)
@@ -608,8 +623,8 @@ PROC addControls() OF frmNodeEdit
 
   domethod(self.grpNodeSettings4,[MUIM_Group_InitChange])
 
-  self.controlList4:= [self.intNumColours,self.intWinLeftEdge,self.intWinTopEdge,self.intWinWidth,self.intWinHeight,self.strWinPubScreen,
-                       self.strDisplayId,self.boolWinIconified,self.boolWinInterlace,self.boolWinStatusBar,self.boolWinToFront]
+  self.controlList4:= [self.intNumColours,self.intWinLeftEdge,self.intWinTopEdge,self.intWinWidth,self.intWinHeight,self.strDisplayId,
+                       self.boolWinPubScreen,self.strWinPubScreen,self.boolWinIconified,self.boolWinInterlace,self.boolWinStatusBar,self.boolWinToFront]
 
   ForAll({control},self.controlList4,`control.addToGroup(self.grpNodeSettings4))
   domethod(self.grpNodeSettings4,[OM_ADDMEMBER,HVSpace])
@@ -949,7 +964,11 @@ PROC saveChanges() OF frmNodeEdit
   writeToolType(windowTooltype,'WINDOW.TOPEDGE',self.intWinTopEdge.getValue())
   writeToolType(windowTooltype,'WINDOW.WIDTH',self.intWinWidth.getValue())
   writeToolType(windowTooltype,'WINDOW.HEIGHT',self.intWinHeight.getValue())
-  writeToolType(windowTooltype,'WINDOW.PUBSCREEN',self.strWinPubScreen.getValue())
+  IF self.boolWinPubScreen.getValue()
+    writeToolType(windowTooltype,'WINDOW.PUBSCREEN')
+  ELSE
+    writeToolType(windowTooltype,'WINDOW.PUBSCREEN',self.strWinPubScreen.getValue())
+  ENDIF
   IF self.boolWinIconified.getValue() THEN writeToolType(windowTooltype,'WINDOW.ICONIFIED') ELSE deleteToolType(windowTooltype,'WINDOW.ICONIFIED')
   IF self.boolWinInterlace.getValue() THEN writeToolType(windowTooltype,'WINDOW.INTERLACE') ELSE deleteToolType(windowTooltype,'WINDOW.INTERLACE')
   IF self.boolWinStatusBar.getValue() THEN writeToolType(windowTooltype,'WINDOW.STATBAR') ELSE deleteToolType(windowTooltype,'WINDOW.STATBAR')
@@ -1242,8 +1261,16 @@ PROC loadNode(node) OF frmNodeEdit
   self.intWinWidth.setValue(val)
   val:=readToolTypeInt(windowTooltype,'WINDOW.HEIGHT')
   self.intWinHeight.setValue(val)
-  readToolType(windowTooltype,'WINDOW.PUBSCREEN',tooltypeValue)
-  self.strWinPubScreen.setValue(tooltypeValue)
+  IF checkToolTypeExists(windowTooltype,'WINDOW.PUBSCREEN')
+    readToolType(windowTooltype,'WINDOW.PUBSCREEN',tooltypeValue)
+    IF StrLen(tooltypeValue)=0
+      self.boolWinPubScreen.setValue(-1)
+      self.strWinPubScreen.setValue('')
+    ELSE
+      self.boolWinPubScreen.setValue(0)
+      self.strWinPubScreen.setValue(tooltypeValue)
+    ENDIF
+  ENDIF
   self.boolWinIconified.setValue(IF checkToolTypeExists(windowTooltype,'WINDOW.ICONIFIED') THEN MUI_TRUE ELSE FALSE)
   self.boolWinInterlace.setValue(IF checkToolTypeExists(windowTooltype,'WINDOW.INTERLACE') THEN MUI_TRUE ELSE FALSE)
   self.boolWinStatusBar.setValue(IF checkToolTypeExists(windowTooltype,'WINDOW.STATBAR') THEN MUI_TRUE ELSE FALSE)

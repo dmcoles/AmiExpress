@@ -2,13 +2,6 @@ OPT OSVERSION = 37,STACK=60000,LARGE
 OPT PREPROCESS
 
 /*
-  window.pubscreen can be WINDOW.PUBSCREEN or WINDOW.PUBSCREEN=
-
-  help screen
-  add warning about incorrect rexxdoor if nodes>10
-  add warning to restart on exit if ACP running
-  restart bbs
-
   user editor
   callers log viewer
   msgbase viewer
@@ -37,7 +30,7 @@ PROC main() HANDLE
   helpTextInitialise()
 
   NEW frmMain.create(app)
-  frmMain.domain()
+  frmMain.doMain()
 
 EXCEPT DO
 

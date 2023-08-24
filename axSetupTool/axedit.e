@@ -21,7 +21,6 @@ EXPORT OBJECT app_obj
 	app                         :	PTR TO LONG
 	winMain                     :	PTR TO LONG
 	mn_label_1                  :	PTR TO LONG
-	mnlabel1Help                :	PTR TO LONG
 	mnlabel1About               :	PTR TO LONG
 	mnlabel1Exit                :	PTR TO LONG
 	mnlabel1Donotremovefolder1  :	PTR TO LONG
@@ -51,7 +50,7 @@ EXPORT OBJECT app_obj
 	btnUsers                    :	PTR TO LONG
 	tx_label_0                  :	PTR TO LONG
 	btnAbout                    :	PTR TO LONG
-	btnHelp                     :	PTR TO LONG
+	btnTools                    :	PTR TO LONG
 	btnExit                     :	PTR TO LONG
 	wi_conf_edit                :	PTR TO LONG
 	btnFirstConf                :	PTR TO LONG
@@ -176,7 +175,24 @@ EXPORT OBJECT app_obj
 	grpCommands                 :	PTR TO LONG
 	btnBBSCmd                   :	PTR TO LONG
 	btnSysCmd                   :	PTR TO LONG
+	winTools                    :	PTR TO LONG
+	tx_label_3                  :	PTR TO LONG
+	txtAcpStatus                :	PTR TO LONG
+	tx_label_4                  :	PTR TO LONG
+	txtNodeCount                :	PTR TO LONG
+	tx_label_6                  :	PTR TO LONG
+	txtConfCount                :	PTR TO LONG
+	btnShutdown                 :	PTR TO LONG
+	btnStart                    :	PTR TO LONG
+	btnRestart                  :	PTR TO LONG
+	btnClose                    :	PTR TO LONG
 	stR_TX_label_0              :	PTR TO CHAR
+	stR_TX_label_3              :	PTR TO CHAR
+	stR_txtAcpStatus            :	PTR TO CHAR
+	stR_TX_label_4              :	PTR TO CHAR
+	stR_txtNodeCount            :	PTR TO CHAR
+	stR_TX_label_6              :	PTR TO CHAR
+	stR_txtConfCount            :	PTR TO CHAR
 	stR_gr_conf_pages           :	PTR TO LONG
 	stR_gr_node_pages           :	PTR TO LONG
 	ra_presetsContent           :	PTR TO LONG
@@ -207,9 +223,16 @@ PROC create( display : PTR TO app_display ) OF app_obj
 	DEF gr_grp_28 , grOUP_ROOT_5 , grOUP_ROOT_6
 	DEF gr_settingsSaveCancel , grOUP_ROOT_7 , gr_item_buttons
 	DEF grOUP_ROOT_8 , gr_grp_39 , gr_grp_36 , gr_grp_38
-	DEF grOUP_ROOT_9 , gr_grp_43 , gr_area_save
+	DEF grOUP_ROOT_9 , gr_grp_43 , gr_area_save , grOUP_ROOT_11
+	DEF gr_grp_48 , space_29 , gr_grp_49 , space_30
 
 	self.stR_TX_label_0              := '\ec/X\nSetup Tool'
+	self.stR_TX_label_3              := 'ACP Status'
+	self.stR_txtAcpStatus            := NIL
+	self.stR_TX_label_4              := 'Nodes'
+	self.stR_txtNodeCount            := NIL
+	self.stR_TX_label_6              := 'Conferences'
+	self.stR_txtConfCount            := NIL
 	self.stR_gr_conf_pages           := [
 		'Main' ,
 		'Download Paths' ,
@@ -314,7 +337,7 @@ PROC create( display : PTR TO app_display ) OF app_obj
 
 	self.btnAbout := SimpleButton( 'About' )
 
-	self.btnHelp := SimpleButton( 'Help' )
+	self.btnTools := SimpleButton( 'Tools' )
 
 	self.btnExit := SimpleButton( 'Exit' )
 
@@ -327,7 +350,7 @@ PROC create( display : PTR TO app_display ) OF app_obj
 		Child , self.tx_label_0 ,
 		Child , im_label_2 ,
 		Child , self.btnAbout ,
-		Child , self.btnHelp ,
+		Child , self.btnTools ,
 		Child , self.btnExit ,
 	End
 
@@ -335,10 +358,6 @@ PROC create( display : PTR TO app_display ) OF app_obj
 		MUIA_Group_Horiz , MUI_TRUE ,
 		Child , gr_grp_1 ,
 		Child , gr_grp_2 ,
-	End
-
-	self.mnlabel1Help := MenuitemObject ,
-		MUIA_Menuitem_Title , 'Help' ,
 	End
 
 	self.mnlabel1About := MenuitemObject ,
@@ -351,7 +370,6 @@ PROC create( display : PTR TO app_display ) OF app_obj
 
 	mnlabel1File := MenuitemObject ,
 		MUIA_Menuitem_Title , 'File' ,
-		MUIA_Family_Child , self.mnlabel1Help ,
 		MUIA_Family_Child , self.mnlabel1About ,
 		MUIA_Family_Child , self.mnlabel1Exit ,
 	End
@@ -1597,6 +1615,90 @@ PROC create( display : PTR TO app_display ) OF app_obj
 		WindowContents , self.grpCommands ,
 	End
 
+	self.tx_label_3 := TextObject ,
+		MUIA_Background , MUII_WindowBack ,
+		MUIA_Text_Contents , self.stR_TX_label_3 ,
+		MUIA_Text_SetMin , MUI_TRUE ,
+	End
+
+	self.txtAcpStatus := TextObject ,
+		MUIA_Background , MUII_WindowBack ,
+		MUIA_Frame , MUIV_Frame_Text ,
+		MUIA_Text_Contents , self.stR_txtAcpStatus ,
+		MUIA_Text_SetMin , MUI_TRUE ,
+	End
+
+	self.tx_label_4 := TextObject ,
+		MUIA_Background , MUII_WindowBack ,
+		MUIA_Text_Contents , self.stR_TX_label_4 ,
+		MUIA_Text_SetMin , MUI_TRUE ,
+	End
+
+	self.txtNodeCount := TextObject ,
+		MUIA_Background , MUII_WindowBack ,
+		MUIA_Frame , MUIV_Frame_Text ,
+		MUIA_Text_Contents , self.stR_txtNodeCount ,
+		MUIA_Text_SetMin , MUI_TRUE ,
+	End
+
+	self.tx_label_6 := TextObject ,
+		MUIA_Background , MUII_WindowBack ,
+		MUIA_Text_Contents , self.stR_TX_label_6 ,
+		MUIA_Text_SetMin , MUI_TRUE ,
+	End
+
+	self.txtConfCount := TextObject ,
+		MUIA_Background , MUII_WindowBack ,
+		MUIA_Frame , MUIV_Frame_Text ,
+		MUIA_Text_Contents , self.stR_txtConfCount ,
+		MUIA_Text_SetMin , MUI_TRUE ,
+	End
+
+	space_29 := VSpace( 0 )
+
+	gr_grp_48 := GroupObject ,
+		MUIA_HelpNode , 'GR_grp_48' ,
+		Child , self.tx_label_3 ,
+		Child , self.txtAcpStatus ,
+		Child , self.tx_label_4 ,
+		Child , self.txtNodeCount ,
+		Child , self.tx_label_6 ,
+		Child , self.txtConfCount ,
+		Child , space_29 ,
+	End
+
+	self.btnShutdown := SimpleButton( 'Shutdown' )
+
+	self.btnStart := SimpleButton( 'Start' )
+
+	self.btnRestart := SimpleButton( 'Restart' )
+
+	self.btnClose := SimpleButton( 'Close' )
+
+	space_30 := HVSpace
+
+	gr_grp_49 := GroupObject ,
+		MUIA_HelpNode , 'GR_grp_49' ,
+		MUIA_Weight , 49 ,
+		Child , self.btnShutdown ,
+		Child , self.btnStart ,
+		Child , self.btnRestart ,
+		Child , self.btnClose ,
+		Child , space_30 ,
+	End
+
+	grOUP_ROOT_11 := GroupObject ,
+		MUIA_Group_Columns , 2 ,
+		Child , gr_grp_48 ,
+		Child , gr_grp_49 ,
+	End
+
+	self.winTools := WindowObject ,
+		MUIA_Window_Title , 'Tools' ,
+		MUIA_Window_ID , "10WI" ,
+		WindowContents , grOUP_ROOT_11 ,
+	End
+
 	self.app := ApplicationObject ,
 		//( IF icon THEN MUIA_Application_DiskObject ELSE TAG_IGNORE ) , icon ,
 		//( IF arexx THEN MUIA_Application_Commands ELSE TAG_IGNORE ) , ( IF arexx THEN arexx.commands ELSE NIL ) ,
@@ -1605,9 +1707,7 @@ PROC create( display : PTR TO app_display ) OF app_obj
 		MUIA_Application_Author , 'Darren Coles' ,
 		MUIA_Application_Base , 'NONE' ,
 		MUIA_Application_Title , 'Ami-Express Configuration Editor' ,
-		MUIA_Application_Version , '$VER: NONE XX.XX (XX.XX.XX)' ,
-		MUIA_Application_Copyright , 'NOBODY' ,
-		MUIA_Application_Description , 'NONE' ,
+		MUIA_Application_Copyright , '(c)2023 Darren Coles' ,
 		MUIA_Application_HelpFile , 'axsys.guide' ,
 		SubWindow , self.winMain ,
 		SubWindow , self.wi_conf_edit ,
@@ -1619,6 +1719,7 @@ PROC create( display : PTR TO app_display ) OF app_obj
 		SubWindow , self.wi_presets ,
 		SubWindow , self.wi_areas ,
 		SubWindow , self.wi_commands ,
+		SubWindow , self.winTools ,
 	End
 
 ENDPROC self.app
