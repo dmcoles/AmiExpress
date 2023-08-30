@@ -169,6 +169,9 @@ PROC addSystemControls() OF frmSettingsEdit
   DEF languageList:PTR TO LONG
   DEF i
 
+  NEW control.createDirSelect('bBBS Path',SYS_BBS_PATH,self.app.app,self.setChangedHook,self)
+  self.paBBSPath:=control
+
   NEW control.createString('bBBS Name',SYS_BBS_NAME,self.app.app,self.setChangedHook,self)
   self.strBBSName:=control
 
@@ -298,16 +301,17 @@ PROC addSystemControls() OF frmSettingsEdit
   NEW control.createString('Execute async on upload',SYS_EXECA_ON_UPLOAD,self.app.app,self.setChangedHook,self)
   self.strExecAOnUpload:=control
 
-  self.controlList:=[self.strBBSName,self.strBBSLocation,self.strSysopName,self.strRegKey,self.cyNewAccounts,self.strDefaultMenu,
+  self.controlList:=[self.paBBSPath,self.strBBSName,self.strBBSLocation,self.strSysopName,self.strRegKey,self.cyNewAccounts,self.strDefaultMenu,
                     self.paLocalULPath,self.intAutoValPreset,self.intAutoValDelay,self.strAutoValPassword,self.cyLanguage,
                     self.strSmtpHost,self.intSmtpPort,self.strSmtpUsername,self.strSmtpPassword,self.boolSmtpSSL,self.strSysopEmail,
-                    self.strBbsEmail,self.boolMailOnPage,self.boolMailOnComment,self.boolMailOnLogon,self.boolMailOnLogoff,self.boolMailOnNewUser,
-                    self.boolMailOnUpload,self.boolMailOnPwdFail,self.paLanguageBase,self.paHistory,self.paUserNotes,self.intHoldAccess,
+                    self.strBbsEmail,self.paLanguageBase,self.paHistory,self.paUserNotes,self.intHoldAccess,
                     self.strFileDizSysCmd,self.strFtpHost,self.strFtpPort,self.strFtpDataPort,self.strHttpPort,self.strExecOnNewUser,
                     self.strExecAOnNewUser,self.strExecOnPage,self.strExecAOnPage,self.strExecOnConnect,self.strExecAOnConnect,
                     self.strExecOnLogon,self.strExecAOnLogon,self.strExecOnLogoff,self.strExecAOnLogoff,
                     self.strExecOnComment,self.strExecAOnComment,self.strExecOnUpload,self.strExecAOnUpload,
-                    self.boolCreditByKb,self.boolLongWho,self.boolConvertToMb,self.boolQuietJoin,self.boolRelativeConfs]
+                    self.boolCreditByKb,self.boolLongWho,self.boolConvertToMb,self.boolQuietJoin,self.boolRelativeConfs,
+                    self.boolMailOnPage,self.boolMailOnComment,self.boolMailOnLogon,self.boolMailOnLogoff,self.boolMailOnNewUser,
+                    self.boolMailOnUpload,self.boolMailOnPwdFail]
 
   //domethod(self.grpSettings,[MUIM_Group_InitChange])
   ForAll({control},self.controlList,`IF control THEN control.addToGroup(self.grpSettings) ELSE FALSE)
@@ -338,9 +342,6 @@ PROC addServerControls() OF frmSettingsEdit
   DEF sublist:PTR TO control
   DEF tempStr[255]:STRING
   DEF i
-
-  NEW control.createDirSelect('bBBS Path',SYS_BBS_PATH,self.app.app,self.setChangedHook,self)
-  self.paBBSPath:=control
 
   NEW control.createStringInt('Stack size',SYS_STACK,self.app.app,self.setChangedHook,self)
   self.intStack:=control
@@ -442,15 +443,15 @@ PROC addServerControls() OF frmSettingsEdit
     self.nuttonCommands.add(control)
   ENDFOR
 
-  self.controlList:=[self.paBBSPath,self.intStack,self.intPriority,self.intTelnetPort,self.intFtpPort,
+  self.controlList:=[self.intStack,self.intPriority,self.intTelnetPort,self.intFtpPort,
                      self.boolIconified,self.intIconifyLeft,self.intIconifyTop,self.strAcpFont,self.strExecOnStart,
                      self.intDosCheckTime,self.intDosBanTime,self.intDosCheckTrig,self.boolDoNotMove,
                      self.boolMulticom,self.boolAEShell,self.boolNoCx,self.boolNoSaveState]
 
   domethod(self.grpSettings,[MUIM_Group_InitChange])
 
-  sublist:=[self.paBBSPath,self.intStack,self.intPriority,self.intTelnetPort,self.intFtpPort,
-                     self.boolIconified,self.intIconifyLeft,self.intIconifyTop,self.strAcpFont,self.strExecOnStart,
+  sublist:=[self.intStack,self.intPriority,self.intTelnetPort,self.intFtpPort,
+                     self.strAcpFont,self.strExecOnStart,
                      self.intDosCheckTime,self.intDosBanTime,self.intDosCheckTrig]
 
   ForAll({control},sublist,`control.addToGroup(self.grpSettings)) 
@@ -478,7 +479,7 @@ PROC addServerControls() OF frmSettingsEdit
     control.addToGroup(self.grpSettings)
   ENDFOR
   
-  sublist:=[self.boolDoNotMove,self.boolMulticom,self.boolAEShell,self.boolNoCx,self.boolNoSaveState]
+  sublist:=[self.intIconifyLeft,self.intIconifyTop,self.boolIconified,self.boolDoNotMove,self.boolMulticom,self.boolAEShell,self.boolNoCx,self.boolNoSaveState]
   ForAll({control},sublist,`control.addToGroup(self.grpSettings)) 
 
 
@@ -593,6 +594,12 @@ PROC saveSystemChanges() OF frmSettingsEdit
   MOVE.L (A1),self
   GetA4()
 
+  fullTrim(self.paBBSPath.getValue(),tempStr)
+  IF EstrLen(tempStr)=0
+    Mui_RequestA(0,self.winMain,0,'Error','*OK','BBS Path is a mandatory field',0)
+    RETURN
+  ENDIF
+
   fullTrim(self.strBBSName.getValue(),tempStr)
   IF EstrLen(tempStr)=0
     Mui_RequestA(0,self.winMain,0,'Error','*OK','BBS Name is a mandatory field',0)
@@ -612,6 +619,7 @@ PROC saveSystemChanges() OF frmSettingsEdit
   ENDIF
 
   self.sleep()
+  writeToolType(self.acpName,'BBS_LOCATION',self.paBBSPath.getValue())
   writeToolType(self.acpName,'BBS_NAME',self.strBBSName.getValue())
   writeToolType(self.acpName,'BBS_GEOGRAPHIC',self.strBBSLocation.getValue())
   writeToolType(self.acpName,'SYSOP_NAME',self.strSysopName.getValue())
@@ -688,14 +696,7 @@ PROC saveServerChanges() OF frmSettingsEdit
   MOVE.L (A1),self
   GetA4()
 
-  fullTrim(self.paBBSPath.getValue(),tempStr)
-  IF EstrLen(tempStr)=0
-    Mui_RequestA(0,self.winMain,0,'Error','*OK','BBS Path is a mandatory field',0)
-    RETURN
-  ENDIF
-
   self.sleep()
-  writeToolType(self.acpName,'BBS_LOCATION',self.paBBSPath.getValue())
   writeToolType(self.acpName,'BBS_STACK',self.intStack.getValue())
   writeToolType(self.acpName,'PRIORITY',self.intPriority.getValue())
   IF self.boolIconified.getValue() THEN writeToolType(self.acpName,'ICONIFIED') ELSE deleteToolType(self.acpName,'ICONIFIED')
@@ -784,14 +785,20 @@ PROC saveZoomChanges() OF frmSettingsEdit
   self.wake()
 ENDPROC
 
-PROC editSystemSettings(acpName:PTR TO CHAR) OF frmSettingsEdit
+PROC formShow() OF frmSettingsEdit
+  MOVE.L (A1),self
+  GetA4()
+  Mui_RequestA(0,self.winMain,0,'Information','*OK','For the initial setup please fill in the mandatory fields on this page.',0)
+ENDPROC
+
+PROC editSystemSettings(acpName:PTR TO CHAR, initialSetup=FALSE) OF frmSettingsEdit
   DEF loop,val,count,i,entry,temppath[255]:STRING,tempstr[255]:STRING
   DEF bbsPath[200]:STRING
   DEF languagesTooltype[255]:STRING
   DEF languages:PTR TO stringlist
 
-
   DEF saveHook:PTR TO hook
+  DEF formShowHook:PTR TO hook
   DEF closeHook:PTR TO hook
 
   NEW saveHook
@@ -800,6 +807,13 @@ PROC editSystemSettings(acpName:PTR TO CHAR) OF frmSettingsEdit
   NEW closeHook
   installhook( closeHook, {canClose})    
   self.closeHook:=closeHook
+  
+  IF initialSetup
+    NEW formShowHook
+    installhook( formShowHook, {formShow})    
+    self.showHook:=formShowHook
+  ENDIF
+  
 
   self.acpName:=acpName
   self.bbsConfigName:=String(255)
@@ -838,6 +852,9 @@ PROC editSystemSettings(acpName:PTR TO CHAR) OF frmSettingsEdit
 
   readToolType(self.acpName,'BBS_NAME',tempstr)
   self.strBBSName.setValue(tempstr)
+
+  readToolType(self.acpName,'BBS_LOCATION',tempstr)
+  self.paBBSPath.setValue(tempstr)
 
   readToolType(self.acpName,'BBS_GEOGRAPHIC',tempstr)
   self.strBBSLocation.setValue(tempstr)
@@ -957,6 +974,7 @@ PROC editSystemSettings(acpName:PTR TO CHAR) OF frmSettingsEdit
   END saveHook
   END closeHook
   END languages
+  IF initialSetup THEN END formShowHook
   DisposeLink(self.languages)
   DisposeLink(self.bbsConfigName)
 ENDPROC
@@ -985,9 +1003,6 @@ PROC editServerSettings(acpName:PTR TO CHAR) OF frmSettingsEdit
  
   set( self.winMain, MUIA_Window_Title,'Edit Server Settings')
   set( self.winMain, MUIA_Window_ID, "FSER")
-
-  readToolType(self.acpName,'BBS_LOCATION',tempstr)
-  self.paBBSPath.setValue(tempstr)
 
   val:=readToolTypeInt(self.acpName,'BBS_STACK')
   self.intStack.setValue(val)

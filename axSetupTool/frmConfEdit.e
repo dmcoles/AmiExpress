@@ -9,10 +9,12 @@ MODULE '*axedit','*frmBase','*tooltypes','*controls','*miscfuncs','*frmAddComple
 EXPORT OBJECT frmConfEdit OF frmBase
   confConfig         : PTR TO CHAR
   controlList        : LONG
+  controlList2       : LONG
   
   strConfNumber      : PTR TO LONG
   strConfName        : PTR TO LONG
   grpConfSettings    : PTR TO LONG
+  grpConfMore        : PTR TO LONG
   grpConfPages       : PTR TO LONG
   strConfName2       : PTR TO control
   paConfPath         : PTR TO control
@@ -297,7 +299,12 @@ PROC create(app:PTR TO app_obj) OF frmConfEdit
   get(app.gr_conf_settings,MUIA_Scrollgroup_Contents,{group})
   self.grpConfSettings:=group
 
-  set(self.grpConfSettings, MUIA_Group_Columns , 4)
+  get(app.gr_conf_more,MUIA_Scrollgroup_Contents,{group})
+  self.grpConfMore:=group
+
+  set(self.grpConfSettings, MUIA_Group_Columns , 2)
+  set(self.grpConfMore, MUIA_Group_Columns , 2)
+  
   set(self.winMain,MUIA_Window_Width,MUIV_Window_Width_Screen(75))
   
   get(self.lvDownloadPaths,MUIA_Listview_List,{list})
@@ -586,22 +593,27 @@ PROC addControls() OF frmConfEdit
   self.boolFtpNoDirlist:=control 
 
   self.controlList:=[self.strConfName2,self.paConfPath,self.strForwardMail,self.strMenuPrompt,self.strUploadPrompt,self.paLocalULPath,
-                     self.intFtpDirDays,self.strFtpDirName,self.boolFreeDownloads,self.boolUseUsernames,self.boolUseRealname,self.boolUseInternetNames,
+                     self.intFtpDirDays,self.strFtpDirName]
+
+  self.controlList2:=[self.boolFreeDownloads,self.boolUseUsernames,self.boolUseRealname,self.boolUseInternetNames,
                      self.boolCustomMail,self.boolDefaultNewscan,self.boolDefaultNewfiles,self.boolDefaultZoom,self.boolForceNewscan,
                      self.boolShowNewFiles,self.boolNoNewscan,self.boolNoNewFiles,self.boolNoFtpUploads,self.boolFtpNoDirlist]
-
 
   domethod(self.grpConfSettings,[MUIM_Group_InitChange])
   ForAll({control},self.controlList,`control.addToGroup(self.grpConfSettings))
   domethod(self.grpConfSettings,[OM_ADDMEMBER,HVSpace])
   domethod(self.grpConfSettings,[OM_ADDMEMBER,HVSpace])
-  domethod(self.grpConfSettings,[OM_ADDMEMBER,HVSpace])
-  domethod(self.grpConfSettings,[OM_ADDMEMBER,HVSpace])
   domethod(self.grpConfSettings,[MUIM_Group_ExitChange])
+
+  domethod(self.grpConfMore,[MUIM_Group_InitChange])
+  ForAll({control},self.controlList2,`control.addToGroup(self.grpConfMore))
+  domethod(self.grpConfMore,[OM_ADDMEMBER,HVSpace])
+  domethod(self.grpConfMore,[OM_ADDMEMBER,HVSpace])
+  domethod(self.grpConfMore,[MUIM_Group_ExitChange])
 ENDPROC
 
-PROC freeControl(control:PTR TO control) OF frmConfEdit
-  control.removeFromGroup(self.grpConfSettings)
+PROC freeControl(control:PTR TO control,group) OF frmConfEdit
+  control.removeFromGroup(group)
   END control
 ENDPROC
 
@@ -610,8 +622,7 @@ PROC removeControls() OF frmConfEdit
   DEF control:PTR TO control
   
   domethod(self.grpConfSettings,[MUIM_Group_InitChange])
-  ForAll({control},self.controlList,`self.freeControl(control))
-  
+  ForAll({control},self.controlList,`self.freeControl(control,self.grpConfSettings)) 
   get(self.grpConfSettings,MUIA_Group_ChildList,{list})
   state:=list.head
   WHILE (obj:=NextObject({state}))
@@ -619,6 +630,16 @@ PROC removeControls() OF frmConfEdit
     Mui_DisposeObject(obj)
   ENDWHILE
   domethod(self.grpConfSettings,[MUIM_Group_ExitChange])
+  
+
+  ForAll({control},self.controlList2,`self.freeControl(control,self.grpConfMore)) 
+  get(self.grpConfMore,MUIA_Group_ChildList,{list})
+  state:=list.head
+  WHILE (obj:=NextObject({state}))
+    domethod(self.grpConfMore,[OM_REMMEMBER,obj])
+    Mui_DisposeObject(obj)
+  ENDWHILE
+  domethod(self.grpConfMore,[MUIM_Group_ExitChange])  
 ENDPROC
 
 PROC firstConf() OF frmConfEdit
@@ -692,7 +713,6 @@ PROC saveChanges() OF frmConfEdit
     Mui_RequestA(0,self.winMain,0,'Error','*OK','Conference Path is a mandatory field',0)
     RETURN
   ENDIF
-
 
   self.sleep()
   StringF(tempStr,'\d',self.confCount)

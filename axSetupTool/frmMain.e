@@ -7,6 +7,8 @@ MODULE 'utility/tagitem' , 'utility/hooks', 'tools/installhook'
 MODULE '*axedit','*frmBase','*frmEditList','*frmNodeEdit','*frmConfEdit','*frmSettingsEdit','*frmAccess','*frmCommands','*frmTools','*tooltypes'
 
 EXPORT OBJECT frmMain OF frmBase
+  aboutwin:LONG
+  missingMandatory:INT
   acpConfigName: PTR TO CHAR
   btnConfsClickHook: hook
   btnNodesClickHook: hook
@@ -28,7 +30,20 @@ EXPORT OBJECT frmMain OF frmBase
   btnExitClickHook: hook
   btnAboutClickHook: hook
   btnToolsClickHook: hook
+  mnuAboutMuiClickHook: hook
 ENDOBJECT
+
+PROC aboutMui() OF frmMain
+  MOVE.L (A1),self
+  GetA4()
+  IF (self.aboutwin=0)
+    self.aboutwin:=AboutmuiObject,
+            MUIA_Window_RefWindow, self.winMain,
+            MUIA_Aboutmui_Application, self.app.app,
+            End
+  ENDIF
+  IF (self.aboutwin) THEN set(self.aboutwin,MUIA_Window_Open,TRUE)
+ENDPROC
 
 PROC exitbuttonPressed() OF frmMain
   MOVE.L (A1),self
@@ -38,7 +53,6 @@ ENDPROC
 
 
 PROC aboutbuttonPressed() OF frmMain
-  DEF win
   MOVE.L (A1),self
   GetA4()
   Mui_RequestA(0,self.winMain,0,'About Ami-Express Setup Tool' ,'*Ok','This tool can assist you in configuring\nalmost every aspect of Ami-Express.\n\n(c)2023 Darren Coles.',0)
@@ -269,6 +283,19 @@ PROC protocolsbuttonPressed() OF frmMain
   
 ENDPROC
 
+PROC formShow() OF frmMain
+  DEF frmSettingsEdit:PTR TO frmSettingsEdit
+  MOVE.L (A1),self
+  GetA4()
+  IF self.missingMandatory
+    NEW frmSettingsEdit.create(self.app)
+    frmSettingsEdit.editSystemSettings(self.acpConfigName,TRUE)
+    END frmSettingsEdit
+
+  ENDIF
+ENDPROC
+
+
 PROC create(app:PTR TO app_obj) OF frmMain
   SUPER self.create(app)
   self.winMain:=app.winMain
@@ -317,12 +344,18 @@ PROC doMain() OF frmMain
   DEF tempStr[200]:STRING
   DEF nodeCount
   DEF closeHook:PTR TO hook
+  DEF showHook:PTR TO hook
 
   DEF v
 
   NEW closeHook
+  NEW showHook
+
   installhook( closeHook, {canClose})    
   self.closeHook:=closeHook
+
+  installhook( showHook, {formShow})
+  self.showHook:=showHook
 
   GetVar('axSetupEditor_prefs',tempStr,200,0)
   SetStr(tempStr)
@@ -376,8 +409,11 @@ PROC doMain() OF frmMain
     ENDIF
   ENDIF
   IF EstrLen(self.acpConfigName)=0
+    Mui_RequestA(0,self.winMain,0,'Error' ,'*Ok','Ami-Express setup tool is unable to proceed\nbecause we cannot find the acp.info file',0)
     Throw("ACP","icon")
   ENDIF
+
+  self.aboutwin:=0
 
   self.setupButtonClick(self.app.btnComputers,self.btnComputersClickHook,{computersbuttonPressed})
   self.setupButtonClick(self.app.btnCheckers,self.btnCheckersClickHook,{fcheckbuttonPressed})
@@ -400,6 +436,14 @@ PROC doMain() OF frmMain
   self.setupButtonClick(self.app.btnAbout,self.btnAboutClickHook,{aboutbuttonPressed})
   self.setupButtonClick(self.app.btnTools,self.btnToolsClickHook,{toolsbuttonPressed})
 
+  installhook( self.mnuAboutMuiClickHook, {aboutMui})
+
+	domethod( self.app.mnlabel1AboutMui, [
+		MUIM_Notify , MUIA_Menuitem_Trigger, MUIV_EveryTime,
+		self.app.mnlabel1AboutMui,
+		3,
+    MUIM_CallHook , self.mnuAboutMuiClickHook, self ] )
+
 	domethod( self.app.mnlabel1Exit , [
 		MUIM_Notify , MUIA_Menuitem_Trigger, MUIV_EveryTime,
 		self.app.mnlabel1Exit,
@@ -418,6 +462,21 @@ PROC doMain() OF frmMain
   initialiseCache()
 
   nodeCount:=readToolTypeInt(self.acpConfigName,'NODES')
+  IF nodeCount=-1
+    Mui_RequestA(0,self.winMain,0,'Error' ,'*Ok','Ami-Express setup tool is unable to proceed\nbecause the number of nodes is not defined in the acp.info file',0)
+    Throw("ACP","icon")
+  ENDIF
+
+  self.missingMandatory:=FALSE
+  readToolType(self.acpConfigName,'BBS_LOCATION',tempStr)
+  IF EstrLen(tempStr)=0 THEN self.missingMandatory:=TRUE
+  readToolType(self.acpConfigName,'BBS_NAME',tempStr)
+  IF EstrLen(tempStr)=0 THEN self.missingMandatory:=TRUE
+  readToolType(self.acpConfigName,'BBS_GEOGRAPHIC',tempStr)
+  IF EstrLen(tempStr)=0 THEN self.missingMandatory:=TRUE
+  readToolType(self.acpConfigName,'SYSOP_NAME',tempStr)
+  IF EstrLen(tempStr)=0 THEN self.missingMandatory:=TRUE
+  
   IF (nodeCount>10) AND (FileLength('bbs:utils/rexxdoor')=16068)
     Mui_RequestA(self.app.app,0,0,'Warning','*OK','The version of rexxdoor you are using\nis not compatible with more than 10 nodes.',0)
   ENDIF
@@ -458,11 +517,14 @@ PROC doMain() OF frmMain
     ENDIF
   ENDIF
   StrAdd(tempStr,self.acpConfigName)
-  SetVar('axSetupEditor_prefs',tempStr,EstrLen(tempStr),GVF_SAVE_VAR OR GVF_GLOBAL_ONLY)
+  
+  SetVar('axSetupEditor_prefs',tempStr,-1,GVF_SAVE_VAR OR GVF_GLOBAL_ONLY)
+  IF KickVersion(39)=FALSE THEN Execute('Copy env:axSetupEditor_prefs envarc:',0,0)
 
   clearDiskObjectCache()
   deInitialiseCache()
 
   DisposeLink(self.acpConfigName)
   END closeHook
+  END showHook
 ENDPROC

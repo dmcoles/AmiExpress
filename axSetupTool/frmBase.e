@@ -10,14 +10,16 @@ EXPORT CONST ID_SAVE=1
 EXPORT OBJECT frmBase
   app                       : PTR TO app_obj
 	winMain                   :	PTR TO LONG
+  showHook                  : PTR TO hook
   saveHook                  : PTR TO hook
-  canSaveHook                  : PTR TO hook
+  canSaveHook               : PTR TO hook
   closeHook                 : PTR TO hook
 ENDOBJECT
 
 PROC create(app:PTR TO app_obj) OF frmBase
   self.app:=app 
   self.saveHook:=NIL
+  self.showHook:=NIL
   self.canSaveHook:=NIL
   self.closeHook:=NIL
 ENDPROC
@@ -51,13 +53,14 @@ PROC showModal() OF frmBase
   DEF running = TRUE , result_domethod , signal,result = FALSE
 
   self.show()
-  
 
 	domethod( self.winMain , [
 		MUIM_Notify , MUIA_Window_CloseRequest , MUI_TRUE ,
 		self.app.app,
 		2 ,
 		MUIM_Application_ReturnID , MUIA_Window_CloseRequest ] )
+
+  IF self.showHook THEN callHookA(self.showHook,0,{self})
   
   WHILE running
 

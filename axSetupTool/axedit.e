@@ -22,6 +22,7 @@ EXPORT OBJECT app_obj
 	winMain                     :	PTR TO LONG
 	mn_label_1                  :	PTR TO LONG
 	mnlabel1About               :	PTR TO LONG
+	mnlabel1AboutMui            :	PTR TO LONG
 	mnlabel1Exit                :	PTR TO LONG
 	mnlabel1Donotremovefolder1  :	PTR TO LONG
 	mnlabel1Removefolder1       :	PTR TO LONG
@@ -49,6 +50,7 @@ EXPORT OBJECT app_obj
 	btnZoom                     :	PTR TO LONG
 	btnUsers                    :	PTR TO LONG
 	tx_label_0                  :	PTR TO LONG
+	gr_ax_image                 :	PTR TO LONG
 	btnAbout                    :	PTR TO LONG
 	btnTools                    :	PTR TO LONG
 	btnExit                     :	PTR TO LONG
@@ -64,6 +66,7 @@ EXPORT OBJECT app_obj
 	btnRemoveConf               :	PTR TO LONG
 	gr_conf_pages               :	PTR TO LONG
 	gr_conf_settings            :	PTR TO LONG
+	gr_conf_more                :	PTR TO LONG
 	lv_download_paths           :	PTR TO LONG
 	pa_downloadpath             :	PTR TO LONG
 	stR_PA_downloadpath         :	PTR TO LONG
@@ -91,6 +94,7 @@ EXPORT OBJECT app_obj
 	btnRemoveNode               :	PTR TO LONG
 	gr_node_pages               :	PTR TO LONG
 	gr_node_settings            :	PTR TO LONG
+	gr_node_second_settings     :	PTR TO LONG
 	gr_node_more_settings       :	PTR TO LONG
 	gr_node_serial_settings     :	PTR TO LONG
 	gr_node_window_settings     :	PTR TO LONG
@@ -205,12 +209,12 @@ ENDOBJECT
 PROC create( display : PTR TO app_display ) OF app_obj
 
 	DEF mnlabel1File , mnlabel1Settings , mnlabel1ConferenceDelete
-	DEF grOUP_ROOT_0 , gr_grp_1 , gr_grp_2 , im_label_2
-	DEF grOUP_ROOT_2 , gr_confselect , obj_aux0 , obj_aux1
-	DEF obj_aux2 , obj_aux3 , gr_grp_13 , gr_downloadpaths
-	DEF gr_grp_20 , gr_uploadpaths , gr_grp_22 , gr_messagebases
-	DEF gr_grp_46 , gr_save , grOUP_ROOT_3 , gr_nodeSelect
-	DEF obj_aux4 , obj_aux5 , lbl300start , lbl300end , lbl1200start
+	DEF grOUP_ROOT_0 , gr_grp_1 , gr_grp_2 , grOUP_ROOT_2
+	DEF gr_confselect , obj_aux0 , obj_aux1 , obj_aux2 , obj_aux3
+	DEF gr_grp_13 , gr_downloadpaths , gr_grp_20 , gr_uploadpaths
+	DEF gr_grp_22 , gr_messagebases , gr_grp_46 , gr_save
+	DEF grOUP_ROOT_3 , gr_nodeSelect , obj_aux4 , obj_aux5
+	DEF gr_grp_50 , lbl300start , lbl300end , lbl1200start
 	DEF lbl1200end , lbl2400start , lbl2400end , lbl4800start
 	DEF lbl4800end , lbl9600start , lbl9600end , lbl12000start
 	DEF lbl12000end , lbl14400start , lbl14400end , lbl16800start
@@ -235,15 +239,17 @@ PROC create( display : PTR TO app_display ) OF app_obj
 	self.stR_txtConfCount            := NIL
 	self.stR_gr_conf_pages           := [
 		'Main' ,
+		'More' ,
 		'Download Paths' ,
 		'Upload Paths' ,
 		'Message bases' ,
 		NIL ]
 	self.stR_gr_node_pages           := [
-		'Node Settings' ,
-		'More Settings' ,
+		'Main' ,
+		'Second' ,
+		'More' ,
 		'Serial/Modem' ,
-		'Window Settings' ,
+		'Window' ,
 		'Time restrictions' ,
 		NIL ]
 	self.ra_presetsContent           := [
@@ -326,13 +332,8 @@ PROC create( display : PTR TO app_display ) OF app_obj
 		MUIA_Text_SetMin , MUI_TRUE ,
 	End
 
-	im_label_2 := ImageObject ,
-		MUIA_Image_Spec , '5:bbs:Storage/Icons/ICONIFIED.info' ,
-		MUIA_Frame , MUIV_Frame_ImageButton ,
-		MUIA_Image_FreeVert , MUI_TRUE ,
-		MUIA_Image_FreeHoriz , MUI_TRUE ,
-		MUIA_FixHeight , 21 ,
-		MUIA_FixWidth , 38 ,
+	self.gr_ax_image := GroupObject ,
+		MUIA_HelpNode , 'GR_ax_image' ,
 	End
 
 	self.btnAbout := SimpleButton( 'About' )
@@ -348,7 +349,7 @@ PROC create( display : PTR TO app_display ) OF app_obj
 		MUIA_Group_SameWidth , MUI_TRUE ,
 		MUIA_Group_VertSpacing , 5 ,
 		Child , self.tx_label_0 ,
-		Child , im_label_2 ,
+		Child , self.gr_ax_image ,
 		Child , self.btnAbout ,
 		Child , self.btnTools ,
 		Child , self.btnExit ,
@@ -364,6 +365,10 @@ PROC create( display : PTR TO app_display ) OF app_obj
 		MUIA_Menuitem_Title , 'About' ,
 	End
 
+	self.mnlabel1AboutMui := MenuitemObject ,
+		MUIA_Menuitem_Title , 'About Mui...' ,
+	End
+
 	self.mnlabel1Exit := MenuitemObject ,
 		MUIA_Menuitem_Title , 'Exit' ,
 	End
@@ -371,6 +376,7 @@ PROC create( display : PTR TO app_display ) OF app_obj
 	mnlabel1File := MenuitemObject ,
 		MUIA_Menuitem_Title , 'File' ,
 		MUIA_Family_Child , self.mnlabel1About ,
+		MUIA_Family_Child , self.mnlabel1AboutMui ,
 		MUIA_Family_Child , self.mnlabel1Exit ,
 	End
 
@@ -563,6 +569,17 @@ PROC create( display : PTR TO app_display ) OF app_obj
 		MUIA_Scrollgroup_Contents , self.gr_conf_settings ,
 	End
 
+	self.gr_conf_more := VirtgroupObject ,
+		VirtualFrame ,
+		MUIA_HelpNode , 'GR_conf_more' ,
+		MUIA_Group_Columns , 4 ,
+		MUIA_Group_HorizSpacing , 4 ,
+	End
+
+	self.gr_conf_more := ScrollgroupObject ,
+		MUIA_Scrollgroup_Contents , self.gr_conf_more ,
+	End
+
 	self.lv_download_paths := ListObject ,
 		MUIA_Frame , MUIV_Frame_InputList ,
 	End
@@ -707,6 +724,7 @@ PROC create( display : PTR TO app_display ) OF app_obj
 		MUIA_Register_Titles , self.stR_gr_conf_pages ,
 		MUIA_HelpNode , 'gr_conf_pages' ,
 		Child , self.gr_conf_settings ,
+		Child , self.gr_conf_more ,
 		Child , gr_downloadpaths ,
 		Child , gr_uploadpaths ,
 		Child , gr_messagebases ,
@@ -843,12 +861,23 @@ PROC create( display : PTR TO app_display ) OF app_obj
 	self.gr_node_settings := VirtgroupObject ,
 		VirtualFrame ,
 		MUIA_HelpNode , 'GR_node_settings' ,
-		MUIA_Group_Columns , 2 ,
+		MUIA_Group_Columns , 4 ,
 		MUIA_Group_HorizSpacing , 4 ,
 	End
 
 	self.gr_node_settings := ScrollgroupObject ,
 		MUIA_Scrollgroup_Contents , self.gr_node_settings ,
+	End
+
+	self.gr_node_second_settings := VirtgroupObject ,
+		VirtualFrame ,
+		MUIA_HelpNode , 'GR_node_second_settings' ,
+		MUIA_Group_Columns , 2 ,
+		MUIA_Group_HorizSpacing , 4 ,
+	End
+
+	self.gr_node_second_settings := ScrollgroupObject ,
+		MUIA_Scrollgroup_Contents , self.gr_node_second_settings ,
 	End
 
 	self.gr_node_more_settings := VirtgroupObject ,
@@ -1294,10 +1323,17 @@ PROC create( display : PTR TO app_display ) OF app_obj
 		MUIA_Register_Titles , self.stR_gr_node_pages ,
 		MUIA_HelpNode , 'gr_node_pages' ,
 		Child , self.gr_node_settings ,
+		Child , self.gr_node_second_settings ,
 		Child , self.gr_node_more_settings ,
 		Child , self.gr_node_serial_settings ,
 		Child , self.gr_node_window_settings ,
 		Child , self.gr_node_time_settings ,
+	End
+
+	gr_grp_50 := GroupObject ,
+		MUIA_HelpNode , 'GR_grp_50' ,
+		MUIA_Group_Horiz , MUI_TRUE ,
+		Child , self.gr_node_pages ,
 	End
 
 	self.btnNodeSave := SimpleButton( 'Save' )
@@ -1313,7 +1349,7 @@ PROC create( display : PTR TO app_display ) OF app_obj
 
 	grOUP_ROOT_3 := GroupObject ,
 		Child , gr_nodeSelect ,
-		Child , self.gr_node_pages ,
+		Child , gr_grp_50 ,
 		Child , gr_nodesave ,
 	End
 

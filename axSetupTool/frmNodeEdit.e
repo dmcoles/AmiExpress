@@ -14,7 +14,8 @@ OBJECT timeItem
 ENDOBJECT
 
 EXPORT OBJECT frmNodeEdit OF frmBase
-  controlList1       : LONG
+  controlList1a       : LONG
+  controlList1b       : LONG
   controlList2       : LONG
   controlList3       : LONG
   controlList4       : LONG
@@ -32,6 +33,7 @@ EXPORT OBJECT frmNodeEdit OF frmBase
   btnNodeSave        : PTR TO LONG
   btnNodeCancel      : PTR TO LONG
   grpNodeSettings    : PTR TO LONG
+  grpNodeMoreSettings: PTR TO LONG
   grpNodeSettings2   : PTR TO LONG
   grpNodeSettings3   : PTR TO LONG
   grpNodeSettings4   : PTR TO LONG
@@ -193,7 +195,11 @@ PROC create(app:PTR TO app_obj) OF frmNodeEdit
 
   get(app.gr_node_settings,MUIA_Scrollgroup_Contents,{group})
   self.grpNodeSettings:=group
-  set(self.grpNodeSettings, MUIA_Group_Columns , 4)
+  set(self.grpNodeSettings, MUIA_Group_Columns , 2)
+
+  get(app.gr_node_second_settings,MUIA_Scrollgroup_Contents,{group})
+  self.grpNodeMoreSettings:=group
+  set(self.grpNodeMoreSettings, MUIA_Group_Columns , 2)
 
   get(app.gr_node_more_settings,MUIA_Scrollgroup_Contents,{group})
   self.grpNodeSettings2:=group
@@ -391,7 +397,7 @@ PROC addControls() OF frmNodeEdit
   self.strFtpDataPort:=control
   NEW control.createString('HTTP Port(s)',NODE_HTTP_PORT,self.app.app,self.setChangedHook,self) 
   self.strHttpPort:=control
-  NEW control.createCycle('UL Credit',NODE_KEEP_UL_CREDIT,['Default','Grant additional time',0],self.app.app,self.setChangedHook,self) 
+  NEW control.createCycle('UL Credit',NODE_KEEP_UL_CREDIT,['Default','Give extra time',0],self.app.app,self.setChangedHook,self) 
   self.intKeepUlCredit:=control
   NEW control.createStringInt('Max Message Queue',NODE_MAX_MSG_QUEUE,self.app.app,self.setChangedHook,self) 
   self.intMaxMsgQueue:=control
@@ -583,19 +589,27 @@ PROC addControls() OF frmNodeEdit
   NEW control.createModeSelect('DisplayId',NODE_DISPLAY_ID,self.app.app,self.setChangedHook,self)
   self.strDisplayId:=control
 
-  self.controlList1:= [self.intPriority,self.strNodeStart,self.strSystemPassword,self.strSystemPasswordPrompt,self.strNewuserPassword,
+  self.controlList1a:= [self.intPriority,self.strNodeStart,self.strSystemPassword,self.strSystemPasswordPrompt,self.strNewuserPassword,
                        self.strNamePrompt,self.strNamePrompt2,self.strPasswordPrompt,self.paScreens,self.intAutoValPreset,self.intAutoValDelay,
                        self.strAutoValPassword,self.strFtpPort,self.strFtpDataPort,self.strHttpPort,self.intKeepUlCredit,
-                       self.intMaxMsgQueue,self.paPlaypen,self.intRingCount,self.strRemotePassword,self.intSysopChatColour,self.intUserChatColour,
+                       self.intMaxMsgQueue]
+
+  self.controlList1b:= [self.paPlaypen,self.intRingCount,self.strRemotePassword,self.intSysopChatColour,self.intUserChatColour,
                        self.fnUserDataName,self.fnUserMiscName,self.fnUserKeysName,self.paLocalUlPath,self.strForceAnsi,self.intOverrideTimeout,
                        self.intBGFilecheckStack,self.strConInputDev,self.strConOutputDev,self.strScreenPens,self.strConfDb,self.fnFilesNotAllowed,
                        self.strFirstCommand,self.intSerialCacheSize]
   
   domethod(self.grpNodeSettings,[MUIM_Group_InitChange])
-  ForAll({control},self.controlList1,`control.addToGroup(self.grpNodeSettings))
+  ForAll({control},self.controlList1a,`control.addToGroup(self.grpNodeSettings))
   domethod(self.grpNodeSettings,[OM_ADDMEMBER,HVSpace])
   domethod(self.grpNodeSettings,[OM_ADDMEMBER,HVSpace])
   domethod(self.grpNodeSettings,[MUIM_Group_ExitChange])
+
+  domethod(self.grpNodeMoreSettings,[MUIM_Group_InitChange])
+  ForAll({control},self.controlList1b,`control.addToGroup(self.grpNodeMoreSettings))
+  domethod(self.grpNodeMoreSettings,[OM_ADDMEMBER,HVSpace])
+  domethod(self.grpNodeMoreSettings,[OM_ADDMEMBER,HVSpace])
+  domethod(self.grpNodeMoreSettings,[MUIM_Group_ExitChange])
   
   self.controlList2:= [self.boolCallersLog,self.boolCapitalFilenames,self.boolDefScreens,self.boolDebugLog,self.boolDoorLog,self.boolStartLog,
                        self.boolUDLog,self.boolChatOn,self.boolDisableQuickLogon,self.boolIdleNode,self.boolMailscanPrompt,self.boolNoTimeout,
@@ -608,6 +622,8 @@ PROC addControls() OF frmNodeEdit
   ForAll({control},self.controlList2,`control.addToGroup(self.grpNodeSettings2))
   domethod(self.grpNodeSettings2,[OM_ADDMEMBER,HVSpace])
   domethod(self.grpNodeSettings2,[OM_ADDMEMBER,HVSpace])
+  domethod(self.grpNodeSettings2,[OM_ADDMEMBER,HVSpace])
+  domethod(self.grpNodeSettings2,[OM_ADDMEMBER,HVSpace])
   domethod(self.grpNodeSettings2,[MUIM_Group_ExitChange])
 
   self.controlList3:=[self.strSerialDevice,self.intSerialUnit,self.intSerialBaud,0,0,self.boolA2232Patch,self.boolNoPurgeLine,self.boolRepurge,
@@ -617,6 +633,8 @@ PROC addControls() OF frmNodeEdit
   domethod(self.grpNodeSettings3,[MUIM_Group_InitChange])
 
   ForAll({control},self.controlList3,`IF control THEN control.addToGroup(self.grpNodeSettings3) ELSE domethod(self.grpNodeSettings3,[OM_ADDMEMBER,HVSpace]))
+  domethod(self.grpNodeSettings3,[OM_ADDMEMBER,HVSpace])
+  domethod(self.grpNodeSettings3,[OM_ADDMEMBER,HVSpace])
   domethod(self.grpNodeSettings3,[OM_ADDMEMBER,HVSpace])
   domethod(self.grpNodeSettings3,[OM_ADDMEMBER,HVSpace])
   domethod(self.grpNodeSettings3,[MUIM_Group_ExitChange])
@@ -645,7 +663,8 @@ PROC removeControls() OF frmNodeEdit
   DEF list:PTR TO lh,state,obj
   DEF control:PTR TO control
 
-  ForAll({control},self.controlList1,`self.freeControl(control,self.grpNodeSettings))
+  ForAll({control},self.controlList1a,`self.freeControl(control,self.grpNodeSettings))
+  ForAll({control},self.controlList1b,`self.freeControl(control,self.grpNodeMoreSettings))
   ForAll({control},self.controlList2,`self.freeControl(control,self.grpNodeSettings2))
   ForAll({control},self.controlList3,`self.freeControl(control,self.grpNodeSettings3))
   ForAll({control},self.controlList4,`self.freeControl(control,self.grpNodeSettings4))
