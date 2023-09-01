@@ -1000,27 +1000,50 @@ PROC makeFtpListFromDlDirs(ftpData:PTR TO ftpData, startDate, cmdType, sb, data_
   DEF path[255]:STRING
   DEF dirCache[255]:STRING
   DEF fib:PTR TO fileinfoblock
-  DEF dirNum,i
+  DEF dirNum,i,j,add
+  DEF dlDirList:PTR TO stringlist
 
   IF((fib:=AllocDosObject(DOS_FIB,NIL)))=NIL
     RETURN FALSE
   ENDIF
 
+  NEW dlDirList.stringlist(20)
+
   dirNum:=1
   StringF(path,'DLPATH.\d',dirNum++)
   WHILE(readToolType(TOOLTYPE_CONF,ftpData.confNums.item(ftpData.currentConf-1),path,path))
     checkPathSlash(path)
-    IF StrLen(ftpData.subDirPath)
-      StrAdd(path,ftpData.subDirPath)
-      checkPathSlash(path)
-    ENDIF
-    
-    StringF(dirCache,'RAM:DirCaches/Conf\dDir\d\s\s',ftpData.currentConf,dirNum-1,IF StrLen(ftpData.subDirPath)>0 THEN '_' ELSE '', ftpData.subDirPath)
-    FOR i:=14 TO StrLen(dirCache)-1 DO IF dirCache[i]="/" THEN dirCache[i]:="_"
-    
-    makeList(path,dirCache,fib,startDate,cmdType,sb,data_c)
+    dlDirList.add(path)
     StringF(path,'DLPATH.\d',dirNum++)
   ENDWHILE
+
+  FOR i:=0 TO dlDirList.count()-1
+    add:=TRUE
+    FOR j:=0 TO dlDirList.count()-1
+      IF (i<>j)
+        IF EstrLen(dlDirList.item(i))>=EstrLen(dlDirList.item(j))
+          IF StriCmp(dlDirList.item(i),dlDirList.item(j),EstrLen(dlDirList.item(j))) THEN add:=FALSE
+        ENDIF
+      ENDIF
+    ENDFOR
+    IF add=FALSE THEN dlDirList.setItem(i,'')
+  ENDFOR
+
+  FOR j:=0 TO dlDirList.count()-1
+    IF EstrLen(dlDirList.item(j))>0
+      StrCopy(path,dlDirList.item(j))
+      IF StrLen(ftpData.subDirPath)
+        StrAdd(path,ftpData.subDirPath)
+        checkPathSlash(path)
+      ENDIF
+      
+      StringF(dirCache,'RAM:DirCaches/Conf\dDir\d\s\s',ftpData.currentConf,j,IF StrLen(ftpData.subDirPath)>0 THEN '_' ELSE '', ftpData.subDirPath)
+      FOR i:=14 TO StrLen(dirCache)-1 DO IF dirCache[i]="/" THEN dirCache[i]:="_"
+      
+      makeList(path,dirCache,fib,startDate,cmdType,sb,data_c)
+    ENDIF
+  ENDFOR
+  END dlDirList
 
   FreeDosObject(DOS_FIB,fib)
 
