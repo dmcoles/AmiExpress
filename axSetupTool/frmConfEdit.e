@@ -3,7 +3,7 @@ OPT PREPROCESS
 
 MODULE 'muimaster' , 'libraries/mui','dos'
 MODULE 'tools/boopsi','workbench/workbench','icon','intuition/classusr'
-MODULE 'utility/tagitem','utility/hooks','tools/installhook','exec/lists'
+MODULE 'utility/tagitem','utility/hooks','tools/installhook','exec/lists','libraries/asl','dos/dos'
 MODULE '*axedit','*frmBase','*tooltypes','*controls','*miscfuncs','*frmAddComplexItem','*configObject','*/stringlist','*helpText'
 
 EXPORT OBJECT frmConfEdit OF frmBase
@@ -95,6 +95,18 @@ EXPORT OBJECT frmConfEdit OF frmBase
   msgbaseLists: PTR TO stdlist
 ENDOBJECT
 
+PROC setasldrawerflags() OF frmConfEdit
+  DEF tags:PTR TO LONG
+  MOVE.L A1,tags
+  
+  WHILE tags[]<>0 DO tags++
+  tags[]:=ASLFR_DRAWERSONLY
+  tags++
+  tags[]:=-1
+  tags++
+  tags[]:=0
+ENDPROC TRUE
+
 PROC dlPathChange() OF frmConfEdit
   DEF str
   MOVE.L (A1),self
@@ -163,6 +175,41 @@ PROC ulpathItemRemove() OF frmConfEdit
   self.changed:=TRUE
 ENDPROC
 
+PROC addDlPathSubDirs(path) OF frmConfEdit
+  DEF dir_info:PTR TO fileinfoblock
+  DEF pdir
+  DEF subdir[255]:STRING
+
+  IF ((dir_info:=AllocDosObject(DOS_FIB,NIL)) = NIL)
+    RETURN
+  ENDIF
+  
+  IF ((pdir:=Lock(path,ACCESS_READ)))=FALSE
+    FreeDosObject(DOS_FIB,dir_info)
+    RETURN
+  ENDIF
+  
+  IF(Examine(pdir, dir_info))=FALSE
+    FreeDosObject(DOS_FIB,dir_info)
+    UnLock(pdir)
+    RETURN
+  ENDIF
+
+  WHILE(ExNext(pdir,dir_info))
+    IF(dir_info.direntrytype >= 0)
+      StrCopy(subdir,path)
+      AddPart(subdir,dir_info.filename,255)
+      SetStr(subdir)
+      StrAdd(subdir,'/')
+      domethod( self.lvDownloadPaths , [ MUIM_List_InsertSingle , subdir , MUIV_List_Insert_Bottom ] )
+      self.addDlPathSubDirs(subdir)
+    ENDIF
+  ENDWHILE
+
+  UnLock(pdir)
+  FreeDosObject(DOS_FIB,dir_info)
+ENDPROC
+
 PROC dlpathItemAdd() OF frmConfEdit
   DEF str
   MOVE.L (A1),self
@@ -170,6 +217,14 @@ PROC dlpathItemAdd() OF frmConfEdit
 
   get(self.strDownloadPath, MUIA_String_Contents,{str})
   domethod( self.lvDownloadPaths , [ MUIM_List_InsertSingle , str , MUIV_List_Insert_Bottom ] )
+
+  IF Mui_RequestA(0,self.winMain,0,'Query',
+    '*Yes|No','Should we also scan for and add any sub-folders of this path?',0)
+    self.addDlPathSubDirs(str)
+  ENDIF
+  
+  
+
   get (self.strDownloadPath,MUIA_Popstring_String,{str})
   set(str, MUIA_String_Contents,'')
   
@@ -1027,6 +1082,7 @@ PROC editConfs(acpName) OF frmConfEdit
   DEF count,i,entry,temppath[255]:STRING,tempstr[255]:STRING
   DEF saveHook:PTR TO hook
   DEF closeHook:PTR TO hook
+  DEF aslflagsHook:PTR TO hook
   DEF bbsPath[255]:STRING
   DEF msgbaseList:PTR TO stdlist
   DEF msgbase:PTR TO msgbase
@@ -1038,6 +1094,9 @@ PROC editConfs(acpName) OF frmConfEdit
   installhook( closeHook, {canClose})    
   self.closeHook:=closeHook
 
+  NEW aslflagsHook
+  installhook( aslflagsHook, {setasldrawerflags})
+
   self.acpName:=acpName  
 
   set( self.btnEditMsgbase , MUIA_Disabled , MUI_TRUE)
@@ -1048,6 +1107,9 @@ PROC editConfs(acpName) OF frmConfEdit
   set( self.btnDlPathAdd , MUIA_Disabled , MUI_TRUE)
   set( self.btnUlPathRemove , MUIA_Disabled , MUI_TRUE)
   set( self.btnDlPathRemove , MUIA_Disabled , MUI_TRUE)
+
+  set (self.strUploadPath,MUIA_Popasl_StartHook,aslflagsHook)
+  set (self.strDownloadPath,MUIA_Popasl_StartHook,aslflagsHook)
 
   set( self.lvDownloadPaths , MUIA_ShortHelp , getHelpText(DLPATHS_LVIEW))
   set( self.btnDlPathAdd , MUIA_ShortHelp , getHelpText(DLPATHS_ADD))
@@ -1102,5 +1164,6 @@ PROC editConfs(acpName) OF frmConfEdit
   self.removeControls()
   END saveHook
   END closeHook
+  END aslflagsHook
   DisposeLink(self.confConfig)
 ENDPROC
