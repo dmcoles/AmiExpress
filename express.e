@@ -22476,12 +22476,10 @@ PROC makeFtpDirCache(confLoc:PTR TO CHAR, confnum, dirnum, dlpath:PTR TO CHAR, s
           t:=dateStampToDateTime(f_info.datestamp)
           s:=f_info.size
           IF (f_info.direntrytype>0)
-            IF s=0 
-              StringF(tempstr,'\s\s/',dlpath,f_info.filename)
-              StringF(tempstr2,'\s\s\s',subdir,IF StrLen(subdir)>0 THEN '_' ELSE '',f_info.filename)
-              makeFtpDirCache(confLoc,confnum,dirnum,tempstr,tempstr2)
-              s:=-1
-            ENDIF
+            StringF(tempstr,'\s\s/',dlpath,f_info.filename)
+            StringF(tempstr2,'\s\s\s',subdir,IF StrLen(subdir)>0 THEN '_' ELSE '',f_info.filename)
+            makeFtpDirCache(confLoc,confnum,dirnum,tempstr,tempstr2)
+            s:=-1
           ENDIF
           StringF(tempstr,'\z\h[8] \z\h[8] \s\n',t,s,f_info.filename)
           WriteF(tempstr)
@@ -25501,7 +25499,7 @@ ENDPROC RESULT_SUCCESS
 
 PROC internalCommandVER()
   DEF tempStr[255]:STRING
-  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ©2018-2022 Darren Coles\b\n\b\n',expressVer,expressDate)
+  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ©2018-2023 Darren Coles\b\n\b\n',expressVer,expressDate)
   aePuts(tempStr)
   aePuts('Original Version:\b\n')
   aePuts('  (C)1989-91 Mike Thomas, Synthetic Technologies\b\n')
@@ -28554,7 +28552,7 @@ PROC processFtpLogon()
   ENDIF
   telnetSend(sendStr,EstrLen(sendStr))
 
-  StringF(sendStr,'230-\b\n230-Running AmiExpress \s Copyright ©2018-2022 Darren Coles\b\n',expressVer)
+  StringF(sendStr,'230-\b\n230-Running AmiExpress \s Copyright ©2018-2023 Darren Coles\b\n',expressVer)
   telnetSend(sendStr,EstrLen(sendStr))
   StringF(sendStr,'230-Registration \s. You are connected to Node \d\b\n',regKey,node)
   telnetSend(sendStr,EstrLen(sendStr))
@@ -29284,7 +29282,7 @@ PROC processLogon()
   ENDIF
   aePuts(tempStr)
 
-  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018-2022 Darren Coles\b\n',expressVer)
+  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018-2023 Darren Coles\b\n',expressVer)
   aePuts(tempStr)
   StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
   aePuts(tempStr)
@@ -29684,7 +29682,7 @@ PROC processAwait()
       send017()
       sendCLS()
 
-      StringF(tempstr,'\b\n                     [33m©2018-2022 AmiExpress [37mby[35m Darren Coles[0m\b\n\b\n')
+      StringF(tempstr,'\b\n                     [33m©2018-2023 AmiExpress [37mby[35m Darren Coles[0m\b\n\b\n')
       aePuts(tempstr)
 
       StringF(tempstr,'                              [33m Original Version:[0m\b\n\b\n')

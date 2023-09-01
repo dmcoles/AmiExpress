@@ -223,6 +223,7 @@ ENDPROC result
 EXPORT PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
   DEF i,cnt,found=FALSE
   DEF cacheObj: PTR TO diskObjectCacheItem
+  DEF oldCacheObj: PTR TO diskObjectCacheItem
   DEF do=NIL:PTR TO diskobject
   DEF fn2[255]:STRING
   DEF ownToolTypes
@@ -319,9 +320,9 @@ EXPORT PROC getOrCreateCacheItem(fileName:PTR TO CHAR)
       IF diskObjectCache.count()<(diskObjectCache.maxSize()-1)
         diskObjectCache.add(cacheObj)
       ELSE
-        cacheObj:=diskObjectCache.item(0)
-        DisposeLink(cacheObj.fileName)
-        FreeDiskObject(cacheObj.diskObject)
+        oldCacheObj:=diskObjectCache.item(0)
+        DisposeLink(oldCacheObj.fileName)
+        FreeDiskObject(oldCacheObj.diskObject)
         diskObjectCache.remove(0)
         diskObjectCache.add(cacheObj)
       ENDIF

@@ -8,19 +8,26 @@
 (set @app-name "Ami-Express")
 (if  (exists "BBS:" (noreq))
   (set @default-dest "bbs:")
-  (set @default-dest "Work:")
+  (set @default-dest "sys:bbs")
 )
 ; 
+
+(if (< (getversion) (* 37 65536))
+	(abort (cat
+		"Ami-Express requires operating system "
+		"version 2.04 or higher to work."
+	))
+)  
+
 (welcome "Welcome to the Ami-Express installation utility.\nThis will install or upgrade your installation to AmiExpress " #appver)
 
-  (set #muiver (/ (getversion "libs:muimaster.library" ) 65536) )
+  (set #muiver (/ (getversion "mui:mui" ) 65536) )
 
   (set #owndevunitver (/ (getversion "libs:owndevunit.library" ) 65536) )
 
   (set #fifolibver (/ (getversion "libs:fifo.library" ) 65536) )
 
   (set #amissllibver (/ (getversion "libs:amisslmaster.library" ) 65536) )
-
   (set #asynclibver (/ (getversion "libs:async.library" ) 65536) )
 
   (if ( <>  #muiver 0)
@@ -34,8 +41,8 @@
   )
   
   (if ( <>  #fifolibver 0)
-     ( set #fifolibmsg  "fifo handler: installed\n" )
-     ( set #fifolibmsg "fifo handler: not installed\n" )
+     ( set #fifolibmsg  "fifo library: installed\n" )
+     ( set #fifolibmsg "fifo library: not installed\n" )
   )
 
   (if ( <>  #amissllibver 0)
@@ -44,16 +51,16 @@
   )
 
   (if ( <>  #asynclibver 0)
-     ( set #ibmcondevmsg "async.library: installed\n" )
-     ( set #ibmcondevmsg "async.library: not installed\n" )
+     ( set #asynclibmsg "async.library: installed\n" )
+     ( set #asynclibmsg "async.library: not installed\n" )
   )
 
 ; 
-( if (exists "sys:wbstartup/acp" (noreq))
-    ( set #acpname "sys:wbstartup/acp")
+( if (exists "sys:wbstartup/ACP" (noreq))
+    ( set #acpname "sys:wbstartup/ACP")
     ( 
-      ( if (exists "bbs:wbstartup/acp" (noreq))
-          ( set #acpname "bbs:wbstartup/acp")
+      ( if (exists "bbs:wbstartup/ACP" (noreq))
+          ( set #acpname "bbs:wbstartup/ACP")
           ( set #acpname "")
       )
     )
@@ -62,8 +69,6 @@
 (set expexists
   (exists "BBS:Express" (noreq))
 )
-
-(set expexists 0)
 
 ; 
 (if (= expexists 0)
@@ -76,7 +81,7 @@
 ; 
 (set #default-dest-installergen-temp
   (askdir
-    (prompt "Select where you want Ami-Express installed")
+    (prompt "Select where you want Ami-Express installed (create a folder if you need one)")
     (help "Select where you want Ami-Express installed.\nNo folder will be created so please ensure that you have created one if needed.")
     (default @default-dest)
   )
@@ -89,7 +94,7 @@
 (set #acpchoice (askchoice
       (choices "WBStartup (for auto startup)" "BBS: (for manual startup)" "Select a different location")
         (prompt "Where would you like to install the ACP program?")
-        (help #cpu-help)
+        (help "")
         (default 0) ))
 
 ( if ( = #acpchoice 0)
@@ -110,21 +115,20 @@
       )
 )
 
-(copylib
+(copyfiles
+  (prompt "Copying Express")
+  (help @copyfiles-help)
   (source "AmiExpress/BBS/Express")
   (dest @default-dest)
-  (prompt "Copying Express")
-  (help @copylib-help)
-  (confirm "expert")
+  (confirm )
 )
-
 ( complete 30)
 
-(copylib
-  (source "AmiExpress/Wbstartup/ACP")
+(copyfiles
+  (source "AmiExpress/ACP")
   (dest #acppath)
   (prompt "Copying ACP")
-  (help @copylib-help)
+  (help @copyfiles-help)
   (infos)
   (confirm "expert")
 
@@ -141,7 +145,38 @@
   (all)
 )
 
+( complete 45)
+
+(copyfiles
+  (prompt "Copying aedoor library")
+  (help @copyfiles-help)
+  (confirm "expert")
+  (source "AmiExpress/libs")
+  (dest "libs:")
+  (all)
+)
+
 ( complete 50)
+
+(copyfiles
+  (prompt "Copying extras")
+  (help @copyfiles-help)
+  (confirm "expert")
+  (source "AmiExpress/c")
+  (dest "c:")
+  (all)
+)
+
+(copyfiles
+  (prompt "Copying extras")
+  (help @copyfiles-help)
+  (confirm "expert")
+  (source "AmiExpress/l")
+  (dest "l:")
+  (all)
+)
+
+( complete 55)
 
 (copyfiles
   (prompt "Copying storage")
@@ -154,18 +189,24 @@
 ( complete 60)
 
 ; 
-(run (cat "LHA x AmiExpress/defaultbbs.lha " @default-dest)
+(copyfiles
   (prompt "Copying default bbs configuration")
-  (help )
+  (help @copyfiles-help)
   (confirm "expert")
+  (source "AmiExpress/defaultbbs")
+  (dest @default-dest)
+  (all)
 )
-
 ( complete 70)
 
-(run (cat "setenv axsetupeditor_prefs save 11" #acppath)
+(run (cat "setenv axsetupeditor_prefs 11" (tackon #acppath "acp"))
   (prompt "Saving configuration")
   (help )
-  (confirm "expert")
+)
+
+(run (cat "copy env:axsetupeditor_prefs envarc:")
+  (prompt "Saving configuration")
+  (help )
 )
 
 ( complete 80)
@@ -180,7 +221,6 @@
   (prompt "Add startup items")
   (help @startup-help)
   (command #startup)
-  (confirm "expert")
 )
 ; 
  
@@ -190,21 +230,19 @@
 ; 
 (set install-dest bbs:)
 
-; 
-(set #expressver (getversion "bbs:express" ) )
+(run (cat "version full >env:tmpver " #acpname))
+(set #acpver (getenv "tmpver") )
+(if (= (substr #acpver 0 4) "ACP ")
+  (set #acpver (substr #acpver 4 (- (strlen #acpver) 4))) 
+)
 
+(run (cat "version full >env:tmpver bbs:express"))
+(set #expressver (getenv "tmpver") )
+(if (= (substr #expressver 0 13) "Ami-Express ")
+  (set #expressver (substr #expressver 13 (- (strlen #expressver) 13))) 
+)
 
-(set #acpver (getversion #acpname ) )
-
-(set #expressverMajor (/ #expressver 65536) )
-(set #expressverMinor (bitand #expressver 65535) )
-(set #expressver ("%ld.%ld" #expressverMajor #expressverMinor) )
-
-(set #acpMajor (/ #expressver 65536) )
-(set #acpMinor (bitand #expressver 65535) )
-(set #acpver ("%ld.%ld" #expressverMajor #expressverMinor) )
-
-(message ("An existing installation of Ami-Express was found.\n\nThe currently installed version information is \n\nACP: %s\nExpress: %s\n\nPress proceed if you wish to continue upgrading Ami-Express.\n\nThe configuration of your bbs will not be affected and only the updated\napplication files will be overwritten.\n" #expressver #acpver) 
+(message ("An existing installation of Ami-Express was found.\n\nThe currently installed version information is \n\nACP: %sExpress: %s\nPress proceed if you wish to continue upgrading Ami-Express.\n\nThe configuration of your bbs will not be affected and only the updated\napplication files will be overwritten.\n" #acpver #expressver) 
 )
 
 ( complete 10)
@@ -213,11 +251,11 @@
 ; 
 ( complete 20)
 
-(copylib
+(copyfiles
   (source "AmiExpress/BBS/Express")
   (dest "bbs:")
-  (prompt "Copying Express")
-  (help @copylib-help)
+  (prompt "Upgrading Express")
+  (help @copyfiles-help)
   (confirm "expert")
 )
 
@@ -232,11 +270,11 @@
 
     ( if (exists (tackon #axprefs "acp") (noreq))
       (
-        (copylib
-          (source "AmiExpress/wbstartup/acp")
+        (copyfiles
+          (source "AmiExpress/ACP")
           (dest #axprefs)
-          (prompt "Copying ACP")
-          (help @copylib-help)
+          (prompt "Upgrading ACP")
+          (help @copyfiles-help)
           (confirm "expert")
         )
         (set #acpdone 1)
@@ -244,15 +282,15 @@
     ) 
   )
 )
-
-( if (and (exists "sys:wbstartup/acp" (noreq))
-          (<> #axprefs "sys:wbstartup") ) 
+(message #axprefs)
+( if (and (exists "sys:wbstartup/ACP" (noreq))
+          (<> #axprefs "sys:wbstartup/") ) 
   (
-    (copylib
-      (source "AmiExpress/wbstartup/acp")
+    (copyfiles
+      (source "AmiExpress/ACP")
       (dest "sys:wbstartup")
-      (prompt "Copying ACP")
-      (help @copylib-help)
+      (prompt "Upgrading ACP")
+      (help @copyfiles-help)
       (confirm "expert")
     )
     (set #acpdone 1)
@@ -262,11 +300,11 @@
 ( if (and (exists "bbs:acp" (noreq))
           (<> #axprefs "bbs:") ) 
   (
-    (copylib
-      (source "AmiExpress/wbstartup/acp")
+    (copyfiles
+      (source "AmiExpress/ACP")
       (dest "bbs:")
-      (prompt "Copying ACP")
-      (help @copylib-help)
+      (prompt "Upgrading ACP")
+      (help @copyfiles-help)
       (confirm "expert")
     )
     (set #acpdone 1)
@@ -283,11 +321,11 @@
 
     ( if (exists (tackon #acppath "acp" ) (noreq))
       (
-        (copylib
-          (source "AmiExpress/wbstartup/acp")
+        (copyfiles
+          (source "AmiExpress/ACP")
           (dest #acppath)
-          (prompt "Copying ACP")
-          (help @copylib-help)
+          (prompt "Upgrading ACP")
+          (help @copyfiles-help)
           (confirm "expert")
         )
         ( set #acpdone 1 )
@@ -299,7 +337,7 @@
 ( complete 60)
 
 (copyfiles
-  (prompt "Copying utils")
+  (prompt "Upgrading utils")
   (help @copyfiles-help)
   (confirm "expert")
   (source "AmiExpress/BBS/Utils")
@@ -312,6 +350,6 @@
 )
 ) ; End If
 
-( message "The MUI system is required by the Ami-Express configuration tool\nand is recommended to be installed. In addition there are optional extras that\ncan be used by Ami-Express which should be installed manually if required.\n\n" #muimsg #owndevunitmsg #fifolibmsg #amissllibmsg #ibmcondevmsg #kalacondevmsg "\nThese extras are all freely available for download on the aminet.")
+( message "The MUI system is required by the Ami-Express configuration tool and is recommended to be installed. In addition there are optional extras that can be used by Ami-Express which should be installed manually if required.\n\n" #muimsg #owndevunitmsg #fifolibmsg #amissllibmsg #asynclibmsg "\nThese extras are all freely available for download on the aminet.")
 
 (exit)

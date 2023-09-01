@@ -46,6 +46,8 @@
 
 ENUM ERR_NONE,ERR_ALREADY_RUNNING,ERR_STARTUP, ERR_VALIDATE,ERR_NO_DISKFONT,ERR_FDS_RANGE
 
+CONST AX_SETUP_TOOL='BBS:Utils/axSetupTool'
+
 CONST LISTENQ=100
 CONST EINTR=4
 CONST MAX_LINE=255
@@ -297,6 +299,7 @@ DEF nodeIdle[MAX_NODES]:ARRAY OF CHAR
 DEF startUp=FALSE/*** Set startup scripts to none ***/
 DEF zipOn=FALSE/*** Turn ZIPPED window off ***/ 
 DEF notDone=1
+DEF shuttingDown=0
 DEF down[MAX_NODES]:ARRAY OF CHAR
 DEF activeNodes[MAX_NODES]:ARRAY OF CHAR
 DEF publicName[200]:STRING
@@ -328,6 +331,8 @@ DEF colours
 DEF dosCheckTime=60
 DEF dosCheckTrigger=5
 DEF dosBanTime=60
+
+DEF menuSelect=FALSE
 
 DEF masterPort[100]:STRING
 
@@ -1036,10 +1041,8 @@ PROC createCustomMenus(nodes)
     maddNodes(nodes)
     maddItem(  NM_ITEM, 'Instant Login',0, 0, 0, 0)
     maddNodes(nodes)
-    IF shellMode
-      maddItem(  NM_ITEM, 'AEShell',0, 0, 0, 0)
-      maddNodes(nodes)
-    ENDIF
+    maddItem(  NM_ITEM, 'Shell',0, 0, 0, 0)
+    maddNodes(nodes)
     maddItem(  NM_ITEM, 'Toggle Chat',0, 0, 0, 0)
     maddNodes(nodes)
     maddItem(  NM_ITEM, 'Exit Node',0, 0, 0, 0)
@@ -1062,6 +1065,7 @@ PROC createCustomMenus(nodes)
     maddNodes(nodes)
     maddItem( NM_ITEM,'Set NRAMS',0,0,0,0)
     maddNodes(nodes)
+    maddItem( NM_ITEM,'Config Editor',0,IF FileLength(AX_SETUP_TOOL)>=0 THEN 0 ELSE ITEMENABLED,0,0)
 
     maddItem( NM_TITLE, 'Custom Control',0,0,0,0)
 
@@ -1280,12 +1284,10 @@ PROC doControl(node)
         DisplayBeep(scr)
       ENDIF
     CASE SV_AESHELL
-      IF shellMode
-        IF(users[node].actionVal=ENV_AWAITCONNECT)
-          callNode(node,SV_AESHELL)
-        ELSE
-          DisplayBeep(scr)
-        ENDIF
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
+        callNode(node,SV_AESHELL)
+      ELSE
+        DisplayBeep(scr)
       ENDIF
     CASE SV_CHATTOGGLE
       cd:=users[node].actionVal
@@ -1443,10 +1445,14 @@ PROC handleEditGadget(im:PTR TO intuimessage,ig)
       IF(button)
         IF(nutton(2)=FALSE) THEN doButton(2,0)
       ELSE
-        IF shellMode
+        IF shellMode OR menuSelect
           IF(control) THEN control:=0 ELSE control:=SV_AESHELL
         ELSE
-          selectAndRunConfig('','','')
+          IF FileLength(AX_SETUP_TOOL)>=0
+            Execute(AX_SETUP_TOOL,0,0)
+          ELSE
+            selectAndRunConfig('','','')
+          ENDIF
         ENDIF
       ENDIF
     CASE GAD_TOGGLECHAT
@@ -1586,6 +1592,8 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
       StrCopy(action2,'Node Inactive   ')
       IF activeNodes[node] THEN activeNodeCount--
       activeNodes[node]:=FALSE
+      down[node]:=TRUE
+      IF (activeNodeCount=0) AND (shuttingDown) THEN notDone:=0
       /*if(ActiveNodeCount==0) notDone=0;*/
     CASE ENV_MULTICHAT
       StrCopy(action2,'MultiNode Chat  ')
@@ -2025,6 +2033,9 @@ PROC checkMasterSig(signals)
         ReplyMsg(cpymsg)
       ELSEIF(cpymsg.command=SV_ACPALERT)
         myrequest(cpymsg.user)
+        ReplyMsg(cpymsg)
+      ELSEIF(cpymsg.command=SV_ACPSHUTDOWN)
+        attemptShutdown()
         ReplyMsg(cpymsg)
       ELSEIF(cpymsg.command=SV_STARTNODE)
         StringF(temp,'AmiExpress_Node.\d',cpymsg.node)
@@ -2747,6 +2758,18 @@ PROC readStartUp(s:PTR TO CHAR)
   
   dobj,cfg:=getToolTypes(s)
   IF (dobj=NIL) 
+    acpError:=1
+  ELSEIF(FindToolType(dobj.tooltypes,'SYSOP_NAME')=0) OR (FindToolType(dobj.tooltypes,'BBS_NAME')=0) OR
+        (FindToolType(dobj.tooltypes,'BBS_LOCATION')=0) OR (FindToolType(dobj.tooltypes,'BBS_GEOGRAPHIC')=0)
+    acpError:=1
+  ENDIF
+  
+  IF acpError
+    IF FileLength(AX_SETUP_TOOL)>=0
+      Execute(AX_SETUP_TOOL,0,0)
+      RETURN
+    ENDIF
+    acpError:=0
     selectAndRunConfig('','s:','aeicon.json')
     
     dobj,cfg:=getToolTypes(s)
@@ -2757,7 +2780,7 @@ PROC readStartUp(s:PTR TO CHAR)
     ENDIF
   ENDIF
   oldtooltypes:=dobj.tooltypes
-  
+
   IF(t:=FindToolType(oldtooltypes,'ACPFONT'))
     StrCopy(fontName,t)
   ENDIF
@@ -3229,7 +3252,8 @@ ENDPROC
 
 PROC attemptShutdown()
   DEF i
- 
+  
+  shuttingDown:=TRUE
   IF(activeNodeCount=0)
     notDone:=0
   ELSE
@@ -3237,7 +3261,7 @@ PROC attemptShutdown()
       IF(StrLen(startNode[i])>0)
         IF((users[i].actionVal=ENV_AWAITCONNECT) AND (down[i])=FALSE)
           control:=SV_NODEOFFHOOK
-          down[i]:=TRUE
+          ->down[i]:=TRUE
           doControl(i)
         ENDIF                     
       ELSE
@@ -4155,13 +4179,19 @@ PROC main() HANDLE
                 CASE MENUPICK
                   ->quit menu item
                   IF(menunum(im.code)=0) AND (itemnum(im.code)=5) THEN attemptShutdown()
+
+                  IF(menunum(im.code)=1) AND (itemnum(im.code)=14) 
+                    IF FileLength(AX_SETUP_TOOL)>=0 THEN Execute(AX_SETUP_TOOL,0,0)
+                  ENDIF
                   
                   IF(menunum(im.code)=1)
                     i:=button
                     button:=0
+                    menuSelect:=TRUE
                     handleEditGadget(NIL,GAD_SYSOPLOGIN+itemnum(im.code))
                     handleEditGadget(NIL,GAD_NODES+subnum(im.code))
                     button:=i
+                    menuSelect:=FALSE
                   ENDIF
                   IF(menunum(im.code)=2)
                     num:=itemnum(im.code)
