@@ -118,17 +118,19 @@
 (copyfiles
   (prompt "Copying Express")
   (help @copyfiles-help)
-  (source "AmiExpress/BBS/Express")
+  (source "AmiExpress/AmiExpress")
+  (choices "Express")
   (dest @default-dest)
-  (confirm )
+  (confirm "expert")
 )
 ( complete 30)
 
 (copyfiles
-  (source "AmiExpress/ACP")
+  (source "AmiExpress/AmiExpress")
   (dest #acppath)
   (prompt "Copying ACP")
   (help @copyfiles-help)
+  (choices "ACP")
   (infos)
   (confirm "expert")
 
@@ -140,7 +142,7 @@
   (prompt "Copying utils")
   (help @copyfiles-help)
   (confirm "expert")
-  (source "AmiExpress/BBS/Utils")
+  (source "AmiExpress/AmiExpress/Utils")
   (dest (tackon @default-dest "Utils"))
   (all)
 )
@@ -148,45 +150,59 @@
 ( complete 45)
 
 (copyfiles
-  (prompt "Copying aedoor library")
+  (prompt "Copying icons")
   (help @copyfiles-help)
   (confirm "expert")
-  (source "AmiExpress/libs")
-  (dest "libs:")
+  (source "AmiExpress/AmiExpress/Storage")
+  (dest (tackon @default-dest "Storage"))
   (all)
 )
+
 
 ( complete 50)
 
-(copyfiles
-  (prompt "Copying extras")
-  (help @copyfiles-help)
-  (confirm "expert")
-  (source "AmiExpress/c")
-  (dest "c:")
-  (all)
-)
-
-(copyfiles
-  (prompt "Copying extras")
-  (help @copyfiles-help)
-  (confirm "expert")
-  (source "AmiExpress/l")
-  (dest "l:")
-  (all)
+(copylib
+  (prompt "Copying aedoor library")
+  (help @copylib-help)
+  (confirm "average")
+  (source "AmiExpress/libs/aedoor.library")
+  (dest "libs:")
 )
 
 ( complete 55)
 
 (copyfiles
-  (prompt "Copying storage")
+  (prompt "Copying archive tools")
+  (help @copyfiles-help)
+  (confirm "average")
+  (source "AmiExpress/c")
+  (dest "c:")
+  (choices "LHA" "LZX" "ZIP" "UNZIP")
+)
+
+( complete 60)
+
+(copyfiles
+  (prompt "Copying LZX registration key")
+  (help @copyfiles-help)
+  (confirm "average")
+  (source "AmiExpress/l")
+  (dest "l:")
+  (choices "LZX.keyfile")
+)
+
+( complete 65)
+
+(copyfiles
+  (prompt "Copying file id tools")
   (help @copyfiles-help)
   (confirm "expert")
-  (source "AmiExpress/BBS/Storage")
-  (dest (tackon @default-dest "Storage"))
-  (all)
+  (source "AmiExpress/fileid")
+  (dest "c:")
+  (choices "Textract" "DMSDescript" "EXEDescript" "GIFDesc")
 )
-( complete 60)
+
+( complete 70)
 
 ; 
 (copyfiles
@@ -197,7 +213,7 @@
   (dest @default-dest)
   (all)
 )
-( complete 70)
+( complete 90)
 
 (run (cat "setenv axsetupeditor_prefs 11" (tackon #acppath "acp"))
   (prompt "Saving configuration")
@@ -209,7 +225,7 @@
   (help )
 )
 
-( complete 80)
+( complete 95)
 
 (if  (exists "BBS:" (noreq))
    (set #startup "Assign doors: bbs:doors\nPath bbs:utils add\nResident SYS:Rexxc/RX pure")
@@ -252,9 +268,10 @@
 ( complete 20)
 
 (copyfiles
-  (source "AmiExpress/BBS/Express")
+  (source "AmiExpress/AmiExpress")
   (dest "bbs:")
   (prompt "Upgrading Express")
+  (choices "Express")
   (help @copyfiles-help)
   (confirm "expert")
 )
@@ -271,8 +288,9 @@
     ( if (exists (tackon #axprefs "acp") (noreq))
       (
         (copyfiles
-          (source "AmiExpress/ACP")
+          (source "AmiExpress/AmiExpress")
           (dest #axprefs)
+          (choices "ACP")
           (prompt "Upgrading ACP")
           (help @copyfiles-help)
           (confirm "expert")
@@ -282,15 +300,15 @@
     ) 
   )
 )
-(message #axprefs)
 ( if (and (exists "sys:wbstartup/ACP" (noreq))
           (<> #axprefs "sys:wbstartup/") ) 
   (
     (copyfiles
-      (source "AmiExpress/ACP")
+      (source "AmiExpress/AmiExpress")
       (dest "sys:wbstartup")
       (prompt "Upgrading ACP")
       (help @copyfiles-help)
+      (choices "ACP")
       (confirm "expert")
     )
     (set #acpdone 1)
@@ -301,10 +319,11 @@
           (<> #axprefs "bbs:") ) 
   (
     (copyfiles
-      (source "AmiExpress/ACP")
+      (source "AmiExpress/AmiExpress")
       (dest "bbs:")
       (prompt "Upgrading ACP")
       (help @copyfiles-help)
+      (choices "ACP")
       (confirm "expert")
     )
     (set #acpdone 1)
@@ -322,10 +341,11 @@
     ( if (exists (tackon #acppath "acp" ) (noreq))
       (
         (copyfiles
-          (source "AmiExpress/ACP")
+          (source "AmiExpress/AmiExpress")
           (dest #acppath)
           (prompt "Upgrading ACP")
           (help @copyfiles-help)
+          (choices "ACP")
           (confirm "expert")
         )
         ( set #acpdone 1 )
@@ -340,7 +360,7 @@
   (prompt "Upgrading utils")
   (help @copyfiles-help)
   (confirm "expert")
-  (source "AmiExpress/BBS/Utils")
+  (source "AmiExpress/AmiExpress/Utils")
   (dest "BBS:Utils")
   (pattern "~(rexxdoor)")
 )

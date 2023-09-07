@@ -51,6 +51,7 @@ DEF state=-1, stateData, reqState,instantLogon=FALSE
 DEF windowClose=NIL:PTR TO window
 DEF windowStat=NIL:PTR TO window
 DEF windowZmodem=NIL:PTR TO window
+DEF expMenu:PTR TO menu
 DEF consoleReadMP=NIL: PTR TO mp
 DEF titlebar[255]:STRING
 DEF ititlebar[255]:STRING
@@ -1393,9 +1394,9 @@ PROC checkDoorMsg(mode)
       CASE SV_INSTANT
         servercmd:=SV_INSTANT
       CASE SV_CHATTOGGLE
-        sysopAvail:=Not(sysopAvail)
-        updateTitle(NIL)
-        statChatFlag()
+        servercmd:=SV_CHATTOGGLE
+      CASE SV_TOGGLESTATUS
+        servercmd:=SV_TOGGLESTATUS
       CASE SV_ACCOUNTS
         servercmd:=SV_ACCOUNTS
       CASE SV_QUIETNODE
@@ -1431,6 +1432,16 @@ PROC checkDoorMsg(mode)
         servercmd:=SV_AESHELL
       CASE SV_KICKUSER
         servercmd:=SV_KICKUSER
+      CASE SV_TIMEINCREASE
+        servercmd:=SV_TIMEINCREASE
+      CASE SV_TIMEDECREASE
+        servercmd:=SV_TIMEDECREASE
+      CASE SV_CAPTURE
+        servercmd:=SV_CAPTURE
+      CASE SV_DISPLAYFILE
+        servercmd:=SV_DISPLAYFILE
+      CASE SV_GRANTTEMP
+        servercmd:=SV_GRANTTEMP
       CASE SV_RESERVENODE
         StrCopy(reservedName,servermsg.string)
         IF(StrLen(reservedName)>0)
@@ -1476,6 +1487,10 @@ PROC checkDoorMsg(mode)
         acceptIncomingConnection(servermsg.data,FALSE)
       CASE INCOMING_FTP
         acceptIncomingConnection(servermsg.data,TRUE)
+      CASE SV_CONFMAINT
+        servercmd:=SV_CONFMAINT
+      CASE SV_VIEWLOGS
+        servercmd:=SV_VIEWLOGS
     ENDSELECT
     IF servermsg<>NIL
       ReplyMsg(servermsg)
@@ -6952,12 +6967,25 @@ PROC processCommodityMessage(signals)
   ENDIF
 ENDPROC
 
+PROC processWinMessage2(win:PTR TO window)
+  DEF winmsg:PTR TO intuimessage
+  DEF msgclass
+  WHILE winmsg:=GetMsg(win.userport)
+    msgclass:=winmsg.class
+    ReplyMsg(winmsg)
+    SELECT msgclass
+      CASE IDCMP_CLOSEWINDOW
+        closeExpressScreen()
+      CASE IDCMP_MENUPICK
+        handleMenuPick(winmsg.code)
+    ENDSELECT
+    EXIT window=NIL
+  ENDWHILE
+ENDPROC
+
 PROC processWindowMessage(signals)
   -> If IDCMP messages received, handle them
-  DEF winmsg:PTR TO intuimessage
   DEF windowsig
-  DEF msgclass
-  DEF win:PTR TO window
 
   IF screen AND (scropen=FALSE)
     IF CloseScreen(screen) THEN screen:=NIL
@@ -6965,25 +6993,17 @@ PROC processWindowMessage(signals)
 
   IF windowClose<>NIL
     windowsig:=Shl(1, windowClose.userport.sigbit)
-    win:=windowClose
-  ELSEIF window<>NIL
-    windowsig:=Shl(1, window.userport.sigbit)
-    win:=window
-  ELSE
-    windowsig:=0
+    IF signals AND windowsig THEN processWinMessage2(windowClose)
   ENDIF
 
-  IF signals AND windowsig
-    -> We have to ReplyMsg these when done with them
-    WHILE winmsg:=GetMsg(win.userport)
-      msgclass:=winmsg.class
-      ReplyMsg(winmsg)
-      SELECT msgclass
-        CASE IDCMP_CLOSEWINDOW
-          closeExpressScreen()
-      ENDSELECT
-      EXIT window=NIL
-    ENDWHILE
+  IF window<>NIL
+    windowsig:=Shl(1, window.userport.sigbit)
+    IF signals AND windowsig THEN processWinMessage2(window)
+  ENDIF
+
+  IF windowStat<>NIL
+    windowsig:=Shl(1, windowStat.userport.sigbit)
+    IF signals AND windowsig THEN processWinMessage2(windowStat)
   ENDIF
 ENDPROC
 
@@ -7031,7 +7051,10 @@ PROC closeAEStats()
     statWriteMP:=NIL
   ENDIF
 
-  IF(windowStat<>NIL) THEN CloseWindow(windowStat)
+  IF(windowStat<>NIL) 
+    ClearMenuStrip(windowStat)
+    CloseWindow(windowStat)
+  ENDIF
   windowStat:=NIL
 ENDPROC
 
@@ -7099,6 +7122,8 @@ PROC toggleStatusDisplay()
          WA_HEIGHT,sz,
          WA_DETAILPEN,dp,
          WA_BLOCKPEN,bp,
+         WA_IDCMP,IDCMP_MENUPICK,
+         WA_NEWLOOKMENUS,1,
          WA_FLAGS,WFLG_SIMPLE_REFRESH,
          TAG_DONE]
     ELSE
@@ -7109,9 +7134,12 @@ PROC toggleStatusDisplay()
          WA_HEIGHT,sz,
          WA_DETAILPEN,dp,
          WA_BLOCKPEN,bp,
+         WA_IDCMP,IDCMP_MENUPICK,
+         WA_NEWLOOKMENUS,1,
          WA_FLAGS,WFLG_SIMPLE_REFRESH,
          TAG_DONE]
     ENDIF
+
     IF(( windowStat:=OpenWindowTagList(NIL,tags))<>NIL)
 
       dStatBar:=1
@@ -7121,6 +7149,8 @@ PROC toggleStatusDisplay()
       initStatCon()
       clearStatusPane()
       SetWindowTitles(window,titlebar,titlebar)
+      SetMenuStrip(windowStat,expMenu)
+
       IF pub THEN SetWindowTitles(windowStat,titlebar,titlebar)
       IF (loggedOnUser<>NIL)
         IF (StrLen(loggedOnUser.name)>0) THEN statPrintUser(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
@@ -7130,6 +7160,7 @@ PROC toggleStatusDisplay()
     FastDisposeList(tags)
     IF pubLock THEN UnlockPubScreen(NIL,pubLock)
   ENDIF
+  updateMenus()
 ENDPROC
 
 PROC doFax()
@@ -7372,10 +7403,15 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
 
   IF windowClose<>NIL
     windowsig:=Shl(1, windowClose.userport.sigbit)
-  ELSEIF window<>NIL
-    windowsig:=Shl(1, window.userport.sigbit)
+  ENDIF
+  
+  IF window<>NIL
+    windowsig:=windowsig OR Shl(1, window.userport.sigbit)
   ENDIF
 
+  IF windowStat<>NIL
+    windowsig:=windowsig OR Shl(1, windowStat.userport.sigbit)
+  ENDIF
 
   IF resmp<>NIL THEN doorsig:=Shl(1, resmp.sigbit)
   IF rexxmp<>NIL THEN rexxsig:=Shl(1, rexxmp.sigbit)
@@ -7555,6 +7591,8 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       servercmd:=-1
       debugLog(LOG_DEBUG,'SYSOP LOGON')
       statClearTime()
+      disableNodeMenus(TRUE)
+      disableOnlineMenus(FALSE)
       StrCopy(connectString,'SYSOP_LOCAL')
       IF (scropen) THEN expressToFront() ELSE openExpressScreen()
       ioFlags[IOFLAG_SER_IN]:=0
@@ -7572,6 +7610,8 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       servercmd:=-1
       debugLog(LOG_DEBUG,'LOCAL LOGON')
       statClearTime()
+      disableNodeMenus(TRUE)
+      disableOnlineMenus(FALSE)
       StrCopy(connectString,'F2_LOCAL')
       IF (scropen) THEN expressToFront() ELSE openExpressScreen()
       ioFlags[IOFLAG_SER_IN]:=0
@@ -7597,6 +7637,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       IF(StrLen(reservedName)>0)
         StrCopy(reservedName,'')
       ELSE
+        disableNodeMenus(TRUE)
         ioFlags[IOFLAG_SER_IN]:=0
         ioFlags[IOFLAG_SER_OUT]:=0
         ioFlags[IOFLAG_SCR_OUT]:=-1
@@ -7607,6 +7648,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
         conCLS()
         reserveForUser()
         resetSystem()
+        disableNodeMenus(FALSE)
         ioFlags[IOFLAG_SER_IN]:=-1
         ioFlags[IOFLAG_SCR_OUT]:=0
         setEnvStat(ENV_RESERVE)
@@ -7615,7 +7657,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     ENDIF
 
     ->F5
-    IF ((wasControl=1) AND (ch="4"))
+    IF (servercmd=SV_CONFMAINT) OR ((wasControl=1) AND (ch="4"))
       servercmd:=-1
       ioFlags[IOFLAG_SER_IN]:=0
       ioFlags[IOFLAG_SCR_OUT]:=-1
@@ -7625,6 +7667,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       onlineBaud:=cmds.openingBaud
       onlineBaudR:=cmds.openingBaud
       timeLimit:=3600
+      disableNodeMenus(TRUE)
       logonType:=LOGON_TYPE_LOCAL
       logonTime:=getSystemTime()
       lastTimeUpdate:=logonTime
@@ -7644,6 +7687,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       ioFlags[IOFLAG_SER_IN]:=-1
       ioFlags[IOFLAG_SCR_OUT]:=0
       IF(ioFlags[IOFLAG_FIL_IN]) THEN ioFlags[IOFLAG_FIL_IN]:=0
+      disableNodeMenus(FALSE)
       IF reqState=REQ_STATE_NONE THEN statePtr.redrawScreen:=TRUE
     ENDIF
 
@@ -7653,11 +7697,13 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       ioFlags[IOFLAG_SER_IN]:=0
       ioFlags[IOFLAG_SCR_OUT]:=-1
       intDoReset(sopt.offHook)
+      disableNodeMenus(TRUE)
       IF (scropen) THEN expressToFront() ELSE openExpressScreen()
       setEnvStat(ENV_SHELL)
       sendCLS()
       remoteShell()
       resetSystem()
+      disableNodeMenus(FALSE)
       ioFlags[IOFLAG_SER_IN]:=-1
       ioFlags[IOFLAG_SCR_OUT]:=0
       IF(ioFlags[IOFLAG_FIL_IN]) THEN ioFlags[IOFLAG_FIL_IN]:=0
@@ -7670,6 +7716,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       ioFlags[IOFLAG_SER_IN]:=0
       ioFlags[IOFLAG_SCR_OUT]:=-1
       intDoReset(sopt.offHook)
+      disableNodeMenus(TRUE)
       IF (scropen) THEN expressToFront() ELSE openExpressScreen()
       conCursorOn()
       sendCLS()
@@ -7694,6 +7741,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       loggedOnUserMisc:=NIL
       loggedOnUserKeys:=NIL
       resetSystem()
+      disableNodeMenus(FALSE)
       ioFlags[IOFLAG_SER_IN]:=-1
       ioFlags[IOFLAG_SCR_OUT]:=0
       IF(ioFlags[IOFLAG_FIL_IN]) THEN ioFlags[IOFLAG_FIL_IN]:=0
@@ -7701,11 +7749,12 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     ENDIF
 
     ->Shift F6
-    IF ((wasControl=2) AND (ch="5"))
+    IF (servercmd=SV_VIEWLOGS) OR ((wasControl=2) AND (ch="5"))
       servercmd:=-1
       ioFlags[IOFLAG_SER_IN]:=0
       ioFlags[IOFLAG_SCR_OUT]:=-1
       intDoReset(sopt.offHook)
+      disableNodeMenus(TRUE)
       IF (scropen) THEN expressToFront() ELSE openExpressScreen()
       sendCLS()
       StringF(temp,'\sNode\d/Callerslog',cmds.bbsLoc,node)
@@ -7726,6 +7775,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       loggedOnUserMisc:=NIL
       loggedOnUserKeys:=NIL
       resetSystem()
+      disableNodeMenus(FALSE)
       ioFlags[IOFLAG_SER_IN]:=-1
       ioFlags[IOFLAG_SCR_OUT]:=0
       IF(ioFlags[IOFLAG_FIL_IN]) THEN ioFlags[IOFLAG_FIL_IN]:=0
@@ -7733,9 +7783,10 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     ENDIF
 
     ->F7
-    IF ((wasControl=1) AND (ch="6"))
+    IF (servercmd=SV_CHATTOGGLE) OR ((wasControl=1) AND (ch="6"))
       servercmd:=-1
       sysopAvail:=Not(sysopAvail)
+      updateMenus()
       updateTitle(NIL)
       statChatFlag()
     ENDIF
@@ -7765,7 +7816,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       clearDiskObjectCache()
     ENDIF
 
-    IF ((wasControl=1) AND (ch="?"))
+    IF (servercmd=SV_TOGGLESTATUS) OR ((wasControl=1) AND (ch="?"))
       toggleStatusDisplay()
     ENDIF
   ENDIF
@@ -7796,27 +7847,27 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     ENDIF
 
     ->F2 - increase time limit
-    IF ((wasControl=1) AND (ch="1") AND (loggedOnUser<>NIL))
+    IF (servercmd=SV_TIMEINCREASE) OR ((wasControl=1) AND (ch="1") AND (loggedOnUser<>NIL))
       servercmd:=-1
       timeLimit:=timeLimit+600
       loggedOnUser.timeTotal:=loggedOnUser.timeTotal+600
     ENDIF
 
     ->F3 - decrease time limit
-    IF ((wasControl=1) AND (ch="2") AND (loggedOnUser<>NIL))
+    IF (servercmd=SV_TIMEDECREASE) OR ((wasControl=1) AND (ch="2") AND (loggedOnUser<>NIL))
       servercmd:=-1
       timeLimit:=timeLimit-600
       loggedOnUser.timeTotal:=loggedOnUser.timeTotal-600
     ENDIF
 
     ->F4 - capture
-    IF ((wasControl=1) AND (ch="3"))
+    IF (servercmd=SV_CAPTURE) OR ((wasControl=1) AND (ch="3"))
       servercmd:=-1
       startCapture()
     ENDIF
 
     ->Shift F4 - display file to user
-    IF ((wasControl=2) AND (ch="3"))
+    IF (servercmd=SV_DISPLAYFILE) OR ((wasControl=2) AND (ch="3"))
       servercmd:=-1
       startASend()
       RETURN TRUE,RESULT_SUCCESS
@@ -7831,7 +7882,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     ENDIF
 
     ->Shift F6 - grant/remove temporary access
-    IF ((wasControl=2) AND (ch="5") AND (loggedOnUser<>NIL))
+    IF (servercmd=SV_GRANTTEMP) OR ((wasControl=2) AND (ch="5") AND (loggedOnUser<>NIL))
       servercmd:=-1
       IF(tempAccessGranted)
         loggedOnUser.secStatus:=tempAccess.accessLevel;
@@ -7855,9 +7906,10 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     ENDIF
 
     ->F7
-    IF ((wasControl=1) AND (ch="6"))
+    IF (servercmd=SV_CHATTOGGLE) OR ((wasControl=1) AND (ch="6"))
       servercmd:=-1
       sysopAvail:=Not(sysopAvail)
+      updateMenus()
       updateTitle(NIL)
       statChatFlag()
     ENDIF
@@ -7893,7 +7945,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
     ENDIF
 
     ->HELP
-    IF ((wasControl=1) AND (ch="?"))
+    IF (servercmd=SV_TOGGLESTATUS) OR ((wasControl=1) AND (ch="?"))
       servercmd:=-1
       toggleStatusDisplay()
     ENDIF
@@ -8194,6 +8246,8 @@ PROC processLoggingOff()
   Delay(50)
   stateData:=0
   writeLogoffLog('logging off 22',FALSE)
+  disableNodeMenus(FALSE)
+  disableOnlineMenus(TRUE)
 
   StrCopy(telnetUsername,'')
   StrCopy(telnetPassword,'')
@@ -29739,7 +29793,9 @@ PROC processAwait()
     ENDIF
 
     IF (checkSer()) OR (sopt.trapDoor) OR (instantLogon) OR (checkTelnetConnection()) AND (reqState=REQ_STATE_NONE)
-     
+      disableNodeMenus(TRUE)
+      disableOnlineMenus(FALSE)
+
       IF checkIncomingCall()=RESULT_CONNECT
         debugLog(LOG_DEBUG,'REMOTE LOGON')
         ioFlags[IOFLAG_SCR_OUT]:=-1
@@ -30646,6 +30702,138 @@ PROC openZmodemStat()
 
 ENDPROC
 
+PROC disableNodeMenus(flag)
+  DEF item:PTR TO menuitem
+  IF windowStat THEN ClearMenuStrip(windowStat)
+  IF window THEN ClearMenuStrip(window)
+  item:=expMenu.firstitem
+  WHILE item
+    IF (item.flags AND CHECKIT)=0
+      IF flag THEN item.flags:=item.flags AND $FFEF ELSE item.flags:=item.flags OR $10
+    ENDIF
+    item:=item.nextitem
+  ENDWHILE
+
+  IF windowStat THEN ResetMenuStrip(windowStat,expMenu)
+  IF window THEN ResetMenuStrip(window,expMenu)
+  
+ENDPROC
+
+PROC disableOnlineMenus(flag)
+  DEF item:PTR TO menuitem
+  IF windowStat THEN ClearMenuStrip(windowStat)
+  IF window THEN ClearMenuStrip(window)
+  
+  item:=expMenu.nextmenu.firstitem
+  WHILE item
+    IF flag THEN item.flags:=item.flags AND $FFEF ELSE item.flags:=item.flags OR $10
+    item:=item.nextitem
+  ENDWHILE
+
+  IF windowStat THEN ResetMenuStrip(windowStat,expMenu)
+  IF window THEN ResetMenuStrip(window,expMenu)
+ENDPROC
+
+PROC updateMenus()
+  DEF item:PTR TO menuitem
+  IF windowStat THEN ClearMenuStrip(windowStat)
+  IF window THEN ClearMenuStrip(window)
+  item:=expMenu.firstitem
+  WHILE item
+    IF GTMENUITEM_USERDATA(item)=-1
+      IF sysopAvail THEN item.flags:=item.flags OR $100 ELSE item.flags:=item.flags AND $FEFF
+    ENDIF
+    IF GTMENUITEM_USERDATA(item)=-2
+      IF dStatBar THEN item.flags:=item.flags OR $100 ELSE item.flags:=item.flags AND $FEFF
+    ENDIF
+    item:=item.nextitem
+  ENDWHILE
+
+  IF windowStat THEN ResetMenuStrip(windowStat,expMenu)
+  IF window THEN ResetMenuStrip(window,expMenu)
+ 
+ENDPROC
+
+PROC createMenus()
+  DEF eWinMenu:PTR TO newmenu
+  DEF n=0
+
+  eWinMenu:=NEW eWinMenu[28]
+  eWinMenu[n].type:=NM_TITLE
+  eWinMenu[n++].label:='Node'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Sysop logon             F1'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Local logon             F2'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Instant logon           F3'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Reserve node            F4'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Conference maintenance  F5'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Shell                Sh-F5'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Account editor          F6'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='View callerslog      Sh-F6'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n].flags:=CHECKIT
+  eWinMenu[n].mutualexclude:=0
+  eWinMenu[n].userdata:=-1
+  eWinMenu[n++].label:='Sysop available       F7'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n].flags:=CHECKIT
+  eWinMenu[n].mutualexclude:=0
+  eWinMenu[n].userdata:=-2
+  eWinMenu[n++].label:='Toggle status       Help'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Init modem              F8'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Exit node               F9'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Exit node (offhook)    F10'
+  eWinMenu[n].type:=NM_TITLE
+  eWinMenu[n++].label:='Online'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Chat                   F1'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Time limit'
+  eWinMenu[n].type:=NM_SUB
+  eWinMenu[n++].label:='Increase               F2'
+  eWinMenu[n].type:=NM_SUB
+  eWinMenu[n++].label:='Decrease               F3'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Capture                F4'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Show file              F5'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Account edit           F6'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Grant temporary access F7'
+  eWinMenu[n].type:=NM_ITEM
+  eWinMenu[n++].label:='Disconnect            F10'
+  eWinMenu[n].type:=NM_END
+  
+  IF (gadtoolsbase:=OpenLibrary('gadtools.library',0))<>NIL
+    expMenu:=CreateMenusA(eWinMenu,[TAG_END])
+    disableNodeMenus(FALSE)
+    disableOnlineMenus(TRUE)
+    CloseLibrary(gadtoolsbase)
+  ENDIF
+  END eWinMenu[28]
+  
+ENDPROC
+
+PROC freeMenus()
+  IF expMenu
+    IF (gadtoolsbase:=OpenLibrary('gadtools.library',0))<>NIL
+      FreeMenus(expMenu)
+      CloseLibrary(gadtoolsbase)
+    ENDIF
+  ENDIF
+ENDPROC
+
 PROC openExpressScreen()
   DEF width,height,top,left,dispId
   DEF pubScreen[255]:STRING
@@ -30654,6 +30842,7 @@ PROC openExpressScreen()
   DEF pub=FALSE
   DEF pubLock=NIL
   DEF opentags:PTR TO LONG,temp
+  DEF vi
   DEF pens: PTR TO INT, cols:PTR TO INT
   DEF pensize,colsize
   DEF statePtr:PTR TO awaitState
@@ -30794,6 +30983,8 @@ PROC openExpressScreen()
 
     IF screen=NIL THEN RETURN ERR_SCREEN
 
+    vi:=GetVisualInfoA(screen, [NIL])
+
     IF windowClose=NIL
       opentags:=NEW [WA_CLOSEGADGET,1,WA_CUSTOMSCREEN,screen,
          WA_TOP,0,
@@ -30828,7 +31019,8 @@ PROC openExpressScreen()
         WA_MAXHEIGHT,-1,
         ->WA_DETAILPEN,0,
         ->WA_BLOCKPEN,blockpen,
-        WA_IDCMP,IDCMP_CLOSEWINDOW,
+        WA_NEWLOOKMENUS,1,
+        WA_IDCMP,IDCMP_CLOSEWINDOW OR IDCMP_MENUPICK,
         WA_FLAGS,WFLG_ACTIVATE,
         TAG_DONE]
       window:=OpenWindowTagList(NIL,opentags)
@@ -30842,6 +31034,8 @@ PROC openExpressScreen()
         WA_HEIGHT,height-(screen.wbortop+screen.font.ysize+1),
         ->WA_DETAILPEN,0,
         ->WA_BLOCKPEN,blockpen,
+        WA_NEWLOOKMENUS,1,
+        WA_IDCMP,IDCMP_MENUPICK,
         WA_FLAGS,WFLG_ACTIVATE,
         TAG_DONE]
       window:=OpenWindowTagList(NIL,opentags)
@@ -30849,8 +31043,14 @@ PROC openExpressScreen()
     ENDIF
   ENDIF
 
+
   IF pubLock THEN UnlockPubScreen(NIL,pubLock)
   IF window=NIL THEN RETURN ERR_WINDOW
+
+  updateMenus()
+  LayoutMenusA(expMenu,vi,[GTMN_NEWLOOKMENUS,1,TAG_DONE])
+  FreeVisualInfo(vi)
+  SetMenuStrip(window,expMenu)
 
   IF state=STATE_AWAIT
     statePtr:=stateData
@@ -30907,6 +31107,66 @@ PROC openExpressScreen()
   IF((sopt.statBar<>FALSE) AND (pub=FALSE)) THEN toggleStatusDisplay()
 ENDPROC ERR_NONE
 
+PROC handleMenuPick(menucode)
+  DEF menu,item,subitem
+  menu:=menucode AND $1F
+  item:=(Shr((menucode),5) AND $3F)
+  subitem:=(Shr((menucode),11) AND $1F)
+  
+  SELECT menu
+    CASE 0
+      SELECT item
+        CASE 0
+          servercmd:=SV_SYSOPLOG
+        CASE 1
+          servercmd:=SV_LOCALLOG
+        CASE 2
+          servercmd:=SV_INSTANT
+        CASE 3
+          servercmd:=SV_RESERVE
+        CASE 4
+          servercmd:=SV_CONFMAINT
+        CASE 5
+          servercmd:=SV_AESHELL
+        CASE 6
+          servercmd:=SV_ACCOUNTS
+        CASE 7
+          servercmd:=SV_VIEWLOGS
+        CASE 8
+          servercmd:=SV_CHATTOGGLE
+        CASE 9
+          servercmd:=SV_TOGGLESTATUS
+        CASE 10
+          servercmd:=SV_INITMODEM
+        CASE 11
+          servercmd:=SV_EXITNODE
+        CASE 12
+          servercmd:=SV_NODEOFFHOOK
+      ENDSELECT
+    CASE 1
+      SELECT item
+        CASE 0
+          servercmd:=SV_CHAT
+        CASE 1
+          IF subitem=0
+            servercmd:=SV_TIMEINCREASE
+          ELSE
+            servercmd:=SV_TIMEDECREASE
+          ENDIF
+        CASE 2
+            servercmd:=SV_CAPTURE
+        CASE 3
+            servercmd:=SV_DISPLAYFILE
+        CASE 4
+            servercmd:=SV_ACCOUNTS
+        CASE 5
+            servercmd:=SV_GRANTTEMP
+        CASE 6
+            servercmd:=SV_KICKUSER
+      ENDSELECT
+  ENDSELECT
+ENDPROC
+
 PROC closeExpressScreen()
 
   closeAEStats()
@@ -30947,6 +31207,7 @@ PROC closeExpressScreen()
   ENDIF
 
   IF window
+    ClearMenuStrip(window)
     CloseWindow(window)
     window:=NIL
   ENDIF
@@ -31563,6 +31824,7 @@ PROC main() HANDLE
     SetTaskPri(FindTask(0),cmds.taskPri)
   ENDIF
 
+  createMenus()
   IF (sopt.iconify=FALSE) THEN openExpressScreen()
 
   formatLongDateTime(getSystemTime(),tempstr)
@@ -31687,6 +31949,8 @@ PROC main() HANDLE
   socketbase:=NIL
   
   closeExpressScreen()
+  freeMenus()
+  
   IF iconbase THEN CloseLibrary(iconbase)
   IF diskfontbase THEN CloseLibrary(diskfontbase)
 
@@ -31745,6 +32009,7 @@ PROC main() HANDLE
   CASE "NIL"
     StringF(tempstr,'NIL pointer error at line \d',exceptioninfo)
     debugLog(LOG_ERROR,tempstr) 
+    WriteF('Error: NIL pointer exception')
   DEFAULT
     IF exception<>0
       StringF(tempstr,'Unknown exception \d',exception)
