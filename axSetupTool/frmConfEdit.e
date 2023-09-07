@@ -390,7 +390,7 @@ PROC cloneNewConf() OF frmConfEdit
     self.confCount:=self.confCount+1
     self.currConf:=self.confCount
 
-    StringF(tempStr,'\d',self.currConf)
+    StringF(tempStr,'\r\z\d[2]',self.currConf)
     set(self.strConfNumber, MUIA_String_Contents,tempStr)
 
     set( self.btnPrevConf, MUIA_Disabled , FALSE)
@@ -956,7 +956,7 @@ PROC loadConf(conf) OF frmConfEdit
   StringF(tempStr,'LOCATION.\d',conf)
   readToolType(self.confConfig,tempStr,confPath)
 
-  StringF(tempStr,'\d',conf)
+  StringF(tempStr,'\r\z\d[2]',conf)
   set(self.strConfNumber, MUIA_String_Contents,tempStr)
   set(self.strConfName, MUIA_String_Contents,confName)
   self.strConfName2.setValue(confName)
