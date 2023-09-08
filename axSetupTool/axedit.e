@@ -702,7 +702,7 @@ PROC create( display : PTR TO app_display ) OF app_obj
 
 	self.btnMsgbaseAdd := SimpleButton( 'Add' )
 
-	self.btnMsgbaseEdit := SimpleButton( 'Ediit' )
+	self.btnMsgbaseEdit := SimpleButton( 'Edit' )
 
 	self.btnMsgbaseDelete := SimpleButton( 'Remove' )
 
