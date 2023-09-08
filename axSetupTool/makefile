@@ -1,11 +1,11 @@
 # Compile axed
 
-options=DEBUG IGNORECACHE SYM SHOWFNAME ADDBUF 300
+options=DEBUG IGNORECACHE SYM SHOWFNAME ADDBUF 3
 compiler=EVO
 
 all:					axSetupTool
 
-release:				options = IGNORECACHE OPTI SHOWFNAME ADDBUF 300
+release:				options = IGNORECACHE OPTI SHOWFNAME ADDBUF 3
 release:			axSetupTool
 
 axSetupTool:	axSetupTool.e frmMain.m axedit.m helpText.m
@@ -15,7 +15,7 @@ axedit.m:			axedit.e
 							$(compiler) axedit $(options)
 
 stringlist.m:		/stringlist.e
-							$(compiler) /stringlist $(options)
+							$(compiler)/stringlist $(options)
 
 tooltypes.m:	tooltypes.e stringlist.m
 							$(compiler) tooltypes $(options)
