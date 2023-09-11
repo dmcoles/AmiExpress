@@ -20,6 +20,9 @@ jobs:
          password: ${{ secrets.DOCKER_PASSWORD }}
          registry: docker.io
          image: dmcoles/amiga-evo-cicd:latest
-         run: echo "hello world"
-
-    
+         options: -v $ {{ github.workspace }}:~/source
+         run: |
+           echo "hello world"
+           vamos --cwd esource:AmiExpress make
+           vamos --cwd esource:AmiExpress/axSetupTool make
+           
