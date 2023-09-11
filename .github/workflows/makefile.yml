@@ -1,0 +1,25 @@
+name: Makefile CI
+
+on:
+  push:
+    branches: [ "actionstest" ]
+  pull_request:
+    branches: [ "actionstest" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - uses: addnab/docker-run-action@v3
+      with:
+         username: ${{ secrets.DOCKER_USERNAME }}
+         password: ${{ secrets.DOCKER_PASSWORD }}
+         registry: docker.io
+         image: dmcoles/amiga-evo-cicd:latest
+         run: echo "hello world"
+
+    
