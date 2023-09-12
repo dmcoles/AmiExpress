@@ -48,6 +48,7 @@ jobs:
       
       - name: add zip file extension to artifact
         run: |
+          ls ~/
           mv ~/amiExpress-nightly${{ github.sha }} ~/amiExpress-nightly${{ github.sha }}.zip
           
       - name: Update nightly release
