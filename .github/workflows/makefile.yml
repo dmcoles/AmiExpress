@@ -37,9 +37,9 @@ jobs:
           cd downloads
           lha a ~/amiExpress-nightly${{ github.sha }}.lha *
           ls ~/
-          
+         
       - name: Update nightly release
-        uses: eine/tip@master
+        uses: pyTooling/Actions/releaser@main
         with:
           tag: dev-build
           rm: true
