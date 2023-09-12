@@ -45,11 +45,15 @@ jobs:
         with:
           name: amiExpress-nightly${{ github.sha }}
           path: ~/
-
+      
+      - name: add zip file extension to artifact
+        run: |
+          mv ~/amiExpress-nightly${{ github.sha }} ~/amiExpress-nightly${{ github.sha }}.zip
+          
       - name: Update nightly release
         uses: eine/tip@master
         with:
           tag: dev-build
           rm: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          files: ~/*.*
+          files: ~/amiExpress-nightly${{ github.sha }}.zip
