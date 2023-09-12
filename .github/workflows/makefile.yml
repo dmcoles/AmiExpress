@@ -1,0 +1,41 @@
+name: Makefile CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "v5.6.0" ]
+  pull_request:
+    branches: [ "v5.6.0" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: dmcoles/amiga-evo-cicd
+      credentials:
+            username: ${{ secrets.DOCKER_USERNAME }}
+            password: ${{ secrets.DOCKER_PASSWORD }}
+    steps: 
+      - uses: actions/checkout@v4
+      - name: run build
+        run: |
+           vamos -c /usr/amiga/.vamosrc --cwd esource: -V system:/usr/amiga -V esource:$GITHUB_WORKSPACE make
+           vamos -c /usr/amiga/.vamosrc --cwd esource:axSetupTool -V system:/usr/amiga -V esource:$GITHUB_WORKSPACE make
+
+      - name: add build artifacts to publish
+        run: |
+          mkdir downloads
+          mkdir downloads/utils
+          cp $GITHUB_WORKSPACE/express5 downloads
+          cp $GITHUB_WORKSPACE/acp downloads
+          cp $GITHUB_WORKSPACE/jsonimport downloads/utils
+          cp $GITHUB_WORKSPACE/icon2cfg downloads/utils
+          cp $GITHUB_WORKSPACE/qwk downloads/utils
+          cp $GITHUB_WORKSPACE/ftn downloads/utils
+          cp $GITHUB_WORKSPACE/axSetupTool/axSetupTool downloads/utils
+    
+      - name: Use the Upload Artifact GitHub Action
+        uses: actions/upload-artifact@v2
+        with: 
+          name: amiExpress-nightly${{ github.sha }}
+          path: downloads
