@@ -36,6 +36,7 @@ jobs:
           cp $GITHUB_WORKSPACE/axSetupTool/axSetupTool downloads/utils 
           cd downloads
           lha a ~/amiExpress-nightly${{ github.sha }}.lha *
+          ls ~/
           
       - name: Update nightly release
         uses: eine/tip@master
