@@ -19,8 +19,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: run build
         run: |
-           vamos -c /usr/amiga/.vamosrc --cwd esource: -V system:/usr/amiga -V esource:$GITHUB_WORKSPACE make
-           vamos -c /usr/amiga/.vamosrc --cwd esource:axSetupTool -V system:/usr/amiga -V esource:$GITHUB_WORKSPACE make
+           vamos -c /usr/amiga/.vamosrc --cwd esource: -V system:/usr/amiga -V esource:$GITHUB_WORKSPACE make build=release
+           vamos -c /usr/amiga/.vamosrc --cwd esource:axSetupTool -V system:/usr/amiga -V esource:$GITHUB_WORKSPACE make build=release
 
       - name: add build artifacts to publish
         run: |
