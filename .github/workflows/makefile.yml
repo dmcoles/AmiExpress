@@ -24,6 +24,7 @@ jobs:
 
       - name: add build artifacts to publish
         run: |
+          apk add lha
           mkdir downloads
           mkdir downloads/utils
           cp $GITHUB_WORKSPACE/express5 downloads
@@ -32,24 +33,9 @@ jobs:
           cp $GITHUB_WORKSPACE/icon2cfg downloads/utils
           cp $GITHUB_WORKSPACE/qwk downloads/utils
           cp $GITHUB_WORKSPACE/ftn downloads/utils
-          cp $GITHUB_WORKSPACE/axSetupTool/axSetupTool downloads/utils   
-
-      - name: Use the Upload Artifact GitHub Action
-        uses: actions/upload-artifact@v2
-        with: 
-          name: amiExpress-nightly${{ github.sha }}
-          path: downloads
-
-      - name: Grab the uploaded artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: amiExpress-nightly${{ github.sha }}
-          path: ~/
-      
-      - name: add zip file extension to artifact
-        run: |
-          ls ~/
-          mv ~/amiExpress-nightly${{ github.sha }} ~/amiExpress-nightly${{ github.sha }}.zip
+          cp $GITHUB_WORKSPACE/axSetupTool/axSetupTool downloads/utils 
+          cd downloads
+          lha a ~/amiExpress-nightly${{ github.sha }}.lha *
           
       - name: Update nightly release
         uses: eine/tip@master
@@ -57,4 +43,4 @@ jobs:
           tag: dev-build
           rm: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          files: ~/amiExpress-nightly${{ github.sha }}.zip
+          files: ~/amiExpress-nightly${{ github.sha }}.lha
