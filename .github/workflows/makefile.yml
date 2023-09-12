@@ -32,10 +32,24 @@ jobs:
           cp $GITHUB_WORKSPACE/icon2cfg downloads/utils
           cp $GITHUB_WORKSPACE/qwk downloads/utils
           cp $GITHUB_WORKSPACE/ftn downloads/utils
-          cp $GITHUB_WORKSPACE/axSetupTool/axSetupTool downloads/utils
-    
+          cp $GITHUB_WORKSPACE/axSetupTool/axSetupTool downloads/utils   
+
       - name: Use the Upload Artifact GitHub Action
         uses: actions/upload-artifact@v2
         with: 
           name: amiExpress-nightly${{ github.sha }}
           path: downloads
+
+      - name: Grab the uploaded artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: amiExpress-nightly${{ github.sha }}
+          path: ~/
+
+      - name: Update nightly release
+        uses: eine/tip@master
+        with:
+          tag: dev-build
+          rm: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: ~/*.*
