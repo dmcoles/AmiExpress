@@ -1,14 +1,21 @@
 # Compile ACP and EXPRESS and any dependencies
 
-options=DEBUG IGNORECACHE NILCHECK OPTI SYM SHOWFNAME
+debugoptions=DEBUG IGNORECACHE NILCHECK OPTI SYM SHOWFNAME
+releaseoptions=IGNORECACHE OPTI SHOWFNAME
 compiler=EVO
 expprogramname=AmiExpress
 acpprogramname=ACP
 version=5.6.0-dev
 
+ifeq ($(build),release)
+options=$(releaseoptions)
+else
+options=$(debugoptions)
+endif
+
 all:					acp express5 jsonimport icon2cfg qwk ftn
 
-release:				options = IGNORECACHE OPTI SHOWFNAME
+release:				options=$(releaseoptions)
 release:				acp express5 jsonimport icon2cfg qwk ftn
 
 acp:					acp.e acpversion.m axcommon.m jsonparser.m jsoncreate.m stringlist.m 
@@ -22,10 +29,10 @@ express5:			express.e expversion.m axcommon.m axconsts.m miscfuncs.m axobjects.m
 verinfogen:		verinfogen.e
 							$(compiler) verinfogen $(options)
 
-ftn:					ftn.e stringlist.m
+ftn:					ftn.e stringlist.m axobjects.m
 							$(compiler) ftn $(options)
 
-qwk:					qwk.e stringlist.m
+qwk:					qwk.e stringlist.m axobjects.m
 							$(compiler) qwk $(options)
 
 icon2cfg:			icon2cfg.e miscfuncs.m
@@ -73,7 +80,7 @@ axcommon.m:		axcommon.e stringlist.m
 axconsts.m:		axconsts.e
 							$(compiler) axconsts $(options)
 
-axobjects.m:	axobjects.e axconsts.m
+axobjects.m:	axobjects.e axconsts.m stringlist.m
 							$(compiler) axobjects $(options)
 
 axenums.m:		axenums.e

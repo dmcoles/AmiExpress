@@ -1,11 +1,18 @@
 # Compile axed
 
-options=DEBUG IGNORECACHE SYM SHOWFNAME ADDBUF 3
+debugoptions=DEBUG IGNORECACHE LARGE NILCHECK OPTI SYM SHOWFNAME ADDBUF 5
+releaseoptions=IGNORECACHE OPTI SHOWFNAME ADDBUF 5
 compiler=EVO
+
+ifeq ($(build),release)
+options=$(releaseoptions)
+else
+options=$(debugoptions)
+endif
 
 all:					axSetupTool
 
-release:				options = IGNORECACHE OPTI SHOWFNAME ADDBUF 3
+release:			options=$(releaseoptions)
 release:			axSetupTool
 
 axSetupTool:	axSetupTool.e frmMain.m axedit.m helpText.m
