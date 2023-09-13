@@ -28,8 +28,8 @@ jobs:
           mkdir downloads
           mkdir downloads/utils
           cp $GITHUB_WORKSPACE/express5 downloads
-          cp $GITHUB_WORKSPACE/acp downloads
-          cp $GITHUB_WORKSPACE/jsonimport downloads/utils
+          cp $GITHUB_WORKSPACE/ACP downloads
+          cp $GITHUB_WORKSPACE/jsonImport downloads/utils
           cp $GITHUB_WORKSPACE/icon2cfg downloads/utils
           cp $GITHUB_WORKSPACE/qwk downloads/utils
           cp $GITHUB_WORKSPACE/ftn downloads/utils
