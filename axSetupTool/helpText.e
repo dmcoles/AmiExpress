@@ -39,6 +39,7 @@ EXPORT ENUM ACCESS_NAME_MAX_PAGES,ACCESS_NAME,ACCESS_AREA_NAME,CHECKER_FILE,CHEC
     NODE_FORCE_ANSI,NODE_CON_IN_DEVICE,NODE_CON_OUT_DEVICE,NODE_SCREEN_PENS,NODE_CONF_DB_FILE,
     NODE_FIRST_COMMAND,NODE_SERIAL_DEVICE,NODE_MODEM_INIT,NODE_MODEM_RESET,NODE_MODEM_RING,NODE_MODEM_ANSWER,
     NODE_MODEM_OFFHOOK,NODE_MODEM_NRAMS,NODE_WIN_DEFPUBSCREEN,NODE_WIN_PUBSCREEN,SYS_BBS_NAME,SYS_BBS_LOCATION,SYS_SYSOP_NAME,
+    SYS_MIN_PASSWORD_LEN,SYS_MIN_PASSWORD_STRENGTH,SYS_PASSWORD_ENCRYPTION,SYS_MAX_PASSWORD_FAILS,SYS_PASSWORD_EXPIRY,SYS_STRICT_PASSWORD_POLICY,
     SYS_DEFAULT_MENU,SYS_AUTO_VAL_PASSWORD,SYS_REGKEY,SYS_SMTP_SERVER,SYS_SMTP_USERNAME,SYS_SMTP_PASSWORD,
     SYS_SYSOP_EMAIL,SYS_BBS_EMAIL,SYS_FILEDIZ_CMD,SYS_FTP_HOST,SYS_EXEC_ON_NEW_USER,SYS_EXECA_ON_NEW_USER,
     SYS_EXEC_ON_SYSOP_PAGE,SYS_EXECA_ON_SYSOP_PAGE,SYS_EXEC_ON_CONNECT,SYS_EXECA_ON_CONNECT,
@@ -302,6 +303,12 @@ EXPORT PROC helpTextInitialise()
   addHelp(SYS_BBS_NAME,'Sets the name of the BBS that is shown to the user when they connect.')
   addHelp(SYS_BBS_LOCATION,'Sets the bbs geographic location that is shown to the user when they connect.')
   addHelp(SYS_SYSOP_NAME,'Sets the name of the sysop of the bbs.')
+  addHelp(SYS_MIN_PASSWORD_LEN,'Sets the minimum number of characters allowed for a users password.')
+  addHelp(SYS_MIN_PASSWORD_STRENGTH,'Sets the minimum complexity of a users password. The character types are Upper, Lower, Numeric, Symbol')
+  addHelp(SYS_PASSWORD_ENCRYPTION,'Sets the encryption used to store the users passwords. The legacy /X encryption is very weak and can be broken in seconds.')
+  addHelp(SYS_MAX_PASSWORD_FAILS,'Controls the maximum number of incorrect password attempts before a users account is locked out.')
+  addHelp(SYS_PASSWORD_EXPIRY,'Sets the number of days after which the user will be forced to change their password.')
+  addHelp(SYS_STRICT_PASSWORD_POLICY,'If strict password policy is enabled then users will be forced to change their existing password if it does not comply with the settings.')
   addHelp(SYS_DEFAULT_MENU,'Sets the default menu name (will default to MENU if left blank).')
   addHelp(SYS_AUTO_VAL_PASSWORD,'Sets the auto validation password for all nodes.')
   addHelp(SYS_REGKEY,'Sets the registration name. This is displayed to the user as part of the welcome message.')

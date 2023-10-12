@@ -26,6 +26,12 @@ EXPORT OBJECT frmSettingsEdit OF frmBase
   strBBSLocation   : PTR TO control
   strSysopName     : PTR TO control
   strDefaultMenu   : PTR TO control
+  intMinPasswordLen: PTR TO control
+  cycMinPasswordStrength: PTR TO control
+  cycPasswordEncryption: PTR TO control
+  intMaxPasswordFails: PTR TO control
+  intPasswordExpiry: PTR TO control
+  cycStrictPasswordPolicy: PTR TO control
   paLocalULPath    : PTR TO control
   intAutoValPreset : PTR TO control
   intAutoValDelay  : PTR TO control
@@ -181,6 +187,24 @@ PROC addSystemControls() OF frmSettingsEdit
   NEW control.createString('bSysop Name',SYS_SYSOP_NAME,self.app.app,self.setChangedHook,self)
   self.strSysopName:=control
 
+  NEW control.createStringInt('Min Password Length',SYS_MIN_PASSWORD_LEN,self.app.app,self.setChangedHook,self)
+  self.intMinPasswordLen:=control
+
+  NEW control.createCycle('Min Password Strength',SYS_MIN_PASSWORD_STRENGTH,['No restriction','2 character types','3 character types','All 4 character types',0],self.app.app,self.setChangedHook,self)
+  self.cycMinPasswordStrength:=control
+
+  NEW control.createCycle('Password Encryption',SYS_PASSWORD_ENCRYPTION,['Legacy /X Encryption','PBKDF2 (5 rounds)','PBKDF2 (50 rounds)','PBKDF2 (100 rounds)','PBKDF2 (1000 rounds)','PBKDF2 (10000 rounds)',0],self.app.app,self.setChangedHook,self)
+  self.cycPasswordEncryption:=control
+
+  NEW control.createStringInt('Max Password Fails',SYS_MAX_PASSWORD_FAILS,self.app.app,self.setChangedHook,self)
+  self.intMaxPasswordFails:=control
+
+  NEW control.createStringInt('Password Expiry',SYS_PASSWORD_EXPIRY,self.app.app,self.setChangedHook,self)
+  self.intPasswordExpiry:=control
+
+  NEW control.createCycle('Strict Password Policy',SYS_STRICT_PASSWORD_POLICY,['No','Yes',0],self.app.app,self.setChangedHook,self)
+  self.cycStrictPasswordPolicy:=control
+
   NEW control.createString('Default Menu',SYS_DEFAULT_MENU,self.app.app,self.setChangedHook,self)
   self.strDefaultMenu:=control
 
@@ -301,7 +325,9 @@ PROC addSystemControls() OF frmSettingsEdit
   NEW control.createString('Execute async on upload',SYS_EXECA_ON_UPLOAD,self.app.app,self.setChangedHook,self)
   self.strExecAOnUpload:=control
 
-  self.controlList:=[self.paBBSPath,self.strBBSName,self.strBBSLocation,self.strSysopName,self.strRegKey,self.cyNewAccounts,self.strDefaultMenu,
+  self.controlList:=[self.paBBSPath,self.strBBSName,self.strBBSLocation,self.strSysopName,self.intMinPasswordLen,
+                    self.cycMinPasswordStrength,self.cycPasswordEncryption,self.intMaxPasswordFails,self.intPasswordExpiry,
+                    self.cycStrictPasswordPolicy,self.strRegKey,self.cyNewAccounts,self.strDefaultMenu,
                     self.paLocalULPath,self.intAutoValPreset,self.intAutoValDelay,self.strAutoValPassword,self.cyLanguage,
                     self.strSmtpHost,self.intSmtpPort,self.strSmtpUsername,self.strSmtpPassword,self.boolSmtpSSL,self.strSysopEmail,
                     self.strBbsEmail,self.paLanguageBase,self.paHistory,self.paUserNotes,self.intHoldAccess,
@@ -623,6 +649,33 @@ PROC saveSystemChanges() OF frmSettingsEdit
   writeToolType(self.acpName,'BBS_NAME',self.strBBSName.getValue())
   writeToolType(self.acpName,'BBS_GEOGRAPHIC',self.strBBSLocation.getValue())
   writeToolType(self.acpName,'SYSOP_NAME',self.strSysopName.getValue())
+
+  writeToolType(self.bbsConfigName,'MIN_PASSWORD_LENGTH',self.intMinPasswordLen.getValue())
+  IF self.cycMinPasswordStrength.getValueIndex()=0
+    writeToolType(self.bbsConfigName,'MIN_PASSWORD_STRENGTH','')
+  ELSE
+    StringF(tempStr,'\d',self.cycMinPasswordStrength.getValueIndex()+1)
+    writeToolType(self.bbsConfigName,'MIN_PASSWORD_STRENGTH',tempStr)
+  ENDIF 
+  SELECT self.cycPasswordEncryption.getValueIndex()
+    CASE 0
+      writeToolType(self.bbsConfigName,'PASSWORD_SECURITY','LEGACY')
+    CASE 1
+      writeToolType(self.bbsConfigName,'PASSWORD_SECURITY','PBKDF2_5')
+    CASE 2
+      writeToolType(self.bbsConfigName,'PASSWORD_SECURITY','PBKDF2_50')
+    CASE 3
+      writeToolType(self.bbsConfigName,'PASSWORD_SECURITY','PBKDF2_100')
+    CASE 4
+      writeToolType(self.bbsConfigName,'PASSWORD_SECURITY','PBKDF2_1000')
+    CASE 5
+      writeToolType(self.bbsConfigName,'PASSWORD_SECURITY','PBKDF2_10000')
+  ENDSELECT
+
+  writeToolType(self.bbsConfigName,'MAX_PASSWORD_FAILS',self.intMaxPasswordFails.getValue())
+  writeToolType(self.bbsConfigName,'PASSWORD_EXPIRY_DAYS',self.intPasswordExpiry.getValue()) 
+  IF self.cycStrictPasswordPolicy.getValueIndex() THEN writeToolType(self.bbsConfigName,'STRICT_PASSWORD_POLICY') ELSE deleteToolType(self.bbsConfigName,'STRICT_PASSWORD_POLICY')
+
   IF self.cyNewAccounts.getValueIndex()=0 THEN writeToolType(self.acpName,'NEW_ACCOUNTS','APPEND') ELSE deleteToolType(self.acpName,'NEW_ACCOUNTS')
   writeToolType(self.bbsConfigName,'REGKEY',self.strRegKey.getValue())
   writeToolType(self.bbsConfigName,'DEFAULT_MENUNAME',self.strDefaultMenu.getValue())
@@ -861,6 +914,38 @@ PROC editSystemSettings(acpName:PTR TO CHAR, initialSetup=FALSE) OF frmSettingsE
   
   readToolType(self.acpName,'SYSOP_NAME',tempstr)
   self.strSysopName.setValue(tempstr)
+
+  val:=readToolTypeInt(self.bbsConfigName,'MIN_PASSWORD_LENGTH')
+  self.intMinPasswordLen.setValue(val)
+
+  val:=readToolTypeInt(self.bbsConfigName,'MIN_PASSWORD_STRENGTH')
+  IF val<1 THEN val:=1
+  self.cycMinPasswordStrength.setValueIndex(val-1)
+
+  readToolType(self.bbsConfigName,'PASSWORD_SECURITY',tempstr)
+  IF StriCmp(tempstr,'LEGACY')
+    self.cycPasswordEncryption.setValueIndex(0)
+  ELSEIF StriCmp(tempstr,'PBKDF2_5')
+    self.cycPasswordEncryption.setValueIndex(1)
+  ELSEIF StriCmp(tempstr,'PBKDF2_50')
+    self.cycPasswordEncryption.setValueIndex(2)
+  ELSEIF StriCmp(tempstr,'PBKDF2_100')
+    self.cycPasswordEncryption.setValueIndex(3)
+  ELSEIF StriCmp(tempstr,'PBKDF2_1000')
+    self.cycPasswordEncryption.setValueIndex(4)
+  ELSEIF StriCmp(tempstr,'PBKDF2_10000')
+    self.cycPasswordEncryption.setValueIndex(5)
+  ELSE
+    self.cycPasswordEncryption.setValueIndex(0)
+  ENDIF
+
+  val:=readToolTypeInt(self.bbsConfigName,'MAX_PASSWORD_FAILS')
+  self.intMaxPasswordFails.setValue(val)
+
+  val:=readToolTypeInt(self.bbsConfigName,'PASSWORD_EXPIRY_DAYS')
+  self.intPasswordExpiry.setValue(val)
+
+  self.cycStrictPasswordPolicy.setValueIndex(IF checkToolTypeExists(self.bbsConfigName,'STRICT_PASSWORD_POLICY') THEN 1 ELSE 0)
 
   readToolType(self.acpName,'NEW_ACCOUNTS',tempstr)
   self.cyNewAccounts.setValueIndex(IF StriCmp(tempstr,'APPEND') THEN 0 ELSE 1)

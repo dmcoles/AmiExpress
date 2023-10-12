@@ -21,7 +21,7 @@ axSetupTool:	axSetupTool.e frmMain.m axedit.m helpText.m
 axedit.m:			axedit.e
 							$(compiler) axedit $(options)
 
-stringlist.m:	../stringlist.e
+stringlist.m:	
 							$(compiler) /stringlist $(options)
 
 tooltypes.m:	tooltypes.e stringlist.m
