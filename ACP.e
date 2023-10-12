@@ -1514,7 +1514,7 @@ PROC handleEditGadget(im:PTR TO intuimessage,ig)
           showSessionStats(eWin)
       ENDSELECT
     CASE GAD_TOPSBOX
-        IF(control)
+        IF(control) OR (topOption>=SYSTEM_STATS)
           control:=0
           SELECT topOption
             CASE LAST_CALLERS
@@ -4200,6 +4200,7 @@ PROC main() HANDLE
              WA_MAXHEIGHT, -1,
              WA_ZOOM, dim,
              WA_AUTOADJUST, 1,
+             WA_NEWLOOKMENUS, 1,
              WA_PUBSCREEN, IF EstrLen(publicName)=0 THEN NIL ELSE scr,
              WA_PUBSCREENFALLBACK, 1,
              WA_GADGETS,   gadgets,
@@ -4296,6 +4297,8 @@ PROC main() HANDLE
                       showLastDownloads(eWin)
                     CASE SYSTEM_STATS
                       showSystemStats(eWin)
+                    CASE SESSION_STATS
+                      showSessionStats(eWin)
                   ENDSELECT
                   FOR i:=0 TO MAX_NODES-1
                     IF(StrLen(startNode[i])>0)
@@ -4368,6 +4371,7 @@ EXCEPT DO
       Permit()
     ENDIF
   ENDIF
+  FreeMenus(eWinM)
 
   IF msg THEN FreeMem(msg,SIZEOF acpMessage)
   
