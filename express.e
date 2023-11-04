@@ -2961,40 +2961,40 @@ PROC checkUserOnLine(check)
     loop:=0
     error:=1
     REPEAT
-    IF(loop=node)   THEN loop++
+      IF(loop=node) THEN loop++
 
-    IF sopt.toggles[TOGGLES_MULTICOM]
-      status:=-1
+      IF sopt.toggles[TOGGLES_MULTICOM]
+        status:=-1
       ObtainSemaphore(masterNode)
-      sp:=(masterNode.myNode[loop].s)
+        sp:=(masterNode.myNode[loop].s)
       ReleaseSemaphore(masterNode)
 
-      IF sp
-        ObtainSemaphore(sp)
-        status:=sp.status
-        ReleaseSemaphore(sp)
+        IF sp
+          ObtainSemaphore(sp)
+          status:=sp.status
+          ReleaseSemaphore(sp)
+        ENDIF
+      ELSE
+        status:=0
       ENDIF
-    ELSE
-      status:=0
-    ENDIF
 
-    IF (status>=0) AND (status<>ENV_NOTACTIVE) AND (status<>ENV_SHUTDOWN)
-      StringF(tempStr,'\snode\d',cmds.bbsLoc,loop)
-      IF(lock:=Lock(tempStr,ACCESS_READ))
-        UnLock(lock)
-        StringF(tempStr,'\snode\d.user',cmds.bbsLoc,loop)
-        IF(fh:=Open(tempStr,MODE_OLDFILE))<>0
-          IF(Read(fh,tuser,SIZEOF user))
-            IF(stringCompare(tuser.name,loggedOnUser.name)=RESULT_SUCCESS)
-              error:=0
-              lock:=NIL
+      IF (status>=0) AND (status<>ENV_NOTACTIVE) AND (status<>ENV_SHUTDOWN)
+        StringF(tempStr,'\snode\d',cmds.bbsLoc,loop)
+        IF(lock:=Lock(tempStr,ACCESS_READ))
+          UnLock(lock)
+          StringF(tempStr,'\snode\d.user',cmds.bbsLoc,loop)
+          IF(fh:=Open(tempStr,MODE_OLDFILE))<>0
+            IF(Read(fh,tuser,SIZEOF user))
+              IF(stringCompare(tuser.name,loggedOnUser.name)=RESULT_SUCCESS)
+                error:=0
+                lock:=NIL
+              ENDIF
             ENDIF
           ENDIF
+          Close(fh)
         ENDIF
-        Close(fh)
       ENDIF
-    ENDIF
-    loop++
+      loop++
     UNTIL (lock=NIL) OR (loop=MAX_NODES)
   ELSE
     error:=1
@@ -5053,9 +5053,9 @@ PROC joinConf(conf, msgBaseNum,confScan, auto, forceMailScan=FORCE_MAILSCAN_NOFO
       processSysCommand('S')
       IF getConfMsgBaseCount(conf)>1
         getMsgBaseName(conf,msgBaseNum,tempstr)
-        StringF(string,'Conference \d: \s [\s] Auto-ReJoined',relConfNum,currentConfName,tempstr)
+        StringF(string,'Conference \d: \s [\s] Auto-ReJoined',conf,currentConfName,tempstr)
       ELSE
-        StringF(string,'Conference \d: \s Auto-ReJoined',relConfNum,currentConfName)
+        StringF(string,'Conference \d: \s Auto-ReJoined',conf,currentConfName)
       ENDIF
       IF quietJoin=FALSE THEN aePuts(string)
     ELSE
@@ -18273,7 +18273,7 @@ ENDPROC RESULT_SUCCESS
 
 PROC checkForFile(fn: PTR TO CHAR)
   DEF path[255]:STRING,final[255]:STRING
-  DEF x
+  DEF x 
 
   IF((InStr(fn,'%')>=0) OR ((InStr(fn,'#'))>=0) OR ((InStr(fn,'?'))>=0) OR ((InStr(fn,' '))>=0) OR ((InStr(fn,'/'))>=0) OR
     ((InStr(fn,'('))>=0) OR ((InStr(fn,')'))>=0) OR ((InStr(fn,':'))>=0) OR ((InStr(fn,'*'))>=0)) THEN RETURN RESULT_FAILURE
