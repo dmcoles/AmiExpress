@@ -2960,19 +2960,30 @@ PROC checkUserOnLine(check)
   IF(check)
     loop:=0
     error:=1
+
+    IF sopt.toggles[TOGGLES_MULTICOM]
+      ObtainSemaphore(masterNode)
+    ENDIF
+
     REPEAT
       IF(loop=node) THEN loop++
 
       IF sopt.toggles[TOGGLES_MULTICOM]
         status:=-1
-      ObtainSemaphore(masterNode)
         sp:=(masterNode.myNode[loop].s)
-      ReleaseSemaphore(masterNode)
 
         IF sp
           ObtainSemaphore(sp)
           status:=sp.status
           ReleaseSemaphore(sp)
+          lock:=-1
+          IF (status>=0) AND (status<>ENV_NOTACTIVE) AND (status<>ENV_SHUTDOWN)
+            IF(stringCompare(sp.handle,loggedOnUser.name)=RESULT_SUCCESS)
+              lock:=0
+              error:=0
+            ENDIF
+          ENDIF
+          status:=-1
         ENDIF
       ELSE
         status:=0
@@ -2996,6 +3007,10 @@ PROC checkUserOnLine(check)
       ENDIF
       loop++
     UNTIL (lock=NIL) OR (loop=MAX_NODES)
+
+    IF sopt.toggles[TOGGLES_MULTICOM]
+      ReleaseSemaphore(masterNode)
+    ENDIF
   ELSE
     error:=1
   ENDIF
