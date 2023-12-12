@@ -95,7 +95,7 @@ EXPORT PROC writeToolType(toolType,key,newValue=-1,force=FALSE)
         RETURN
       ENDIF
     ENDIF
-    WriteF('update tooltype \s \s = \s\n',toolType,key,newValue)
+    ->WriteF('update tooltype \s \s = \s\n',toolType,key,newValue)
     changesMade:=TRUE
     
     count:=0
@@ -135,7 +135,7 @@ EXPORT PROC writeToolType(toolType,key,newValue=-1,force=FALSE)
       ENDIF
     ENDFOR
     IF needToAdd
-      WriteF('added \s\n',newItem)
+      ->WriteF('added \s\n',newItem)
       changesMade:=TRUE
       cacheObj.changed:=TRUE
       oldtooltypes[count]:=StrClone(newItem)
@@ -193,7 +193,7 @@ EXPORT PROC deleteToolType(toolType,key)
     do.tooltypes:=oldtooltypes
 
     IF changed
-      WriteF('delete tooltype \s \s\n',toolType,key)
+      ->WriteF('delete tooltype \s \s\n',toolType,key)
       changesMade:=TRUE
     ENDIF
   ENDIF
@@ -242,7 +242,7 @@ PROC freeCacheItem(cacheObj:PTR TO diskObjectCacheItem)
   DEF mem,i
 
   IF cacheObj.changed
-    WriteF('saving file and freeing \s\n',cacheObj.fileName)
+    ->WriteF('saving file and freeing \s\n',cacheObj.fileName)
     PutDiskObject(cacheObj.fileName,cacheObj.diskObject)
   ENDIF
 
@@ -367,7 +367,7 @@ PROC getOrCreateCacheItem(fileName:PTR TO CHAR,getDef=FALSE)
     IF (do=NIL)
       IF (getDef)
         do:=GetDefDiskObject(WBPROJECT)
-        WriteF('create new disk obj\n')
+        ->WriteF('create new disk obj\n')
       ELSE
         RETURN 0,0
       ENDIF
@@ -435,7 +435,7 @@ EXPORT PROC saveCachedChanges()
   FOR i:=0 TO diskObjectCache.count()-1
     cacheObj:=diskObjectCache.item(i)
     IF cacheObj.changed
-      WriteF('saving file \s\n',cacheObj.fileName)
+      ->WriteF('saving file \s\n',cacheObj.fileName)
       PutDiskObject(cacheObj.fileName,cacheObj.diskObject)
       cacheObj.changed:=FALSE
     ENDIF
