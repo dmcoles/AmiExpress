@@ -238,6 +238,9 @@
   (help @startup-help)
   (command #startup)
 )
+
+( message "The user password encryption used by Ami-Express prior to this release is extremely weak and easily hackable using brute force.\n\nThis release introduces password encryption using PKBDF2. The number of rounds of PKBDF2 has been set to 100 which is a compromise between security and the processing capability of the Amiga. If you have a powerful CPU you should consider changing the settings to make it more secure.")
+
 ; 
  
 ) ; Else
@@ -366,6 +369,30 @@
 )
 
 ( complete 80)
+
+(set #currsecurity "")
+(iconinfo (dest "bbs:bbsconfig") (gettooltype "PASSWORD_SECURITY" "#currsecurity" ))
+
+( if ( = #currsecurity "")
+(
+  (set #securitychoice (askchoice
+        (choices "Enable the new encryption" "Keep the legacy encryption"
+          (prompt "This release of Ami-Express includes a new password encryption system.\nThe old system was extremely weak and easily hacked using brute force.\nIf you have to downgrade Ami-Express for any reason, new users created with the new password security will not be able to log into the BBS.")
+          (help "")
+          (default 0) ))
+  )
+
+
+    ( if ( = #securitychoice 0)
+       (tooltype (dest "bbs:bbsconfig") (settooltype "PASSWORD_SECURITY" "PKBDF2_100"))
+       (tooltype (dest "bbs:bbsconfig") (settooltype "PASSWORD_SECURITY" "LEGACY"))
+    )
+  )
+)
+
+
+( complete 90)
+
 ; 
 )
 ) ; End If
