@@ -5,7 +5,7 @@ releaseoptions=IGNORECACHE OPTI SHOWFNAME
 compiler=EVO
 expprogramname=AmiExpress
 acpprogramname=ACP
-version=5.6.0-dev
+version=5.6.0
 
 ifeq ($(build),release)
 options=$(releaseoptions)
@@ -137,5 +137,8 @@ dist:					ACP express5 jsonImport icon2cfg qwk ftn axSetupTool
 							Copy deployment/Install\ Ami-Express.info Rel/
 							Copy deployment/File_Id.Diz Rel/
 							Copy deployment/read_me.txt Rel/
+							Lha -r a t:Amix560.lha Rel/
+							Copy t:Amix560.lha Rel/
+							-delete t:Amix560.lha
 
 .PHONY: 			expversion.e axSetupTool
