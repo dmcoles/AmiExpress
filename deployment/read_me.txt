@@ -8,7 +8,7 @@
 | Ami-Express was a BBS System that ran on the Commodore Amiga series of    |
 | computers and was developed by Lightspeed Technologies in the 1990s.      |
 |                                                                           |
-| Version 5.5.0                                                             |
+| Version 5.6.0                                                             |
 |                                                                           |
 | This is a rewrite of that system written in Amiga E. It is open source    |
 | and has new features and bug fixes in addition to aiming for near 100%    |
@@ -21,16 +21,9 @@
 | I have also updated the documentation for Ami-Express as many existing    |
 | features were not properly documented. Some new features included in this |
 | release are:                                                              |
-|   * XMODEM and HYDRA protocol support                                     |
-|   * IEMSI support for auto-login if your client supports it.              |
+|   * Full MUI Based Configuration / Setup Edit                             |
+|   * Installer Script that allows upgrading and initial BBS setup          |
 |   * FTP Direct Server - you can now log onto FTP directly and upload or   |
-|     download without having to log on via telnet.                         | 
-|   * Improved CPS info in ACP during transfers                             |
-|                                                                           |
-| With the inclusion of the HYDRA protocol support in this release we have  |
-| achieved full feature parity with the old V4.x Releases of Ami-Express.   |
-| There may still be some small differences between this version and the    |
-| older releases but all features are now covered.                          |
 |                                                                           |
 | All source code is publicly available at:                                 |
 |  https://github.com/dmcoles/AmiExpress along with the documentation.      |
@@ -44,9 +37,8 @@
 | included in the archive.                                                  |
 |                                                                           |
 | This verison of /X comes with both rexxdoor 1.3 and 2.2 - If you have 10  |
-| nodes or more you *MUST* use 2.2 (rename it to rexxdoor) - however this   |
-| version requires that you make RX resident otherwise it won't work. If    |
-| you have less than 10 nodes you can use either version.                   |
+| nodes or more you *MUST* use 2.2 - the installer will prompt you to make  |
+| a decision on which version you prefer.                                   |
 |                                                                           |
 | If you are a pre-existing /X4 user, the ACP and Express files can just    |
 | replace the old versions and should be as close to fully backwards        |
@@ -61,6 +53,8 @@
 |                                                                           |
 | Version History                                                           |
 |                                                                           |
+| 5.6.0 31 Dec 2023                                                         |
+|       * Improved password encryption, Full Setup Editor, Installer        |
 | 5.5.0 05 Jun 2022 (Feature parity release)                                |
 |       * XMODEM and Hydra support, FTP Direct Server, IEMSI auto login     |
 | 5.4.0 17 May 2021                                                         |
