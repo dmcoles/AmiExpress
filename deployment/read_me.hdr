@@ -1,0 +1,10 @@
+Short:        AmiExpress BBS system redeveloped in E
+Author:       darren_m_coles@yahoo.co.uk (Darren Coles)
+Uploader:     darren_m_coles@yahoo.co.uk (Darren Coles)
+Type:         comm/amiex
+Version:      5.6.0
+Replaces:     comm/amiex/Amix550.lha
+Architecture: m68k-amigaos >= 2.0.4
+Distribution: Aminet
+Kurz:         AmiExpress BBS entwickelt in E
+

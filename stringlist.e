@@ -11,7 +11,7 @@ EXPORT OBJECT stringlist
   PRIVATE initialMax:LONG
 ENDOBJECT
 
-EXPORT PROC end() OF stringlist				-> destructor
+EXPORT PROC end() OF stringlist       -> destructor
   self.clear()
   DisposeLink(self.items)
 ENDPROC
@@ -66,6 +66,12 @@ EXPORT PROC insert(pos,stringVal:PTR TO CHAR) OF stringlist
   self.items[pos]:=s
 ENDPROC
 
+EXPORT PROC contains(stringVal:PTR TO CHAR) OF stringlist
+  DEF i
+  FOR i:=0 TO ListLen(self.items)-1
+    IF StriCmp(self.items[i],stringVal) THEN RETURN TRUE
+  ENDFOR
+ENDPROC FALSE
 
 EXPORT PROC add(stringVal:PTR TO CHAR) OF stringlist
   DEF s,c
@@ -110,6 +116,37 @@ EXPORT PROC count() OF stringlist IS ListLen(self.items)
 
 EXPORT PROC maxSize() OF stringlist IS ListMax(self.items)
 
+PROC partition(first, last) OF stringlist
+  DEF splitv, up, down, i
+  splitv:=self.items[first]
+  up:=first
+  down:=last
+  REPEAT
+    WHILE (StrCompare(self.items[up],splitv)<=0) AND (up<last) DO up++
+    WHILE (StrCompare(self.items[down],splitv)>0) AND (down>first) DO down--
+    IF up<down
+      i:=self.items[up]
+      self.items[up]:=self.items[down]
+      self.items[down]:=i
+    ENDIF
+  UNTIL up>=down
+  i:=self.items[first]
+  self.items[first]:=self.items[down]
+  self.items[down]:=i
+ENDPROC down
+  
+PROC quicksort(first, last) OF stringlist
+  DEF index
+  IF first<last
+    index:=self.partition(first, last)
+    self.quicksort(first, index-1)
+    self.quicksort(index+1, last)
+  ENDIF
+ENDPROC
+
+EXPORT PROC sort() OF stringlist
+  self. quicksort(0,ListLen(self.items)-1)
+ENDPROC
 
 /*
 
@@ -122,7 +159,7 @@ EXPORT OBJECT stdlist
   PRIVATE initialMax:LONG
 ENDOBJECT
 
-EXPORT PROC end() OF stdlist				-> destructor
+EXPORT PROC end() OF stdlist        -> destructor
   DisposeLink(self.items)
 ENDPROC
 

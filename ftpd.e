@@ -33,7 +33,8 @@ MODULE	'socket',
        '*axobjects',
        '*axenums',
        '*tooltypes',
-       '*miscfuncs'
+       '*miscfuncs',
+       '*bcd'
        
  
 EXPORT OBJECT ftpData
@@ -258,23 +259,24 @@ PROC uploadFileStart(ftpData:PTR TO ftpData,fn,resumepos)
   ADD.L #8,A7
 ENDPROC
 
-PROC checkDownloadRatio(ftpData:PTR TO ftpData,fn,pos,res:PTR TO CHAR)
+PROC checkDownloadRatio(ftpData:PTR TO ftpData,fn,flen,res:PTR TO CHAR)
   DEF cdr
   cdr:=ftpData.checkDownloadRatio
   MOVE.L fn,-(A7)
-  MOVE.L pos,-(A7)
+  MOVE.L flen,-(A7)
   MOVE.L res,-(A7)
   cdr()
   ADD.L #12,A7
 ENDPROC D0
 
-PROC downloadFileStart(ftpData:PTR TO ftpData,fn,pos)
+PROC downloadFileStart(ftpData:PTR TO ftpData,fn,flen,pos)
   DEF fs
   fs:=ftpData.downloadFileStart
   MOVE.L fn,-(A7)
+  MOVE.L flen,-(A7)
   MOVE.L pos,-(A7)
   fs()
-  ADD.L #8,A7
+  ADD.L #12,A7
 ENDPROC
 
 PROC uploadFileEnd(ftpData:PTR TO ftpData,fn,result)
@@ -335,11 +337,11 @@ PROC getPath(ftpData:PTR TO ftpData,confNum,subDir:PTR TO CHAR,outpath)
   gp(confNum,subDir,outpath)
 ENDPROC
 
-PROC findFile(ftpData:PTR TO ftpData,fileName,outpath)
+PROC findFile(ftpData:PTR TO ftpData,fileName,subDirs,outpath)
   DEF ff
   
   ff:=ftpData.findFile
-  ff(fileName,outpath)
+  ff(fileName,subDirs,outpath)
 ENDPROC
 
 PROC aePuts(ftpData:PTR TO ftpData, s:PTR TO CHAR)
@@ -446,17 +448,13 @@ ENDPROC
 
 PROC calcCPS(pd,t,t2)
   DEF cps,td
+  DEF bcdVal[8]:ARRAY OF CHAR
   cps:=0
-  IF t<t2
-    td:=t2-t
-    IF (pd<0) OR (pd>$10000000)
-      pd:=Shr(pd,1) AND $7fffffff
-      td:=Div(td,50)
-      IF td<1 THEN td:=1
-      cps:=Shl(Div(pd,td),1)
-    ELSE
-      cps:=Div(Mul(pd,50),td)     
-    ENDIF
+  td:=t2-t
+  IF td
+    convertToBCD(pd,bcdVal)
+    mulBCD(bcdVal,50)
+    cps:=divBCD(bcdVal,td)
   ELSE
     cps:=pd
   ENDIF
@@ -499,12 +497,8 @@ PROC getFileName(ftpData:PTR TO ftpData, filename:PTR TO CHAR,outFilename:PTR TO
       item:=fileList.item(i)
       IF StriCmp(FilePart(item.fileName),filename) THEN StrCopy(outFilename,item.fileName)
     ENDFOR
-  ELSEIF StrLen(ftpData.subDirPath)>0
-    StrCopy(outFilename,ftpData.subDirPath)
-    checkPathSlash(outFilename)
-    StrAdd(outFilename,filename)
   ELSEIF ftpData.findFile<>NIL
-    findFile(ftpData,filename,outFilename)
+    findFile(ftpData,filename,ftpData.subDirPath,outFilename)
   ENDIF
 ENDPROC
 
@@ -842,13 +836,10 @@ PROC downloadDir(sb,data_c, ftpData:PTR TO ftpData,cmdType)
 ENDPROC TRUE
 
 PROC fullDir(sb,data_c, ftpData:PTR TO ftpData,cmdType)
-  DEF fileNames:PTR TO stringlist
-  DEF fileSizes:PTR TO stdlist
-  DEF fileDates:PTR TO stdlist
-  DEF filedate:datestamp
+  DEF i
   DEF tempstr[255]:STRING
   DEF dirline[255]:STRING
-  DEF i
+  DEF filedate:datestamp
 
   IF (ftpData.currentConf=0)
     dateTimeToDateStamp(getSystemTime(),filedate)
@@ -872,103 +863,193 @@ PROC fullDir(sb,data_c, ftpData:PTR TO ftpData,cmdType)
     callersLog(ftpData,'\tDirectory Scan via ftp')
   ENDIF
   
-  fileNames,fileSizes,fileDates:=makeConfFileList(ftpData)
-    
-  FOR i:=0 TO fileNames.count()-1
-       
-    dateTimeToDateStamp(fileDates.item(i),filedate)
-    
-    IF fileSizes.item(i)=-1
-      IF cmdType=CMDTYPE_MLSD
-        formatFileDate2(filedate,tempstr)
-        StringF(dirline,'Type=dir;Modify=\s;Perm=r; \s\b\n',tempstr,FilePart(fileNames.item(i)))
-      ELSEIF cmdType=CMDTYPE_NLST
-        StrCopy(dirline,fileNames.item(i))
-      ELSE /*cmdType=CMDTYPE_LIST as default*/
-        formatFileDate(filedate,tempstr)
-        StringF(dirline,'dr--r--r--   1 root  root \r\d[10] \s \s\b\n',0,tempstr,FilePart(fileNames.item(i)))
-      ENDIF
-    ELSE
-      IF cmdType=CMDTYPE_MLSD
-        formatFileDate2(filedate,tempstr)
-        StringF(dirline,'Type=file;Size=\d;Modify=\s;Perm=r; \s\b\n',fileSizes.item(i),tempstr,FilePart(fileNames.item(i)))
-      ELSEIF cmdType=CMDTYPE_NLST
-        StrCopy(dirline,fileNames.item(i))
-      ELSE /*cmdType=CMDTYPE_LIST as default*/
-        formatFileDate(filedate,tempstr)
-        StringF(dirline,'-r--r--r--   1 root  root \r\d[10] \s \s\b\n',fileSizes.item(i),tempstr,FilePart(fileNames.item(i)))
-      ENDIF
-    ENDIF
-    writeLineEx(sb,data_c, dirline)
-  ENDFOR
-  
-  END fileNames
-  END fileSizes
-  END fileDates
+  makeConfFileList(ftpData,cmdType,sb,data_c)
 
 ENDPROC
 
-PROC makeList(path:PTR TO CHAR, fib:PTR TO fileinfoblock, fileNames:PTR TO stringlist, fileSizes:PTR TO stdlist,fileDates:PTR TO stdlist, startDate)
+PROC sendFileDetails(filename:PTR TO CHAR, fileSize, fileDate, cmdType, sb, data_c, output)
+  DEF filedatets:datestamp
+  DEF tempstr[255]:STRING
+  DEF dirline[255]:STRING
+
+  dateTimeToDateStamp(fileDate,filedatets)
+  
+  IF fileSize=-1
+    IF cmdType=CMDTYPE_MLSD
+      formatFileDate2(filedatets,tempstr)
+      StringF(dirline,'Type=dir;Modify=\s;Perm=r; \s\b\n',tempstr,FilePart(filename))
+    ELSEIF cmdType=CMDTYPE_NLST
+      StrCopy(dirline,filename)
+    ELSE /*cmdType=CMDTYPE_LIST as default*/
+      formatFileDate(filedatets,tempstr)
+      StringF(dirline,'dr--r--r--   1 root  root \r\d[10] \s \s\b\n',0,tempstr,FilePart(filename))
+    ENDIF
+  ELSE
+    IF cmdType=CMDTYPE_MLSD
+      formatFileDate2(filedatets,tempstr)
+      StringF(dirline,'Type=file;Size=\d;Modify=\s;Perm=r; \s\b\n',fileSize,tempstr,FilePart(filename))
+    ELSEIF cmdType=CMDTYPE_NLST
+      StrCopy(dirline,filename)
+    ELSE /*cmdType=CMDTYPE_LIST as default*/
+      formatFileDate(filedatets,tempstr)
+      StringF(dirline,'-r--r--r--   1 root  root \r\d[10] \s \s\b\n',fileSize,tempstr,FilePart(filename))
+    ENDIF
+  ENDIF
+  IF output
+    IF ((EstrLen(output)+EstrLen(dirline))>StrMax(output))
+      writeLineEx(sb,data_c, output)
+      StrCopy(output,'')
+    ENDIF
+    StrAdd(output,dirline)
+  ELSE
+    writeLineEx(sb,data_c, dirline)
+  ENDIF
+
+ENDPROC
+
+PROC makeList(path:PTR TO CHAR,dirCache:PTR TO CHAR,fib:PTR TO fileinfoblock, startDate, cmdType, sb, data_c)
   DEF fLock
-  DEF d
+  DEF d,fh
+  DEF dirLine[40]:STRING
+  DEF tmp[10]:STRING
+  DEF c=FALSE
+  DEF mem,fs,p,cnt
+  DEF output
+  
+  output:=String(10000)
+  
+  fs:=FileLength(dirCache)
+  IF fs>0
+    /*IF (mem:=New(fs+1))
+      fh:=Open(dirCache,MODE_OLDFILE)
+      Read(fh,mem,fs)
+      p:=0
+      WHILE (p<fs)
+        StrCopy(dirLine,'')
+        IF (cnt:=InStr(mem+p,'\n'))>=0
+          StrCopy(dirLine,mem+p,cnt)
+          p:=p+cnt+1
+        ELSE
+          StrCopy(dirLine,mem+p)
+          p:=fs
+        ENDIF
+        IF StrLen(dirLine)>18
+          c:=TRUE
+          StrCopy(tmp,'$')
+          StrAdd(tmp,dirLine,8)
+          d:=Val(tmp)
+          IF d>=startDate
+            StrCopy(tmp,'$')
+            StrAdd(tmp,dirLine+9,8)
+            sendFileDetails(dirLine+18,Val(tmp),d,cmdType, sb, data_c, output)
+          ENDIF
+        ENDIF        
+      ENDWHILE
+      Close(fh)
+      Dispose(mem)
+    ELSE*/
+      fh:=Open(dirCache,MODE_OLDFILE)
+      IF fh<>0
+        WHILE(Fgets(fh,dirLine,40)<>NIL)
+          IF StrLen(dirLine)>18
+            c:=TRUE
+            StrCopy(tmp,'$')
+            StrAdd(tmp,dirLine,8)
+            d:=Val(tmp)
+            IF d>=startDate
+              StrCopy(tmp,'$')
+              StrAdd(tmp,dirLine+9,8)
+              sendFileDetails(dirLine+18,Val(tmp),d,cmdType, sb, data_c, output)
+            ENDIF
+          ENDIF
+        ENDWHILE
+        Close(fh)
+      ENDIF
+    //ENDIF
+    IF (output ANDALSO (EstrLen(output)>0))
+      writeLineEx(sb,data_c, output)
+    ENDIF
+    IF c 
+      DisposeLink(output) 
+      RETURN
+    ENDIF
+
+  ENDIF
+
   IF((fLock:=Lock(path,ACCESS_READ)))   
     IF((Examine(fLock,fib)))
       IF(fib.direntrytype > 0)
         WHILE(ExNext(fLock,fib))
-          d:=dateStampToDateTime(fib.datestamp)
-          IF d>=startDate
-            fileNames.add(fib.filename)
-            IF fib.direntrytype>0 THEN fileSizes.add(-1) ELSE fileSizes.add(fib.size)
-            fileDates.add(d)
+          IF StrCmp(fib.filename,'.dircache')=FALSE
+            d:=dateStampToDateTime(fib.datestamp)
+            IF d>=startDate
+              sendFileDetails(fib.filename,IF fib.direntrytype>0 THEN -1 ELSE fib.size,d,cmdType, sb, data_c, output)
+            ENDIF
           ENDIF
         ENDWHILE
       ENDIF
     ENDIF
     UnLock(fLock)
   ENDIF
+  IF (output ANDALSO (EstrLen(output)>0)) THEN writeLineEx(sb,data_c, output)
+  DisposeLink(output) 
 ENDPROC
    
 
-PROC makeFtpListFromSubDir(ftpData:PTR TO ftpData, fileNames:PTR TO stringlist, fileSizes:PTR TO stdlist,fileDates:PTR TO stdlist, startDate)
+PROC makeFtpListFromDlDirs(ftpData:PTR TO ftpData, startDate, cmdType, sb, data_c)
   DEF path[255]:STRING
+  DEF dirCache[255]:STRING
   DEF fib:PTR TO fileinfoblock
-  
-  StrCopy(path,ftpData.subDirPath)
-  
+  DEF dirNum,i,j,add
+  DEF dlDirList:PTR TO stringlist
+
   IF((fib:=AllocDosObject(DOS_FIB,NIL)))=NIL
     RETURN FALSE
   ENDIF
 
-  checkPathSlash(path)
-    
-  makeList(path,fib, fileNames,fileSizes,fileDates,startDate)   
-
-  FreeDosObject(DOS_FIB,fib)
-ENDPROC
-
-PROC makeFtpListFromDlDirs(ftpData:PTR TO ftpData, fileNames:PTR TO stringlist, fileSizes:PTR TO stdlist,fileDates:PTR TO stdlist, startDate)
-  DEF path[255]:STRING
-  DEF fib:PTR TO fileinfoblock
-  DEF dirNum
-
-  IF((fib:=AllocDosObject(DOS_FIB,NIL)))=NIL
-    RETURN FALSE
-  ENDIF
+  NEW dlDirList.stringlist(20)
 
   dirNum:=1
   StringF(path,'DLPATH.\d',dirNum++)
   WHILE(readToolType(TOOLTYPE_CONF,ftpData.confNums.item(ftpData.currentConf-1),path,path))
     checkPathSlash(path)
-    
-    makeList(path,fib, fileNames,fileSizes,fileDates,startDate)   
+    dlDirList.add(path)
     StringF(path,'DLPATH.\d',dirNum++)
   ENDWHILE
+
+  FOR i:=0 TO dlDirList.count()-1
+    add:=TRUE
+    FOR j:=0 TO dlDirList.count()-1
+      IF (i<>j)
+        IF EstrLen(dlDirList.item(i))>=EstrLen(dlDirList.item(j))
+          IF StriCmp(dlDirList.item(i),dlDirList.item(j),EstrLen(dlDirList.item(j))) THEN add:=FALSE
+        ENDIF
+      ENDIF
+    ENDFOR
+    IF add=FALSE THEN dlDirList.setItem(i,'')
+  ENDFOR
+
+  FOR j:=0 TO dlDirList.count()-1
+    IF EstrLen(dlDirList.item(j))>0
+      StrCopy(path,dlDirList.item(j))
+      IF StrLen(ftpData.subDirPath)
+        StrAdd(path,ftpData.subDirPath)
+        checkPathSlash(path)
+      ENDIF
+      
+      StringF(dirCache,'RAM:DirCaches/Conf\dDir\d\s\s',ftpData.currentConf,j,IF StrLen(ftpData.subDirPath)>0 THEN '_' ELSE '', ftpData.subDirPath)
+      FOR i:=14 TO StrLen(dirCache)-1 DO IF dirCache[i]="/" THEN dirCache[i]:="_"
+      
+      makeList(path,dirCache,fib,startDate,cmdType,sb,data_c)
+    ENDIF
+  ENDFOR
+  END dlDirList
 
   FreeDosObject(DOS_FIB,fib)
 
 ENDPROC
 
-PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, fileNames:PTR TO stringlist, fileSizes:PTR TO stdlist,fileDates:PTR TO stdlist, startDate)
+PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, startDate, cmdType, sb, data_c)
   DEF dtStr[20]:STRING
   DEF sizeStr[20]:STRING
   DEF dtcomp1,dtcomp2
@@ -976,8 +1057,11 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, fileNames:PTR TO stringlist,
   DEF dirFile[255]:STRING
   DEF tempstr[255]:STRING
   DEF fh,t,sz,m,d,y
+  DEF output
 
   DEF maxDirs
+
+  output:=String(10000)
 
   maxDirs:=readToolTypeInt(TOOLTYPE_CONF,ftpData.confNums.item(ftpData.currentConf-1),'NDIRS')
 
@@ -993,8 +1077,8 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, fileNames:PTR TO stringlist,
     
       IF(Fgets(fh,tempstr,255)<>NIL) AND (StrLen(tempstr)>0)
         tempstr[255]:=0
-        SetStr(tempstr,StrLen(tempstr))
-        IF (tempstr[0]<>32) AND (tempstr[0]<>0) AND (tempstr[0]<>"\n")
+        SetStr(tempstr,StrLen(tempstr))      
+        IF (dirLineNewFile(tempstr))
           t:=TrimStr(tempstr+14)
           spPos:=InStr(t,' ')               
           StrCopy(dtStr,TrimStr(t+spPos))
@@ -1015,7 +1099,7 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, fileNames:PTR TO stringlist,
     found:=FALSE
     REPEAT
       IF StrLen(tempstr)>0
-        IF (tempstr[0]<>32) AND (tempstr[0]<>0) AND (tempstr[0]<>"\n")
+        IF dirLineNewFile(tempstr)
         
           IF found=FALSE
             t:=TrimStr(tempstr+14)
@@ -1042,11 +1126,8 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, fileNames:PTR TO stringlist,
             IF (InStr(sizeStr,'M')>=0) THEN sz:=Mul(sz,1048576)
             
             spPos:=InStr(tempstr,' ')
-            SetStr(tempstr,spPos)           
-
-            fileNames.add(tempstr)
-            fileSizes.add(sz)
-            fileDates.add(encodeDate(m,d,y))
+            SetStr(tempstr,spPos)
+            sendFileDetails(tempstr,sz,encodeDate(m,d,y),cmdType, sb, data_c, output)
           ENDIF
         ENDIF
       ENDIF
@@ -1058,12 +1139,11 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, fileNames:PTR TO stringlist,
       fh:=Open(dirFile,MODE_OLDFILE)
     ENDIF
   ENDWHILE
+  IF (output ANDALSO (EstrLen(output)>0)) THEN writeLineEx(sb,data_c, output)
+  DisposeLink(output)
 ENDPROC
 
-PROC makeConfFileList(ftpData:PTR TO ftpData)
-  DEF fileNames:PTR TO stringlist
-  DEF fileSizes:PTR TO stdlist
-  DEF fileDates:PTR TO stdlist
+PROC makeConfFileList(ftpData:PTR TO ftpData, cmdType, sb, data_c)
   DEF startDate,dayOffset
   
   dayOffset:=readToolTypeInt(TOOLTYPE_CONF,ftpData.confNums.item(ftpData.currentConf-1),'FTP_DIR_DAYS')
@@ -1072,20 +1152,17 @@ PROC makeConfFileList(ftpData:PTR TO ftpData)
   
   startDate:=getSystemDate()-dayOffset
 
-  fileNames:=NEW fileNames.stringlist(256)
-  fileSizes:=NEW fileSizes.stdlist(256)
-  fileDates:=NEW fileDates.stdlist(256)
  
   IF ftpData.currentConf>0
     IF (StrLen(ftpData.subDirPath)>0)
-      makeFtpListFromSubDir(ftpData,fileNames,fileSizes,fileDates,startDate)
+      makeFtpListFromDlDirs(ftpData,startDate,cmdType, sb, data_c)
     ELSEIF checkToolTypeExists(TOOLTYPE_CONF,ftpData.confNums.item(ftpData.currentConf-1),'FTP_NO_DIRLIST')
-      makeFtpListFromDlDirs(ftpData,fileNames,fileSizes,fileDates,startDate)
+      makeFtpListFromDlDirs(ftpData,startDate,cmdType, sb, data_c)
     ELSE
-      makeFtpListFromDirList(ftpData,fileNames,fileSizes,fileDates,startDate)
+      makeFtpListFromDirList(ftpData,startDate,cmdType, sb, data_c)
     ENDIF
   ENDIF
-ENDPROC fileNames,fileSizes,fileDates
+ENDPROC
 
 PROC cmdUser(sb,ftp_c,params:PTR TO CHAR,ftpData:PTR TO ftpData)
   ->WriteF('user=\s\b\n',params)
@@ -1110,10 +1187,11 @@ PROC cmdPwd(sb,ftp_c,ftpData:PTR TO ftpData)
       StrCopy(sendStr, '257 "/" is current directory.\b\n')
       writeLineEx(sb,ftp_c,sendStr)
     ELSE
+     
       StringF(dirName,'/\r\z\d[3]-\s',ftpData.currentConf,ftpData.confNames.item(ftpData.currentConf-1))
       IF StrLen(ftpData.subDirPath)>0
         StrAdd(dirName,'/')
-        StrAdd(dirName,FilePart(ftpData.subDirPath))
+        StrAdd(dirName,ftpData.subDirPath)
       ENDIF
       StringF(sendStr, '257 "\s" is current directory.\b\n',dirName)
       writeLineEx(sb,ftp_c,sendStr)
@@ -1144,7 +1222,7 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,path:PTR TO CHAR)
   DEF sendStr[255]:STRING
   DEF temp[255]:STRING
   DEF outFileName[255]:STRING
-  DEF stat,i
+  DEF stat,i,p
 
   IF ftpData.mode=MODE_FULLSERVER
     IF StrCmp(path,'/')
@@ -1158,7 +1236,13 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,path:PTR TO CHAR)
         writeLineEx(sb,ftp_c,sendStr) 
         
         IF StrLen(ftpData.subDirPath)>0
-          StrCopy(ftpData.subDirPath,'')
+          IF InStr(ftpData.subDirPath,'/')>=0
+            p:=StrLen(ftpData.subDirPath)-1
+            WHILE ftpData.subDirPath[p]<>"/" DO p--
+            SetStr(ftpData.subDirPath,p)
+          ELSE
+            StrCopy(ftpData.subDirPath,'')
+          ENDIF
         ELSE
           ftpData.currentConf:=0
         ENDIF
@@ -1193,33 +1277,39 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,path:PTR TO CHAR)
 
       FOR i:=0 TO ftpData.confNames.count()-1
         StringF(temp,'/\r\z\d[3]-\s/',i+1,ftpData.confNames.item(i))
-        IF StrCmp(temp,path,StrLen(temp)) THEN stat:=i
+        IF StrCmp(temp,path,StrLen(temp))
+          stat:=i
+          StrCopy(path,path+StrLen(temp))
+        ENDIF
       ENDFOR
 
       IF stat=-1
         IF ftpData.currentConf=0
           FOR i:=0 TO ftpData.confNames.count()-1
             StringF(temp,'\r\z\d[3]-\s/',i+1,ftpData.confNames.item(i))
-            IF StrCmp(temp,path,StrLen(temp)) THEN stat:=i
+            IF StrCmp(temp,path,StrLen(temp))
+              stat:=i
+              StrCopy(path,path+StrLen(temp))
+            ENDIF
           ENDFOR
         ENDIF
       ENDIF
 
       IF stat>=0
         ftpData.currentConf:=stat+1
-        
-        getPath(ftpData,ftpData.confNums.item(ftpData.currentConf-1),FilePart(path),outFileName)
+        getPath(ftpData,ftpData.confNums.item(ftpData.currentConf-1),path,outFileName)
         IF StrLen(outFileName)>0
-          StrCopy(ftpData.subDirPath,outFileName)
+          StrCopy(ftpData.subDirPath,path)
         ELSE
           stat:=-1
         ENDIF
       ELSE
         IF ftpData.currentConf<>0
+          IF StrLen(ftpData.subDirPath)>0 THEN StringF(path,'\s/\s',ftpData.subDirPath,path)
           getPath(ftpData,ftpData.confNums.item(ftpData.currentConf-1),path,outFileName)
           IF StrLen(outFileName)>0
+            StrCopy(ftpData.subDirPath,path)
             stat:=1
-            StrCopy(ftpData.subDirPath,outFileName)
           ENDIF
         ENDIF
       ENDIF
@@ -1619,7 +1709,7 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF buff
   DEF asynclib
   DEF fn[255]:STRING
-  DEF r,l,pos,cps,lastpos
+  DEF r,l,pos,cps,lastpos,flen
   DEF fh
   DEF t,t2,startTime
   DEF candl=TRUE
@@ -1656,7 +1746,9 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
    
     getFileName(ftpData,filename,fn)
     fh:=0
+    flen:=0
     IF StrLen(fn)
+      flen:=FileLength(fn)
       IF asynclib<>NIL
         writeLineEx(sb,ftp_c, '150 Opening BINARY connection with ASYNC\b\n')
         fh:=OpenAsync(fn,MODE_READ,32768)
@@ -1678,18 +1770,15 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
         pos:=ftpData.restPos
         IF asynclib<>NIL
           SeekAsync(fh,pos,MODE_START)
-          pos:=SeekAsync(fh,0,MODE_CURRENT)
         ELSE
           Seek(fh,pos,OFFSET_BEGINNING)
-          pos:=Seek(fh,0,OFFSET_CURRENT)
         ENDIF
-        IF (ftpData.checkDownloadRatio<>NIL) ANDALSO (checkDownloadRatio(ftpData,fn,pos,res)=FALSE)
+        IF (ftpData.checkDownloadRatio<>NIL) ANDALSO (checkDownloadRatio(ftpData,fn,flen,res)=FALSE)
           StringF(temp,'550 \s\b\n',res)
           writeLineEx(sb,ftp_c,temp)
           candl:=FALSE
-        ELSE
-          IF (ftpData.downloadFileStart<>NIL) THEN downloadFileStart(ftpData,fn,pos)
         ENDIF
+        IF (ftpData.downloadFileStart<>NIL) THEN downloadFileStart(ftpData,fn,flen,pos)
       ENDIF
       IF candl
         buff:=New(32768)
@@ -2049,7 +2138,7 @@ PROC createThread(num,node,sockid,ftpData:PTR TO ftpData)
   DEF name[255]:STRING
   
   StringF(name,'ftpThread\d-\d',node,num)
-  tags:=NEW [NP_ENTRY,{ftpThread},NP_NAME,name,NP_STACKSIZE,10000,0]:LONG
+  tags:=NEW [NP_ENTRY,{ftpThread},NP_NAME,name,NP_STACKSIZE,10000,0]
  
   ftpData.sockId:=sockid
 
@@ -2057,7 +2146,7 @@ PROC createThread(num,node,sockid,ftpData:PTR TO ftpData)
   proc:=CreateNewProc(tags)
   saveA4(proc,ftpData,node)
   Permit()
- END tags[7]
+  FastDisposeList(tags)
 ENDPROC
 
 EXPORT PROC ftpServerMode(ftpData:PTR TO ftpData, ftp_c,ftpHost:PTR TO CHAR,uploadPath:PTR TO CHAR,ftpDataPorts:PTR TO LONG,filenameCAPS)
@@ -2074,7 +2163,7 @@ EXPORT PROC ftpServerMode(ftpData:PTR TO ftpData, ftp_c,ftpHost:PTR TO CHAR,uplo
   ftpData.workingPath:=String(255)
   ftpData.uploadPath:=String(255)
   ftpData.hostName:=String(255)
-  ftpData.subDirPath:=String(255)
+  ftpData.subDirPath:=String(1000)
   ftpData.dataPorts:=ftpDataPorts
   ftpData.ftpDir:={fullDir}
   ftpData.currentConf:=0

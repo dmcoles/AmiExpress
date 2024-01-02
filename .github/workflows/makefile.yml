@@ -19,23 +19,29 @@ jobs:
       - uses: actions/checkout@v4
       - name: run build
         run: |
-           vamos -c /usr/amiga/.vamosrc --cwd esource: -V system:/usr/amiga -V esource:$GITHUB_WORKSPACE make
-           vamos -c /usr/amiga/.vamosrc --cwd esource:axSetupTool -V system:/usr/amiga -V esource:$GITHUB_WORKSPACE make
+           vamos -c /usr/amiga/.vamosrc --cwd esource: -V system:/usr/amiga -V esource:$GITHUB_WORKSPACE make build=release
+           vamos -c /usr/amiga/.vamosrc --cwd esource:axSetupTool -V system:/usr/amiga -V esource:$GITHUB_WORKSPACE make build=release
 
       - name: add build artifacts to publish
         run: |
+          apk add lha
           mkdir downloads
           mkdir downloads/utils
           cp $GITHUB_WORKSPACE/express5 downloads
-          cp $GITHUB_WORKSPACE/acp downloads
-          cp $GITHUB_WORKSPACE/jsonimport downloads/utils
+          cp $GITHUB_WORKSPACE/ACP downloads
+          cp $GITHUB_WORKSPACE/jsonImport downloads/utils
           cp $GITHUB_WORKSPACE/icon2cfg downloads/utils
           cp $GITHUB_WORKSPACE/qwk downloads/utils
           cp $GITHUB_WORKSPACE/ftn downloads/utils
-          cp $GITHUB_WORKSPACE/axSetupTool/axSetupTool downloads/utils
-    
-      - name: Use the Upload Artifact GitHub Action
-        uses: actions/upload-artifact@v2
-        with: 
-          name: amiExpress-nightly${{ github.sha }}
-          path: downloads
+          cp $GITHUB_WORKSPACE/axSetupTool/axSetupTool downloads/utils 
+          cd downloads
+          lha a ../amiExpress-nightly${{ github.sha }}.lha *
+          ls ../
+         
+      - name: Update nightly release
+        uses: pyTooling/Actions/releaser@main
+        with:
+          tag: dev-build
+          rm: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: amiExpress-nightly${{ github.sha }}.lha
