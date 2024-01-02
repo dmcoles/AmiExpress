@@ -21,32 +21,58 @@
 | I have also updated the documentation for Ami-Express as many existing    |
 | features were not properly documented. Some new features included in this |
 | release are:                                                              |
-|   * Full MUI Based Configuration / Setup Edit                             |
+|   * Full MUI Based Configuration / Setup Editor                           |
 |   * Installer Script that allows upgrading and initial BBS setup          |
-|   * FTP Direct Server - you can now log onto FTP directly and upload or   |
+|   * Improved password encryption.                                         |
 |                                                                           |
 | All source code is publicly available at:                                 |
 |  https://github.com/dmcoles/AmiExpress along with the documentation.      |
 |                                                                           |
-| Included in this archive are several sample bbs configurations using      |
-| tooltype (.info) and config file (.cfg) format. These are aimed at users  |
-| wanting to set up a bbs for the first time. There is also a file called   |
-| aeicon.json which can be imported using the json import tool or by        |
-| selecting the file the first time you start /X with no configuration in   |
-| place. This file will create a basic structure similar to the ones        |
-| included in the archive.                                                  |
+| The sample bbs configurations included in previous versions of this tool  |
+| are no longer included. The new install process will create a default     |
+| minimal (but functional) BBS for you. You can then use the new setup tool |
+| to fully configure the BBS and create a system tailored to your needs.    |
+| The default bbs also contains some useful doors that are typically used   |
+| on every Ami-Express bbs eg AquaScan and FileDescription.                 |
 |                                                                           |
 | This verison of /X comes with both rexxdoor 1.3 and 2.2 - If you have 10  |
-| nodes or more you *MUST* use 2.2 - the installer will prompt you to make  |
-| a decision on which version you prefer.                                   |
+| nodes or more you *MUST* use 2.2 - new installations will be configured   |
+| to use the newer version but upgrades will leave the the setup unaltered. |
 |                                                                           |
 | If you are a pre-existing /X4 user, the ACP and Express files can just    |
 | replace the old versions and should be as close to fully backwards        |
-| compatible as possible. Plesae do contact me or raise issues in github if |
+| compatible as possible. Please do contact me or raise issues in github if |
 | you encounter any problems.                                               |
 |                                                                           |
+| Copyright (c)2024 Darren Coles                                            |
+| Permission is hereby granted, free of charge, to any person obtaining a
+| copy of this software and associated documentation files (the "Software"),|
+| to deal in the Software without restriction, including without limitation |
+| the rights to use, copy, modify, merge, publish, distribute, sublicense,  |
+| and/or sell copies of the Software, and to permit persons to whom the     |
+| Software is furnished to do so, subject to the following conditions:      |
+|                                                                           |
+| The above copyright notice and this permission notice shall be included   |
+| in all copies or substantial portions of the Software.                    |
+|                                                                           |
+| THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS   |
+| OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF                |
+| MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN |
+| NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,  |
+| DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR     |
+| OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE |
+| USE OR OTHER DEALINGS IN THE SOFTWARE.                                    |
+|                                                                           |
+| Installer and Installer project icon                                      |
+| (c) Copyright 1995-96 Escom AG.  All Rights Reserved.                     |
+| Reproduced and distributed under license from Escom AG.                   |
+|                                                                           |
+| INSTALLER SOFTWARE IS PROVIDED "AS-IS" AND SUBJECT TO CHANGE;             |
+| NO WARRANTIES ARE MADE.  ALL USE IS AT YOUR OWN RISK.  NO LIABILITY       |
+| OR RESPONSIBILITY IS ASSUMED.                                             |
+|                                                                           |
 |---------------------------------------------------------------------------|
-|      This release is dedicated to my partner Traci who was taken ill      |
+|    This release is dedicated to my ex-partner Traci who was taken ill     |
 |      unexpectedly at the end of 2018 and passed away after suffering      |
 |               lung damage caused by Influenza. RIP Traci xx.              |
 |---------------------------------------------------------------------------|

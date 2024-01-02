@@ -19,7 +19,7 @@ release:				options=$(releaseoptions)
 release:				ACP express5 jsonImport icon2cfg qwk ftn
 
 axSetupTool:
-							make -B -C axSetupTool build=$(build)
+							$(MAKE) MAKEFLAGS=-B -C axSetupTool build=$(build)
 
 ACP:					ACP.e acpversion.m axcommon.m jsonParser.m jsonCreate.m stringlist.m 
 							$(compiler) ACP $(options)
@@ -125,6 +125,8 @@ dist:					ACP express5 jsonImport icon2cfg qwk ftn axSetupTool
 							makedir Rel/AmiExpress/AmiExpress
 							makedir Rel/AmiExpress/AmiExpress/Utils
 							lha x deployment/binaries.lha Rel/AmiExpress/
+							Copy Rel/AmiExpress/Installer Rel/
+							-delete Rel/AmiExpress/Installer
 							Copy acp Rel/AmiExpress/AmiExpress/
 							Copy express5 Rel/AmiExpress/AmiExpress/express
 							Copy jsonImport Rel/AmiExpress/AmiExpress/Utils/
@@ -140,5 +142,6 @@ dist:					ACP express5 jsonImport icon2cfg qwk ftn axSetupTool
 							Lha -r a t:Amix560.lha Rel/
 							Copy t:Amix560.lha Rel/
 							-delete t:Amix560.lha
+							join deployment/read_me.hdr deployment/read_me.txt TO Rel/Amix560.readme
 
-.PHONY: 			expversion.e axSetupTool
+.PHONY: 			expversion.e acpversion.e axSetupTool
