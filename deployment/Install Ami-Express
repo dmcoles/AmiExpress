@@ -249,25 +249,66 @@
 ; 
 (set install-dest bbs:)
 
-(run (cat "version full >env:tmpver " #acpname))
-(set #acpver (getenv "tmpver") )
-(if (= (substr #acpver 0 4) "ACP ")
-  (set #acpver (substr #acpver 4 (- (strlen #acpver) 4))) 
+(if (exists "env:axsetupeditor_prefs" (noreq))
+  (set #axprefs (getenv "axsetupeditor_prefs") )
+  (set #axprefs "")
+)
+
+(set #acppath "")
+(if (<> #axprefs "")
+  (
+   (set #axprefs (substr #axprefs 2 (- (strlen #axprefs) 5)))
+
+    ( if (exists (tackon #axprefs "acp") (noreq))
+      (set #acppath #axprefs)
+    )
+  )
+)
+(if (= #acppath "")
+  (if (exists "sys:wbstartup/ACP" (noreq))
+      (set #acppath "sys:wbstartup")
+  )
+)
+(if (= #acppath "")
+  (if (exists "bbs:ACP" (noreq))
+      (set #acppath "bbs:")
+  )
+)
+
+(if (= #acppath "")
+  (set #acppath
+   (askdir
+    (prompt "Please select the location of your ACP file")
+    (help #destdir-help)
+    (default @default-dest) ) )
+)
+   
+
+( complete 10)
+
+(set #acpname (tackon #acppath "acp"))
+
+(if  (= #acpname "")
+  (set #acpver "Unknown\n")
+  (
+    (run (cat "echo >ram:out " #acpname))
+    (run (cat "version full >env:tmpver \"" #acpname "\""))
+    (set #acpver (getenv "tmpver") )
+    (if (= (substr #acpver 0 4) "ACP ")
+      (set #acpver (substr #acpver 4 (- (strlen #acpver) 4))) 
+    )
+  )
 )
 
 (run (cat "version full >env:tmpver bbs:express"))
 (set #expressver (getenv "tmpver") )
-(if (= (substr #expressver 0 13) "Ami-Express ")
-  (set #expressver (substr #expressver 13 (- (strlen #expressver) 13))) 
+(if (= (substr #expressver 0 11) "AmiExpress ")
+  (set #expressver (substr #expressver 11 (- (strlen #expressver) 11))) 
 )
 
 (message ("An existing installation of Ami-Express was found.\n\nThe currently installed version information is \n\nACP: %sExpress: %s\nPress proceed if you wish to continue upgrading Ami-Express.\n\nThe configuration of your bbs will not be affected and only the updated\napplication files will be overwritten.\n" #acpver #expressver) 
 )
 
-( complete 10)
-; 
-
-; 
 ( complete 20)
 
 (copyfiles
@@ -281,78 +322,29 @@
 
 ( complete 40)
 
-(set #acpdone 0)
-
-(set #axprefs (getenv "axsetupeditor_prefs") )
-(if (<> #axprefs "")
-  (
-   (set #axprefs (substr #axprefs 2 (- (strlen #axprefs) 5)))
-
-    ( if (exists (tackon #axprefs "acp") (noreq))
-      (
-        (copyfiles
-          (source "AmiExpress/AmiExpress")
-          (dest #axprefs)
-          (choices "ACP")
-          (prompt "Upgrading ACP")
-          (help @copyfiles-help)
-          (confirm "expert")
-        )
-        (set #acpdone 1)
-      )
-    ) 
-  )
-)
-( if (and (exists "sys:wbstartup/ACP" (noreq))
-          (<> #axprefs "sys:wbstartup/") ) 
-  (
+( if (exists (tackon #acppath "ACP" (noreq)))
     (copyfiles
       (source "AmiExpress/AmiExpress")
-      (dest "sys:wbstartup")
+      (dest #acppath)
       (prompt "Upgrading ACP")
       (help @copyfiles-help)
       (choices "ACP")
       (confirm "expert")
     )
-    (set #acpdone 1)
-  )
 )
 
-( if (and (exists "bbs:acp" (noreq))
-          (<> #axprefs "bbs:") ) 
+( complete 50)
+
+(if (= (exists "env:axsetupeditor_prefs" (noreq)) 0)
   (
-    (copyfiles
-      (source "AmiExpress/AmiExpress")
-      (dest "bbs:")
-      (prompt "Upgrading ACP")
-      (help @copyfiles-help)
-      (choices "ACP")
-      (confirm "expert")
+    (run (cat "setenv axsetupeditor_prefs 11" (tackon #acppath "acp"))
+      (prompt "Saving configuration")
+      (help )
     )
-    (set #acpdone 1)
-  )
-)
 
-( if ( = #acpdone 0)
-  (
-    (set #acppath
-     (askdir
-      (prompt "Please select the location of your ACP file")
-      (help #destdir-help)
-      (default @default-dest) ) )
-
-    ( if (exists (tackon #acppath "acp" ) (noreq))
-      (
-        (copyfiles
-          (source "AmiExpress/AmiExpress")
-          (dest #acppath)
-          (prompt "Upgrading ACP")
-          (help @copyfiles-help)
-          (choices "ACP")
-          (confirm "expert")
-        )
-        ( set #acpdone 1 )
-      )
+    (run (cat "copy env:axsetupeditor_prefs envarc:")
+      (prompt "Saving configuration")
+      (help )
     )
   )
 )
@@ -380,6 +372,21 @@
           (prompt "This release of Ami-Express includes a new password encryption system.\nThe old system was extremely weak and easily hacked using brute force.\nIf you have to downgrade Ami-Express for any reason, new users created with the new password security will not be able to log into the BBS.")
           (help "")
           (default 0) ))
+  )
+
+  (if (= (exists "bbs:bbsconfig.info" (noreq)) 0)
+    (
+      (copyfiles
+        (prompt "Creating bbsconfig.info")
+        (help @copyfiles-help)
+        (source "AmiExpress/defaultbbs/bbsconfig.info")
+        (dest "BBS:")
+        )
+      
+      (tooltype (dest "bbs:bbsconfig") (settooltype "HISTORY"))
+      (tooltype (dest "bbs:bbsconfig") (settooltype "CONVERT_TO_MB"))
+     )
+
   )
 
 
