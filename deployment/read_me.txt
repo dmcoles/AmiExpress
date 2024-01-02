@@ -53,7 +53,7 @@
 |                                                                           |
 | Version History                                                           |
 |                                                                           |
-| 5.6.0 31 Dec 2023                                                         |
+| 5.6.0 02 Jan 2024                                                         |
 |       * Improved password encryption, Full Setup Editor, Installer        |
 | 5.5.0 05 Jun 2022 (Feature parity release)                                |
 |       * XMODEM and Hydra support, FTP Direct Server, IEMSI auto login     |
