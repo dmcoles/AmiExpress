@@ -4316,18 +4316,18 @@ PROC main() HANDLE
                   ->quit menu item
                   IF(menunum(im.code)=0) AND (itemnum(im.code)=6) THEN attemptShutdown()
 
-                  IF(menunum(im.code)=1) AND (itemnum(im.code)=14) 
-                    IF FileLength(AX_SETUP_TOOL)>=0 THEN Execute(AX_SETUP_TOOL,0,0)
-                  ENDIF
-                  
-                  IF(menunum(im.code)=1)
-                    i:=button
-                    button:=0
-                    menuSelect:=TRUE
-                    handleEditGadget(NIL,GAD_SYSOPLOGIN+itemnum(im.code))
-                    handleEditGadget(NIL,GAD_NODES+subnum(im.code))
-                    button:=i
-                    menuSelect:=FALSE
+                  IF(menunum(im.code)=1) 
+                    IF (itemnum(im.code)=14) 
+                      IF FileLength(AX_SETUP_TOOL)>=0 THEN Execute(AX_SETUP_TOOL,0,0)
+                    ELSE
+                      i:=button
+                      button:=0
+                      menuSelect:=TRUE
+                      handleEditGadget(NIL,GAD_SYSOPLOGIN+itemnum(im.code))
+                      handleEditGadget(NIL,GAD_NODES+subnum(im.code))
+                      button:=i
+                      menuSelect:=FALSE
+                    ENDIF
                   ENDIF
                   IF(menunum(im.code)=2)
                     num:=itemnum(im.code)

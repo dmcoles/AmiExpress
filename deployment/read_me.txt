@@ -35,7 +35,7 @@
 | The default bbs also contains some useful doors that are typically used   |
 | on every Ami-Express bbs eg AquaScan and FileDescription.                 |
 |                                                                           |
-| This verison of /X comes with both rexxdoor 1.3 and 2.2 - If you have 10  |
+| This version of /X comes with both rexxdoor 1.3 and 2.2 - If you have 10  |
 | nodes or more you *MUST* use 2.2 - new installations will be configured   |
 | to use the newer version but upgrades will leave the the setup unaltered. |
 |                                                                           |
