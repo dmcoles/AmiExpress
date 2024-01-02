@@ -357,7 +357,7 @@
   (confirm "expert")
   (source "AmiExpress/AmiExpress/Utils")
   (dest "BBS:Utils")
-  (pattern "~(rexxdoor)")
+  (pattern "~(rexxdoor|qwk.cfg)")
 )
 
 ( complete 80)
