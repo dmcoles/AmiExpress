@@ -5,7 +5,7 @@ releaseoptions=IGNORECACHE OPTI SHOWFNAME
 compiler=EVO
 expprogramname=AmiExpress
 acpprogramname=ACP
-version=5.6.0
+version=5.6.1-dev
 
 ifeq ($(build),release)
 options=$(releaseoptions)

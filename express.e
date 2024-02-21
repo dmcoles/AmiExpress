@@ -28071,7 +28071,7 @@ PROC processCommand(cmdtext,allowsyscmd=FALSE, subtype=-1)
   DEF cmdparams[255]:STRING
   DEF spacepos,res
 
-  IF EstrLen(cmdtext)=0 THEN RETURN RESULT_SUCCESS
+  IF StrLen(cmdtext)=0 THEN RETURN RESULT_SUCCESS
 
   spacepos:=InStr(cmdtext,' ')
 
@@ -28100,7 +28100,7 @@ PROC processSysCommand(cmdtext, allowBBSCmd=FALSE)
   DEF cmdparams[255]:STRING
   DEF spacepos,res
 
-  IF EstrLen(cmdtext)=0 THEN RETURN RESULT_SUCCESS
+  IF StrLen(cmdtext)=0 THEN RETURN RESULT_SUCCESS
 
   IF (spacepos:=InStr(cmdtext,' '))>=0
     midStr2(cmdcode,cmdtext,0,spacepos)
