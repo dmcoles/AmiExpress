@@ -6,6 +6,8 @@ MODULE 'tools/boopsi','workbench/workbench','icon','intuition/classusr'
 MODULE 'utility/tagitem','utility/hooks','tools/installhook','exec/lists','libraries/asl','dos/dos'
 MODULE '*axedit','*frmBase','*tooltypes','*controls','*miscfuncs','*frmAddComplexItem','*configObject','*/stringlist','*helpText'
 
+CONST CONFDBSIZE=74000
+
 EXPORT OBJECT frmConfEdit OF frmBase
   confConfig         : PTR TO CHAR
   controlList        : LONG
@@ -38,6 +40,7 @@ EXPORT OBJECT frmConfEdit OF frmBase
   boolNoNewFiles     : PTR TO control
   boolNoFtpUploads   : PTR TO control
   boolFtpNoDirlist   : PTR TO control
+  intNDirs           : PTR TO control
   lvDownloadPaths    : PTR TO LONG
   strDownloadPath    : PTR TO LONG
   lvUploadPaths      : PTR TO LONG
@@ -614,7 +617,7 @@ PROC addControls() OF frmConfEdit
   NEW control.createDirSelect('Local Upload Path',CONF_LOCAL_UPLOAD_PATH,self.app.app,self.setChangedHook,self)
   self.paLocalULPath:=control
 
-  NEW control.createStringInt('FTP Dir Days',FTP_DIR_DAYS,self.app.app,self.setChangedHook,self)
+  NEW control.createStringInt('FTP Dir Days',1,self.app.app,self.setChangedHook,self)
   self.intFtpDirDays:=control
 
   NEW control.createString('FTP Dir Name',CONF_FTP_DIR_NAME,self.app.app,self.setChangedHook,self)
@@ -647,7 +650,10 @@ PROC addControls() OF frmConfEdit
   NEW control.createCheckBox('FTP No Dirlist',CONF_FTP_NO_DIRLIST,self.app.app,self.setChangedHook,self)
   self.boolFtpNoDirlist:=control 
 
-  self.controlList:=[self.strConfName2,self.paConfPath,self.strForwardMail,self.strMenuPrompt,self.strUploadPrompt,self.paLocalULPath,
+  NEW control.createStringInt('NDirs',CONF_NDIRS,self.app.app,self.setChangedHook,self)
+  self.intNDirs:=control
+
+  self.controlList:=[self.strConfName2,self.paConfPath,self.intNDirs,self.strForwardMail,self.strMenuPrompt,self.strUploadPrompt,self.paLocalULPath,
                      self.intFtpDirDays,self.strFtpDirName]
 
   self.controlList2:=[self.boolFreeDownloads,self.boolUseUsernames,self.boolUseRealname,self.boolUseInternetNames,
@@ -751,6 +757,7 @@ PROC saveChanges() OF frmConfEdit
   DEF window,count,i,entry
   DEF folderStr[255]:STRING
   DEF msgbase:PTR TO msgbase
+  DEF fh,tmp
 
   MOVE.L (A1),self
   GetA4()
@@ -826,7 +833,20 @@ PROC saveChanges() OF frmConfEdit
         makeDir(msgbase.location)
       ENDIF
     ENDFOR
+
+    StrCopy(folderStr,confPath)
+    AddPart(folderStr,'Conf.DB',255)
     
+    ->create conf.db
+    IF (FileLength(folderStr)<=0)
+      fh:=Open(folderStr,MODE_NEWFILE)
+      IF fh<>0
+        tmp:=New(CONFDBSIZE)
+        Write(fh,tmp,CONFDBSIZE)
+        Dispose(tmp)
+        Close(fh)
+      ENDIF
+    ENDIF
   ENDIF
 
   IF self.boolFreeDownloads.getValue() THEN writeToolType(confPath,'FREEDOWNLOADS') ELSE deleteToolType(confPath,'FREEDOWNLOADS')  
@@ -854,6 +874,16 @@ PROC saveChanges() OF frmConfEdit
   IF self.boolNoNewFiles.getValue() THEN writeToolType(confPath,'NO_NEW_FILES') ELSE deleteToolType(confPath,'NO_NEW_FILES')
   IF self.boolNoFtpUploads.getValue() THEN writeToolType(confPath,'NO_FTP_UPLOADS') ELSE deleteToolType(confPath,'NO_FTP_UPLOADS')
   IF self.boolFtpNoDirlist.getValue() THEN writeToolType(confPath,'FTP_NO_DIRLIST') ELSE deleteToolType(confPath,'FTP_NO_DIRLIST')
+  writeToolType(confPath,'NDIRS',self.intNDirs.getValue())
+
+  StrCopy(folderStr,confPath)
+  AddPart(folderStr,'NDIRS',255)
+  fh:=Open(folderStr,MODE_NEWFILE)
+  IF fh<>0
+    StringF(tempStr,'\s\n',self.intNDirs.getValue())
+    Write(fh,tempStr,EstrLen(tempStr))
+    Close(fh)
+  ENDIF
 
   get(self.lvDownloadPaths,MUIA_List_Entries,{count})  
   FOR i:=1 TO count
@@ -999,6 +1029,10 @@ PROC loadConf(conf) OF frmConfEdit
   self.boolNoNewFiles.setValue(IF checkToolTypeExists(confPath,'NO_NEW_FILES') THEN MUI_TRUE ELSE FALSE)
   self.boolNoFtpUploads.setValue(IF checkToolTypeExists(confPath,'NO_FTP_UPLOADS') THEN MUI_TRUE ELSE FALSE)
   self.boolFtpNoDirlist.setValue(IF checkToolTypeExists(confPath,'FTP_NO_DIRLIST') THEN MUI_TRUE ELSE FALSE)
+
+  val:=readToolTypeInt(confPath,'NDIRS')
+  IF val<1 THEN val:=1
+  self.intNDirs.setValue(val)
  
   domethod( self.lvDownloadPaths , [ MUIM_List_Clear] )
   domethod( self.lvUploadPaths , [ MUIM_List_Clear] )
