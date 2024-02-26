@@ -26,7 +26,12 @@
 |   * Improved password encryption.                                         |
 |                                                                           |
 | All source code is publicly available at:                                 |
-|  https://github.com/dmcoles/AmiExpress along with the documentation.      |
+|  https://github.com/dmcoles/AmiExpress along with the documentation       |
+|                                                                           |
+| The latest information relating to setup and troubleshooting is in the    |
+| wiki here:                                                                |
+|                                                                           |
+|  https://github.com/dmcoles/AmiExpress/wiki                               |
 |                                                                           |
 | The sample bbs configurations included in previous versions of this tool  |
 | are no longer included. The new install process will create a default     |

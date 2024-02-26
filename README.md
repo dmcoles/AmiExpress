@@ -28,6 +28,12 @@ I have also updated the documentation for AmiExpress as many existing features w
 *  New US command (upload sysop) allows files to be uploaded to any directory anyhere on the system
 *  Query callers ip/hostname from telnetd.device and record to callers log, provide via door interface
 
+### Documentation
+
+The latest documentation for setting up and troubleshooting Ami-Express 5 is always located here:
+
+https://github.com/dmcoles/AmiExpress/wiki
+
 ### Want to help out?
 
 I am currently the sole developer on this project. If you are experienced with running /X on the Amiga platform and wish to help out, please feel free to contact me. I am always looking for ideas on how to improve this product.
