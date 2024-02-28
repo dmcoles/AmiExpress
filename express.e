@@ -10625,7 +10625,7 @@ PROC saveAttachList(fname:PTR TO CHAR)
   Close(f)       
 ENDPROC
 
-PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
+PROC saveNewMSG(gfh,mh:PTR TO mailHeader, update=TRUE)
   DEF msgbaselock
   DEF f,i,stat,id
   DEF rzmsglock,lock
@@ -10633,9 +10633,11 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
   DEF tempStr[255]:STRING
   DEF tempStr2[255]:STRING
 
-  mh.recv:=0
-  mh.msgDate:=getSystemTime()
-  AstrCopy(mh.fromName,confMailName,31)
+  IF update
+    mh.recv:=0
+    mh.msgDate:=getSystemTime()
+    AstrCopy(mh.fromName,confMailName,31)
+  ENDIF
    
   IF(msgbaselock:=lockMsgBase())
 
@@ -10651,7 +10653,7 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader)
       UNTIL fileExists(tempStr2)=FALSE
       f:=Open(tempStr2,MODE_NEWFILE)
       IF f<>0
-        fileWriteLn(f,confMailName)
+        fileWriteLn(f,mh.fromName)
         fileWriteLn(f,mh.toName)
         fileWriteLn(f,mh.subject)
         formatLongDateTime2(mh.msgDate,tempStr," ")
@@ -10981,6 +10983,7 @@ contloop:
       IF(nonStopMail=FALSE)
         aePuts('\b\n[32mMsg. Options: [33mA[36m')
         IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts(',[33mD')
+        IF checkSecurity(ACS_SYSOP_READ) THEN aePuts(',[33mM')
         aePuts('[36m,[33mF[36m,[33mR[36m,[33mL[36m,[33mQ')
         StringF(string,'[36m,[33m?[36m,[33m??[36m,[32m<[33mCR[32m> [32m([0m \d[32m )[0m >: ',msgNum)
         aePuts(string)
@@ -10988,6 +10991,7 @@ contloop:
     ELSEIF helplist=1
       aePuts('[33mA[32m>[36mgain[0m')
       IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
+      IF checkSecurity(ACS_SYSOP_READ) THEN aePuts('\b\n[33mM[32m>[36move[0m')
       aePuts('\b\n[33mF[32m>[36morward[0m')
       aePuts('\b\n[33mR[32m>[36meply[0m')
       aePuts('\b\n[33mL[32m>[36mist[0m')
@@ -10998,6 +11002,7 @@ contloop:
     ELSE
       aePuts('[33mA[32m>[36mgain[0m')
       IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
+      IF checkSecurity(ACS_SYSOP_READ) THEN aePuts('\b\n[33mM[32m>[36move Message[0m')
       aePuts('\b\n[33mF[32m>[36morward[0m')
       aePuts('\b\n[33mR[32m>[36meply[0m')
       aePuts('\b\n[33mL[32m>[36mist all messages[0m')
@@ -11087,6 +11092,13 @@ contloop:
       JUMP contloop
     ENDIF
 
+    IF checkSecurity(ACS_SYSOP_READ)
+      IF(((str[0]="M") OR (str[0]="m")))
+        stat:=moveMSG(gfh)
+        IF stat=RESULT_SUCCESS THEN RETURN RESULT_SUCCESS
+      ENDIF
+    ENDIF
+    
     IF checkSecurity(ACS_DELETE_MESSAGE)
       IF(((str[0]="D") OR (str[0]="d")))
         IF((privateFlag=0) OR ((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)))
@@ -11802,6 +11814,69 @@ PROC saveStatOnly()
   RETURN RESULT_SUCCESS
 ENDPROC
 
+PROC moveMSG(gfh)
+  DEF stat,destConf,destMsgBase,oldgfh
+  DEF tempStr[255]:STRING
+  DEF filename[255]:STRING
+  DEF mh:mailHeader
+  DEF oldConf,oldMsgbase
+  
+  stat,destConf,destMsgBase:=getMoveConf(TRUE)
+  IF stat<>RESULT_SUCCESS THEN RETURN stat
+  IF destConf=0 THEN RETURN RESULT_SUCCESS
+
+  IF (destConf=currentConf) AND (destMsgBase=currentMsgBase)
+    aePuts('\b\nYou have not changed the message location\n')
+    RETURN RESULT_FAILURE
+  ENDIF
+
+  aePuts('\b\nMove message (y/n)? ')
+  stat:=yesNo(0)
+  IF(stat<0) THEN RETURN stat
+  IF(stat=0) THEN RETURN RESULT_FAILURE
+
+  CopyMem(mailHeader,mh,SIZEOF mailHeader)
+
+  StringF(tempStr,'\s\d',msgBaseLocation,mailHeader.msgNumb)
+  IF loadMsg(tempStr)
+    oldgfh:=gfh
+    oldConf:=currentConf
+    oldMsgbase:=currentMsgBase
+    currentConf:=destConf
+    currentMsgBase:=destMsgBase
+    getMsgBaseLocation(currentConf,currentMsgBase,msgBaseLocation)
+
+    StringF(filename,'\s\s',msgBaseLocation,'HeaderFile')
+    gfh:=Open(filename,MODE_READWRITE)
+    IF(gfh=0)
+      gfh:=Open(filename,MODE_NEWFILE)
+      IF(gfh=0)
+        myError(ERR_MSGBASE)
+        gfh:=oldgfh
+        currentConf:=oldConf
+        currentMsgBase:=oldMsgbase
+        getMsgBaseLocation(currentConf,currentMsgBase,msgBaseLocation)
+        RETURN RESULT_FAILURE
+      ENDIF
+    ENDIF
+
+    stat:=saveNewMSG(gfh,mh,FALSE)
+    Close(gfh)
+
+    gfh:=oldgfh
+    currentConf:=oldConf
+    currentMsgBase:=oldMsgbase
+    getMsgBaseLocation(currentConf,currentMsgBase,msgBaseLocation)
+
+    IF(stat<0)
+      RETURN stat
+    ENDIF
+    deleteMSG(gfh)
+    RETURN RESULT_SUCCESS
+  ENDIF
+
+ENDPROC RESULT_FAILURE
+
 PROC deleteMSG(gfh)
   DEF string[255]:STRING
   DEF msgbaselock
@@ -11907,6 +11982,7 @@ PROC readMSG(gfh)
       IF(nonStopMail=FALSE)
         aePuts('\b\n[32mMsg. Options: [33mA[36m')
         IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts(',[33mD')
+        IF checkSecurity(ACS_SYSOP_READ) THEN aePuts(',[33mM')
         aePuts('[36m,[33mF[36m,[33mR[36m,[33mL[36m,[33mQ')
         StringF(string,'[36m,[33m?[36m,[33m??[36m,[32m<[33mCR[32m> [32m([0m \s[32m )[0m>: ',str)
         aePuts(string)
@@ -11914,6 +11990,7 @@ PROC readMSG(gfh)
     ELSEIF(helplist=1)
       aePuts('[33mA[32m>[36mgain[0m')
       IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
+      IF checkSecurity(ACS_SYSOP_READ) THEN aePuts('\b\n[33mM[32m>[36move[0m')
       aePuts('\b\n[33mF[32m>[36morward[0m')
       aePuts('\b\n[33mR[32m>[36meply[0m')
       aePuts('\b\n[33mL[32m>[36mist[0m')
@@ -11924,6 +12001,7 @@ PROC readMSG(gfh)
     ELSE
       aePuts('[33mA[32m>[36mgain[0m')
       IF checkSecurity(ACS_DELETE_MESSAGE) THEN aePuts('\b\n[33mD[32m>[36melete Message[0m')
+      IF checkSecurity(ACS_SYSOP_READ) THEN aePuts('\b\n[33mM[32m>[36move Message[0m')
       aePuts('\b\n[33mF[32m>[36morward[0m')
       aePuts('\b\n[33mR[32m>[36meply[0m')
       aePuts('\b\n[33mL[32m>[36mist all messages[0m')
@@ -12055,6 +12133,14 @@ PROC readMSG(gfh)
             ENDIF
             noDirF:=1
             JUMP goNextMsg
+          CASE "m"
+            IF checkSecurity(ACS_SYSOP_READ)
+              stat:=moveMSG(gfh)
+              IF stat=RESULT_SUCCESS
+                noDirF:=1
+                JUMP goNextMsg
+              ENDIF
+            ENDIF
         ENDSELECT
       ENDIF
       IF(((str[0]="E") OR (str[0]="e")) AND (checkSecurity(ACS_MESSAGE_EDIT)))
@@ -26897,6 +26983,74 @@ PROC maintenanceFileDelete(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,match
 
 ENDPROC RESULT_SUCCESS
 
+PROC getMoveConf(msgbase)
+  DEF destConfStr[255]:STRING
+  DEF stat,n,destConf,destMsgBase,num,tmp
+  DEF tempstr[255]:STRING
+
+  REPEAT
+    stat:=lineInput('\b\nConference Number to move to (L to List): ','',5,INPUT_TIMEOUT,destConfStr)
+    IF stat<>RESULT_SUCCESS THEN RETURN stat,0,0
+
+    IF StrLen(destConfStr)=0 THEN RETURN RESULT_SUCCESS,0,0
+
+    IF ((StrCmp(destConfStr,'L')) OR (StrCmp(destConfStr,'l')))
+      aePuts('\b\n')
+      aePuts('                                 [32mConference List\b\n')
+      aePuts('\b\n')
+      processMciCmd('~CL|',4,0)
+      n:=FALSE
+    ELSE
+      n:=TRUE
+    ENDIF
+  UNTIL n
+
+  destConf:=getInverse(Val(destConfStr))
+
+  IF destConf<1 THEN destConf:=1
+  IF destConf>cmds.numConf THEN destConf:=cmds.numConf
+
+  IF(checkConfAccess(destConf)=FALSE)
+    aePuts('\b\nYou do not have access to the requested conference\b\n\b\n')
+    RETURN RESULT_FAILURE,0,0
+  ENDIF
+
+  StringF(tempstr,'\b\nYou have chosen conference: \s\b\n',getConfName(destConf))
+  aePuts(tempstr)
+
+  destMsgBase:=1
+  IF msgbase
+    num:=getConfMsgBaseCount(destConf)
+    IF num>1
+      REPEAT
+        stat:=lineInput('\b\nMessagebase Number to move to (L to List): ','',5,INPUT_TIMEOUT,destConfStr)
+        IF stat<>RESULT_SUCCESS THEN RETURN stat,0
+
+        IF StrLen(destConfStr)=0 THEN RETURN RESULT_SUCCESS,0
+
+        IF ((StrCmp(destConfStr,'L')) OR (StrCmp(destConfStr,'l')))
+          aePuts('\b\n')
+          aePuts('                                 [32mMessagebase List\b\n')
+          aePuts('\b\n')
+          tmp:=currentConf
+          currentConf:=destConf
+          processMciCmd('~ML|',4,0)
+          currentConf:=tmp
+          n:=FALSE
+        ELSE
+          n:=TRUE
+        ENDIF
+      UNTIL n
+      destMsgBase:=Val(destConfStr)
+      IF destMsgBase<1 THEN destMsgBase:=1
+      IF destMsgBase>num THEN destMsgBase:=num
+      getMsgBaseName(destConf,destMsgBase,tempstr)
+      StringF(tempstr,'\b\nYou have chosen message base: \s\b\n',tempstr)
+      aePuts(tempstr)
+    ENDIF
+  ENDIF
+ENDPROC RESULT_SUCCESS,destConf,destMsgBase
+
 PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr:PTR TO CHAR,matchposition)
   DEF oldDirName[255]:STRING
   DEF oldDestDirName[255]:STRING
@@ -26910,43 +27064,16 @@ PROC maintenanceFileMove(dirname:PTR TO CHAR, srchold, fname:PTR TO CHAR,datestr
   DEF padfname[255]:STRING
   DEF path[255]:STRING
   DEF found,drivenum,drivenum2
-  DEF destConfStr[255]:STRING
   DEF destDirStr[255]:STRING
   DEF d1,d2,brk,filemoved,status,n
   DEF destConf,destDir,stat,maxConfDir
   DEF currpos
 
-  REPEAT
-    stat:=lineInput('\b\nConference Number to move to (L to List): ','',5,INPUT_TIMEOUT,destConfStr)
-    IF stat<>RESULT_SUCCESS THEN RETURN stat
-
-    IF StrLen(destConfStr)=0 THEN RETURN RESULT_SUCCESS
-
-    IF ((StrCmp(destConfStr,'L')) OR (StrCmp(destConfStr,'l')))
-      aePuts('\b\n')
-      aePuts('                                 [32mConference List\b\n')
-      aePuts('\b\n')
-      processMciCmd('~CL|',4,0)
-      n:=FALSE
-    ELSE
-      n:=TRUE
-    ENDIF
-  UNTIL n
+  stat,destConf:=getMoveConf(FALSE)
+  IF stat<>RESULT_SUCCESS THEN RETURN stat
+  IF destConf=0 THEN RETURN RESULT_SUCCESS
 
   d1:=getDateCompareVal(datestr)
-
-  destConf:=getInverse(Val(destConfStr))
-
-  IF destConf<1 THEN destConf:=1
-  IF destConf>cmds.numConf THEN destConf:=cmds.numConf
-
-  IF(checkConfAccess(destConf)=FALSE)
-    aePuts('\b\nYou do not have access to the requested conference\b\n\b\n')
-    RETURN RESULT_FAILURE
-  ENDIF
-
-  StringF(tempstr,'\b\nYou have chosen conference: \s\b\n',getConfName(destConf))
-  aePuts(tempstr)
 
   maxConfDir:=readToolTypeInt(TOOLTYPE_CONF,destConf,'NDIRS')
 
