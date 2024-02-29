@@ -78,7 +78,7 @@
 |                                                                           |
 | Version History                                                           |
 |                                                                           |
-| 5.6.1 02 Jan 2024                                                         |
+| 5.6.1 29 Feb 2024                                                         |
 |       * Some fixes to resolve issues when running on 68000                |
 |       * Added support for conf NDIRS setting in the configuration editor  |
 |       * Added option to move mail messages to another conference          |
