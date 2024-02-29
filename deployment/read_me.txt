@@ -5,10 +5,10 @@
 |//     l__¡   \\_¡¡   \\!___  ¬\_.  \  ¡ l__¡  ¯¬\__  ¬\    \\    \\     \\|
 /         ¬l____/¬'l____/: ¬l___/ l___\ !   ¬l____/¬l___/_____/_____/       \
 |                      ·                 ·                                  |
+| Version 5.6.1                                                             |
+|                                                                           |
 | Ami-Express was a BBS System that ran on the Commodore Amiga series of    |
 | computers and was developed by Lightspeed Technologies in the 1990s.      |
-|                                                                           |
-| Version 5.6.0                                                             |
 |                                                                           |
 | This is a rewrite of that system written in Amiga E. It is open source    |
 | and has new features and bug fixes in addition to aiming for near 100%    |
@@ -19,19 +19,13 @@
 | this software and to continue using the Ami-Express name.                 |
 |                                                                           |
 | I have also updated the documentation for Ami-Express as many existing    |
-| features were not properly documented. Some new features included in this |
-| release are:                                                              |
-|   * Full MUI Based Configuration / Setup Editor                           |
-|   * Installer Script that allows upgrading and initial BBS setup          |
-|   * Improved password encryption.                                         |
-|                                                                           |
-| All source code is publicly available at:                                 |
-|  https://github.com/dmcoles/AmiExpress along with the documentation       |
-|                                                                           |
-| The latest information relating to setup and troubleshooting is in the    |
-| wiki here:                                                                |
+| features were not properly documented. This documenations (including      |
+| setup, tooltype information and troubleshooting help) is here:            |
 |                                                                           |
 |  https://github.com/dmcoles/AmiExpress/wiki                               |
+|                                                                           |
+| In addition all source code is publicly available at:                     |
+|  https://github.com/dmcoles/AmiExpress                                    |
 |                                                                           |
 | The sample bbs configurations included in previous versions of this tool  |
 | are no longer included. The new install process will create a default     |
@@ -84,6 +78,10 @@
 |                                                                           |
 | Version History                                                           |
 |                                                                           |
+| 5.6.1 02 Jan 2024                                                         |
+|       * Some fixes to resolve issues when running on 68000                |
+|       * Added support for conf NDIRS setting in the configuration editor  |
+|       * Added option to move mail messages to another conference          |
 | 5.6.0 02 Jan 2024                                                         |
 |       * Improved password encryption, Full Setup Editor, Installer        |
 | 5.5.0 05 Jun 2022 (Feature parity release)                                |
