@@ -877,10 +877,10 @@ PROC saveChanges() OF frmConfEdit
   writeToolType(confPath,'NDIRS',self.intNDirs.getValue())
 
   StrCopy(folderStr,confPath)
-  AddPart(folderStr,'NDIRS',255)
+  AddPart(folderStr,'NDirs',255)
   fh:=Open(folderStr,MODE_NEWFILE)
   IF fh<>0
-    StringF(tempStr,'\s\n',self.intNDirs.getValue())
+    StringF(tempStr,'\s',self.intNDirs.getValue())
     Write(fh,tempStr,EstrLen(tempStr))
     Close(fh)
   ENDIF
