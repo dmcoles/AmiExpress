@@ -9708,31 +9708,18 @@ PROC attachMsgFiles(num: LONG,s:PTR TO CHAR,attachType: LONG)
   ENDIF
 ENDPROC
 
-
-PROC checkAttachedFile(msgnumb,flag)
-  DEF stat
+PROC getAttachType(msgnumb)
   DEF str[250]:STRING
+  DEF tempStr[1024]:STRING
   DEF fBlock:PTR TO fileinfoblock
   DEF fLock
   DEF filetype=0
-  DEF tempStr[1024]:STRING
-
-  StrCopy(tempStr,'')
-
-  convertToBCD(0,dTBT)
-  convertToBCD(0,uTBT)
-  ulTTTM:=NIL
-  ulTTTM:=0
-  tTEFF:=NIL
-  tTCPS:=NIL
 
   StringF(str,'\s\d',msgBaseLocation,msgnumb)
-
   IF(fBlock:=AllocDosObject(DOS_FIB,NIL))
     IF(fLock:=Lock(str,ACCESS_READ))
       IF(Examine(fLock,fBlock))
         IF(StrLen(fBlock.comment)>0)
-          StrCopy(tempStr,fBlock.comment)
           filetype:=1     ->single attached file referenced in file comment
         ENDIF
 
@@ -9754,8 +9741,31 @@ PROC checkAttachedFile(msgnumb,flag)
   ENDIF
   StringF(str,'\sA\d',msgBaseLocation,msgnumb)
   IF fileExists(str) THEN filetype:=3   ->corresponding A<msgnum> file containing attachment file details
+ENDPROC filetype
+
+PROC checkAttachedFile(msgnumb,flag)
+  DEF stat
+  DEF filetype=0
+  DEF fn[255]:STRING
+  DEF tempStr[1024]:STRING
+
+  StrCopy(tempStr,'')
+
+  convertToBCD(0,dTBT)
+  convertToBCD(0,uTBT)
+  ulTTTM:=NIL
+  ulTTTM:=0
+  tTEFF:=NIL
+  tTCPS:=NIL
+
+  filetype:=getAttachType(msgnumb)
 
   IF(filetype)
+    IF filetype=1
+      StringF(fn,'\s\d',msgBaseLocation,msgnumb)
+      getFileComment(fn,tempStr)
+    ENDIF
+    
     IF(flag)
       aePuts('...This message has an attached file(s), Download? (y/N/goodbye)? ')
       stat:=readChar(INPUT_TIMEOUT)
@@ -10728,12 +10738,12 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader, update=TRUE)
       ENDIF
 
       IF(stat=RESULT_NO_CARRIER) THEN RETURN RESULT_NO_CARRIER
-      RETURN stat
     ENDIF
+    RETURN stat
   ELSE
      aePuts('ERROR! Another task has the MsgBase locked!\b\nMessage has not been saved!\b\n\b\n')
+     RETURN RESULT_FAILURE
   ENDIF
-
 ENDPROC
 
 PROC enterMSG(gfh)
@@ -11817,9 +11827,12 @@ ENDPROC
 PROC moveMSG(gfh)
   DEF stat,destConf,destMsgBase,oldgfh
   DEF tempStr[255]:STRING
-  DEF filename[255]:STRING
+  DEF oldMsgBaseLoc[255]:STRING
+  DEF commentStr[255]:STRING
+  DEF filename1[255]:STRING
+  DEF filename2[255]:STRING
   DEF mh:mailHeader
-  DEF oldConf,oldMsgbase
+  DEF oldConf,oldMsgbase,oldMsgNum,attachtype
   
   stat,destConf,destMsgBase:=getMoveConf(TRUE)
   IF stat<>RESULT_SUCCESS THEN RETURN stat
@@ -11839,17 +11852,20 @@ PROC moveMSG(gfh)
 
   StringF(tempStr,'\s\d',msgBaseLocation,mailHeader.msgNumb)
   IF loadMsg(tempStr)
+    attachtype:=getAttachType(mailHeader.msgNumb)
     oldgfh:=gfh
     oldConf:=currentConf
     oldMsgbase:=currentMsgBase
+    oldMsgNum:=mailHeader.msgNumb
+    getMsgBaseLocation(currentConf,currentMsgBase,oldMsgBaseLoc)
     currentConf:=destConf
     currentMsgBase:=destMsgBase
-    getMsgBaseLocation(currentConf,currentMsgBase,msgBaseLocation)
+    getMsgBaseLocation(destConf,destMsgBase,msgBaseLocation)
 
-    StringF(filename,'\s\s',msgBaseLocation,'HeaderFile')
-    gfh:=Open(filename,MODE_READWRITE)
+    StringF(filename1,'\s\s',msgBaseLocation,'HeaderFile')
+    gfh:=Open(filename1,MODE_READWRITE)
     IF(gfh=0)
-      gfh:=Open(filename,MODE_NEWFILE)
+      gfh:=Open(filename1,MODE_NEWFILE)
       IF(gfh=0)
         myError(ERR_MSGBASE)
         gfh:=oldgfh
@@ -11862,15 +11878,32 @@ PROC moveMSG(gfh)
 
     stat:=saveNewMSG(gfh,mh,FALSE)
     Close(gfh)
-
     gfh:=oldgfh
+    IF(stat<0)
+      RETURN stat
+    ENDIF
+
+    IF stat=RESULT_SUCCESS
+      SELECT attachtype
+        CASE 1  ->
+          StringF(tempStr,'\s\d',oldMsgBaseLoc,oldMsgNum)
+          getFileComment(tempStr,commentStr)
+          StringF(tempStr,'\s\d',msgBaseLocation,mh.msgNumb)
+          SetComment(tempStr,commentStr)
+        CASE 2  ->
+          StringF(tempStr,'COPY \sF\d \sF\d ALL',oldMsgBaseLoc,oldMsgNum,msgBaseLocation,mh.msgNumb)
+          Execute(tempStr,NIL,NIL)
+        CASE 3 ->
+          StringF(filename1,'\sA\d',oldMsgBaseLoc,oldMsgNum)
+          StringF(filename2,'\sA\d',msgBaseLocation,mh.msgNumb)
+          fileCopy(filename1,filename2)
+          DeleteFile(filename1)
+      ENDSELECT
+    ENDIF
     currentConf:=oldConf
     currentMsgBase:=oldMsgbase
     getMsgBaseLocation(currentConf,currentMsgBase,msgBaseLocation)
 
-    IF(stat<0)
-      RETURN stat
-    ENDIF
     deleteMSG(gfh)
     RETURN RESULT_SUCCESS
   ENDIF
