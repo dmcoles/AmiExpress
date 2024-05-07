@@ -37,11 +37,16 @@ jobs:
           cd downloads
           lha a ../amiExpress-nightly${{ github.sha }}.lha *
           ls ../
-         
-      - name: Update nightly release
-        uses: pyTooling/Actions/releaser@main
+
+      - name: Get current date
+        id: date
+        run: |
+          echo "builddate={$(date +'%Y-%m-%d')}" >> $GITHUB_OUTPUT
+      - name: Update release files and title
+        uses: mini-bomba/create-github-release@v1.1.3
         with:
-          tag: dev-build
-          rm: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          files: amiExpress-nightly${{ github.sha }}.lha
+          tag: dev-build
+          name: automated dev build ${{ steps.date.outputs.builddate }}
+          files: : amiExpress-nightly${{ github.sha }}.lha
+
