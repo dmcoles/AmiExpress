@@ -867,14 +867,14 @@ PROC fullDir(sb,data_c, ftpData:PTR TO ftpData,cmdType)
 
 ENDPROC
 
-PROC sendFileDetails(filename:PTR TO CHAR, fileSize, fileDate, cmdType, sb, data_c, output)
+PROC sendFileDetails(filename:PTR TO CHAR, fileSize, dirFlag, fileDate, cmdType, sb, data_c, output)
   DEF filedatets:datestamp
   DEF tempstr[255]:STRING
   DEF dirline[255]:STRING
 
   dateTimeToDateStamp(fileDate,filedatets)
   
-  IF fileSize=-1
+  IF dirFlag
     IF cmdType=CMDTYPE_MLSD
       formatFileDate2(filedatets,tempstr)
       StringF(dirline,'Type=dir;Modify=\s;Perm=r; \s\b\n',tempstr,FilePart(filename))
@@ -913,7 +913,7 @@ PROC makeList(path:PTR TO CHAR,dirCache:PTR TO CHAR,fib:PTR TO fileinfoblock, st
   DEF dirLine[40]:STRING
   DEF tmp[10]:STRING
   DEF c=FALSE
-  DEF mem,fs,p,cnt
+  DEF mem,fs,p,cnt,dirFlag
   DEF output
   
   output:=String(10000)
@@ -959,7 +959,18 @@ PROC makeList(path:PTR TO CHAR,dirCache:PTR TO CHAR,fib:PTR TO fileinfoblock, st
             IF d>=startDate
               StrCopy(tmp,'$')
               StrAdd(tmp,dirLine+9,8)
-              sendFileDetails(dirLine+18,Val(tmp),d,cmdType, sb, data_c, output)
+              cnt:=Val(tmp)
+              dirFlag:=FALSE
+              IF cnt=-1
+                IF((fLock:=Lock(dirLine+18,ACCESS_READ)))   
+                  IF((Examine(fLock,fib)))
+                    IF(fib.direntrytype > 0) THEN dirFlag:=TRUE
+                  ENDIF
+                  UnLock(fLock)
+                ENDIF
+              ENDIF
+
+              sendFileDetails(dirLine+18,cnt,dirFlag,d,cmdType, sb, data_c, output)
             ENDIF
           ENDIF
         ENDWHILE
@@ -983,7 +994,7 @@ PROC makeList(path:PTR TO CHAR,dirCache:PTR TO CHAR,fib:PTR TO fileinfoblock, st
           IF StrCmp(fib.filename,'.dircache')=FALSE
             d:=dateStampToDateTime(fib.datestamp)
             IF d>=startDate
-              sendFileDetails(fib.filename,IF fib.direntrytype>0 THEN -1 ELSE fib.size,d,cmdType, sb, data_c, output)
+              sendFileDetails(fib.filename,fib.size,IF fib.direntrytype>0 THEN TRUE ELSE FALSE,d,cmdType, sb, data_c, output)
             ENDIF
           ENDIF
         ENDWHILE
@@ -1076,7 +1087,7 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, startDate, cmdType, sb, data
     IF fh<>0
     
       IF(Fgets(fh,tempstr,255)<>NIL) AND (StrLen(tempstr)>0)
-        tempstr[255]:=0
+        tempstr[254]:=0
         SetStr(tempstr,StrLen(tempstr))      
         IF (dirLineNewFile(tempstr))
           t:=TrimStr(tempstr+14)
@@ -1127,7 +1138,7 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, startDate, cmdType, sb, data
             
             spPos:=InStr(tempstr,' ')
             SetStr(tempstr,spPos)
-            sendFileDetails(tempstr,sz,encodeDate(m,d,y),cmdType, sb, data_c, output)
+            sendFileDetails(tempstr,sz,FALSE,encodeDate(m,d,y),cmdType, sb, data_c, output)
           ENDIF
         ENDIF
       ENDIF

@@ -8901,7 +8901,7 @@ PROC displayMessage(gfh)
     aePuts(str)
     StrCopy(date,mailHeader.toName,31)
     LowerStr(date)
-    timeVar:=(StrCmp(date,'eall',4))
+    timeVar:=(StrCmp(date,'eall',5))
     IF(timeVar)
       StrCopy(date,confMailName,31)
       StrAdd(date,' (ALL)')
@@ -10799,7 +10799,7 @@ skipEntry:
   ELSE
     StrCopy(str,mailHeader.toName,31)
     LowerStr(str)
-    stat:=StrCmp(str,'eall',4)            /* looking for eall             */
+    stat:=StrCmp(str,'eall',5)            /* looking for eall             */
 
     IF(stat)
       IF extSend
@@ -10815,7 +10815,7 @@ skipEntry:
         RETURN RESULT_FAILURE
       ENDIF
     ELSE
-      stat:=StrCmp(str,'sysop',5)
+      stat:=StrCmp(str,'sysop',6)
       IF(stat)
         loadAccount(1,tempUser,tempUserKeys,tempUserMisc)
         stat:=0
@@ -11176,7 +11176,7 @@ contloop:
     ENDIF
 
     IF(((str[0]="f") OR (str[0]="F")))
-      IF((privateFlag=0) OR ((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)) OR (StrCmp(mailHeader.toName,'EALL',4)))
+      IF((privateFlag=0) OR ((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)) OR (StrCmp(mailHeader.toName,'EALL',5)))
         stat:=captureRealAndInternetNames(currentConf,currentMsgBase)
         IF stat=RESULT_SUCCESS
           stat:=forwardMSG(gfh)
@@ -11199,7 +11199,7 @@ contloop:
     ENDIF
 
     IF(((str[0]="r") OR (str[0]="R")))
-      IF((privateFlag=0) OR ((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)) OR (StrCmp(mailHeader.toName,'EALL',4)))
+      IF((privateFlag=0) OR ((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)) OR (StrCmp(mailHeader.toName,'EALL',5)))
         stat:=captureRealAndInternetNames(currentConf,currentMsgBase)
         IF stat=RESULT_SUCCESS
           stat:=replyToMSG(gfh)
@@ -11564,17 +11564,17 @@ PROC getAValidName(name, default, str)
 
   AstrCopy(str,name,31)
   LowerStr(str)
-  IF(StrCmp(str,'all',3))
+  IF(StrCmp(str,'all',4))
     UpperStr(str)
     RETURN 1
   ENDIF
 
-  IF(StrCmp(str,'eall',4))
+  IF(StrCmp(str,'eall',5))
     UpperStr(str)
     RETURN 1
   ENDIF
 
-  IF(StrCmp(str,'sysop',5))
+  IF(StrCmp(str,'sysop',6))
     loadAccount(1,tempUser,tempUserKeys,tempUserMisc)
   ELSE
     stat:=chooseAName(name,tempUser,tempUserKeys,tempUserMisc,1)
@@ -11673,7 +11673,7 @@ PROC searchNewMail(gfh, cn, msgBaseNum)
     getMsgBaseName(cn,msgBaseNum,msgBaseName)
 
     IF StrLen(msgBaseName)>0
-      IF msgBaseNum=1 THEN aePuts('\n')
+      IF msgBaseNum=1 THEN aePuts('\b\n')
       StringF(tempStr,' [32mMessage Base[33m: [0m\s - ',msgBaseName)
       aePuts(tempStr)
     ENDIF
@@ -26434,7 +26434,7 @@ PROC asciiZoomConf(confNum,msgBaseNum,confNameType)
             StringF(tempstr,'\nDate   : \l\s[30]  Number: \d\n',date,mailHeader.msgNumb)
             fileWrite(fo,tempstr)
             StrCopy(date,mailHeader.toName)
-            IF(StriCmp(date,'eall',4))
+            IF(StriCmp(date,'eall',5))
               StrCopy(date,zoomConfMailName)
               StrAdd(date,' (ALL)')
             ELSE
