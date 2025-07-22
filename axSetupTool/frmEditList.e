@@ -1577,7 +1577,7 @@ PROC editAccessLevel(acpName) OF frmEditList
   DEF closeHook:PTR TO hook
   DEF accessLists:PTR TO stdlist
   DEF deleteAccessLevels:PTR TO stringlist
-  DEF accessList:PTR TO stringlist
+  DEF accessLevel:PTR TO accessLevel
 
   self.changed:=FALSE
 
@@ -1639,8 +1639,8 @@ PROC editAccessLevel(acpName) OF frmEditList
   END closeHook
 
   FOR i:=0 TO accessLists.count()-1
-    accessList:=accessLists.item(i)
-    END accessList
+    accessLevel:=accessLists.item(i)
+    END accessLevel
   ENDFOR
   END accessLists
   END deleteAccessLevels
