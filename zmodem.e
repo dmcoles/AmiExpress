@@ -86,8 +86,29 @@ PROC flength(file)
   FreeDosObject(DOS_FIB,fBlock)
 ENDPROC fsize
 
-->todo proper disk space check
-PROC getFreeDiskSpace() IS 300000000
+PROC getFreeDiskSpace(zm:PTR TO zmodem_t, path:PTR TO CHAR)
+  DEF fLock
+  DEF i_data:PTR TO infodata
+  DEF temp1, temp2
+  DEF freebytes=0:LONG
+  DEF tempstr[255]:STRING
+
+  IF (i_data:=AllocMem(SIZEOF infodata, MEMF_CHIP))
+    IF (fLock:=Lock(path, ACCESS_READ))
+      IF Info(fLock, i_data)
+        temp1, temp2:=mulu64(i_data.numblocks - i_data.numblocksused,
+                             i_data.bytesperblock)
+        ->saturate to 4GB for disks >4GB
+        IF temp1 THEN freebytes:=$FFFFFFFF ELSE freebytes:=temp2
+      ENDIF
+      UnLock(fLock)
+    ELSE
+      StringF(tempstr, 'Cannot lock path for disk space check: \s', path)
+      lprintf(zm, LOG_ERROR, tempstr)
+    ENDIF
+    FreeMem(i_data, SIZEOF infodata)
+  ENDIF
+ENDPROC freebytes
 
 EXPORT PROC getZmSystemTime()
   DEF currDate: datestamp 
@@ -2551,6 +2572,7 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
   DEF brk=FALSE
   DEF p
   DEF t1,t2
+  DEF freespace, safety_margin
 
   timetaken[]:=0
 	zm.current_file_num:=1
@@ -2564,6 +2586,19 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
 		REPEAT	/* try */
 			skip:=TRUE
 			loop:=FALSE
+
+			->disk space check
+			freespace:=getFreeDiskSpace(zm, download_dir)
+			safety_margin:=20480
+			IF (bytes > freespace) OR ((freespace - bytes) < safety_margin)
+				StringF(tempstr, 'Insufficient disk space: need \d bytes, only \d available',
+				        bytes, freespace)
+				lprintf(zm, LOG_ERROR, tempstr)
+				zmodem_send_zskip(zm)
+				skip:=FALSE
+				brk:=TRUE
+				JUMP zreccont1
+			ENDIF
 
       IF fpath[StrLen(fpath)-1]<>":" THEN StrAdd(fpath,'/')
 			StringF(fpath,'\s\s',download_dir,zm.current_file_name)
