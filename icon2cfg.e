@@ -95,7 +95,7 @@ PROC main() HANDLE
       ENDIF
     ENDIF
 
-    fileBuf:=New(getFileSize(fn2)+1)     ->allow an extra char in case file does not end in LF
+    fileBuf:=New(FileLength(fn2)+1)     ->allow an extra char in case file does not end in LF
     IF fileBuf<>NIL
       fh:=Open(sourceFile,MODE_OLDFILE)
       IF fh<>0

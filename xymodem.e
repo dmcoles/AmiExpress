@@ -1,12 +1,6 @@
 OPT LARGE,MODULE
 
- MODULE 'dos/dos'
-
-EXPORT CONST LOG_DEBUG=4
-EXPORT CONST LOG_INFO=3
-EXPORT CONST LOG_NOTICE=2
-EXPORT CONST LOG_WARNING=1
-EXPORT CONST LOG_ERR=0
+ MODULE 'dos/dos','*axenums','*bcd'
 
 CONST MAX_PATH=512
 
@@ -90,9 +84,9 @@ EXPORT OBJECT xymodem_t
   current_file_pos
   current_file_size
   total_files
-  total_bytes
+  total_bytes[8]:ARRAY OF CHAR
   files_remaining
-  bytes_remaining
+  bytes_remaining[8]:ARRAY OF CHAR
   errors
   fallback_to_xmodem
 
@@ -153,6 +147,14 @@ PROC is_cancelled(xym: PTR TO xymodem_t)
     RETURN xym.cancelled
   ENDIF
 ENDPROC xym.cancelled
+
+PROC download_completed(xym:PTR TO xymodem_t,fname,fsize,sentsize)
+  DEF p
+  p:=xym.zm_download_completed
+  IF p<>NIL
+    RETURN p(fsize,sentsize)
+  ENDIF
+ENDPROC
 
 PROC upload_completed(xym:PTR TO xymodem_t,fname:PTR TO CHAR,filebytes)
   DEF p
@@ -275,25 +277,25 @@ PROC xmodem_put_nak(xym:PTR TO xymodem_t, block_num)
   
   IF(dump_count)
     StringF(tempstr,'Block \d: Dumped \d bytes',block_num, dump_count)
-    lprintf(xym,LOG_INFO,tempstr)
+    lprintf(xym,LOG_DEBUG,tempstr)
   ENDIF
 
   IF(block_num<=1)
     IF((xym.mode AND (B2K OR GMODE))=(B2K OR GMODE))  -> A for X/Ymodem-G with 2-K block
       StringF(tempstr,'Block \d: Requesting mode: Streaming, 16-bit CRC, 2K Block', block_num)
-      lprintf(xym,LOG_INFO,tempstr)
+      lprintf(xym,LOG_DEBUG,tempstr)
       putcom(xym,"A")
     ELSEIF((xym.mode) AND GMODE)  -> G for X/Ymodem-G
       StringF(tempstr,'Block \d: Requesting mode: Streaming, 16-bit CRC', block_num)
-      lprintf(xym,LOG_INFO,tempstr)
+      lprintf(xym,LOG_DEBUG,tempstr)
       putcom(xym,"G")
     ELSEIF ((xym.mode) AND CRC)  -> C for CRC
       StringF(tempstr,'Block \d: Requesting mode: 16-bit CRC', block_num)
-      lprintf(xym,LOG_INFO,tempstr)
+      lprintf(xym,LOG_DEBUG,tempstr)
       putcom(xym,"C")
     ELSE        -> NAK for checksum
       StringF(tempstr,'Block \d: Requesting mode: 8-bit Checksum', block_num)
-      lprintf(xym,LOG_INFO,tempstr)
+      lprintf(xym,LOG_DEBUG,tempstr)
       putcom(xym,NAK)
     ENDIF
   ELSE
@@ -354,14 +356,14 @@ PROC xmodem_get_block(xym:PTR TO xymodem_t, block:PTR TO CHAR, expected_block_nu
       CASE ETX -> 2048-byte blocks
         IF(xym.max_block_size < XMODEM_2K_BLOCK_SIZE) 
           StringF(tempstr,'Block \d: 2048-byte blocks not supported',expected_block_num)
-          lprintf(xym,LOG_WARNING,tempstr)
+          lprintf(xym,LOG_WARN,tempstr)
           RETURN FAILURE
         ENDIF
         xym.block_size:=XMODEM_2K_BLOCK_SIZE
       CASE STX -> 1024-byte blocks 
         IF(xym.max_block_size < XMODEM_MAX_BLOCK_SIZE) 
           StringF(tempstr,'Block \d: 1024-byte blocks not supported',expected_block_num)
-          lprintf(xym,LOG_WARNING,tempstr)
+          lprintf(xym,LOG_WARN,tempstr)
           RETURN FAILURE
         ENDIF
         xym.block_size:=XMODEM_MAX_BLOCK_SIZE
@@ -369,7 +371,7 @@ PROC xmodem_get_block(xym:PTR TO xymodem_t, block:PTR TO CHAR, expected_block_nu
         StringF(tempstr,'Block \d: EOT received', expected_block_num)
         lprintf(xym,LOG_DEBUG,tempstr)
         IF(eot=FALSE)
-          lprintf(xym,LOG_INFO,'NAKing first EOT')
+          lprintf(xym,LOG_DEBUG,'NAKing first EOT')
           eot:=1 
           xmodem_put_nak(xym,expected_block_num) -> chuck's double EOT trick 
           JUMP lp 
@@ -379,11 +381,11 @@ PROC xmodem_get_block(xym:PTR TO xymodem_t, block:PTR TO CHAR, expected_block_nu
         IF(can=FALSE)      -> must get two CANs in a row
           can:=1
           StringF(tempstr,'Block \d: Received CAN  Expected SOH, STX, or EOT',expected_block_num)
-          lprintf(xym,LOG_WARNING,tempstr)
+          lprintf(xym,LOG_WARN,tempstr)
           JUMP lp
         ENDIF
         StringF(tempstr,'Block \d: Canceled remotely', expected_block_num)
-        lprintf(xym,LOG_WARNING,tempstr)
+        lprintf(xym,LOG_WARN,tempstr)
         RETURN CAN
       CASE NOINP   -> Nothing came in
         IF(eot) THEN RETURN EOT
@@ -391,7 +393,7 @@ PROC xmodem_get_block(xym:PTR TO xymodem_t, block:PTR TO CHAR, expected_block_nu
       DEFAULT
         chr(i,tempstr2)
         StringF(tempstr,'Block \d: Received \s  Expected SOH, STX, or EOT',expected_block_num,tempstr2)
-        lprintf(xym,LOG_WARNING,tempstr)
+        lprintf(xym,LOG_WARN,tempstr)
         IF (eot) THEN RETURN EOT
         RETURN NOINP
     ENDSELECT
@@ -426,7 +428,7 @@ PROC xmodem_get_block(xym:PTR TO xymodem_t, block:PTR TO CHAR, expected_block_nu
 
     IF(block_num<>(Eor(block_inv,255)))
       StringF(tempstr,'Block \d: Block number bit error (0x\h[2] vs 0x\h[2])',expected_block_num, block_num,Eor(block_inv,255))
-      lprintf(xym,LOG_WARNING,tempstr)
+      lprintf(xym,LOG_WARN,tempstr)
       RETURN FAILURE
     ENDIF
 
@@ -436,14 +438,14 @@ PROC xmodem_get_block(xym:PTR TO xymodem_t, block:PTR TO CHAR, expected_block_nu
         crc:=crc OR getcom(xym,xym.byte_timeout)
         IF(crc<>calc_crc)
           StringF(tempstr,'Block \d: CRC ERROR', block_num)
-          lprintf(xym,LOG_WARNING,tempstr)
+          lprintf(xym,LOG_WARN,tempstr)
           RETURN FAILURE
         ENDIF
       ELSE  -> CHKSUM
         chksum:=getcom(xym,xym.byte_timeout)
         IF(chksum<>calc_chksum)
           StringF(tempstr,'Block \d: CHECKSUM ERROR', block_num)
-          lprintf(xym,LOG_WARNING,tempstr)
+          lprintf(xym,LOG_WARN,tempstr)
           RETURN FAILURE
         ENDIF
       ENDIF
@@ -451,7 +453,7 @@ PROC xmodem_get_block(xym:PTR TO xymodem_t, block:PTR TO CHAR, expected_block_nu
 
     IF(block_num<>(expected_block_num AND 255))
       StringF(tempstr,'Block number error (\d received, expected \d)',block_num,expected_block_num AND 255)
-      lprintf(xym,LOG_WARNING,tempstr)
+      lprintf(xym,LOG_WARN,tempstr)
       
       IF (((xym.mode) AND XMODEM) AND (expected_block_num=1) AND (block_num=0)) THEN RETURN NOT_XMODEM
       
@@ -539,7 +541,7 @@ PROC xmodem_get_ack(xym:PTR TO xymodem_t, tries, block_num)
       IF xym.g_delay>0 THEN Delay(xym.g_delay)
       IF(getcom(xym,0)=CAN)
         StringF(tempstr,'Block \d: !Canceled remotely', block_num)
-        lprintf(xym,LOG_WARNING,tempstr)
+        lprintf(xym,LOG_WARN,tempstr)
         xmodem_cancel(xym)
         RETURN CAN
       ENDIF
@@ -554,7 +556,7 @@ PROC xmodem_get_ack(xym:PTR TO xymodem_t, tries, block_num)
     IF(i=CAN)
       IF(can)  -> 2 CANs in a row 
         StringF(tempstr,'Block \d: !Canceled remotely', block_num)
-        lprintf(xym,LOG_WARNING,tempstr)
+        lprintf(xym,LOG_WARN,tempstr)
         xmodem_cancel(xym)
         RETURN CAN
       ENDIF
@@ -564,7 +566,7 @@ PROC xmodem_get_ack(xym:PTR TO xymodem_t, tries, block_num)
     IF(i<>NOINP)
       chr(i,tempstr2)
       StringF(tempstr,'Block \d: !Received \s  Expected ACK',block_num, tempstr2)
-      lprintf(xym,LOG_WARNING,tempstr)
+      lprintf(xym,LOG_WARN,tempstr)
       IF (i<>CAN) THEN RETURN i
     ENDIF
     
@@ -581,7 +583,7 @@ PROC xmodem_get_mode(xym:PTR TO xymodem_t)
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
 
-  lprintf(xym,LOG_INFO,'Waiting for transfer mode request...')
+  lprintf(xym,LOG_DEBUG,'Waiting for transfer mode request...')
 
   xym.mode:=xym.mode AND Eor(GMODE OR CRC,255)
   errors:=0
@@ -593,12 +595,12 @@ lp2:
     
     SELECT i
       CASE NAK     -> checksum 
-        lprintf(xym,LOG_INFO,'Receiver requested mode: 8-bit Checksum')
+        lprintf(xym,LOG_DEBUG,'Receiver requested mode: 8-bit Checksum')
         xym.max_block_size:=XMODEM_MAX_BLOCK_SIZE
         xym.block_size:=XMODEM_MAX_BLOCK_SIZE
         RETURN TRUE
       CASE "C"
-        lprintf(xym,LOG_INFO,'Receiver requested mode: 16-bit CRC')
+        lprintf(xym,LOG_DEBUG,'Receiver requested mode: 16-bit CRC')
         IF(xym.crc_mode_supported=FALSE) THEN JUMP lp2
         xym.max_block_size:=XMODEM_MAX_BLOCK_SIZE
         xym.block_size:=XMODEM_MAX_BLOCK_SIZE
@@ -606,7 +608,7 @@ lp2:
         xym.mode:=xym.mode OR CRC
         RETURN TRUE
       CASE "A"
-        lprintf(xym,LOG_INFO,'Receiver requested mode: Streaming, 2k-block, 16-bit CRC')
+        lprintf(xym,LOG_DEBUG,'Receiver requested mode: Streaming, 2k-block, 16-bit CRC')
         IF ((xym.crc_mode_supported=FALSE) OR (xym.g_mode_supported=FALSE)) THEN JUMP lp2
 
         xym.mode:=xym.mode OR (GMODE OR CRC OR B2K)
@@ -614,7 +616,7 @@ lp2:
         xym.block_size:=XMODEM_2K_BLOCK_SIZE
         RETURN TRUE
       CASE "G"
-        lprintf(xym,LOG_INFO,'Receiver requested mode: Streaming, 16-bit CRC')
+        lprintf(xym,LOG_DEBUG,'Receiver requested mode: Streaming, 16-bit CRC')
         IF ((xym.crc_mode_supported=FALSE) OR (xym.g_mode_supported=FALSE)) THEN JUMP lp2
         xym.max_block_size:=XMODEM_MAX_BLOCK_SIZE
         xym.block_size:=XMODEM_MAX_BLOCK_SIZE
@@ -623,7 +625,7 @@ lp2:
         RETURN TRUE
       CASE CAN
         IF(can)
-          lprintf(xym,LOG_WARNING,'Canceled remotely')
+          lprintf(xym,LOG_WARN,'Canceled remotely')
           RETURN FALSE
         ENDIF
         can:=1 
@@ -632,12 +634,12 @@ lp2:
       DEFAULT
         chr(i,tempstr2)
         StringF(tempstr,'Received \s  Expected NAK, C, or G',tempstr2)
-        lprintf(xym,LOG_WARNING,tempstr)
+        lprintf(xym,LOG_WARN,tempstr)
     ENDSELECT
     errors++
   ENDWHILE 
 
-  lprintf(xym,LOG_ERR,'Failed to get transfer mode request from receiver')
+  lprintf(xym,LOG_ERROR,'Failed to get transfer mode request from receiver')
 ENDPROC FALSE
 
 PROC xmodem_put_eot(xym:PTR TO xymodem_t)
@@ -651,12 +653,12 @@ PROC xmodem_put_eot(xym:PTR TO xymodem_t)
   WHILE((errors<=xym.max_errors) AND (is_connected(xym)))
 
     StringF(tempstr,'Sending End-of-Text (EOT) indicator (\d)',errors+1)
-    lprintf(xym,LOG_INFO,tempstr)
+    lprintf(xym,LOG_DEBUG,tempstr)
 
     WHILE(((ch:=getcom(xym,0))<>NOINP) AND (is_connected(xym)))
       chr(ch,tempstr2)
       lprintf(tempstr,'Throwing out received: \s',tempstr2)
-      lprintf(xym,LOG_INFO,tempstr)
+      lprintf(xym,LOG_DEBUG,tempstr)
     ENDWHILE
 
     putcom(xym,EOT)
@@ -666,7 +668,7 @@ PROC xmodem_put_eot(xym:PTR TO xymodem_t)
 
     chr(ch,tempstr2)
     StringF(tempstr,'Received \s',tempstr2)
-    lprintf(xym,LOG_INFO,tempstr)
+    lprintf(xym,LOG_DEBUG,tempstr)
     IF(ch=ACK) THEN RETURN TRUE
     
     IF ((ch=CAN) AND (cans>0)) THEN RETURN FALSE
@@ -675,7 +677,7 @@ PROC xmodem_put_eot(xym:PTR TO xymodem_t)
       JUMP lp3  -> chuck's double EOT trick so don't complain 
     ENDIF
     
-    lprintf(xym,LOG_WARNING,'Expected ACK')
+    lprintf(xym,LOG_WARN,'Expected ACK')
 
 lp3:    
     errors++
@@ -702,7 +704,7 @@ PROC xmodem_send_file(xym:PTR TO xymodem_t, fname:PTR TO CHAR, sent:PTR TO LONG,
 
   
   StringF(tempstr,'Sending file \s',fname)
-  lprintf(xym,LOG_ERR,tempstr)
+  lprintf(xym,LOG_ERROR,tempstr)
 
   xym.success:=FALSE
   fname2:=FilePart(fname)
@@ -711,7 +713,7 @@ PROC xmodem_send_file(xym:PTR TO xymodem_t, fname:PTR TO CHAR, sent:PTR TO LONG,
     fp:=doOpen(xym,fname,MODE_OLDFILE)
     IF fp=NIL
       StringF(tempstr,'Error opening file \s',fname)
-      lprintf(xym,LOG_ERR,tempstr)
+      lprintf(xym,LOG_ERROR,tempstr)
       RETURN FALSE
     ENDIF
     fsize:=getFileSize(xym,fp)
@@ -719,12 +721,13 @@ PROC xmodem_send_file(xym:PTR TO xymodem_t, fname:PTR TO CHAR, sent:PTR TO LONG,
     fp:=0
     fsize:=0
   ENDIF
+  xym.current_file_size:=fsize
 
   IF(xym.total_files=0) THEN xym.total_files:=1
-  IF(xym.total_bytes=0) THEN xym.total_bytes:=fsize
+  IF(convertFromBCD(xym.total_bytes)=0) THEN convertToBCD(fsize,xym.total_bytes)
 
   IF(xym.files_remaining=0) THEN xym.files_remaining:=1
-  IF(xym.bytes_remaining=0) THEN xym.bytes_remaining:=fsize
+  IF(convertFromBCD(xym.bytes_remaining)=0) THEN convertToBCD(fsize,xym.bytes_remaining)
 
   -> try 
     IF((xym.mode) AND YMODEM)
@@ -735,17 +738,18 @@ PROC xmodem_send_file(xym:PTR TO xymodem_t, fname:PTR TO CHAR, sent:PTR TO LONG,
       AstrCopy(block,fname2,XMODEM_MAX_BLOCK_SIZE)
       
       
-      StringF(tempstr,'\d \d 0 0 \d \d'
+      formatBCD(xym.bytes_remaining,tempstr2)
+      StringF(tempstr,'\d \d 0 0 \d \s'
         ,fsize
         ,0 ->(uintmax_t)st.st_mtime
         ,xym.files_remaining  ->-xym.sent_files
-        ,xym.bytes_remaining  ->-xym.sent_bytes
+        ,tempstr2  ->-xym.sent_bytes
         )
       AstrCopy(block+StrLen(block)+1,tempstr)
       block_len:=StrLen(block)+1+StrLen(tempstr)
       
       StringF(tempstr,'Sending YMODEM header block: ''\s''',block+StrLen(block)+1)
-      lprintf(xym,LOG_INFO,tempstr)
+      lprintf(xym,LOG_DEBUG,tempstr)
       
       xym.errors:=0
       WHILE((xym.errors<=xym.max_errors) AND (is_cancelled(xym)=FALSE) AND (is_connected(xym)))
@@ -753,7 +757,7 @@ PROC xmodem_send_file(xym:PTR TO xymodem_t, fname:PTR TO CHAR, sent:PTR TO LONG,
         WHILE(((ch:=getcom(xym,0))<>NOINP) AND (is_connected(xym)))
           chr(ch,tempstr2)
           StringF(tempstr,'Throwing out received: \s',tempstr2)
-          lprintf(xym,LOG_INFO,tempstr)
+          lprintf(xym,LOG_DEBUG,tempstr)
         ENDWHILE
         xmodem_put_block(xym, block, IF block_len <=XMODEM_MIN_BLOCK_SIZE  THEN XMODEM_MIN_BLOCK_SIZE ELSE xym.block_size, 0)
         xmodem_flush(xym)
@@ -765,7 +769,7 @@ PROC xmodem_send_file(xym:PTR TO xymodem_t, fname:PTR TO CHAR, sent:PTR TO LONG,
         
         IF(((i=NAK) OR (i="C") OR (i="G")) AND (xym.fallback_to_xmodem) AND ((xym.errors+1) = xym.fallback_to_xmodem))
           StringF(tempstr,'Falling back to XMODEM mode after \d attempts',xym.fallback_to_xmodem)
-          lprintf(xym,LOG_NOTICE,tempstr)
+          lprintf(xym,LOG_DEBUG,tempstr)
           xym.mode:=xym.mode AND Not(YMODEM)
           JUMP sbr2
         ENDIF
@@ -773,7 +777,7 @@ PROC xmodem_send_file(xym:PTR TO xymodem_t, fname:PTR TO CHAR, sent:PTR TO LONG,
       ENDWHILE
 sbr2:
       IF((xym.errors>xym.max_errors) OR (is_cancelled(xym)))
-        lprintf(xym,LOG_ERR,'Failed to send header block')
+        lprintf(xym,LOG_ERROR,'Failed to send header block')
         JUMP sbr3
       ENDIF
     ENDIF
@@ -797,7 +801,7 @@ sbr2:
         IF(xym.block_size>XMODEM_MIN_BLOCK_SIZE)
           IF((sent_bytes+xym.block_size) > fsize)
             IF((sent_bytes+xym.block_size-XMODEM_MIN_BLOCK_SIZE) >= fsize)
-              lprintf(xym,LOG_INFO,'Falling back to 128-byte blocks for end of file')
+              lprintf(xym,LOG_DEBUG,'Falling back to 128-byte blocks for end of file')
               xym.block_size:=XMODEM_MIN_BLOCK_SIZE
             ENDIF
           ENDIF
@@ -808,7 +812,7 @@ sbr2:
 
       IF(((rd:=doRead(xym,fp,block,xym.block_size))<>xym.block_size) AND ((sent_bytes + rd) <> fsize))
         StringF(tempstr,'ERROR reading \d bytes at file offset \d',xym.block_size,sent_bytes)
-        lprintf(xym,LOG_ERR,tempstr)
+        lprintf(xym,LOG_ERROR,tempstr)
         xym.errors:=xym.errors+1
         JUMP lp4
       ENDIF
@@ -818,10 +822,10 @@ sbr2:
       IF((r:=xmodem_get_ack(xym, 5,block_num)) <> ACK)
         xym.errors:=xym.errors+1
         StringF(tempstr,'Block \d: Error #\d at offset \d',block_num, xym.errors,sent_bytes)
-        lprintf(xym,LOG_WARNING,tempstr)
+        lprintf(xym,LOG_WARN,tempstr)
         IF (((r="C") OR (xym.errors=3)) AND (block_num=1) AND (xym.block_size>XMODEM_MIN_BLOCK_SIZE))
           StringF(tempstr,'Block \d: Falling back to 128-byte blocks', block_num)
-          lprintf(xym,LOG_NOTICE,tempstr)
+          lprintf(xym,LOG_DEBUG,tempstr)
           xym.block_size:=XMODEM_MIN_BLOCK_SIZE
         ENDIF
       ELSE
@@ -839,7 +843,7 @@ lp4:
   ->#if 0 /* !SINGLE_THREADED */
   ->    lprintf(LOG_DEBUG,"Waiting for output buffer to empty... ")
   ->    if(WaitForEvent(outbuf_empty,5000)<>WAIT_OBJECT_0)
-  ->      lprintf(xym,LOG_WARNING,"FAILURE")
+  ->      lprintf(xym,LOG_WARN,"FAILURE")
   ->#endif
       IF (xmodem_put_eot(xym))  -> end-of-text, wait for ACK 
         success:=TRUE
@@ -875,12 +879,12 @@ EXPORT PROC xymodem_send_files(ymodem,xym: PTR TO xymodem_t,sentptr: PTR TO LONG
   xym.mode:=(IF ymodem THEN YMODEM ELSE XMODEM) OR SEND
 
   xym.files_remaining:=xym.total_files
-  xym.bytes_remaining:=xym.total_bytes
+  CopyMem(xym.total_bytes,xym.bytes_remaining,8)
 
   WHILE(((ch:=getcom(xym,0))<>NOINP) AND (is_connected(xym)))
     chr(ch,tempstr2)
     lprintf(tempstr,'Throwing out received: \s',tempstr2)
-    lprintf(xym,LOG_INFO,tempstr)
+    lprintf(xym,LOG_DEBUG,tempstr)
   ENDWHILE
 
    
@@ -894,7 +898,7 @@ EXPORT PROC xymodem_send_files(ymodem,xym: PTR TO xymodem_t,sentptr: PTR TO LONG
         IF res=FALSE THEN RETURN res
 
         IF (xym.success)
-          doDownloadCompleted(xym,fname,sent)
+          download_completed(xym,fname,xym.current_file_size,sent)
         ENDIF
 
         init:=FALSE
@@ -903,9 +907,9 @@ EXPORT PROC xymodem_send_files(ymodem,xym: PTR TO xymodem_t,sentptr: PTR TO LONG
           res:=FALSE
           IF p<>NIL THEN res:=p(fname)
           xym.files_remaining:=xym.files_remaining-1
-          xym.bytes_remaining:=xym.bytes_remaining-sent
+          subBCD(xym.bytes_remaining,sent)
           IF xym.files_remaining<0 THEN xym.files_remaining:=0
-          IF xym.bytes_remaining<0 THEN xym.bytes_remaining:=0
+          IF xym.bytes_remaining[0]=$99 THEN convertToBCD(0,xym.bytes_remaining)
           IF sentptr<>NIL THEN sentptr[]:=sentptr[]+sent
         ENDIF
       UNTIL res=FALSE
@@ -962,7 +966,7 @@ EXPORT PROC xymodem_recv_files(ymodem,xym: PTR TO xymodem_t, download_dir:PTR TO
       file_bytes:=$7fffffff
       file_bytes_left:=file_bytes
     ELSE
-      lprintf(xym,LOG_INFO,'Fetching YMODEM header block')
+      lprintf(xym,LOG_DEBUG,'Fetching YMODEM header block')
       xym.errors:=0
       WHILE((xym.errors<=xym.max_errors) AND (xym.cancelled=FALSE))
         xmodem_put_nak(xym,0)
@@ -977,17 +981,17 @@ EXPORT PROC xymodem_recv_files(ymodem,xym: PTR TO xymodem_t, download_dir:PTR TO
         IF(((xym.errors+1)>(xym.max_errors/3)) AND (i=NOINP) AND ((xym.mode AND (B2K OR GMODE))=(B2K OR GMODE)))      /* Timeout */
           xym.mode:=xym.mode AND Not(B2K)
           StringF(logtmp,'Falling back to Streaming \s',IF (xym.mode AND CRC) THEN 'CRC-16' ELSE 'Checksum')
-          lprintf(xym,LOG_WARNING,logtmp)
+          lprintf(xym,LOG_WARN,logtmp)
           xym.errors:=-1
         ELSEIF(((xym.errors+1)>(xym.max_errors/3)) AND (i=NOINP) AND (xym.mode AND GMODE))      /* Timeout */
           xym.mode:=xym.mode AND Not(GMODE)
           StringF(logtmp,'Falling back to \s',IF (xym.mode AND CRC) THEN 'CRC-16' ELSE 'Checksum')
-          lprintf(xym,LOG_WARNING,logtmp)
+          lprintf(xym,LOG_WARN,logtmp)
           xym.errors:=-1
         ENDIF
         IF(i=NOT_YMODEM)
           StringF(logtmp,'Falling back to XMODEM\s',IF (xym.mode AND GMODE) THEN '-g' ELSE '')
-          lprintf(xym,LOG_WARNING,logtmp)
+          lprintf(xym,LOG_WARN,logtmp)
           xym.mode:=xym.mode AND Not(YMODEM)
           xym.mode:=xym.mode OR XMODEM OR CRC
           hold_update:=0
@@ -998,14 +1002,14 @@ EXPORT PROC xymodem_recv_files(ymodem,xym: PTR TO xymodem_t, download_dir:PTR TO
           hold_update:=old_hold
 
           StringF(logtmp,'Falling back to XMODEM\s',IF (xym.mode AND GMODE) THEN '-g' ELSE '')
-          lprintf(xym,LOG_WARNING,logtmp)
+          lprintf(xym,LOG_WARN,logtmp)
           StrCopy(str,fname)
           file_bytes:=$7fffffff
           file_bytes_left:=file_bytes
           JUMP rbr1
         ENDIF
         IF(((xym.errors+1)>(xym.max_errors/3)) AND (xym.mode AND CRC) AND ((xym.mode AND GMODE)=FALSE))
-          lprintf(xym,LOG_NOTICE,'Falling back to 8-bit Checksum mode')
+          lprintf(xym,LOG_DEBUG,'Falling back to 8-bit Checksum mode')
           xym.mode:=xym.mode AND Not(CRC)
         ENDIF
         xym.errors:=xym.errors+1
@@ -1017,7 +1021,7 @@ rbr1:
       ENDIF
       IF(i<>NOT_YMODEM)
         IF(block[0]=FALSE) 
-          lprintf(xym,LOG_INFO,'Received YMODEM termination block')
+          lprintf(xym,LOG_DEBUG,'Received YMODEM termination block')
           JUMP end
         ENDIF
         file_bytes:=0
@@ -1062,10 +1066,10 @@ rbr1:
 
         StringF(str,'\s\s',download_dir,FilePart(fname))
         StringF(logtmp,'File size: \d bytes', file_bytes)
-        lprintf(xym,LOG_INFO,logtmp)
+        lprintf(xym,LOG_DEBUG,logtmp)
         IF(total_files>1)
           StringF(logtmp,'Remaining: \d bytes in \d files', total_bytes, total_files)
-          lprintf(xym,LOG_INFO,logtmp)
+          lprintf(xym,LOG_DEBUG,logtmp)
         ENDIF
       ENDIF
     ENDIF
@@ -1077,14 +1081,14 @@ rbr1:
     fnum++
 
     IF dupe_check(xym,str)
-      lprintf(xym,LOG_WARNING,'dupe check triggered')
+      lprintf(xym,LOG_WARN,'dupe check triggered')
       xmodem_cancel(xym)
       JUMP end
     ENDIF
 
     WHILE(fexist(str) AND ((xym.mode AND OVERWRITE)=FALSE))
       StringF(logtmp,'\s already exists',str)
-      lprintf(xym,LOG_WARNING,logtmp)
+      lprintf(xym,LOG_WARN,logtmp)
       IF(xmodem_duplicate(xym, str)=FALSE)
         xmodem_cancel(xym)
         JUMP end
@@ -1094,7 +1098,7 @@ rbr1:
     fp:=doOpen(xym,str,MODE_NEWFILE)
     IF(fp=NIL)
       StringF(logtmp,'Error \d creating \s',IoErr(),str)
-      lprintf(xym,LOG_ERR,logtmp)
+      lprintf(xym,LOG_ERROR,logtmp)
       xmodem_cancel(xym)
       JUMP end
     ENDIF
@@ -1105,14 +1109,14 @@ rbr1:
         ,IF xym.mode AND GMODE THEN 'XMODEM-g' ELSE 'XMODEM'
         ,IF xym.mode AND CRC THEN 'CRC-16' ELSE 'Checksum')
         
-      lprintf(xym,LOG_INFO,logtmp)
+      lprintf(xym,LOG_DEBUG,logtmp)
     ELSE
       StringF(logtmp,'Receiving \s (\d KB) via \s \s'
         ,str
         ,Shr(file_bytes,10) AND $3ffffff
         ,IF xym.mode AND GMODE THEN 'YMODEM-g' ELSE 'YMODEM'
         ,IF xym.mode AND CRC THEN 'CRC-16' ELSE 'Checksum')
-      lprintf(xym,LOG_INFO,logtmp)
+      lprintf(xym,LOG_DEBUG,logtmp)
     ENDIF
     
     t1,t2:=getXYmSystemTime()
@@ -1135,7 +1139,7 @@ c1:
       xym.new_file:=FALSE
       
       IF(is_cancelled(xym)) 
-        lprintf(xym,LOG_WARNING,'Cancelled locally')
+        lprintf(xym,LOG_WARN,'Cancelled locally')
         xmodem_cancel(xym)
         JUMP end
       ENDIF
@@ -1160,20 +1164,20 @@ c1:
         xym.errors:=xym.errors+1
         IF(xym.mode AND GMODE)
           StringF(logtmp,'Too many errors (\d)',xym.errors)
-          lprintf(xym,LOG_ERR,logtmp)
+          lprintf(xym,LOG_ERROR,logtmp)
           JUMP end
         ENDIF
 
         IF(xym.errors>xym.max_errors) 
           StringF(logtmp,'Too many errors (\d)',xym.errors)
-          lprintf(xym,LOG_ERR,logtmp)
+          lprintf(xym,LOG_ERROR,logtmp)
           xmodem_cancel(xym)
           JUMP rbr2
         ENDIF
         
         IF((i<>NOT_XMODEM) AND (block_num=1) AND (xym.errors>(Div(xym.max_errors,3))) AND (xym.mode AND CRC) AND ((xym.mode AND GMODE)=FALSE)) 
           StringF(logtmp,'Falling back to 8-bit Checksum mode (error=\d)', i)
-          lprintf(xym,LOG_NOTICE,logtmp)
+          lprintf(xym,LOG_DEBUG,logtmp)
           xym.mode:=xym.mode AND Not(CRC)
         ENDIF
         xmodem_put_nak(xym, block_num)
@@ -1186,7 +1190,7 @@ c1:
       ENDIF
       
       IF(file_bytes_left<=0) /* No more bytes to receive */
-        lprintf(xym,LOG_WARNING,'Sender attempted to send more bytes than were specified in header')
+        lprintf(xym,LOG_WARN,'Sender attempted to send more bytes than were specified in header')
         JUMP rbr2
       ENDIF
       
@@ -1195,7 +1199,7 @@ c1:
         
       IF(doWrite(xym,fp,block,wr)<>wr)
         StringF(logtmp,'Error writing \d bytes to file at offset \d',wr,pos)
-        lprintf(xym,LOG_ERR,logtmp)
+        lprintf(xym,LOG_ERROR,logtmp)
         xmodem_cancel(xym)
         JUMP end
       ENDIF
@@ -1218,7 +1222,7 @@ rbr2:
 
     IF(file_bytes < getFileSize(xym,fp))
       StringF(logtmp,'Truncating file to \d bytes', file_bytes)
-      lprintf(xym,LOG_INFO,logtmp)
+      lprintf(xym,LOG_DEBUG,logtmp)
       ->chsize(fileno(fp),(ulong)file_bytes); /* 4GB limit! */
     ELSE
       file_bytes:=getFileSize(xym,fp)
@@ -1245,12 +1249,12 @@ rbr2:
     IF(success)
       upload_completed(xym,str,file_bytes)
       StringF(logtmp,'Successful - Time: \d:\d  CPS: \d',Div(t,50),Mod(t,50),cps)
-      lprintf(xym,LOG_INFO,logtmp)
+      lprintf(xym,LOG_DEBUG,logtmp)
       fcount++
     ELSE
       upload_failed(xym,str)
       StringF(logtmp,'File Transfer \s', IF xym.cancelled THEN 'Cancelled' ELSE 'Failure')
-      lprintf(xym,LOG_ERR,logtmp)
+      lprintf(xym,LOG_ERROR,logtmp)
     ENDIF
 
     ->IF(!(modexymODEM) && ftime) THEN setfdate(str,ftime);
@@ -1258,7 +1262,7 @@ rbr2:
     IF((success=FALSE) AND (file_bytes=0)) 
       IF (DeleteFile(str)=FALSE)
         StringF(logtmp,'Unable to remove empty file \s', str)
-        lprintf(xym,LOG_ERR,logtmp)
+        lprintf(xym,LOG_ERROR,logtmp)
       ENDIF
     ENDIF
 
@@ -1273,7 +1277,7 @@ rbr2:
         ,Mod(Div(total_bytes,cps),50)
         ,total_files
         ,Shr(total_bytes,10) AND $3ffffff)
-      lprintf(xym,LOG_INFO,logtmp)
+      lprintf(xym,LOG_DEBUG,logtmp)
     ENDIF
   ENDWHILE
 
@@ -1352,21 +1356,13 @@ PROC getFileSize(xym,fp)
   p:=doSeek(xym,fp,0,OFFSET_END)
 ENDPROC doSeek(xym,fp,p,OFFSET_BEGINING)
 
-PROC doDownloadCompleted(xym:PTR TO xymodem_t,fname,size)
-  DEF p
-  p:=xym.zm_download_completed
-  IF p<>NIL
-    RETURN p(size)
-  ENDIF
-ENDPROC
-
 PROC doOpen(xym:PTR TO xymodem_t,fname,mode)
   DEF p
   p:=xym.zm_fopen
   IF p<>NIL
     RETURN p(fname,mode)
   ENDIF
-  lprintf(xym,LOG_WARNING,'zm_fopen not set, defaulting to dos library Open')
+  lprintf(xym,LOG_WARN,'zm_fopen not set, defaulting to dos library Open')
 ENDPROC Open(fname,mode)
 
 PROC doClose(xym:PTR TO xymodem_t,fhandle)
@@ -1375,7 +1371,7 @@ PROC doClose(xym:PTR TO xymodem_t,fhandle)
   IF p<>NIL
     RETURN p(fhandle)
   ENDIF
-  lprintf(xym,LOG_WARNING,'zm_fclose not set, defaulting to dos library Close') 
+  lprintf(xym,LOG_WARN,'zm_fclose not set, defaulting to dos library Close') 
 ENDPROC Close(fhandle)
 
 PROC doSeek(xym:PTR TO xymodem_t,fhandle,pos,origin)
@@ -1384,7 +1380,7 @@ PROC doSeek(xym:PTR TO xymodem_t,fhandle,pos,origin)
   IF p<>NIL
     RETURN p(fhandle,pos,origin)
   ENDIF
-  lprintf(xym,LOG_WARNING,'zm_fseek not set, defaulting to dos library Seek')
+  lprintf(xym,LOG_WARN,'zm_fseek not set, defaulting to dos library Seek')
 ENDPROC Seek(fhandle,pos,origin)
 
 PROC doRead(xym:PTR TO xymodem_t,fhandle,buffer,length)
@@ -1393,7 +1389,7 @@ PROC doRead(xym:PTR TO xymodem_t,fhandle,buffer,length)
   IF p<>NIL
     RETURN p(fhandle,buffer,length)
   ENDIF
-  ->lprintf(xym,LOG_WARNING,'zm_fread not set, defaulting to dos library FRead')
+  ->lprintf(xym,LOG_WARN,'zm_fread not set, defaulting to dos library FRead')
 ENDPROC Fread(fhandle,buffer,1,length)
 
 PROC doWrite(xym:PTR TO xymodem_t,fhandle,buffer,length)
@@ -1402,7 +1398,7 @@ PROC doWrite(xym:PTR TO xymodem_t,fhandle,buffer,length)
   IF p<>NIL
     RETURN p(fhandle,buffer,length)
   ENDIF
-  ->lprintf(xym,LOG_WARNING,'zm_fwrite not set, defaulting to dos library FWrite')
+  ->lprintf(xym,LOG_WARN,'zm_fwrite not set, defaulting to dos library FWrite')
 ENDPROC Fwrite(fhandle,buffer,1,length)
 
 crc16tbl: INT $0000, $1021, $2042, $3063, $4084, $50A5, $60C6, $70E7,

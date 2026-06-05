@@ -46,6 +46,8 @@
 
 ENUM ERR_NONE,ERR_ALREADY_RUNNING,ERR_STARTUP, ERR_VALIDATE,ERR_NO_DISKFONT,ERR_FDS_RANGE
 
+CONST AX_SETUP_TOOL='BBS:Utils/axSetupTool'
+
 CONST LISTENQ=100
 CONST EINTR=4
 CONST MAX_LINE=255
@@ -59,9 +61,11 @@ CONST TAG_END=0
 CONST NODECONFIG=1
 CONST RUNMCP=2
 
+CONST LAST_CALLERS=0
 CONST LAST_UPLOADS=1
 CONST LAST_DOWNLOADS=2
-CONST LAST_CALLERS=0
+CONST SYSTEM_STATS=3
+CONST SESSION_STATS=4
 
 CONST CHAT_ENTER=5
 CONST CHAT_EXIT=4
@@ -297,6 +301,7 @@ DEF nodeIdle[MAX_NODES]:ARRAY OF CHAR
 DEF startUp=FALSE/*** Set startup scripts to none ***/
 DEF zipOn=FALSE/*** Turn ZIPPED window off ***/ 
 DEF notDone=1
+DEF shuttingDown=0
 DEF down[MAX_NODES]:ARRAY OF CHAR
 DEF activeNodes[MAX_NODES]:ARRAY OF CHAR
 DEF publicName[200]:STRING
@@ -310,6 +315,10 @@ DEF quietNode[MAX_NODES]:ARRAY OF INT
 DEF telnetNode[MAX_NODES]:ARRAY OF INT
 DEF ftpNode[MAX_NODES]:ARRAY OF INT
 DEF bbsStack
+
+DEF startTime:datestamp
+DEF startCalls
+DEF ulCount=0,dlCount=0
 
 DEF nodes[MAX_NODES]:ARRAY OF INT
 DEF suspend[MAX_NODES]:ARRAY OF INT
@@ -328,6 +337,8 @@ DEF colours
 DEF dosCheckTime=60
 DEF dosCheckTrigger=5
 DEF dosBanTime=60
+
+DEF menuSelect=FALSE
 
 DEF masterPort[100]:STRING
 
@@ -535,6 +546,25 @@ PROC getSystemTime()
   startds:=DateStamp(currDate)
 ENDPROC Mul(Mul(startds.days,1440),60)+(startds.minute*60)+(startds.tick/50)
 
+PROC formatLongDateTime(dt:PTR TO datetime,outDateStr)
+  DEF datestr[10]:STRING
+  DEF daystr[10]:STRING
+  DEF timestr[10]:STRING
+  DEF dateVal
+
+
+  dt.format:=FORMAT_DOS
+  dt.flags:=0
+  dt.strday:=0
+  dt.strdate:=datestr
+  dt.strtime:=timestr
+
+  IF DateToStr(dt)
+    StringF(outDateStr,'\s[7]\d\s \s',datestr,IF dt.stamp.days>=8035 THEN 20 ELSE 19,datestr+7,timestr)
+    RETURN TRUE
+  ENDIF
+ENDPROC FALSE
+
 PROC trimStr(src:PTR TO CHAR, dest:PTR TO CHAR)
   DEF i
   StrCopy(dest,TrimStr(src))
@@ -559,14 +589,11 @@ PROC myrequest(s:PTR TO CHAR)
   END myES[5]
 ENDPROC
 
-PROC menunum(n)
-ENDPROC ((n) AND $1F)
+PROC menunum(n) IS ((n) AND $1F)
 
-PROC itemnum(n)
-ENDPROC (Shr((n),5) AND $3F)
+PROC itemnum(n) IS (Shr((n),5) AND $3F)
 
-PROC subnum(n)
-ENDPROC (Shr((n),11) AND $1F)
+PROC subnum(n) IS (Shr((n),11) AND $1F)
 
 ->/* ***** Free the Gadlist and return ***** */
 PROC freeGads()
@@ -909,6 +936,16 @@ PROC findClose()
   dir_info:=NIL
 ENDPROC
 
+EXPORT PROC readIntFromFile(filename: PTR TO CHAR)
+  DEF fh
+  DEF v[100]:STRING
+  IF((fh:=Open(filename,MODE_OLDFILE)))<>0
+    ReadStr(fh,v)
+    Close(fh)
+    RETURN Val(v)
+  ENDIF
+ENDPROC -1
+
 /* ***** Do BevelBorders ***** */
 PROC drawborders()
   /* *** Stats *** */
@@ -1029,6 +1066,7 @@ PROC createCustomMenus(nodes)
     maddItem( NM_SUB,'   Stephan Schiemann ',0,0,0,0)
     maddItem( NM_SUB,'   Eddie Oniel       ',0,0,0,0)
 
+    maddItem( NM_ITEM,  'Iconify',0,0,0,0)
     maddItem( NM_ITEM,  'Quit',0,0,0,0)
 
     maddItem( NM_TITLE, 'Master Control',0,0,0,0)
@@ -1036,10 +1074,8 @@ PROC createCustomMenus(nodes)
     maddNodes(nodes)
     maddItem(  NM_ITEM, 'Instant Login',0, 0, 0, 0)
     maddNodes(nodes)
-    IF shellMode
-      maddItem(  NM_ITEM, 'AEShell',0, 0, 0, 0)
-      maddNodes(nodes)
-    ENDIF
+    maddItem(  NM_ITEM, 'Shell',0, 0, 0, 0)
+    maddNodes(nodes)
     maddItem(  NM_ITEM, 'Toggle Chat',0, 0, 0, 0)
     maddNodes(nodes)
     maddItem(  NM_ITEM, 'Exit Node',0, 0, 0, 0)
@@ -1062,6 +1098,7 @@ PROC createCustomMenus(nodes)
     maddNodes(nodes)
     maddItem( NM_ITEM,'Set NRAMS',0,0,0,0)
     maddNodes(nodes)
+    maddItem( NM_ITEM,'Config Editor',0,IF FileLength(AX_SETUP_TOOL)>=0 THEN 0 ELSE ITEMENABLED,0,0)
 
     maddItem( NM_TITLE, 'Custom Control',0,0,0,0)
 
@@ -1180,7 +1217,7 @@ PROC initGads(scr:PTR TO screen)
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_TOPS].topedge:=ngAry[GAD_TOPS].topedge+(-110+(theight*11))
-  gad:= CreateGadgetA(CYCLE_KIND, gad, ngAry [GAD_TOPS],  [GTCY_LABELS,['Last Five Callers','Last Five Uploads','Last Five Downloads',NIL],GTCY_ACTIVE,topOption,TAG_END])
+  gad:= CreateGadgetA(CYCLE_KIND, gad, ngAry [GAD_TOPS],  [GTCY_LABELS,['Last Five Callers','Last Five Uploads','Last Five Downloads','System Stats','Session Stats',NIL],GTCY_ACTIVE,topOption,TAG_END])
   IF (gad = NIL) THEN RETURN 0
 
   ->IF(initGadsagain=FALSE) THEN ngAry[GAD_TOPSBOX].topedge:=ngAry[GAD_TOPSBOX].topedge+(-110+(theight*11))
@@ -1280,12 +1317,10 @@ PROC doControl(node)
         DisplayBeep(scr)
       ENDIF
     CASE SV_AESHELL
-      IF shellMode
-        IF(users[node].actionVal=ENV_AWAITCONNECT)
-          callNode(node,SV_AESHELL)
-        ELSE
-          DisplayBeep(scr)
-        ENDIF
+      IF(users[node].actionVal=ENV_AWAITCONNECT)
+        callNode(node,SV_AESHELL)
+      ELSE
+        DisplayBeep(scr)
       ENDIF
     CASE SV_CHATTOGGLE
       cd:=users[node].actionVal
@@ -1320,6 +1355,10 @@ PROC doControl(node)
           showNdLastUploads(eWin,node)
         CASE LAST_DOWNLOADS
           showNdLastDownloads(eWin,node)
+        CASE SYSTEM_STATS
+          showSystemStats(eWin)
+        CASE SESSION_STATS
+          showSessionStats(eWin)
       ENDSELECT
   ENDSELECT
   control:=0
@@ -1443,10 +1482,14 @@ PROC handleEditGadget(im:PTR TO intuimessage,ig)
       IF(button)
         IF(nutton(2)=FALSE) THEN doButton(2,0)
       ELSE
-        IF shellMode
+        IF shellMode OR menuSelect
           IF(control) THEN control:=0 ELSE control:=SV_AESHELL
         ELSE
-          selectAndRunConfig('','','')
+          IF FileLength(AX_SETUP_TOOL)>=0
+            Execute(AX_SETUP_TOOL,0,0)
+          ELSE
+            selectAndRunConfig('','','')
+          ENDIF
         ENDIF
       ENDIF
     CASE GAD_TOGGLECHAT
@@ -1457,7 +1500,7 @@ PROC handleEditGadget(im:PTR TO intuimessage,ig)
       ENDIF
     CASE GAD_TOPS
       topOption++
-      IF(topOption>2) THEN topOption:=0
+      IF(topOption>SESSION_STATS) THEN topOption:=0
       SELECT topOption
         CASE LAST_CALLERS
           showLastUser(eWin)
@@ -1465,9 +1508,13 @@ PROC handleEditGadget(im:PTR TO intuimessage,ig)
           showLastDownloads(eWin)
         CASE LAST_UPLOADS
           showLastUploads(eWin)
+        CASE SYSTEM_STATS
+          showSystemStats(eWin)
+        CASE SESSION_STATS
+          showSessionStats(eWin)
       ENDSELECT
     CASE GAD_TOPSBOX
-        IF(control)
+        IF(control) OR (topOption>=SYSTEM_STATS)
           control:=0
           SELECT topOption
             CASE LAST_CALLERS
@@ -1476,6 +1523,10 @@ PROC handleEditGadget(im:PTR TO intuimessage,ig)
               showLastUploads(eWin)
             CASE LAST_DOWNLOADS
               showLastDownloads(eWin)
+            CASE SYSTEM_STATS
+              showSystemStats(eWin)
+            CASE SESSION_STATS
+              showSessionStats(eWin)
           ENDSELECT
         ELSE
           control:=SV_TOPS
@@ -1586,6 +1637,8 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
       StrCopy(action2,'Node Inactive   ')
       IF activeNodes[node] THEN activeNodeCount--
       activeNodes[node]:=FALSE
+      down[node]:=TRUE
+      IF (activeNodeCount=0) AND (shuttingDown) THEN notDone:=0
       /*if(ActiveNodeCount==0) notDone=0;*/
     CASE ENV_MULTICHAT
       StrCopy(action2,'MultiNode Chat  ')
@@ -1658,6 +1711,10 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
         showLastUploads(eWin)
       CASE LAST_DOWNLOADS
         showLastDownloads(eWin)
+      CASE SYSTEM_STATS
+       showSystemStats(eWin)
+      CASE SESSION_STATS
+       showSessionStats(eWin)
     ENDSELECT
     saveState()
   ENDIF
@@ -1828,6 +1885,77 @@ PROC regNodeUser(name:PTR TO CHAR,dateStr:PTR TO CHAR, node)
   DEF list: PTR TO itemsList
   list:=ndUser[node]
   list.add(name,dateStr)
+ENDPROC
+
+PROC showSystemStats(win:PTR TO window)
+  DEF i=0
+  DEF rowTop
+  DEF tempStr[255]:STRING
+  DEF systemCalls
+  rowTop:=topOffset+(theight*11)+BTOP_TOPSBOX
+  SetAPen(win.rport,0)
+  RectFill(win.rport,BLEF_TOPSBOX+5,rowTop+1,BLEF_TOPSBOX+BWID_TOPSBOX-10,rowTop+BHEI_TOPSBOX-2)
+  SetAPen(win.rport,1)
+
+  StringF(tempStr,'\sSystemStats',bbsPath)
+  systemCalls:=readIntFromFile(tempStr)
+
+  StringF(tempStr,'System Calls: \d',systemCalls)
+  rowTop:=topOffset+155-110+(theight*11)
+  printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
+
+  StringF(tempStr,'Number of users: \d',Div(FileLength('bbs:user.data'),$e8 ))
+  rowTop+=10
+  printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
+
+  formatLongDateTime(startTime,tempStr)
+  StringF(tempStr,'Startup: \s',tempStr)
+  rowTop+=10
+  printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
+ 
+  StringF(tempStr,'Available memory: \d',AvailMem(0))
+  rowTop+=10
+  printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
+ENDPROC
+
+PROC showSessionStats(win:PTR TO window)
+  DEF i=0
+  DEF rowTop
+  DEF tempStr[255]:STRING
+  DEF systemCalls,uptime
+  DEF systemTime:datestamp
+  rowTop:=topOffset+(theight*11)+BTOP_TOPSBOX
+  SetAPen(win.rport,0)
+  RectFill(win.rport,BLEF_TOPSBOX+5,rowTop+1,BLEF_TOPSBOX+BWID_TOPSBOX-10,rowTop+BHEI_TOPSBOX-2)
+  SetAPen(win.rport,1)
+
+  DateStamp(systemTime)
+  uptime:=Mul(systemTime.days-startTime.days,1440)+systemTime.minute-startTime.minute
+
+  formatLongDateTime(startTime,tempStr)
+  StringF(tempStr,'Startup: \s',tempStr)
+  rowTop:=topOffset+155-110+(theight*11)
+  printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
+
+  StringF(tempStr,'Uptime: \d days \r\z\d[2]:\r\z\d[2]',Div(uptime,1440),Div(Mod(uptime,1440),60),Mod(uptime,60))
+  rowTop+=10
+  printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
+
+  StringF(tempStr,'\sSystemStats',bbsPath)
+  systemCalls:=readIntFromFile(tempStr)
+
+  StringF(tempStr,'System calls: \d',systemCalls-startCalls)
+  rowTop+=10
+  printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
+
+
+  StringF(tempStr,'Uploads: \d',ulCount)
+  rowTop+=10
+  printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
+
+  StringF(tempStr,'Downloads: \d',dlCount)
+  rowTop+=10
+  printMyText(win.rport,tempStr,GLEF_TOPS+5,rowTop)
 ENDPROC
 
 PROC showLastUser(win:PTR TO window)
@@ -2026,6 +2154,9 @@ PROC checkMasterSig(signals)
       ELSEIF(cpymsg.command=SV_ACPALERT)
         myrequest(cpymsg.user)
         ReplyMsg(cpymsg)
+      ELSEIF(cpymsg.command=SV_ACPSHUTDOWN)
+        attemptShutdown()
+        ReplyMsg(cpymsg)
       ELSEIF(cpymsg.command=SV_STARTNODE)
         StringF(temp,'AmiExpress_Node.\d',cpymsg.node)
         IF(FindPort(temp))=FALSE
@@ -2055,8 +2186,10 @@ PROC checkMasterSig(signals)
               getSystemDate(datestr)
                
               regLastDownloads(tempstr2,datestr,msg.node)
+              dlCount++
               saveState()
               IF topOption = LAST_DOWNLOADS THEN showLastDownloads(eWin)
+              IF topOption = SESSION_STATS THEN showSessionStats(eWin)
               StringF(temp,'DL: \s',msg.user)
               StringF(temp1,'\d',SV_NEWMSG)
               updateNode(temp,msg.location,temp1,msg.baud,msg.node)
@@ -2070,8 +2203,10 @@ PROC checkMasterSig(signals)
               getSystemDate(datestr)
                 
               regLastUploads(tempstr2,datestr,msg.node)
+              ulCount++
               saveState()
               IF topOption = LAST_UPLOADS THEN showLastUploads(eWin)
+              IF topOption = SESSION_STATS THEN showSessionStats(eWin)
               StringF(temp,'UL: \s',msg.user)
               StringF(temp1,'\d',SV_NEWMSG)
               updateNode(temp,msg.location,temp1,msg.baud,msg.node)
@@ -2747,6 +2882,18 @@ PROC readStartUp(s:PTR TO CHAR)
   
   dobj,cfg:=getToolTypes(s)
   IF (dobj=NIL) 
+    acpError:=1
+  ELSEIF(FindToolType(dobj.tooltypes,'SYSOP_NAME')=0) OR (FindToolType(dobj.tooltypes,'BBS_NAME')=0) OR
+        (FindToolType(dobj.tooltypes,'BBS_LOCATION')=0) OR (FindToolType(dobj.tooltypes,'BBS_GEOGRAPHIC')=0)
+    acpError:=1
+  ENDIF
+  
+  IF acpError
+    IF FileLength(AX_SETUP_TOOL)>=0
+      Execute(AX_SETUP_TOOL,0,0)
+      RETURN
+    ENDIF
+    acpError:=0
     selectAndRunConfig('','s:','aeicon.json')
     
     dobj,cfg:=getToolTypes(s)
@@ -2757,7 +2904,7 @@ PROC readStartUp(s:PTR TO CHAR)
     ENDIF
   ENDIF
   oldtooltypes:=dobj.tooltypes
-  
+
   IF(t:=FindToolType(oldtooltypes,'ACPFONT'))
     StrCopy(fontName,t)
   ENDIF
@@ -3229,7 +3376,8 @@ ENDPROC
 
 PROC attemptShutdown()
   DEF i
- 
+  
+  shuttingDown:=TRUE
   IF(activeNodeCount=0)
     notDone:=0
   ELSE
@@ -3237,7 +3385,7 @@ PROC attemptShutdown()
       IF(StrLen(startNode[i])>0)
         IF((users[i].actionVal=ENV_AWAITCONNECT) AND (down[i])=FALSE)
           control:=SV_NODEOFFHOOK
-          down[i]:=TRUE
+          ->down[i]:=TRUE
           doControl(i)
         ENDIF                     
       ELSE
@@ -3780,6 +3928,8 @@ PROC main() HANDLE
  
   KickVersion(37)  -> E-Note: requires V37
 
+  DateStamp(startTime)
+
   updateVersion(myVerStr,myBuildStr)
 
   FOR i:=0 TO MAX_NODES-1
@@ -3912,6 +4062,9 @@ PROC main() HANDLE
 
   readStartUp(iconStartName)
   IF acpError THEN Raise(ERR_STARTUP)
+
+  StringF(tempstr,'\sSystemStats',bbsPath)
+  startCalls:=readIntFromFile(tempstr)
 
   loadConnectionList(connectionList)
 
@@ -4047,6 +4200,7 @@ PROC main() HANDLE
              WA_MAXHEIGHT, -1,
              WA_ZOOM, dim,
              WA_AUTOADJUST, 1,
+             WA_NEWLOOKMENUS, 1,
              WA_PUBSCREEN, IF EstrLen(publicName)=0 THEN NIL ELSE scr,
              WA_PUBSCREENFALLBACK, 1,
              WA_GADGETS,   gadgets,
@@ -4141,6 +4295,10 @@ PROC main() HANDLE
                       showLastUploads(eWin)
                     CASE LAST_DOWNLOADS
                       showLastDownloads(eWin)
+                    CASE SYSTEM_STATS
+                      showSystemStats(eWin)
+                    CASE SESSION_STATS
+                      showSessionStats(eWin)
                   ENDSELECT
                   FOR i:=0 TO MAX_NODES-1
                     IF(StrLen(startNode[i])>0)
@@ -4153,15 +4311,23 @@ PROC main() HANDLE
                 CASE GADGETUP
                   handleEditGadget(im,0)
                 CASE MENUPICK
+                   ->iconify
+                  IF(menunum(im.code)=0) AND (itemnum(im.code)=5) THEN ZipWindow(eWin)
                   ->quit menu item
-                  IF(menunum(im.code)=0) AND (itemnum(im.code)=5) THEN attemptShutdown()
-                  
-                  IF(menunum(im.code)=1)
-                    i:=button
-                    button:=0
-                    handleEditGadget(NIL,GAD_SYSOPLOGIN+itemnum(im.code))
-                    handleEditGadget(NIL,GAD_NODES+subnum(im.code))
-                    button:=i
+                  IF(menunum(im.code)=0) AND (itemnum(im.code)=6) THEN attemptShutdown()
+
+                  IF(menunum(im.code)=1) 
+                    IF (itemnum(im.code)=14) 
+                      IF FileLength(AX_SETUP_TOOL)>=0 THEN Execute(AX_SETUP_TOOL,0,0)
+                    ELSE
+                      i:=button
+                      button:=0
+                      menuSelect:=TRUE
+                      handleEditGadget(NIL,GAD_SYSOPLOGIN+itemnum(im.code))
+                      handleEditGadget(NIL,GAD_NODES+subnum(im.code))
+                      button:=i
+                      menuSelect:=FALSE
+                    ENDIF
                   ENDIF
                   IF(menunum(im.code)=2)
                     num:=itemnum(im.code)
@@ -4205,6 +4371,7 @@ EXCEPT DO
       Permit()
     ENDIF
   ENDIF
+  FreeMenus(eWinM)
 
   IF msg THEN FreeMem(msg,SIZEOF acpMessage)
   

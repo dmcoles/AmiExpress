@@ -2571,7 +2571,7 @@ PROC hydra(hyd:PTR TO hydra_t,txpathname:PTR TO CHAR,txalias:PTR TO CHAR)
                                proc:=hyd.hyd_close
                                proc(hyd.txfd)
                                proc:=hyd.hyd_downloadcompleted
-                               IF proc THEN proc(hyd.txfsize)
+                               IF proc THEN proc(hyd.txfsize,hyd.txfsize-hyd.txoffset)
                                hydra_pct(hyd,TRUE)
                                t1,t2:=time()
                                t:=Mul((t1-hyd.txstart1),50)+t2-hyd.txstart2

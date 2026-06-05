@@ -24,25 +24,6 @@ EXPORT PROC setFDS(fds:PTR TO LONG,socketVal)
   fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
 ENDPROC
 
-EXPORT PROC getFileSize(s: PTR TO CHAR)
-/* returns the file size of a given file or 8192 if an error occured */
-  DEF fBlock: fileinfoblock
-  DEF fLock
-  DEF fsize=8192
-
-  IF((fLock:=Lock(s,ACCESS_READ)))=NIL
-    RETURN 8192
-  ENDIF
-
-  IF((fBlock:=AllocDosObject(DOS_FIB,NIL)))=NIL
-    UnLock(fLock)
-    RETURN 8192
-  ENDIF
-  IF(Examine(fLock,fBlock)) THEN fsize:=fBlock.size
-  UnLock(fLock)
-  FreeDosObject(DOS_FIB,fBlock)
-ENDPROC fsize
-
 EXPORT PROC fileExists(filename)
 /* checks to see if a file exists and returns TRUE OR FALSE */
   DEF lh
@@ -288,7 +269,11 @@ EXPORT PROC formatUnsignedLong(val,outStr)
   
   RawDoFmt('%lu',{val},{asmputchar},outputTxt)
   StrCopy(outStr,outputTxt)
-EXPORT ENDPROC
+ENDPROC
+
+EXPORT PROC formatIP(val,outStr)
+  StringF(outStr,'\d.\d.\d.\d',Shr(val,24) AND $FF,Shr(val,16) AND $FF,Shr(val,8) AND $FF,val AND $FF)
+ENDPROC
 
 EXPORT PROC formatLongDate(cDateVal,outDateStr)
   DEF d : PTR TO datestamp
@@ -646,6 +631,27 @@ EXPORT PROC parsePatternNoCase2(source:PTR TO CHAR,dest:PTR TO CHAR, len)
   r:=ParsePatternNoCase(s,dest,len)
   DisposeLink(s)
 ENDPROC r
+
+EXPORT PROC dirLineNewFile(s:PTR TO CHAR)
+  DEF str,res,ch
+ 
+  str:=AstrClone(s)
+  stripAnsi2(str)
+  ch:=str[0]
+  res:=(ch<>0) AND (ch<>32) AND (ch<>"\n")
+  DisposeLink(str)
+ENDPROC res
+
+EXPORT PROC stripAnsi2(s:PTR TO CHAR)
+  DEF ansi:ansi
+  DEF newStr
+
+  stripAnsi(0,0,1,0,ansi)
+  newStr:=String(StrLen(s))
+  stripAnsi(s,newStr,0,0,ansi)
+  StrCopy(s,newStr)
+  DisposeLink(newStr)
+ENDPROC
 
 EXPORT PROC stripAnsi(s: PTR TO CHAR, d: PTR TO CHAR, resetit, strip, ansi:PTR TO ansi)
   DEF i,j,k,p,c
