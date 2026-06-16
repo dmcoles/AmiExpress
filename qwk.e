@@ -211,10 +211,10 @@ PROC fileWriteLn(fh,str: PTR TO CHAR)
 ENDPROC fileWrite(fh,'\n')
 
 PROC fileWrite(fh,str: PTR TO CHAR)
-  DEF s
-
-  s:=Write(fh,str,StrLen(str))
-  IF s<>StrLen(str) THEN RETURN RESULT_FAILURE
+  DEF s,len
+  len:=StrLen(str)
+  s:=Write(fh,str,len)
+  IF s<>len THEN RETURN RESULT_FAILURE
 ENDPROC RESULT_SUCCESS
 
 PROC formatLongDateTime2(cDateVal,outDateStr,seperatorChar)
@@ -292,18 +292,10 @@ ENDPROC
 PROC getSystemTime()
   DEF currDate: datestamp
   DEF startds:PTR TO datestamp
-  DEF s1,s2,s3,s4
+  DEF s4
 
   startds:=DateStamp(currDate)
-
-  s1:=startds.days+2922
-  s1:=Mul(1440,s1)
-  s1:=Mul(60,s1)
-  s2:=Mul(60,startds.minute)
-  s3:=startds.tick/50
   s4:=Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50)
-
-  ->2922 days between 1/1/70 and 1/1/78
 
 ENDPROC s4+21600
 
@@ -437,22 +429,41 @@ PROC main() HANDLE
       eof:=(ReadStr(fh,tempStr)=-1) AND (StrLen(tempStr)=0)
       processConfigLine(tempStr,category,optionName,optionValue)
 
-      IF StrCmp('MAIN',category) AND StrCmp('MODE',optionName) THEN StrCopy(mode,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('BBSNAME',optionName) THEN StrCopy(bbsName,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('BBSLOCATION',optionName) THEN StrCopy(bbsLocation,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('BBSNUMBER',optionName) THEN StrCopy(bbsNumber,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('BBSID',optionName) THEN StrCopy(bbsId,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('SYSOPNAME',optionName) THEN StrCopy(sysopName,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('USERNAME',optionName) THEN StrCopy(userName,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('GETCMD',optionName) THEN StrCopy(qwkGetCommand,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('PUTCMD',optionName) THEN StrCopy(qwkPutCommand,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('UNPACKCMD',optionName) THEN StrCopy(qwkUnpackCommand,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('PACKCMD',optionName) THEN StrCopy(qwkPackCommand,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('PACKEDTEMP',optionName) THEN StrCopy(qwkFilename,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('MSGTEMP',optionName) THEN StrCopy(qwkMessageFilename,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('CONTROLTEMP',optionName) THEN StrCopy(qwkControlFilename,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('MSGFILE',optionName) THEN StrCopy(qwkRepMessageFilename,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('REPFILE',optionName) THEN StrCopy(qwkOutputFilename,optionValue)
+      IF StrCmp('MAIN',category)
+        IF StrCmp('MODE',optionName)
+          StrCopy(mode,optionValue)
+        ELSEIF StrCmp('BBSNAME',optionName)
+          StrCopy(bbsName,optionValue)
+        ELSEIF StrCmp('BBSLOCATION',optionName)
+          StrCopy(bbsLocation,optionValue)
+        ELSEIF StrCmp('BBSNUMBER',optionName)
+          StrCopy(bbsNumber,optionValue)
+        ELSEIF StrCmp('BBSID',optionName)
+          StrCopy(bbsId,optionValue)
+        ELSEIF StrCmp('SYSOPNAME',optionName)
+          StrCopy(sysopName,optionValue)
+        ELSEIF StrCmp('USERNAME',optionName)
+          StrCopy(userName,optionValue)
+        ELSEIF StrCmp('GETCMD',optionName)
+          StrCopy(qwkGetCommand,optionValue)
+        ELSEIF StrCmp('PUTCMD',optionName)
+          StrCopy(qwkPutCommand,optionValue)
+        ELSEIF StrCmp('UNPACKCMD',optionName)
+          StrCopy(qwkUnpackCommand,optionValue)
+        ELSEIF StrCmp('PACKCMD',optionName)
+          StrCopy(qwkPackCommand,optionValue)
+        ELSEIF StrCmp('PACKEDTEMP',optionName)
+          StrCopy(qwkFilename,optionValue)
+        ELSEIF StrCmp('MSGTEMP',optionName)
+          StrCopy(qwkMessageFilename,optionValue)
+        ELSEIF StrCmp('CONTROLTEMP',optionName)
+          StrCopy(qwkControlFilename,optionValue)
+        ELSEIF StrCmp('MSGFILE',optionName)
+          StrCopy(qwkRepMessageFilename,optionValue)
+        ELSEIF StrCmp('REPFILE',optionName)
+          StrCopy(qwkOutputFilename,optionValue)
+        ENDIF
+      ENDIF
 
     UNTIL StrCmp(category,'CONFS') OR eof
     UpperStr(mode)
