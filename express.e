@@ -25687,7 +25687,7 @@ ENDPROC RESULT_SUCCESS
 
 PROC internalCommandVER()
   DEF tempStr[255]:STRING
-  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ©2018-2023 Darren Coles\b\n\b\n',expressVer,expressDate)
+  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright (C)2018-2026 Darren Coles\b\n\b\n',expressVer,expressDate)
   aePuts(tempStr)
   aePuts('Original Version:\b\n')
   aePuts('  (C)1989-91 Mike Thomas, Synthetic Technologies\b\n')
@@ -28781,7 +28781,7 @@ PROC processFtpLogon()
   ENDIF
   telnetSend(sendStr,EstrLen(sendStr))
 
-  StringF(sendStr,'230-\b\n230-Running AmiExpress \s Copyright ©2018-2023 Darren Coles\b\n',expressVer)
+  StringF(sendStr,'230-\b\n230-Running AmiExpress /X v\s Copyright (C)2018-2026 Darren Coles\b\n',expressVer)
   telnetSend(sendStr,EstrLen(sendStr))
   StringF(sendStr,'230-Registration \s. You are connected to Node \d\b\n',regKey,node)
   telnetSend(sendStr,EstrLen(sendStr))
@@ -29511,7 +29511,7 @@ PROC processLogon()
   ENDIF
   aePuts(tempStr)
 
-  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018-2023 Darren Coles\b\n',expressVer)
+  StringF(tempStr,'\b\n\b\nRunning AmiExpress /X v\s Copyright (C)2018-2026 Darren Coles\b\n',expressVer)
   aePuts(tempStr)
   StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
   aePuts(tempStr)
@@ -29911,15 +29911,15 @@ PROC processAwait()
       send017()
       sendCLS()
 
-      StringF(tempstr,'\b\n                     [33m©2018-2023 AmiExpress [37mby[35m Darren Coles[0m\b\n\b\n')
+      StringF(tempstr,'\b\n                     [33m(C)2018-2026 AmiExpress /X [37mby[35m Darren Coles[0m\b\n\b\n')
       aePuts(tempstr)
 
       StringF(tempstr,'                              [33m Original Version:[0m\b\n\b\n')
       aePuts(tempstr)
 
-      StringF(tempstr,'               [33m©1989-1991 [37mby[35m Mike Thomas, Synthetic Technologies[0m\b\n')
+      StringF(tempstr,'               [33m(C)1989-1991 [37mby[35m Mike Thomas, Synthetic Technologies[0m\b\n')
       aePuts(tempstr)
-      StringF(tempstr,'             [33m©1992-1995 [37mby[35m Joe Hodge, LightSpeed Technologies Inc.[0m\b\n')
+      StringF(tempstr,'             [33m(C)1992-1995 [37mby[35m Joe Hodge, LightSpeed Technologies Inc.[0m\b\n')
       aePuts(tempstr)
       aePuts('\b\n  [33m\b\n')
 
