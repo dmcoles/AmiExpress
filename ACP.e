@@ -568,17 +568,11 @@ ENDPROC FALSE
 PROC trimStr(src:PTR TO CHAR, dest:PTR TO CHAR)
   DEF i
   StrCopy(dest,TrimStr(src))
-
-  i:=StrLen(dest)-1
-  WHILE (i>=0)
-    IF dest[i]<>" "
-      i:=-1
-    ELSE
-      SetStr(dest,i)
-      i--
-    ENDIF
+  i:=EstrLen(dest)
+  WHILE (i>0) AND (dest[i-1]=" ")
+    i--
   ENDWHILE
-  
+  SetStr(dest,i)
 ENDPROC
 
 PROC myrequest(s:PTR TO CHAR)
@@ -628,7 +622,7 @@ PROC openListenSocket(port)
   ->DEF tempStr[255]:STRING
 
   IF((server_s:=Socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
-    ->StringF(tempStr,'/X Telnet: Error creating listening socket. (\d)\b\n',Errno())
+    ->StringF(tempStr,'/X telnet: Error creating listening socket. (\d)\b\n',Errno())
     ->aePuts(tempStr)
     RETURN -1
   ENDIF
@@ -1575,6 +1569,7 @@ ENDPROC 0
 PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PTR TO CHAR,node)
   DEF action2[50]:STRING
   DEF v,a,top
+  DEF nameLen,locLen
   DEF tempstr[25]:STRING
   DEF datestr[255]:STRING
   DEF tempstr2[255]:STRING
@@ -1671,10 +1666,12 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
   RectFill(eWin.rport,GLEF_ACTION,top-7,GLEF_ACTION+GWID_ACTION,top+1)
   SetAPen(eWin.rport,drawPen)
   IF(a<>SV_NEWMSG) AND (a<>ENV_DOORS)
+    nameLen:=StrLen(name)
+    locLen:=StrLen(location)
     Move(eWin.rport,GLEF_USER+3,top)
-    Text(eWin.rport,name,IF StrLen(name)>22 THEN 22 ELSE StrLen(name))
+    Text(eWin.rport,name,IF nameLen>22 THEN 22 ELSE nameLen)
     Move(eWin.rport,GLEF_LOCATION+2,top)
-    Text(eWin.rport,location,IF StrLen(location)>22 THEN 22 ELSE StrLen(location))
+    Text(eWin.rport,location,IF locLen>22 THEN 22 ELSE locLen)
     Move(eWin.rport,GLEF_BAUD+5,top)
     StringF(tempstr,'\r\s[7]',baud)
     Text(eWin.rport,tempstr,7)
@@ -1722,8 +1719,8 @@ ENDPROC
 
 PROC backup(str:PTR TO CHAR,cycle)
   DEF fi,fo
-  DEF ch[10]:STRING
-  DEF num
+  DEF buf[4096]:STRING
+  DEF num,n
   DEF im1[200]:STRING
   DEF im2[200]:STRING
   
@@ -1748,8 +1745,8 @@ PROC backup(str:PTR TO CHAR,cycle)
     Rename(str,im1)
     fi:=Open(im1,MODE_OLDFILE)
     fo:=Open(str,MODE_NEWFILE)
-    WHILE(Fread(fi,ch,1,1)<>0)
-      Fwrite(fo,ch,1,1)
+    WHILE (n:=Fread(fi,buf,1,4096))>0
+      Fwrite(fo,buf,1,n)
     ENDWHILE
     Close(fo)
     Close(fi)
@@ -1851,7 +1848,7 @@ PROC regNodeUploads(name:PTR TO CHAR,dateStr:PTR TO CHAR, node)
 ENDPROC
 
 PROC showQuiet(i)
-  DEF rowTop
+  DEF rowTop,ulen
   rowTop:=topOffset+32+(i*11)
 
   SetAPen(eWin.rport,0)
@@ -1859,13 +1856,16 @@ PROC showQuiet(i)
 
   SetAPen(eWin.rport,getNodeTextColour(i))
   Move(eWin.rport,GLEF_USER+3,rowTop)
-  Text(eWin.rport,users[i].user,IF StrLen(users[i].user)>22 THEN 22 ELSE StrLen(users[i].user))
+  ulen:=StrLen(users[i].user)
+  Text(eWin.rport,users[i].user,IF ulen>22 THEN 22 ELSE ulen)
 
   Move(eWin.rport,GLEF_LOCATION+2,rowTop)
-  Text(eWin.rport,users[i].location,IF StrLen(users[i].location)>22 THEN 22 ELSE StrLen(users[i].location))
+  ulen:=StrLen(users[i].location)
+  Text(eWin.rport,users[i].location,IF ulen>22 THEN 22 ELSE ulen)
 
   Move(eWin.rport,GLEF_ACTION,rowTop)
-  Text(eWin.rport,users[i].action,IF StrLen(users[i].action)>16 THEN 16 ELSE StrLen(users[i].action))
+  ulen:=StrLen(users[i].action)
+  Text(eWin.rport,users[i].action,IF ulen>16 THEN 16 ELSE ulen)
 
   Move(eWin.rport,GLEF_BAUD+5,rowTop)
   Text(eWin.rport,users[i].baud,7)
@@ -2067,7 +2067,7 @@ PROC showNdLastDownloads(win:PTR TO window,node)
 ENDPROC
 
 PROC showNodes()
-  DEF i,rowTop
+  DEF i,rowTop,ulen
   SetAPen(eWin.rport,0)
   RectFill(eWin.rport,BLEF_0+2,topOffset+BTOP_0+1,BLEF_0+BWID_0-3,topOffset+BTOP_0+(theight*11)-2)
   FOR i:=0 TO theight-1
@@ -2076,11 +2076,14 @@ PROC showNodes()
      
     IF(users[i].active)
       Move(eWin.rport,GLEF_USER+3,rowTop)
-      Text(eWin.rport,users[i].user,IF StrLen(users[i].user)>22 THEN 22 ELSE StrLen(users[i].user))
+      ulen:=StrLen(users[i].user)
+      Text(eWin.rport,users[i].user,IF ulen>22 THEN 22 ELSE ulen)
       Move(eWin.rport,GLEF_LOCATION+2,rowTop)
-      Text(eWin.rport,users[i].location,IF StrLen(users[i].location)>22 THEN 22 ELSE StrLen(users[i].location))
+      ulen:=StrLen(users[i].location)
+      Text(eWin.rport,users[i].location,IF ulen>22 THEN 22 ELSE ulen)
       Move(eWin.rport,GLEF_ACTION,rowTop);
-      Text(eWin.rport,users[i].action,IF StrLen(users[i].action)>16 THEN 16 ELSE StrLen(users[i].action))
+      ulen:=StrLen(users[i].action)
+      Text(eWin.rport,users[i].action,IF ulen>16 THEN 16 ELSE ulen)
       Move(eWin.rport,GLEF_BAUD+5,rowTop)
       Text(eWin.rport,users[i].baud,7)
     ENDIF
@@ -3723,7 +3726,7 @@ PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
               ObtainSemaphore(semiNodes)
               IF semiNodes.myNode[i].offHook=FALSE
                 ftpSocket2:=semiNodes.myNode[i].netSocket
-                
+
                 ->set to -2 to prevent the node from being used between here and when the incoming_telnet message arrives
                 IF ftpSocket2=-1 THEN semiNodes.myNode[i].netSocket:=-2
               ENDIF
@@ -3749,7 +3752,7 @@ PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
           ENDIF
         UNTIL (i=MAX_NODES) OR (i=-1)
         IF i<>-1
-          telnetSend(ftpSocket,'530 No nodes available to handle your connection \b\n\b\n')                   
+          telnetSend(ftpSocket,'530 No nodes available to handle your connection \b\n\b\n')
         ENDIF
       ENDIF
         
@@ -3925,7 +3928,7 @@ PROC main() HANDLE
   DEF sopt:PTR TO startOption
 
   fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
- 
+
   KickVersion(37)  -> E-Note: requires V37
 
   DateStamp(startTime)
@@ -4086,7 +4089,6 @@ PROC main() HANDLE
                 0   -> ReservedChannel: reserved for later use
                ]:newbroker, NIL)
         cxsigflag:=Shl(1, broker_mp.sigbit)
-      
         -> After it's set up correctly, the broker has to be activated
       ActivateCxObj(broker, TRUE)
 
@@ -4171,13 +4173,12 @@ PROC main() HANDLE
 
       StringF(version,'AmiExpress Server \s, by ''Darren Coles''',myVerStr)
       LayoutMenusA(eWinM,visInfo,[TAG_END])
-      
       eWin:=OpenWindowTagList(NIL,[
-             WA_FLAGS,     WFLG_DRAGBAR OR 
+             WA_FLAGS,     WFLG_DRAGBAR OR
                            WFLG_DEPTHGADGET OR
-                           WFLG_CLOSEGADGET OR 
-                           WFLG_NOCAREREFRESH OR 
-                           WFLG_SMART_REFRESH OR 
+                           WFLG_CLOSEGADGET OR
+                           WFLG_NOCAREREFRESH OR
+                           WFLG_SMART_REFRESH OR
                            WFLG_REPORTMOUSE,
 
              WA_IDCMP,     LISTVIEWIDCMP OR
@@ -4186,7 +4187,7 @@ PROC main() HANDLE
                            IDCMP_VANILLAKEY OR
                            IDCMP_RAWKEY OR
                            IDCMP_GADGETUP OR
-                           IDCMP_CLOSEWINDOW ,
+                           IDCMP_CLOSEWINDOW,
              WA_LEFT,      edgeX,
              WA_TOP,       edgeY,
              WA_DETAILPEN, IF newscreen=FALSE THEN 1 ELSE 4,
@@ -4205,7 +4206,7 @@ PROC main() HANDLE
              WA_PUBSCREENFALLBACK, 1,
              WA_GADGETS,   gadgets,
              TAG_END] )
-      
+
       IF fontHandle<>NIL THEN SetFont(eWin.rport,fontHandle)
 
       SetMenuStrip(eWin,eWinM)

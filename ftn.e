@@ -149,7 +149,7 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
     ReadStr(fh2,toName)
     IF EstrLen(toName)>35 THEN SetStr(toName,35)
     ReadStr(fh2,subject)
-    IF EstrLen(subject)>71 THEN SetStr(toName,71)
+    IF EstrLen(subject)>71 THEN SetStr(subject,71)
     ReadStr(fh2,msgDateTime)
     ReadStr(fh2,msgId)
   
