@@ -2759,7 +2759,7 @@ PROC setTheGads()
   IF(setTheGadsj=FALSE)
     StrCopy(setOriText[0],'Sysop Login')
     StrCopy(setOriText[1],'Instant Login')
-    StrCopy(setOriText[2],'AEShell')
+    StrCopy(setOriText[2], IF shellMode THEN 'AEShell' ELSE 'Config')
     StrCopy(setOriText[3],'Toggle Chat')
     StrCopy(setOriText[4],'Exit Node')
     StrCopy(setOriText[5],'Local Login')
@@ -3715,8 +3715,7 @@ PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
 
     IF (ftpSocket<>-1)
       f:=FALSE
-   
-      ->IF telnetSend(telnetSocket,'\b\n/X Native Telnet:  Searching for free node...\b\n')=FALSE THEN f:=TRUE
+      ->IF telnetSend(telnetSocket,'\b\n/X Telnet: Searching for free node...')=FALSE THEN f:=TRUE
 
       IF f=FALSE
         i:=0
@@ -3793,10 +3792,10 @@ PROC acceptTelnet(telnetServerSocket,connectionList:PTR TO stdlist)
         IF (connItem.ipAddr=peeraddr.sin_addr)
           IF connItem.blocked
             IF (connItem.blockExpiry=0)
-              telnetSend(telnetSocket,'\b\n/X Native Telnet:  Your ip address is permanently blocked\b\n')
+              telnetSend(telnetSocket,'\b\n/X telnet: Your ip address is permanently blocked\b\n')
             ELSE
               num:=Div(connItem.blockExpiry-t,60)
-              StringF(tempstr,'\b\n/X Native Telnet:  Your ip address has been blocked for another \d minutes\b\n',num)
+              StringF(tempstr,'\b\n/X Telnet: Your ip address has been blocked for another \d minutes\b\n',num)
               telnetSend(telnetSocket,tempstr)
             ENDIF
             CloseSocket(telnetSocket)
@@ -3813,9 +3812,9 @@ PROC acceptTelnet(telnetServerSocket,connectionList:PTR TO stdlist)
         saveConn:=TRUE
         
         IF dosBanTime<0
-          telnetSend(telnetSocket,'\b\n/X Native Telnet:  Your ip address has been blocked permanently\b\n')
+          telnetSend(telnetSocket,'\b\n/X Telnet: Your ip address has been blocked permanently\b\n')
         ELSE
-          StringF(tempstr,'\b\n/X Native Telnet:  Your ip address has been blocked for \d minutes\b\n',dosBanTime)
+          StringF(tempstr,'\b\n/X Telnet: Your ip address has been blocked for \d minutes\b\n',dosBanTime)
           telnetSend(telnetSocket,tempstr)
         ENDIF
         CloseSocket(telnetSocket)
@@ -3833,7 +3832,7 @@ PROC acceptTelnet(telnetServerSocket,connectionList:PTR TO stdlist)
 
       ->WILL=251, WONT=252, DO=253, DONT=254
     
-      IF telnetSend(telnetSocket,'\b\n/X Native Telnet:  Searching for free node...\b\n')=FALSE THEN f:=TRUE
+      IF telnetSend(telnetSocket,'\b\n/X telnet: Checking for free node...')=FALSE THEN f:=TRUE
 
       IF f=FALSE
         i:=0
@@ -3853,7 +3852,7 @@ PROC acceptTelnet(telnetServerSocket,connectionList:PTR TO stdlist)
             ENDIF
 
             IF telnetSocket2=-1
-              StringF(tempstr,'/X Native Telnet:  Successful connection to node \d\b\n\b\n',i)
+              StringF(tempstr,' Node \d assigned.\b\n\b\n',i)
               telnetSend(telnetSocket,tempstr)
 
               StringF(tempstr,'\c\c\c',255,253,0)    ->DO BINARY
@@ -3885,10 +3884,9 @@ PROC acceptTelnet(telnetServerSocket,connectionList:PTR TO stdlist)
           ENDIF
         UNTIL (i=MAX_NODES) OR (i=-1)
         IF i<>-1
-          telnetSend(telnetSocket,'/X Native Telnet:  No nodes available to handle your connection \b\n\b\n')                   
+          telnetSend(telnetSocket,' No free nodes available.\b\n\b\nTry again later!\b\n')
         ENDIF
       ENDIF
-        
       IF telnetSocket<>-1
         CloseSocket(telnetSocket)
         telnetSocket:=-1
