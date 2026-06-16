@@ -751,7 +751,7 @@ retry:
         deletePort(serialReadMP)
         serialReadMP:=NIL
       ENDIF
-      Dispose(serialCache)
+      IF serialCache<>NIL THEN Dispose(serialCache)
       serialCache:=NIL
     ENDIF
     RETURN TRUE
@@ -2171,7 +2171,7 @@ PROC lineInput(promptText,defaultOutput,maxLen,timeout,outputString,allowHistory
   DEF result
   DEF wasControl,ch
   DEF cmdCharString[1]:STRING
-  DEF timedout, i,originalTimeout,curpos
+  DEF timedout, i,originalTimeout,curpos,slen
   DEF tempstr[255]:STRING
   DEF warning=FALSE
 
@@ -2241,10 +2241,11 @@ redoinput:
 
           IF (ch=24) AND (wasControl=0)   -> CTRL X
             StrCopy(tempstr,'')
-            FOR i:=curpos TO StrLen(outputString)-1
+            slen:=StrLen(outputString)
+            FOR i:=curpos TO slen-1
               StrAdd(tempstr,'[1C')
             ENDFOR
-            FOR i:=1 TO StrLen(outputString)
+            FOR i:=1 TO slen
               StrAddChar(tempstr,8)
               StrAdd(tempstr,' ')
               StrAddChar(tempstr,8)
@@ -2257,10 +2258,11 @@ redoinput:
           IF (rawArrow=FALSE)
             IF (allowHistory) AND (ch=UPARROW) AND (historyBuf.count()>0)
               StrCopy(tempstr,'')
-              FOR i:=curpos TO StrLen(outputString)-1
+              slen:=StrLen(outputString)
+              FOR i:=curpos TO slen-1
                 StrAdd(tempstr,'[1C')
               ENDFOR
-              FOR i:=1 TO StrLen(outputString)
+              FOR i:=1 TO slen
                 StrAddChar(tempstr,8)
                 StrAdd(tempstr,' ')
                 StrAddChar(tempstr,8)
@@ -2274,10 +2276,11 @@ redoinput:
             ENDIF
             IF (allowHistory) AND (ch=DOWNARROW) AND (historyBuf.count()>0)
               StrCopy(tempstr,'')
-              FOR i:=curpos TO StrLen(outputString)-1
+              slen:=StrLen(outputString)
+              FOR i:=curpos TO slen-1
                 StrAdd(tempstr,'[1C')
               ENDFOR
-              FOR i:=1 TO StrLen(outputString)
+              FOR i:=1 TO slen
                 StrAddChar(tempstr,8)
                 StrAdd(tempstr,' ')
                 StrAddChar(tempstr,8)
@@ -2306,12 +2309,13 @@ redoinput:
               IF curpos>0
                 StrAddChar(tempstr,ch)
                 curpos--
-                FOR i:=curpos TO StrLen(outputString)-2
+                slen:=StrLen(outputString)
+                FOR i:=curpos TO slen-2
                   outputString[i]:=outputString[i+1]
                   StrAddChar(tempstr,outputString[i+1])
                 ENDFOR
                 StrAdd(tempstr,' ')
-                FOR i:=curpos TO StrLen(outputString)-1
+                FOR i:=curpos TO slen-1
                   StrAdd(tempstr,'[1D')
                 ENDFOR
 
@@ -2320,13 +2324,14 @@ redoinput:
               ENDIF
             ELSEIF (ch=CHAR_DELETE)
             StrCopy(tempstr,'')
-            IF curpos<(StrLen(outputString))
-              FOR i:=curpos TO StrLen(outputString)-2
+            slen:=StrLen(outputString)
+            IF curpos<slen
+              FOR i:=curpos TO slen-2
                 outputString[i]:=outputString[i+1]
                 StrAddChar(tempstr,outputString[i+1])
               ENDFOR
               StrAdd(tempstr,' ')
-              FOR i:=curpos TO StrLen(outputString)-1
+              FOR i:=curpos TO slen-1
                 StrAdd(tempstr,'[1D')
               ENDFOR
               SetStr(outputString,EstrLen(outputString)-1)
@@ -2335,16 +2340,17 @@ redoinput:
           ELSEIF (ch>31) AND (EstrLen(outputString)<maxLen)
             StrCopy(tempstr,'')
             StrAdd(outputString,'#')
-            FOR i:=StrLen(outputString)-1 TO curpos+1 STEP -1
+            slen:=StrLen(outputString)
+            FOR i:=slen-1 TO curpos+1 STEP -1
               outputString[i]:=outputString[i-1]
             ENDFOR
             outputString[curpos]:=ch
             aePuts(cmdCharString)
             curpos++
-            FOR i:=curpos TO StrLen(outputString)-1
+            FOR i:=curpos TO slen-1
               StrAddChar(tempstr,outputString[i])
             ENDFOR
-            FOR i:=curpos TO StrLen(outputString)-1
+            FOR i:=curpos TO slen-1
               StrAdd(tempstr,'[1D')
             ENDFOR
             aePuts(tempstr)
@@ -2516,7 +2522,7 @@ PROC loadTranslator(translator:PTR TO translator,fileName)
     LowerStr(tempstr1)
     LowerStr(tempstr2)
     cnt:=0
-    WHILE((StrLen(tempstr1)>0) OR (StrLen(tempstr2)>0))
+    WHILE((EstrLen(tempstr1)>0) OR (EstrLen(tempstr2)>0))
       cnt++
       AstrCopy(outtxt,tempstr1,256)
       IF (outtxt[0]>="a") AND (outtxt[0]<="z")
@@ -6459,12 +6465,14 @@ ENDPROC FALSE
 
 PROC getTranslator(translatorName)
   DEF trans:PTR TO translator
+  IF StriCmp(lastTranslatorKey,translatorName) THEN RETURN lastTranslatorResult
   trans:=translators
-
   WHILE (trans<>NIL)
     EXIT StriCmp(trans.translatorName,translatorName)
     trans:=trans.trans.succ
   ENDWHILE
+  StrCopy(lastTranslatorKey,translatorName,80)
+  lastTranslatorResult:=trans
 ENDPROC trans
 
 PROC translateText(textstring)
@@ -6634,22 +6642,22 @@ PROC displayScreen(screenType)
       StringF(screencheck,'\s\s',nodeScreenDir,'PRIVATE')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
     CASE SCREEN_ONENODE
-      StringF(screencheck,'\s',cmds.bbsLoc,'OnlyOnOneNode')
+      StringF(screencheck,'\s\s',cmds.bbsLoc,'OnlyOnOneNode')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
     CASE SCREEN_LOGON24
-      StringF(screencheck,'\s',cmds.bbsLoc,'Logon24hrs')
+      StringF(screencheck,'\s\s',cmds.bbsLoc,'Logon24hrs')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
     CASE SCREEN_LANGUAGES
-      StringF(screencheck,'\s',cmds.bbsLoc,'Languages')
+      StringF(screencheck,'\s\s',cmds.bbsLoc,'Languages')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
     CASE SCREEN_INTERNETNAMES
-      StringF(screencheck,'\s',cmds.bbsLoc,'InternetNames')
+      StringF(screencheck,'\s\s',cmds.bbsLoc,'InternetNames')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
     CASE SCREEN_REALNAMES
-      StringF(screencheck,'\s',cmds.bbsLoc,'RealNames')
+      StringF(screencheck,'\s\s',cmds.bbsLoc,'RealNames')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
-    CASE SCREEN_MAILSCAN      
-      StringF(screencheck,'\s',cmds.bbsLoc,'MailScan')
+    CASE SCREEN_MAILSCAN
+      StringF(screencheck,'\s\s',cmds.bbsLoc,'MailScan')
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
   ENDSELECT
 ENDPROC res
@@ -9907,13 +9915,14 @@ PROC replyToMSG(gfh)
 ENDPROC RESULT_SUCCESS
 
 PROC checkToForward(str,name,check)
-  DEF error
+  DEF error,l
   DEF tempStr[255]:STRING
 
   error:=0
 
   IF readToolType(TOOLTYPE_CONF,currentConf,'FORWARDMAIL',str)
-    IF(str[StrLen(str)-1]="\n") THEN SetStr(str,StrLen(str)-1)
+    l:=StrLen(str)
+    IF(str[l-1]="\n") THEN SetStr(str,l-1)
     IF(check)
       loadAccount(1,tempUser,tempUserKeys,tempUserMisc)
       IF(stringCompare(name,tempUser.name)=RESULT_SUCCESS)
@@ -10181,7 +10190,7 @@ next2:
       c:=readChar(INPUT_TIMEOUT)
       IF(c<0) THEN RETURN c
       IF(c=13)
-        IF(StrLen(space)=0)
+        IF(EstrLen(space)=0)
           msgBuf.setItem(lines,'')
           bkFlag:=1
           JUMP brk
@@ -10209,12 +10218,12 @@ next2:
         IF x>0
           StrAddChar(tempstr,c)
           x--
-          FOR i:=x TO StrLen(space)-2
+          FOR i:=x TO EstrLen(space)-2
             space[i]:=space[i+1]
             StrAddChar(tempstr,space[i+1])
           ENDFOR
           StrAdd(tempstr,' ')
-          FOR i:=x TO StrLen(space)-1
+          FOR i:=x TO EstrLen(space)-1
             StrAdd(tempstr,'[1D')
           ENDFOR
 
@@ -10225,13 +10234,13 @@ next2:
       ENDIF
       IF (c=CHAR_DELETE)
         StrCopy(tempstr,'')
-        IF x<(StrLen(space))
-          FOR i:=x TO StrLen(space)-2
+        IF x<(EstrLen(space))
+          FOR i:=x TO EstrLen(space)-2
             space[i]:=space[i+1]
             StrAddChar(tempstr,space[i+1])
           ENDFOR
           StrAdd(tempstr,' ')
-          FOR i:=x TO StrLen(space)-1
+          FOR i:=x TO EstrLen(space)-1
             StrAdd(tempstr,'[1D')
           ENDFOR
           SetStr(space,EstrLen(space)-1)
@@ -10241,7 +10250,7 @@ next2:
       ENDIF
       IF(c=CHAR_TAB)
         c:=Mod(x,8)
-        IF x=(StrLen(space))
+        IF x=(EstrLen(space))
           IF(x+(8-c)>maxLineLen-3)
             c:=CHAR_TAB
           ELSE
@@ -10254,12 +10263,12 @@ next2:
             ENDWHILE
           ENDIF
         ELSE
-          IF(StrLen(space)+(7-c)<maxLineLen)
+          IF(EstrLen(space)+(7-c)<maxLineLen)
             FOR i:=c TO 7
               StrCopy(tempstr,'')
               StrAdd(space,'#')
             ENDFOR
-            FOR i:=StrLen(space)-1 TO x+(7-c) STEP -1
+            FOR i:=EstrLen(space)-1 TO x+(7-c) STEP -1
               space[i]:=space[i-(8-c)]
             ENDFOR
 
@@ -10269,10 +10278,10 @@ next2:
               x++
             ENDFOR
 
-            FOR i:=x TO StrLen(space)-1
+            FOR i:=x TO EstrLen(space)-1
               StrAddChar(tempstr,space[i])
             ENDFOR
-            FOR i:=x TO StrLen(space)-1
+            FOR i:=x TO EstrLen(space)-1
               StrAdd(tempstr,'[1D')
             ENDFOR
             aePuts(tempstr)
@@ -10285,27 +10294,27 @@ next2:
         x--
         aePuts('[1D')
       ENDIF
-      IF ((c=RIGHTARROW) AND (x<(StrLen(space))))
+      IF ((c=RIGHTARROW) AND (x<(EstrLen(space))))
         x++
         aePuts('[1C')
       ENDIF
 
       IF(c<" ") THEN JUMP next2
 
-      IF (x<StrLen(space))
-        IF StrLen(space)<maxLineLen
+      IF (x<EstrLen(space))
+        IF EstrLen(space)<maxLineLen
           StrCopy(tempstr,'')
           StrAdd(space,'#')
-          FOR i:=StrLen(space)-1 TO x+1 STEP -1
+          FOR i:=EstrLen(space)-1 TO x+1 STEP -1
             space[i]:=space[i-1]
           ENDFOR
           space[x]:=c
           sendChar(c)
           x++
-          FOR i:=x TO StrLen(space)-1
+          FOR i:=x TO EstrLen(space)-1
             StrAddChar(tempstr,space[i])
           ENDFOR
-          FOR i:=x TO StrLen(space)-1
+          FOR i:=x TO EstrLen(space)-1
             StrAdd(tempstr,'[1D')
           ENDFOR
           aePuts(tempstr)
@@ -10461,7 +10470,7 @@ brk3:
       msgBuf.setSize(lines)
 
       bkFlag:=0
-      x:=StrLen(space)
+      x:=EstrLen(space)
       JUMP bEG_IN
     ENDIF
     IF((str[0]="E") OR (str[0]="e"))
@@ -12877,7 +12886,7 @@ jumpIn:
         IF ft<>0
           fLock:=NIL
           WHILE(Fgets(ft,ramDir,255)<>NIL) AND (fLock=0)
-            IF ramDir[StrLen(ramDir)-1]=10 THEN SetStr(ramDir,StrLen(ramDir)-1)
+            IF ramDir[EstrLen(ramDir)-1]=10 THEN SetStr(ramDir,EstrLen(ramDir)-1)
             IF MatchPatternNoCase(patternBuf,ramDir) THEN fLock:=Lock(final,ACCESS_READ)
           ENDWHILE
         Close(ft)
@@ -15672,7 +15681,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, estimatedSize:PTR TO CHAR, updateDo
     StrCopy(tempstr2,'')
     readToolType(TOOLTYPE_BBSCONFIG,'','FTPPORT',tempstr)
     readToolType(TOOLTYPE_NODE,node,'FTPPORT',tempstr2)
-    IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
+    IF (EstrLen(tempstr)>0) AND (EstrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
     StrAdd(tempstr,tempstr2)  
     
     ftpPorts:=makeIntList(tempstr)
@@ -15681,7 +15690,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, estimatedSize:PTR TO CHAR, updateDo
     StrCopy(tempstr2,'')
     readToolType(TOOLTYPE_BBSCONFIG,'','FTPDATAPORT',tempstr)
     readToolType(TOOLTYPE_NODE,node,'FTPDATAPORT',tempstr2)
-    IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
+    IF (EstrLen(tempstr)>0) AND (EstrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
     StrAdd(tempstr,tempstr2)
     ftpDataPorts:=makeIntList(tempstr)
 

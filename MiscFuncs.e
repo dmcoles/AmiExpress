@@ -74,16 +74,17 @@ ENDPROC
 EXPORT PROC makeIntList(src:PTR TO CHAR)
   DEF res
   DEF m=1
-  DEF tmp,i
+  DEF tmp,i,srcLen
   
-  tmp:=String(StrLen(src))
+  srcLen:=StrLen(src)
+  tmp:=String(srcLen)
   
-  FOR i:=0 TO StrLen(src)-1
+  FOR i:=0 TO srcLen-1
     IF src[i]="," THEN m++
   ENDFOR
   
   res:=List(m)
-  FOR i:=0 TO StrLen(src)-1
+  FOR i:=0 TO srcLen-1
     IF src[i]=","
       ListAddItem(res,Val(tmp))
       StrCopy(tmp,'')
@@ -155,14 +156,12 @@ ENDPROC RESULT_FAILURE
 
 /* trim spaces from both ends of a string and puts it in the destination estring*/
 EXPORT PROC fullTrim(src:PTR TO CHAR,dest:PTR TO CHAR)
-  DEF n,v=0
+  DEF n
   StrCopy(dest,TrimStr(src))
   n:=EstrLen(dest)
-  IF n>0 THEN v:=dest[n-1]
-  WHILE (n>0) AND (v=" ")
-    SetStr(dest,n-1)
-    n:=EstrLen(dest)
-    IF n>0 THEN v:=dest[n-1]
+  WHILE (n>0) AND (dest[n-1]=" ")
+    n--
+    SetStr(dest,n)
   ENDWHILE
 ENDPROC
 
@@ -475,10 +474,10 @@ EXPORT PROC fileWriteLn(fh,str: PTR TO CHAR)
 ENDPROC fileWrite(fh,'\n')
 
 EXPORT PROC fileWrite(fh,str: PTR TO CHAR)
-  DEF s
-
-  s:=Write(fh,str,StrLen(str))
-  IF s<>StrLen(str) THEN RETURN RESULT_FAILURE
+  DEF s,len
+  len:=StrLen(str)
+  s:=Write(fh,str,len)
+  IF s<>len THEN RETURN RESULT_FAILURE
 ENDPROC RESULT_SUCCESS
 
 EXPORT PROC countSpaces(str:PTR TO CHAR)
@@ -614,16 +613,17 @@ ENDPROC r
 EXPORT PROC parsePatternNoCase2(source:PTR TO CHAR,dest:PTR TO CHAR, len)
   DEF s:PTR TO CHAR
   DEF t[1]:STRING
-  DEF c,i,r
+  DEF c,i,r,origLen
   
   c:=StrLen(source)
+  origLen:=c
   FOR i:=0 TO c-1
     StrCopy(t,source+i,1)
     IF InStr('()|~[]%',t)>=0 THEN c++
   ENDFOR
 
   s:=String(c)
-  FOR i:=0 TO StrLen(source)-1
+  FOR i:=0 TO origLen-1
     StrCopy(t,source+i,1)
     IF InStr('()|~[]%',t)>=0 THEN StrAddChar(s,39)
     StrAdd(s,t)

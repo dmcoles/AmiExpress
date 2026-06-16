@@ -46,7 +46,7 @@ EXPORT PROC getNodeFile(toolType,tooltypeSelector,nodeFile)
       ->get conf location
       StringF(tempStr,'LOCATION.\d',tooltypeSelector)
       readToolType(TOOLTYPE_CONFCONFIG,'',tempStr,tempStr2)
-      IF tempStr2[StrLen(tempStr2)-1]="/" THEN SetStr(tempStr2,StrLen(tempStr2)-1)
+      IF tempStr2[EstrLen(tempStr2)-1]="/" THEN SetStr(tempStr2,EstrLen(tempStr2)-1)
       StringF(nodeFile,'\s',tempStr2)
     CASE TOOLTYPE_MSGBASE
       -> tooltypeSector is conf number
@@ -124,7 +124,7 @@ EXPORT PROC getNodeFile(toolType,tooltypeSelector,nodeFile)
       StringF(tempStr,'\sNode\d/NRAMS',cmds.bbsLoc,tooltypeSelector)
       IF findFirst(tempStr,tempStr2)
         p:=-1
-        FOR i:=0 TO StrLen(tempStr2)-1
+        FOR i:=0 TO EstrLen(tempStr2)-1
           IF tempStr2[i]="." THEN p:=i
         ENDFOR
         IF (p>=0)
@@ -364,7 +364,7 @@ EXPORT PROC getUserAccessFilename(outFilename: PTR TO CHAR)
   DEF i,c
 
   StrCopy(tempStr,loggedOnUser.name)
-  FOR i:=0 TO StrLen(tempStr)-1
+  FOR i:=0 TO EstrLen(tempStr)-1
     c:=tempStr[i]
     SELECT c
       CASE "%"

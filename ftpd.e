@@ -585,20 +585,22 @@ PROC readLine(ftpData:PTR TO ftpData,sb,sockd,vptr:PTR TO CHAR, maxlen)
   DEF string[255]:STRING
 
   buffer:=vptr
+  fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
 
-  FOR n:=0 TO maxlen-1 
+  FOR n:=0 TO maxlen-1
 
     tv.secs:=TIMEOUT
     tv.micro:=0
-    fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
     setSingleFDS(fds,sockd)
     IF ftpData<>NIL THEN sigs:=getSigs(ftpData)
     IF sigs<>0 THEN sigsPtr:={sigs}
     res:=waitSelect(sb,sockd+1,fds,NIL,NIL,tv,sigsPtr)
     IF ftpData<>NIL THEN processMessages(ftpData)
-    END fds[32]
     CONT (res<1) AND (sigs<>0)
-    IF res<=0 THEN RETURN -1
+    IF res<=0
+      END fds[32]
+      RETURN -1
+    ENDIF
 
     rc:=recv(sb,sockd, c, 1,0)
 		IF ( rc = 1 )
@@ -610,10 +612,12 @@ PROC readLine(ftpData:PTR TO ftpData,sb,sockd,vptr:PTR TO CHAR, maxlen)
 		ELSE
           rc:=errno(sb)
 		  CONT rc = EINTR
+          END fds[32]
 		  RETURN -1
 		ENDIF
   ENDFOR
   buffer[]:=0
+  END fds[32]
 ENDPROC n
 
 PROC writeLine(sb,sockd, vptr:PTR TO CHAR, n)
@@ -693,8 +697,12 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
 	 
   hostEnt:=getHostByName(sb,serverHost)
 
-  addr:=Long(hostEnt.h_addr_list)
-  addr:=Long(addr)
+  IF hostEnt=NIL
+    addr:=0
+  ELSE
+    addr:=Long(hostEnt.h_addr_list)
+    addr:=Long(addr)
+  ENDIF
   
   ftpData.rest:=0  
 
@@ -716,23 +724,24 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
   writeLineEx(sb,ftp_c, temp)
   ftpData.restPos:=0
 
+  fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
   REPEAT
     tv.secs:=TIMEOUT
     tv.micro:=0
-    fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
     setSingleFDS(fds,data_s)
     IF ftpData<>NIL THEN sigs:=getSigs(ftpData)
     IF sigs<>0 THEN sigsPtr:={sigs}
     res:=waitSelect(sb,data_s+1,fds,NIL,NIL,tv,sigsPtr)
     IF ftpData<>NIL THEN processMessages(ftpData)
-    END fds[32]
     IF (res<1) AND (sigs=0)
+      END fds[32]
       ftpData.scount:=ftpData.scount-1
       closeSocket(sb,data_s)
       writeLineEx(sb,ftp_c, '425 Timed out waiting for data connection\b\n')
       RETURN -1,-1
     ENDIF
   UNTIL res>0
+  END fds[32]
   
   IF((data_c:=accept(sb,data_s, NIL, NIL) ) < 0)
     ->aePuts(ftpData,'/XFTP: Error calling accept()\b\n')
@@ -1049,7 +1058,7 @@ PROC makeFtpListFromDlDirs(ftpData:PTR TO ftpData, startDate, cmdType, sb, data_
       ENDIF
       
       StringF(dirCache,'RAM:DirCaches/Conf\dDir\d\s\s',ftpData.currentConf,j,IF StrLen(ftpData.subDirPath)>0 THEN '_' ELSE '', ftpData.subDirPath)
-      FOR i:=14 TO StrLen(dirCache)-1 DO IF dirCache[i]="/" THEN dirCache[i]:="_"
+      FOR i:=14 TO EstrLen(dirCache)-1 DO IF dirCache[i]="/" THEN dirCache[i]:="_"
       
       makeList(path,dirCache,fib,startDate,cmdType,sb,data_c)
     ENDIF
@@ -1288,9 +1297,9 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,path:PTR TO CHAR)
 
       FOR i:=0 TO ftpData.confNames.count()-1
         StringF(temp,'/\r\z\d[3]-\s/',i+1,ftpData.confNames.item(i))
-        IF StrCmp(temp,path,StrLen(temp))
+        IF StrCmp(temp,path,EstrLen(temp))
           stat:=i
-          StrCopy(path,path+StrLen(temp))
+          StrCopy(path,path+EstrLen(temp))
         ENDIF
       ENDFOR
 
@@ -1298,9 +1307,9 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,path:PTR TO CHAR)
         IF ftpData.currentConf=0
           FOR i:=0 TO ftpData.confNames.count()-1
             StringF(temp,'\r\z\d[3]-\s/',i+1,ftpData.confNames.item(i))
-            IF StrCmp(temp,path,StrLen(temp))
+            IF StrCmp(temp,path,EstrLen(temp))
               stat:=i
-              StrCopy(path,path+StrLen(temp))
+              StrCopy(path,path+EstrLen(temp))
             ENDIF
           ENDFOR
         ENDIF
