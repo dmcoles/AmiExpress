@@ -133,6 +133,7 @@ DEF cmds=NIL: PTR TO commands   ->shared with tooltyles.e
 DEF mybbsLoc[255]:STRING
 DEF parsedParams: PTR TO stringlist
 DEF confBases: PTR TO stdlist
+DEF confBaseOffsets=NIL
 DEF newSinceFlag
 DEF computerEntries
 DEF computerTypes: PTR TO stringlist
@@ -315,6 +316,8 @@ DEF lastOlmNode=-1
 
 DEF translators: PTR TO translator
 DEF managedTranslators=FALSE
+DEF lastTranslatorKey[80]:STRING
+DEF lastTranslatorResult=NIL
 
 DEF doorExpertMode = FALSE
 
@@ -2025,6 +2028,17 @@ PROC sCheckInput()
   IF(telnetSocket>=0) AND (ioFlags[IOFLAG_SER_IN]) THEN result3:=checkTelnetData()
 ENDPROC result1 OR result2 OR result3
 
+PROC buildConfBaseOffsets()
+  DEF i,offset=0
+  IF confBaseOffsets THEN Dispose(confBaseOffsets)
+  confBaseOffsets:=New((cmds.numConf+1)*4)
+  PutLong(confBaseOffsets,0)
+  FOR i:=1 TO cmds.numConf
+    PutLong(confBaseOffsets+(i*4),offset)
+    offset:=offset+getConfMsgBaseCount(i)
+  ENDFOR
+ENDPROC
+
 PROC countMsgBases()
   DEF count=0
   DEF num,i
@@ -2038,12 +2052,14 @@ ENDPROC count
 PROC getConfIndex(confNum,msgBaseNum)
   DEF index=0
   DEF num=1,i
+  IF confBaseOffsets
+    RETURN Long(confBaseOffsets+(confNum*4))+msgBaseNum-1
+  ENDIF
   FOR i:=1 TO confNum-1
     num:=getConfMsgBaseCount(i)
     index:=index+num
   ENDFOR
-  index:=index+msgBaseNum-1
-ENDPROC index
+ENDPROC index+msgBaseNum-1
 
 PROC getConfMsgBaseCount(confNum)
   DEF num
@@ -2670,6 +2686,8 @@ PROC unloadTranslators()
     translators:=NIL
   ENDIF
   managedTranslators:=FALSE
+  StrCopy(lastTranslatorKey,'')
+  lastTranslatorResult:=NIL
 ENDPROC
 
 PROC loadHistory()
@@ -31882,6 +31900,7 @@ PROC main() HANDLE
     cb:=NEW cb
     confBases.add(cb)
   ENDFOR
+  buildConfBaseOffsets()
 
   xprTitle:=NEW xprTitle.stringlist(100)
   xprLib:=NEW xprLib.stringlist(100)
