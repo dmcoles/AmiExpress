@@ -6563,6 +6563,13 @@ PROC displayScreen(screenType)
       ELSE
         StringF(screencheck,'\s\s',confScreenDir,currentMenuName)
       ENDIF
+      IF findSecurityScreen(screencheck,screenfile)=FALSE
+        IF StrLen(currentMenuName)=0
+          StringF(screencheck,'\s\s',nodeScreenDir,defaultMenuName)
+        ELSE
+          StringF(screencheck,'\s\s',nodeScreenDir,currentMenuName)
+        ENDIF
+      ENDIF
       IF (findSecurityScreen(screencheck,screenfile)) THEN res:=displayFile(screenfile)
       cmdShortcuts:=FALSE
       shortcuts.clear()
