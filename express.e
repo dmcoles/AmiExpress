@@ -23204,16 +23204,18 @@ PROC displayAccount(who:LONG, page, hoozer:PTR TO user, hoozer2: PTR TO userKeys
 
   ENDIF
   
-  displayAccountActions(who)
+  displayAccountActions(who,page)
 ENDPROC
 
-PROC displayAccountActions(who:LONG)
-  DEF tempStr[200]:STRING
+PROC displayAccountActions(who:LONG,page)
+  DEF tempStr[255]:STRING
   DEF tempStr2[20]:STRING
   
   aePuts('[16;1H[33mX  [36m=[0mEXIT-NOSAVE [33m~[36m=[0mSAVE  [33m1-8[36m=[0mPRESETS  [33m9[36m=[0mRE-ACTIVATE  [33m<DEL>[36m=[0mDELETE  [33m*[36m=[0mUSER NOTES\b\n')
-  StrCopy(tempStr,'[33m<TAB>[36m=[0mCONT [33m@[36m=[0mCONFERENCE ACCOUNTING [33m![36m=[0mCREDIT ACCOUNT MAINTENANCE ')
-  IF findUserAnswers(who,tempStr2) THEN StrAdd(tempStr,'[33m?[36m=[0mUSER ANSWERS') ELSE StrAdd(tempStr,'              ')
+  StrCopy(tempStr,'[33mSPACE[36m=[0m')
+  IF page=0 THEN StrAdd(tempStr,'LOCKS ') ELSE StrAdd(tempStr,'MAIN  ')
+  StrAdd(tempStr,'[33mTAB[36m=[0mCONT [33m@[36m=[0mCONF ACCT [33m![36m=[0mCREDIT ACCT ')
+  IF findUserAnswers(who,tempStr2) THEN StrAdd(tempStr,'[33m?[36m=[0mANSWERS') ELSE StrAdd(tempStr,'         ')
   StrAdd(tempStr,'\b\n')
   aePuts(tempStr)
 ENDPROC
@@ -23428,7 +23430,7 @@ PROC displayAccountInfo(who:LONG, page,hoozer:PTR TO user, hoozer2:PTR TO userKe
     aePuts(tempStr)
 
   ENDIF
-  displayAccountActions(who)
+  displayAccountActions(who,page)
 ENDPROC
 
 PROC bulkAccountEditor()
