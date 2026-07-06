@@ -131,6 +131,12 @@ EXPORT OBJECT zModem
   totalDL: LONG
   shouldUpdateDownloadStats: CHAR
   needUpdateDownloadStats: CHAR
+  ulTTTM:LONG
+  dlTTTM:LONG
+  tTCPS:LONG
+  tTEFF:LONG
+  ftptime1:LONG
+  ftptime2:LONG
 ENDOBJECT
 
 EXPORT OBJECT confBase

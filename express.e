@@ -28,6 +28,8 @@ MODULE 'intuition/screens','intuition/intuition','intuition/gadgetclass','exec/p
   MODULE '*axcommon','*axconsts','*axenums','*axobjects','*miscfuncs','*stringlist','*ftpd','*httpd','*errors','*mailssl','*zmodem',
          '*xymodem','*hydra','*bcd','*pwdhash','*sha256','*tooltypes','*expversion'
 
+
+DEF sem=0
 DEF masterMsg:acpMessage
 DEF resmp: PTR TO mp
 DEF rexxmp: PTR TO mp
@@ -146,11 +148,11 @@ DEF pagesAllowed=-1
 DEF ownPartFiles=FALSE
 DEF localUpload=FALSE
 DEF bytesADL=0
-DEF tTEFF=0
-DEF tTCPS=0
+//DEF tTEFF=0
+//DEF tTCPS=0
 ->DEF tTTM=0
-DEF ulTTTM=0
-DEF dlTTTM=0
+//DEF ulTTTM=0
+//DEF dlTTTM=0
 DEF dTBT[8]:ARRAY OF CHAR
 DEF uTBT[8]:ARRAY OF CHAR
 DEF beenUDd=FALSE
@@ -358,8 +360,8 @@ DEF includeDeact=FALSE
 
 DEF bgChecking=FALSE
 
-DEF ftptime1=0
-DEF ftptime2=0
+//DEF ftptime1=0
+//DEF ftptime2=0
 
 DEF nativeTelnet=FALSE
 DEF nativeFtp=FALSE
@@ -405,6 +407,8 @@ DEF telnetPasswordPrompt[100]:STRING
 DEF quietDownload=FALSE
 DEF unknownValue=0
 DEF memConf=0:PTR TO LONG ->shared with tooltypes.e
+
+DEF ftpGData:PTR TO ftpData
 
 RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
@@ -477,7 +481,7 @@ PROC checkOnlineStatus()
 ENDPROC RESULT_SUCCESS
 
 PROC modemOffHook()
-  DEF ni:PTR TO nodeInfo
+  DEF ni:PTR TO nodeInfo2
   offHookFlag:=TRUE
   IF (telnetSocket>=0)
     CloseSocket(telnetSocket)
@@ -487,8 +491,9 @@ PROC modemOffHook()
     telnetSocket:=-1
     IF sopt.toggles[TOGGLES_MULTICOM]
       ObtainSemaphore(masterNode)
-      ni:=(masterNode.myNode[node])
+      ni:=(masterNode.myNode2[node])
       ni.netSocket:=-1
+      ni.netIP:=0
       ni.offHook:=TRUE
       ReleaseSemaphore(masterNode)
     ENDIF   
@@ -793,7 +798,7 @@ PROC intDoReset(s: PTR TO CHAR)
 ENDPROC
 
 PROC dropDTR()
-  DEF ni:PTR TO nodeInfo
+  DEF ni:PTR TO nodeInfo2
   IF telnetSocket>=0
     CloseSocket(telnetSocket)
     CloseLibrary(socketbase)
@@ -802,8 +807,9 @@ PROC dropDTR()
     telnetSocket:=-1
     IF sopt.toggles[TOGGLES_MULTICOM]
       ObtainSemaphore(masterNode)
-      ni:=(masterNode.myNode[node])
+      ni:=(masterNode.myNode2[node])
       ni.netSocket:=-1
+      ni.netIP:=0
       ReleaseSemaphore(masterNode)
     ENDIF
   ENDIF
@@ -842,7 +848,7 @@ ENDPROC
 
 PROC resetSystem()
   DEF tempStr[255]:STRING
-  DEF ni:PTR TO nodeInfo
+  DEF ni:PTR TO nodeInfo2
 
   ioFlags[IOFLAG_KBD_IN]:=-1
   ioFlags[IOFLAG_SER_IN]:=0
@@ -859,8 +865,9 @@ PROC resetSystem()
     telnetSocket:=-1
     IF sopt.toggles[TOGGLES_MULTICOM]
       ObtainSemaphore(masterNode)
-      ni:=(masterNode.myNode[node])
+      ni:=(masterNode.myNode2[node])
       ni.netSocket:=-1
+      ni.netIP:=0
       ReleaseSemaphore(masterNode)
     ENDIF
 
@@ -1022,10 +1029,10 @@ ENDPROC res
 
 
 PROC acceptIncomingConnection(sock,ftp)
-  DEF ni:PTR TO nodeInfo
-  DEF socket
-  ftpConn:=ftp
+  DEF ni:PTR TO nodeInfo2
+  DEF socket,n,r,peeraddr: sockaddr_in
   IF (telnetSocket=-1) AND (offHookFlag=FALSE)
+    ftpConn:=ftp
     telnetSocket:=ObtainSocket(sock,PF_INET,SOCK_STREAM,IPPROTO_TCP)
 
     IF checkCarrier()=FALSE 
@@ -1038,18 +1045,40 @@ PROC acceptIncomingConnection(sock,ftp)
 
     IF sopt.toggles[TOGGLES_MULTICOM]
       ObtainSemaphore(masterNode)
-      ni:=(masterNode.myNode[node])
-      ni.netSocket:=telnetSocket
+      ni:=(masterNode.myNode2[node])
+      ni.netIP:=0
+      IF telnetSocket>=0
+        ni.netSocket:=telnetSocket
+        n:=SIZEOF sockaddr_in
+        r:=GetPeerName(telnetSocket,peeraddr,{n})
+        IF r=0 THEN ni.netIP:=peeraddr.sin_addr
+      ENDIF
       ReleaseSemaphore(masterNode)
     ENDIF
   ELSE
-    socket:=ObtainSocket(sock,PF_INET,SOCK_STREAM,IPPROTO_TCP)
-    CloseSocket(socket)
+    IF ftp
+      socket:=ObtainSocket(sock,PF_INET,SOCK_STREAM,IPPROTO_TCP)   
+      IF ftpGData ANDALSO ftpGData.extraSockets ANDALSO (ftpGData.extraSockets.count()<ftpGData.extraSockets.maxSize())
+        ftpGData.extraSockets.add(socket)
+      ELSE 
+        CloseSocket(socket)
+      ENDIF
+      RETURN
+    ENDIF
   ENDIF
   IF sopt.toggles[TOGGLES_MULTICOM]
     ObtainSemaphore(masterNode)
     ni:=(masterNode.myNode[node])
-    IF ni.netSocket=-2 THEN ni.netSocket:=telnetSocket
+    IF ni.netSocket=-2 
+      ni.netSocket:=telnetSocket
+      ni.netIP:=0
+      IF telnetSocket>=0
+        ni.netSocket:=telnetSocket
+        n:=SIZEOF sockaddr_in
+        r:=GetPeerName(telnetSocket,peeraddr,{n})
+        IF r=0 THEN ni.netIP:=peeraddr.sin_addr
+      ENDIF
+    ENDIF
     ReleaseSemaphore(masterNode)
   ENDIF
 ENDPROC
@@ -1753,7 +1782,7 @@ PROC telnetSend(string:PTR TO CHAR, putlen)
   i:=Send(telnetSocket,buf2,c,0)
   IF (i<>c)
     e:=Errno()
-    IF (((e=EWOULDBLOCK) OR (e=ENOBUFS))=FALSE)
+    IF (((e=EWOULDBLOCK1) OR (e=EWOULDBLOCK2) OR (e=ENOBUFS))=FALSE)
       RETURN
     ELSE
       IF i=-1 THEN i:=0
@@ -1835,6 +1864,8 @@ PROC slowmoSerPuts2(string: PTR TO CHAR, putlen)
 ENDPROC
 
 PROC serPuts2(string: PTR TO CHAR, putlen)
+  IF ftpConn THEN RETURN
+  
   IF telnetSocket>=0
     IF putlen=-1 THEN putlen:=StrLen(string)
   
@@ -1949,7 +1980,7 @@ PROC checkCarrier()
     IF stat2<>1
       stat:=0
       stat2:=Errno()
-      IF (stat2 <> EINTR) AND (stat2<>EWOULDBLOCK) THEN stat:=1
+      IF (stat2 <> EINTR) AND (stat2<>EWOULDBLOCK1) AND (stat2<>EWOULDBLOCK2) AND (stat2) THEN stat:=1
     ELSE
       stat:=0
     ENDIF
@@ -3380,7 +3411,8 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,tooltype,command,privcmd,params,n
         msg.command:=IF loggedOnUser<>NIL THEN userLineLen ELSE 29
         nodesPtr[]:=nodesPtr[]+1
     CASE JH_WRITE
-      IF (transfering=FALSE) AND (doorSilent=FALSE)
+      IF (transfering=FALSE) AND (doorSilent=FALSE) AND (ftpConn=FALSE)
+      
         aePuts(msg.string)
       ENDIF
     CASE CHAIN
@@ -3710,29 +3742,29 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,tooltype,command,privcmd,params,n
     CASE ZMODEMSEND
         convertToBCD(0,dTBT)
         convertToBCD(0,uTBT)
-        ulTTTM:=NIL
-        dlTTTM:=NIL
-        tTEFF:=NIL
-        tTCPS:=NIL
+        zModemInfo.ulTTTM:=NIL
+        zModemInfo.dlTTTM:=NIL
+        zModemInfo.tTEFF:=NIL
+        zModemInfo.tTCPS:=NIL
         StrCopy(tempstring,msg.string)
         ch:=downloadFile(tempstring)
         IF((logonType>=LOGON_TYPE_REMOTE) AND (checkCarrier()=FALSE)) THEN msg.data:=-2 ELSE msg.data:=ch
     CASE BATCHZMODEMSEND
         convertToBCD(0,dTBT)
         convertToBCD(0,uTBT)
-        ulTTTM:=NIL
-        dlTTTM:=NIL
-        tTEFF:=NIL
-        tTCPS:=NIL
+        zModemInfo.ulTTTM:=NIL
+        zModemInfo.dlTTTM:=NIL
+        zModemInfo.tTEFF:=NIL
+        zModemInfo.tTCPS:=NIL
         ch:=downloadFile(msg.filler1)
         IF((logonType>=LOGON_TYPE_REMOTE) AND (checkCarrier()=FALSE)) THEN msg.data:=-2 ELSE msg.data:=ch
     CASE ZMODEMRECEIVE
         convertToBCD(0,dTBT)
         convertToBCD(0,uTBT)
-        ulTTTM:=NIL
-        dlTTTM:=NIL
-        tTEFF:=NIL
-        tTCPS:=NIL
+        zModemInfo.ulTTTM:=NIL
+        zModemInfo.dlTTTM:=NIL
+        zModemInfo.tTEFF:=NIL
+        zModemInfo.tTCPS:=NIL
         bgFileCheck:=FALSE
         StrCopy(tempstring,msg.string);
         ch:=fileReceive(tempstring,1);
@@ -3986,10 +4018,10 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,tooltype,command,privcmd,params,n
     CASE AXNET_SEND
       convertToBCD(0,dTBT)
       convertToBCD(0,uTBT)
-      ulTTTM:=0
-      dlTTTM:=0
-      tTEFF:=0
-      tTCPS:=0
+      zModemInfo.ulTTTM:=0
+      zModemInfo.dlTTTM:=0
+      zModemInfo.tTEFF:=0
+      zModemInfo.tTCPS:=0
       
       msg.data:=doAxNetSend(msg.filler1)
       IF logonType=LOGON_TYPE_REMOTE
@@ -4000,10 +4032,10 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,tooltype,command,privcmd,params,n
     CASE AXNET_RECEIVE
       convertToBCD(0,dTBT)
       convertToBCD(0,uTBT)
-      ulTTTM:=0
-      dlTTTM:=0
-      tTEFF:=0
-      tTCPS:=0
+      zModemInfo.ulTTTM:=0
+      zModemInfo.dlTTTM:=0
+      zModemInfo.tTEFF:=0
+      zModemInfo.tTCPS:=0
       StrCopy(tempstring,msg.string)
 
       msg.data:=doAxNetReceive(tempstring)
@@ -7500,14 +7532,10 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
       IF (ioFlags[IOFLAG_SER_IN])
         ch:=lch
         wasControl:=FALSE
-        StringF(obuf, 'Serial Received: hex $\z\h[2] = \c', ch, ch)
-        debugLog(LOG_DEBUG,obuf)
         chatSerFlag:=1
         ximPort:=SERIAL_PORT
         IF ch=$1b
           ch:=readMayGetChar(serialReadMP,TRUE,{serbuff})
-          StringF(obuf, 'Escape Serial Received: hex $\z\h[2] = \c', ch, ch)
-          debugLog(LOG_DEBUG,obuf)
           IF ch="["
             ch:=readMayGetChar(serialReadMP,TRUE,{serbuff})
 
@@ -7547,25 +7575,12 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
         chatConFlag:=1
         ximPort:=CONSOLE_PORT
 
-        IF ((ch>=$1F) AND (ch<=$7E)) OR (ch>=$A0)
-          StringF(obuf, 'Received: hex $\z\h[2] = \c inControl=\d\b\n', ch, ch,inControl)
-        ELSE
-          StringF(obuf, 'Received: hex $\z\h[2] \d', ch,inControl)
-        ENDIF
-        debugLog(LOG_DEBUG,obuf)
-
         IF ch=$9B
           ch:=readMayGetChar(consoleReadMP, FALSE, {ibuf})
-            StringF(obuf, 'Received control: hex $\z\h[2] \d', ch,ch)
-            debugLog(LOG_DEBUG,obuf)
             lch:=readMayGetChar(consoleReadMP, FALSE, {ibuf})
-            StringF(obuf, 'Received control: hex $\z\h[2] \d', lch,lch)
-            debugLog(LOG_DEBUG,obuf)
           IF (ch="1") AND (lch<>$7E)
             ch:=lch
             lch:=readMayGetChar(consoleReadMP, FALSE, {ibuf})
-            StringF(obuf, 'Received control: hex $\z\h[2] \d', lch,lch)
-            debugLog(LOG_DEBUG,obuf)
             IF lch=$7e
               wasControl:=2
             ENDIF
@@ -9472,16 +9487,19 @@ PROC logoffLog(stat: PTR TO CHAR)
   callersLog(tempstr)
 ENDPROC
 
-PROC logUDFile(dl)
+PROC logUDFile(lzm:PTR TO zModem,dl)
   DEF tempStr[255]:STRING
+
+  IF lzm=0 THEN lzm:=zModemInfo
+
   IF dl
-    StringF(tempStr,'\t\sDownloading \s \d bytes',IF zModemInfo.freeDFlag THEN 'Free ' ELSE '',zModemInfo.fileName,zModemInfo.filesize)
+    StringF(tempStr,'\t\sDownloading \s \d bytes',IF lzm.freeDFlag THEN 'Free ' ELSE '',lzm.fileName,lzm.filesize)
   ELSE
-    IF zModemInfo.resumePos<>0
-      StringF(tempStr,'\tResuming \s[12] \d bytes from \d',FilePart(zModemInfo.fileName),zModemInfo.filesize,zModemInfo.resumePos)
+    IF lzm.resumePos<>0
+      StringF(tempStr,'\tResuming \s[12] \d bytes from \d',FilePart(lzm.fileName),lzm.filesize,lzm.resumePos)
     ELSE
-      IF zModemInfo.filesize<>$7fffffff
-        StringF(tempStr,'\tUploading \s[12] \d bytes',FilePart(zModemInfo.fileName),zModemInfo.filesize)
+      IF lzm.filesize<>$7fffffff
+        StringF(tempStr,'\tUploading \s[12] \d bytes',FilePart(lzm.fileName),lzm.filesize)
       ENDIF
     ENDIF
   ENDIF
@@ -9753,10 +9771,10 @@ PROC checkAttachedFile(msgnumb,flag)
 
   convertToBCD(0,dTBT)
   convertToBCD(0,uTBT)
-  ulTTTM:=NIL
-  ulTTTM:=0
-  tTEFF:=NIL
-  tTCPS:=NIL
+  zModemInfo.ulTTTM:=NIL
+  zModemInfo.dlTTTM:=0
+  zModemInfo.tTEFF:=NIL
+  zModemInfo.tTCPS:=NIL
 
   filetype:=getAttachType(msgnumb)
 
@@ -14422,7 +14440,7 @@ PROC xprupdate()
     update:=TRUE
     IF xpru.xpru_filesize<>-1
       zModemInfo.filesize:=xpru.xpru_filesize
-      logUDFile(zModemInfo.currentOperation=ZMODEM_DOWNLOAD)
+      logUDFile(zModemInfo,zModemInfo.currentOperation=ZMODEM_DOWNLOAD)
     ENDIF
   ENDIF
 
@@ -14452,8 +14470,8 @@ PROC xprupdate()
   ENDIF
   IF(xpru.xpru_updatemask AND XPRU_DATARATE)<>0
     IF xpru.xpru_datarate<>-1
-      tTCPS:=xpru.xpru_datarate
-      tTEFF:=calcEfficiency(tTCPS,onlineBaud)
+      zModemInfo.tTCPS:=xpru.xpru_datarate
+      zModemInfo.tTEFF:=calcEfficiency(zModemInfo.tTCPS,onlineBaud)
     ENDIF
   ENDIF
 
@@ -14464,7 +14482,7 @@ PROC xprupdate()
   IF update
     updateTime:=getSystemTime()
     IF zModemInfo.lastUpdate<>updateTime
-      updateZDisplay()
+      updateZDisplay(zModemInfo)
       debugLog(LOG_DEBUG,'xpru display update')
       StringF(outmsg,'current block size: \d',xpru.xpru_blocksize)
       debugLog(LOG_DEBUG,outmsg)
@@ -14825,49 +14843,52 @@ PROC makeCpsText(cps,outstr:PTR TO CHAR)
   ENDIF
 ENDPROC
 
-PROC updateZDisplay()
+PROC updateZDisplay(zmi:PTR TO zModem)
   DEF tempstr[255]:STRING
   DEF xpos,tags2:PTR TO LONG,vi
   DEF v1,v2
   DEF fsize
+
+  IF zmi=0 THEN zmi:=zModemInfo
+
   IF netMailTransfer
-    IF zModemInfo.currentOperation=ZMODEM_DOWNLOAD
+    IF zmi.currentOperation=ZMODEM_DOWNLOAD
       StringF(tempstr,'[Node \d] NetMail Send Window',node)
-      AstrCopy(zModemInfo.titleBar,tempstr)
+      AstrCopy(zmi.titleBar,tempstr)
     ELSE
       StringF(tempstr,'[Node \d] NetMail Receive Window',node)
-      AstrCopy(zModemInfo.titleBar,tempstr)
+      AstrCopy(zmi.titleBar,tempstr)
     ENDIF 
   ELSE
-    IF zModemInfo.currentOperation=ZMODEM_DOWNLOAD
-      StringF(tempstr,'[Node \d] Send Window (\d/\d)',node,zModemInfo.currentDL,zModemInfo.totalDL)
-      AstrCopy(zModemInfo.titleBar,tempstr)
+    IF zmi.currentOperation=ZMODEM_DOWNLOAD
+      StringF(tempstr,'[Node \d] Send Window (\d/\d)',node,zmi.currentDL,zmi.totalDL)
+      AstrCopy(zmi.titleBar,tempstr)
     ELSE
-      StringF(tempstr,'[Node \d] Receive Window (\d/??)',node,zModemInfo.currentUL)
-      AstrCopy(zModemInfo.titleBar,tempstr)
+      StringF(tempstr,'[Node \d] Receive Window (\d/??)',node,zmi.currentUL)
+      AstrCopy(zmi.titleBar,tempstr)
     ENDIF
   ENDIF
 
   IF(windowZmodem<>NIL)
-    fsize:=zModemInfo.filesize
+    fsize:=zmi.filesize
 
   
-    SetWindowTitles(windowZmodem,zModemInfo.titleBar,zModemInfo.titleBar)
+    SetWindowTitles(windowZmodem,zmi.titleBar,zmi.titleBar)
     zmodemStatPrint('[H[J[0 p')
     IF (KickVersion(40) AND (bitPlanes>2))
       zmodemStatPrint('[37m[ s')
     ENDIF
-    StringF(tempstr,'[H\n FileName: \s\n',FilePart(zModemInfo.fileName))
+    StringF(tempstr,'[H\n FileName: \s\n',FilePart(zmi.fileName))
     zmodemStatPrint(tempstr)
     StringF(tempstr,' FileSize: \d\n',fsize)
     zmodemStatPrint(tempstr)
-    StringF(tempstr,' ETA Time: \s\n',zModemInfo.apxTime)
+    StringF(tempstr,' ETA Time: \s\n',zmi.apxTime)
     zmodemStatPrint(tempstr)
-    StringF(tempstr,' Cur Time: \s\n',zModemInfo.elapsedTime)
+    StringF(tempstr,' Cur Time: \s\n',zmi.elapsedTime)
     zmodemStatPrint(tempstr)
-    StringF(tempstr,' Position: \d\n',zModemInfo.transPos)
+    StringF(tempstr,' Position: \d\n',zmi.transPos)
     zmodemStatPrint(tempstr)
-    StringF(tempstr,' Resume P: \d\n',zModemInfo.resumePos);
+    StringF(tempstr,' Resume P: \d\n',zmi.resumePos);
     zmodemStatPrint(tempstr);
 
     IF (gadtoolsbase:=OpenLibrary('gadtools.library',0))<>NIL
@@ -14886,13 +14907,13 @@ PROC updateZDisplay()
       RectFill(windowZmodem.rport,11,130,322,137)
     ELSE
       IF fsize<100
-        StringF(tempstr,' Complete: \d%\n',Div(Mul(zModemInfo.transPos,100),fsize))
+        StringF(tempstr,' Complete: \d%\n',Div(Mul(zmi.transPos,100),fsize))
       ELSE
-        StringF(tempstr,' Complete: \d%\n',Div(zModemInfo.transPos,Div(fsize,100)))
+        StringF(tempstr,' Complete: \d%\n',Div(zmi.transPos,Div(fsize,100)))
       ENDIF
       zmodemStatPrint(tempstr)
 
-      v1:=zModemInfo.transPos
+      v1:=zmi.transPos
       v2:=fsize
       IF (v2=0)
         xpos:=11
@@ -14914,19 +14935,19 @@ PROC updateZDisplay()
         RectFill(windowZmodem.rport,xpos+1,130,322,137)
       ENDIF
     ENDIF
-    StringF(tempstr,' LastTime: \s\n',zModemInfo.lastTime)
+    StringF(tempstr,' LastTime: \s\n',zmi.lastTime)
     zmodemStatPrint(tempstr)
-    StringF(tempstr,'      CPS: \d Efficiency \d%\n\n',tTCPS,tTEFF)
+    StringF(tempstr,'      CPS: \d Efficiency \d%\n\n',zmi.tTCPS,zmi.tTEFF)
     zmodemStatPrint(tempstr)
-    StringF(tempstr,' Z Status: \s\n',zModemInfo.zStat)
+    StringF(tempstr,' Z Status: \s\n',zmi.zStat)
     zmodemStatPrint(tempstr)
-    StringF(tempstr,' Errors: \d\n',zModemInfo.errorCount)
+    StringF(tempstr,' Errors: \d\n',zmi.errorCount)
     zmodemStatPrint(tempstr)
-    StringF(tempstr,' ErrorPos: \d ',zModemInfo.errorPos)
+    StringF(tempstr,' ErrorPos: \d ',zmi.errorPos)
     zmodemStatPrint(tempstr)
   ENDIF
   
-  makeCpsText(tTCPS,tempstr)
+  makeCpsText(zmi.tTCPS,tempstr)
   
   sendACPCommand2(tempstr,JH_TRANSFERCPS)
 ENDPROC
@@ -15003,7 +15024,7 @@ PROC httpUpload(uploadFolder: PTR TO CHAR,httpPorts)
     StrCopy(tempstr,'localhost')
   ENDIF
   
-  doHttpd(node,tempstr,httpPorts,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},TRUE,NIL)
+  doHttpd(node,tempstr,httpPorts,uploadFolder,{aePuts},{readChar},{sCheckInput},{ftpUploadFileStart},{ftpUploadFileEnd}, {ftpUploadFileProgress},{ftpDupeCheck},{checkCarrier},TRUE,NIL)
   serialCacheEnabled:=oldSerCache
 ENDPROC
 
@@ -15051,7 +15072,7 @@ PROC httpDownload(fileList: PTR TO stdlist, pupdateDownloadStats,httpPorts)
   oldSerCache:=serialCacheEnabled
   flushSerialCache()
   serialCacheEnabled:=FALSE
-  doHttpd(node,tempstr,httpPorts,tempDir,{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd}, {ftpTransferFileProgress},{ftpDupeCheck},{checkCarrier},FALSE,fileList)
+  doHttpd(node,tempstr,httpPorts,tempDir,{aePuts},{readChar},{sCheckInput},{ftpDownloadFileStart},{ftpDownloadFileEnd}, {ftpDownloadFileProgress},{ftpDupeCheck},{checkCarrier},FALSE,fileList)
   serialCacheEnabled:=oldSerCache
  
   ->clean up ram links
@@ -15059,89 +15080,97 @@ PROC httpDownload(fileList: PTR TO stdlist, pupdateDownloadStats,httpPorts)
   Execute(linkStr,NIL,NIL)
 ENDPROC
 
-PROC ftpUploadFileStart(fileName:PTR TO CHAR,resumefrom)
+PROC ftpUploadFileStart(lzModemInfo:PTR TO zModem, fileName:PTR TO CHAR,resumefrom)
+  DEF t1,t2
+
+  IF lzModemInfo=0 THEN lzModemInfo:=zModemInfo
+
   sendMasterUpload(FilePart(fileName))
-  zModemInfo.filesize:=0
-  zModemInfo.resumePos:=resumefrom
-  zModemInfo.transPos:=0
-  ftptime1,ftptime2:=getSystemTime()
-  updateZDisplay()
+  lzModemInfo.filesize:=0
+  lzModemInfo.resumePos:=resumefrom
+  lzModemInfo.transPos:=0
+  t1,t2:=getSystemTime()
+  lzModemInfo.ftptime1:=t1
+  lzModemInfo.ftptime2:=t2
+  updateZDisplay(lzModemInfo)
 ENDPROC
 
-PROC ftpUploadFileEnd(fileName:PTR TO CHAR,success)
+PROC ftpUploadFileEnd(lzModemInfo:PTR TO zModem, fileName:PTR TO CHAR,success)
   DEF i
   DEF str[255]:STRING
   DEF t1,t2
 
-  IF ftpConn THEN ulTTTM:=0
+  IF ftpConn THEN lzModemInfo.ulTTTM:=0
+
+  IF lzModemInfo=0 THEN lzModemInfo:=zModemInfo
 
   t1,t2:=getSystemTime()
 
-  ulTTTM:=ulTTTM+Mul(t1-ftptime1,50)+t2-ftptime2
+  lzModemInfo.ulTTTM:=lzModemInfo.ulTTTM+Mul(t1-lzModemInfo.ftptime1,50)+t2-lzModemInfo.ftptime2
   setEnvStat(ENV_UPLOADING)
   
   IF ftpConn   
     IF success
-      StringF(str,'\tUploading \s \d bytes',fileName,zModemInfo.transPos)
+      StringF(str,'\tUploading \s \d bytes',fileName,lzModemInfo.transPos)
       callersLog(str)
       
-      ulTTTM:=Div(ulTTTM,50)
-      StringF(str,'\t 1 file(s), \dk bytes, \d minute(s). \d second(s), \d cps, N/A % efficiency.',Shr(zModemInfo.transPos-zModemInfo.resumePos,10),Div(ulTTTM,60),Mod(ulTTTM,60),tTCPS)
+      lzModemInfo.ulTTTM:=Div(lzModemInfo.ulTTTM,50)
+      StringF(str,'\t 1 file(s), \dk bytes, \d minute(s). \d second(s), \d cps, N/A % efficiency.',Shr(lzModemInfo.transPos-lzModemInfo.resumePos,10),Div(lzModemInfo.ulTTTM,60),Mod(lzModemInfo.ulTTTM,60),lzModemInfo.tTCPS)
       callersLog(str)
     ELSE
       callersLog('\tUpload Failed..')
     ENDIF  
 
-    IF (tTCPS > loggedOnUserKeys.upCPS2)
-      loggedOnUserKeys.upCPS2:=tTCPS
-      IF tTCPS>65535 THEN tTCPS:=65535
-      loggedOnUserKeys.oldUpCPS:=tTCPS
+    IF (lzModemInfo.tTCPS > loggedOnUserKeys.upCPS2)
+      loggedOnUserKeys.upCPS2:=lzModemInfo.tTCPS
+      IF lzModemInfo.tTCPS>65535 THEN lzModemInfo.tTCPS:=65535
+      loggedOnUserKeys.oldUpCPS:=lzModemInfo.tTCPS
     ENDIF
-
-    FOR i:=0 TO skipdFiles.count()-1
-      StringF(str,'\tSkipped \s',skipdFiles.item(i))
-      callersLog(str)
-      udLog(str)
-    ENDFOR
   ENDIF
 ENDPROC
 
-PROC ftpDownloadFileStart(fileName:PTR TO CHAR,filelen,resume)
+PROC ftpDownloadFileStart(lzModemInfo:PTR TO zModem, fileName:PTR TO CHAR,filelen,resume)
   DEF fileItem:PTR TO flagFileItem
   DEF item:PTR TO flagFileItem
   DEF fn:PTR TO CHAR
-  DEF i
+  DEF i,t1,t2
   
-  ftptime1,ftptime2:=getSystemTime()
+  IF lzModemInfo=0 THEN lzModemInfo:=zModemInfo
+
+  t1,t2:=getSystemTime()
+  lzModemInfo.ftptime1:=t1
+  lzModemInfo.ftptime2:=t2
   fileItem:=NIL
   fn:=FilePart(fileName)
 
-  FOR i:=0 TO zModemInfo.fileList.count()-1
-    item:=zModemInfo.fileList.item(i)
-    IF StriCmp(item.fileName,fileName) THEN fileItem:=item
-  ENDFOR
+  IF lzModemInfo.fileList
+    FOR i:=0 TO lzModemInfo.fileList.count()-1
+      item:=lzModemInfo.fileList.item(i)
+      IF StriCmp(item.fileName,fileName) THEN fileItem:=item
+    ENDFOR
+  ENDIF
 
   IF fileItem<>NIL 
     sendMasterDownload(fileItem.fileName)
-    zModemInfo.freeDFlag:=checkFree(fileItem.fileName)
-    AstrCopy(zModemInfo.fileName,fileItem.fileName,255)
+    lzModemInfo.freeDFlag:=checkFree(fileItem.fileName)
+    AstrCopy(lzModemInfo.fileName,fileItem.fileName,255)
   ELSE
     sendMasterDownload(fn)
-    zModemInfo.freeDFlag:=FALSE
-    AstrCopy(zModemInfo.fileName,fn,255)
+    lzModemInfo.freeDFlag:=FALSE
+    AstrCopy(lzModemInfo.fileName,fn,255)
   ENDIF
   
-  zModemInfo.filesize:=filelen
-  zModemInfo.resumePos:=resume
-  zModemInfo.transPos:=0
-  tTEFF:=0
-  tTCPS:=0
-  updateZDisplay()
+  lzModemInfo.filesize:=filelen
+  lzModemInfo.resumePos:=resume
+  lzModemInfo.transPos:=0
+  lzModemInfo.tTEFF:=0
+  lzModemInfo.tTCPS:=0
+  updateZDisplay(lzModemInfo)
 
-  logUDFile(TRUE)
+  logUDFile(lzModemInfo,TRUE)
 ENDPROC
 
-PROC ftpDownloadFileEnd(fileName:PTR TO CHAR, result)
+PROC ftpDownloadFileEnd(lzModemInfo:PTR TO zModem, fileName:PTR TO CHAR, result)
   DEF fileList:PTR TO stdlist
   DEF fileItem:PTR TO flagFileItem
   DEF item:PTR TO flagFileItem
@@ -15150,29 +15179,31 @@ PROC ftpDownloadFileEnd(fileName:PTR TO CHAR, result)
   DEF i
   DEF t1,t2
   
-  IF ftpConn THEN dlTTTM:=0
+  IF lzModemInfo=0 THEN lzModemInfo:=zModemInfo
+
+  IF ftpConn THEN lzModemInfo.dlTTTM:=0
 
   t1,t2:=getSystemTime()
 
-  dlTTTM:=dlTTTM+Mul(t1-ftptime1,50)+t2-ftptime2
+  lzModemInfo.dlTTTM:=lzModemInfo.dlTTTM+Mul(t1-lzModemInfo.ftptime1,50)+t2-lzModemInfo.ftptime2
 
   fileItem:=NIL
   fn:=FilePart(fileName)
-  IF zModemInfo.fileList<>NIL
-    FOR i:=0 TO zModemInfo.fileList.count()-1
-      item:=zModemInfo.fileList.item(i)
+  IF lzModemInfo.fileList<>NIL
+    FOR i:=0 TO lzModemInfo.fileList.count()-1
+      item:=lzModemInfo.fileList.item(i)
       IF StriCmp(FilePart(item.fileName),fn) THEN fileItem:=item
     ENDFOR
   ENDIF
 
   IF fileItem=NIL THEN RETURN
 
-  IF (result) THEN updateDownloadStats(fileItem,zModemInfo.filesize,zModemInfo.filesize-zModemInfo.resumePos)
+  IF (result) THEN updateDownloadStats(fileItem,lzModemInfo.filesize,lzModemInfo.filesize-lzModemInfo.resumePos)
 
   IF ftpConn
-    dlTTTM:=Div(dlTTTM,50)
+    lzModemInfo.dlTTTM:=Div(lzModemInfo.dlTTTM,50)
     IF result     
-      StringF(tempStr,'\t 1 files, \dk bytes, \d minutes \d seconds \d cps, N/A % efficiency.',Shr(zModemInfo.filesize-zModemInfo.resumePos,10) AND $003fffff,Div(dlTTTM,60),Mod(dlTTTM,60),tTCPS)
+      StringF(tempStr,'\t 1 files, \dk bytes, \d minutes \d seconds \d cps, N/A % efficiency.',Shr(lzModemInfo.filesize-lzModemInfo.resumePos,10) AND $003fffff,Div(lzModemInfo.dlTTTM,60),Mod(lzModemInfo.dlTTTM,60),lzModemInfo.tTCPS)
       callersLog(tempStr)
       udLog(tempStr)
     ELSE
@@ -15182,10 +15213,10 @@ PROC ftpDownloadFileEnd(fileName:PTR TO CHAR, result)
   ENDIF
 
   /* is this baud higher then max cps down ? */
-  IF(tTCPS > loggedOnUserKeys.dnCPS2)
-    loggedOnUserKeys.dnCPS2:=tTCPS
-    IF tTCPS>65535 THEN tTCPS:=65535
-    loggedOnUserKeys.oldDnCPS:=tTCPS
+  IF(lzModemInfo.tTCPS > loggedOnUserKeys.dnCPS2)
+    loggedOnUserKeys.dnCPS2:=lzModemInfo.tTCPS
+    IF lzModemInfo.tTCPS>65535 THEN lzModemInfo.tTCPS:=65535
+    loggedOnUserKeys.oldDnCPS:=lzModemInfo.tTCPS
   ENDIF
 
   IF (result)
@@ -15193,9 +15224,11 @@ PROC ftpDownloadFileEnd(fileName:PTR TO CHAR, result)
   ENDIF
   
   IF ftpConn
-    fileList:=zModemInfo.fileList
-    END fileList
-    zModemInfo.fileList:=NIL
+    fileList:=lzModemInfo.fileList
+    IF fileList
+      END fileList
+      lzModemInfo.fileList:=NIL
+    ENDIF
     setEnvStat(ENV_IDLE)
   ELSE
     setEnvStat(ENV_DOWNLOADING)
@@ -15221,7 +15254,7 @@ PROC ftpStartFileCheck(filename:PTR TO CHAR,success)
   ENDIF
 ENDPROC
 
-PROC ftpWaitFileCheck(timeout)
+PROC ftpWaitFileCheck(filename:PTR TO CHAR,timeout)
   DEF done
    
   IF bgChecking=FALSE
@@ -15241,7 +15274,8 @@ PROC ftpWaitFileCheck(timeout)
   IF done
     transfering:=FALSE
     bgChecking:=FALSE
-    tidyPlayPen()
+    DeleteFile(filename)
+    //tidyPlayPen()
     setEnvStat(ENV_IDLE)
   ENDIF
 ENDPROC done
@@ -15340,28 +15374,45 @@ PROC ftpGetPath(conf,subDir:PTR TO CHAR,path:PTR TO CHAR)
   ENDIF
 ENDPROC path
 
-PROC ftpTransferFileProgress(fileName:PTR TO CHAR,pos,cps)
-  zModemInfo.transPos:=pos
-  tTCPS:=cps
-  tTEFF:=calcEfficiency(tTCPS,onlineBaud)
-  updateZDisplay()
+PROC ftpUploadFileProgress(lzModemInfo:PTR TO zModem, fileName:PTR TO CHAR,pos,cps)
+
+  IF lzModemInfo=0 THEN lzModemInfo:=zModemInfo
+
+  sendMasterUpload(FilePart(fileName))
+
+  lzModemInfo.filesize:=0
+  lzModemInfo.transPos:=pos
+  lzModemInfo.tTCPS:=cps
+  lzModemInfo.tTEFF:=calcEfficiency(lzModemInfo.tTCPS,onlineBaud)
+  
+  updateZDisplay(lzModemInfo)
+ENDPROC
+
+PROC ftpDownloadFileProgress(lzModemInfo:PTR TO zModem, fileName:PTR TO CHAR,pos,flen,cps)
+
+  IF lzModemInfo=0 THEN lzModemInfo:=zModemInfo
+
+  sendMasterDownload(FilePart(fileName))
+
+  lzModemInfo.filesize:=flen
+  lzModemInfo.transPos:=pos
+  lzModemInfo.tTCPS:=cps
+  lzModemInfo.tTEFF:=calcEfficiency(lzModemInfo.tTCPS,onlineBaud)
+  updateZDisplay(lzModemInfo)
 ENDPROC
 
 PROC ftpDupeCheck(fileName:PTR TO CHAR)
   DEF dup=FALSE
+  DEF str[255]:STRING
  
   IF checkForFile(FilePart(fileName))
     dup:=TRUE
   ELSEIF checkInPlaypens(FilePart(fileName))
     dup:=TRUE
-  ENDIF
-    
-  IF ftpConn THEN skipdFiles.clear()
-    
-  IF dup THEN skipdFiles.add(FilePart(fileName))
+  ENDIF    
 ENDPROC dup
 
-PROC ftpCheckRatio(fileName:PTR TO CHAR,flen,errormsg:PTR TO CHAR)
+PROC ftpCheckRatio(lzm:PTR TO zModem, fileName:PTR TO CHAR,flen,errormsg:PTR TO CHAR)
   DEF res,min,size,cnt,i
   DEF tfsizes:PTR TO stdlist
   DEF freeDFlags:PTR TO stdlist
@@ -15369,6 +15420,8 @@ PROC ftpCheckRatio(fileName:PTR TO CHAR,flen,errormsg:PTR TO CHAR)
   DEF fileItem:PTR TO flagFileItem
   DEF estDlCPS  
  
+  IF lzm=0 THEN lzm:=zModemInfo
+
   IF loggedOnUserMisc.lastDlCPS<>0
     estDlCPS:=loggedOnUserMisc.lastDlCPS
   ELSE
@@ -15389,7 +15442,7 @@ PROC ftpCheckRatio(fileName:PTR TO CHAR,flen,errormsg:PTR TO CHAR)
   ENDFOR
 
   fileList:=NEW fileList.stdlist(1)
-  zModemInfo.fileList:=fileList
+  lzm.fileList:=fileList
   fileItem:=NEW fileItem
   fileItem.confNum:=currentConf
   fileItem.fileName:=String(StrLen(fileName))
@@ -15401,7 +15454,7 @@ PROC ftpCheckRatio(fileName:PTR TO CHAR,flen,errormsg:PTR TO CHAR)
   IF res=FALSE
     END fileItem
     END fileList
-    zModemInfo.fileList:=NIL
+    lzm.fileList:=NIL
   ENDIF
   
   END tfsizes
@@ -15489,14 +15542,14 @@ PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPorts,ftpDataPorts)
   ENDIF
 
   ftpData:=NEW ftpData
-
+  ftpData.node:=node
   ftpData.conPuts:=NIL
   ftpData.aePuts:={aePuts}
   ftpData.readChar:={readChar}
   ftpData.sCheckInput:={sCheckInput}
   ftpData.uploadFileStart:={ftpUploadFileStart}
   ftpData.uploadFileEnd:={ftpUploadFileEnd}
-  ftpData.uploadFileProgress:={ftpTransferFileProgress}
+  ftpData.uploadFileProgress:={ftpUploadFileProgress}
   ftpData.downloadFileStart:=NIL
   ftpData.downloadFileEnd:=NIL
   ftpData.downloadFileProgress:=NIL
@@ -15507,9 +15560,11 @@ PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPorts,ftpDataPorts)
   ftpData.callersLog:=NIL
   ftpData.processMessages:={processMessages}
   ftpData.getSigs:={getSigs}
+  ftpData.extraSockets:=NIL
+  ftpData.maxConnections:=1
 
-  doftp(ftpData,node,tempstr,ftpPorts,ftpDataPorts,NIL,uploadFolder,cmds.acLvl[LVL_CAPITOLS_in_FILE]<>0,TRUE)
-
+  doftp(ftpData,tempstr,ftpPorts,ftpDataPorts,NIL,uploadFolder,cmds.acLvl[LVL_CAPITOLS_in_FILE]<>0,TRUE)
+  
   END ftpData
 
   serialCacheEnabled:=oldSerCache
@@ -15540,7 +15595,7 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
   ENDIF
 
   ftpData:=NEW ftpData
-
+  ftpData.node:=node
   ftpData.conPuts:=NIL
   ftpData.aePuts:={aePuts}
   ftpData.readChar:={readChar}
@@ -15550,7 +15605,7 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
   ftpData.uploadFileProgress:=NIL
   ftpData.downloadFileStart:={ftpDownloadFileStart}
   ftpData.downloadFileEnd:={ftpDownloadFileEnd}
-  ftpData.downloadFileProgress:={ftpTransferFileProgress}
+  ftpData.downloadFileProgress:={ftpDownloadFileProgress}
   ftpData.checkDownloadRatio:=NIL
   ftpData.fileDupeCheck:={ftpDupeCheck}
   ftpData.ftpCheckConnection:={checkCarrier}
@@ -15558,8 +15613,10 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
   ftpData.callersLog:=NIL
   ftpData.processMessages:={processMessages}
   ftpData.getSigs:={getSigs}
+  ftpData.extraSockets:=NIL
+  ftpData.maxConnections:=1
 
-  doftp(ftpData,node,tempstr,ftpPorts,ftpDataPorts,fileList,'',cmds.acLvl[LVL_CAPITOLS_in_FILE]<>0,FALSE)
+  doftp(ftpData,tempstr,ftpPorts,ftpDataPorts,fileList,'',cmds.acLvl[LVL_CAPITOLS_in_FILE]<>0,FALSE)
 
   END ftpData
 
@@ -15926,14 +15983,14 @@ PROC downloadFiles(fileList: PTR TO stdlist, estimatedSize:PTR TO CHAR, updateDo
     time1,ticks1:=getSystemTime()
     result:=XprotocolSend(xprio)
     time2,ticks2:=getSystemTime()
-    dlTTTM:=Mul(time2-time1,50)+ticks2-ticks1;
+    zModemInfo.dlTTTM:=Mul(time2-time1,50)+ticks2-ticks1;
     IF zModemInfo.transPos<>zModemInfo.filesize THEN result:=FALSE
   ELSE
     IF hydraFlag 
       ->hydra needs an upload path
       IF(StrLen(sopt.ramPen)>0) THEN StrCopy(path,sopt.ramPen) ELSE StringF(path,'\sNode\d/Playpen/',cmds.bbsLoc,node)
       result:=hydra_do_transfer(hyd,path,NIL,NIL,{dlTimeTaken},{ulTimeTaken})
-      ulTTTM:=ulTimeTaken
+      zModemInfo.ulTTTM:=ulTimeTaken
     ELSEIF xmodemFlag OR ymodemFlag
       xym.user_data:=NIL
       result:=xymodem_send_files(ymodemFlag,xym, NIL,{dlTimeTaken})
@@ -15941,17 +15998,17 @@ PROC downloadFiles(fileList: PTR TO stdlist, estimatedSize:PTR TO CHAR, updateDo
       zm.user_data:=NIL
       result:=zmodem_send_files(zm, NIL,{dlTimeTaken})
     ENDIF
-    dlTTTM:=dlTimeTaken
+    zModemInfo.dlTTTM:=dlTimeTaken
   ENDIF
 
-  IF dlTTTM
+  IF zModemInfo.dlTTTM
     CopyMem(dTBT,tmpBCD,8)
     mulBCD(tmpBCD,50)
-    tTCPS:=divBCD(tmpBCD,dlTTTM)
+    zModemInfo.tTCPS:=divBCD(tmpBCD,zModemInfo.dlTTTM)
   ELSE
-    tTCPS:=convertFromBCD(dTBT)
+    zModemInfo.tTCPS:=convertFromBCD(dTBT)
   ENDIF
-  tTEFF:=calcEfficiency(tTCPS,onlineBaud)    
+  zModemInfo.tTEFF:=calcEfficiency(zModemInfo.tTCPS,onlineBaud)    
 
   IF telnetSocket>=0
     iac(telnetSocket,254,0) ->dont binary
@@ -16338,7 +16395,7 @@ PROC hydstatus(hyd:PTR TO hydra_t,xmit)
       AstrCopy(zModemInfo.fileName,fname,255)
       zModemInfo.filesize:=fsize
       zModemInfo.resumePos:=resumepos
-      logUDFile(xmit)
+      logUDFile(zModemInfo,xmit)
     ENDIF
   ENDIF
 
@@ -16510,19 +16567,19 @@ PROC zmprogress(pos,cnt,filesize,s1,s2,errors,startpos,filename:PTR TO CHAR,newf
   zModemInfo.resumePos:=startpos
   AstrCopy(zModemInfo.fileName,filename,255)
 
-  tTCPS:=n
-  tTEFF:=calcEfficiency(tTCPS,onlineBaud)
+  zModemInfo.tTCPS:=n
+  zModemInfo.tTEFF:=calcEfficiency(zModemInfo.tTCPS,onlineBaud)
 
   IF pos>=0
     zModemInfo.transPos:=pos
     IF pos=filesize THEN AstrCopy(zModemInfo.lastTime,zModemInfo.elapsedTime,40)
   ENDIF
 
-  IF newfile THEN logUDFile(zModemInfo.currentOperation=ZMODEM_DOWNLOAD)
+  IF newfile THEN logUDFile(zModemInfo,zModemInfo.currentOperation=ZMODEM_DOWNLOAD)
 
   updateTime:=getSystemTime()
   IF zModemInfo.lastUpdate<>updateTime
-    updateZDisplay()   
+    updateZDisplay(zModemInfo)   
     debugLog(LOG_DEBUG,'zmprogress update')
     StringF(tempStr,'current block size: \d',blocksize)
     debugLog(LOG_DEBUG,tempStr)
@@ -17069,10 +17126,10 @@ PROC fileUpload(file,forceZmodem=FALSE) HANDLE
     wantzwin:=FALSE
     checkOffhookFlag()
     receivePlayPen(TRUE)
-    IF (ulTTTM>0)
-      tTEFF:=calcEfficiency(divBCD(uTBT,ulTTTM),onlineBaud)
+    IF (zModemInfo.ulTTTM>0)
+      zModemInfo.tTEFF:=calcEfficiency(divBCD(uTBT,zModemInfo.ulTTTM),onlineBaud)
     ELSE
-      tTEFF:=0
+      zModemInfo.tTEFF:=0
     ENDIF
     RETURN 1
   ELSEIF (StriCmp(protocol,'HTTP'))
@@ -17098,10 +17155,10 @@ PROC fileUpload(file,forceZmodem=FALSE) HANDLE
     wantzwin:=FALSE
     checkOffhookFlag()
     receivePlayPen(TRUE)
-    IF (ulTTTM>0)
-      tTEFF:=calcEfficiency(divBCD(uTBT,ulTTTM),onlineBaud)
+    IF (zModemInfo.ulTTTM>0)
+      zModemInfo.tTEFF:=calcEfficiency(divBCD(uTBT,zModemInfo.ulTTTM),onlineBaud)
     ELSE
-      tTEFF:=0
+      zModemInfo.tTEFF:=0
     ENDIF
     RETURN 1
   ELSE
@@ -17286,7 +17343,7 @@ PROC fileUpload(file,forceZmodem=FALSE) HANDLE
     time1,ticks1:=getSystemTime()
     result:=XprotocolReceive(xprio)
     time2,ticks2:=getSystemTime()
-    ulTTTM:=Mul(time2-time1,50)+ticks2-ticks1;
+    zModemInfo.ulTTTM:=Mul(time2-time1,50)+ticks2-ticks1;
   ELSE
     IF hydraFlag 
       result:=hydra_do_transfer(hyd,file,NIL,NIL,NIL,{ulTimeTaken}) 
@@ -17295,16 +17352,16 @@ PROC fileUpload(file,forceZmodem=FALSE) HANDLE
     ELSE
       result:=zmodem_recv_files(zm, file,NIL,{ulTimeTaken}) 
     ENDIF
-    ulTTTM:=ulTimeTaken
+    zModemInfo.ulTTTM:=ulTimeTaken
   ENDIF
-  IF ulTTTM
+  IF zModemInfo.ulTTTM
     CopyMem(uTBT,tmpBCD,8)
     mulBCD(tmpBCD,50)
-    tTCPS:=divBCD(tmpBCD,ulTTTM)
+    zModemInfo.tTCPS:=divBCD(tmpBCD,zModemInfo.ulTTTM)
   ELSE
-    tTCPS:=convertFromBCD(uTBT)
+    zModemInfo.tTCPS:=convertFromBCD(uTBT)
   ENDIF
-  tTEFF:=calcEfficiency(tTCPS,onlineBaud)    
+  zModemInfo.tTEFF:=calcEfficiency(zModemInfo.tTCPS,onlineBaud)    
   
   IF telnetSocket>=0
     iac(telnetSocket,254,0) ->dont binary
@@ -18641,7 +18698,7 @@ PROC testFile(str: PTR TO CHAR, path: PTR TO CHAR)
   DEF temp[100]:STRING,temp2[100]:STRING
   DEF temp4[100]:STRING
 
-  aeGoodFile:=RESULT_NOT_ALLOWED
+  aeGoodFile:=RESULT_NOT_TESTED
   stat:=RESULT_NOT_ALLOWED
 
   StringF(temp2,'FILECHECK \s',str)
@@ -18836,10 +18893,10 @@ PROC sysopUpload()
   skipdFiles.clear()
   convertToBCD(0,dTBT)
   convertToBCD(0,uTBT)
-  dlTTTM:=0
-  ulTTTM:=0
-  tTEFF:=0
-  tTCPS:=0
+  zModemInfo.dlTTTM:=0
+  zModemInfo.ulTTTM:=0
+  zModemInfo.tTEFF:=0
+  zModemInfo.tTCPS:=0
   cnt:=0
   sysopUploading:=TRUE
 
@@ -18853,8 +18910,8 @@ PROC sysopUpload()
   divBCD1024(tmpBCD)
   formatBCD(tmpBCD,tempstr)
 
-  ulTTTM:=Div(ulTTTM,50)
-  StringF(string,' \d file(s), \sk bytes, \d minute(s). \d second(s), \d cps, \d% efficiency.',ulFileCount,tempstr,Div(ulTTTM,60),Mod(ulTTTM,60),tTCPS,tTEFF)
+  zModemInfo.ulTTTM:=Div(zModemInfo.ulTTTM,50)
+  StringF(string,' \d file(s), \sk bytes, \d minute(s). \d second(s), \d cps, \d% efficiency.',ulFileCount,tempstr,Div(zModemInfo.ulTTTM,60),Mod(zModemInfo.ulTTTM,60),zModemInfo.tTCPS,zModemInfo.tTEFF)
   aePuts(string)
 
   aePuts('\b\n\b\n')
@@ -19038,10 +19095,10 @@ PROC uploadaFile(uLFType,cmd,attach,alreadyUploaded=FALSE)            -> JOE
 
     convertToBCD(0,dTBT)
     convertToBCD(0,uTBT)
-    ulTTTM:=0
-    dlTTTM:=0
-    tTEFF:=0
-    tTCPS:=0
+    zModemInfo.ulTTTM:=0
+    zModemInfo.dlTTTM:=0
+    zModemInfo.tTEFF:=0
+    zModemInfo.tTCPS:=0
 
     IF(beenUDd=FALSE)
       displayUserToCallersLog(1)
@@ -19060,16 +19117,16 @@ PROC uploadaFile(uLFType,cmd,attach,alreadyUploaded=FALSE)            -> JOE
   ReleaseSemaphore(bgData)
 
   IF(ulFileCount<>0) OR (bgCnt<>0)
-    peff:=tTEFF
-    pcps:=tTCPS
+    peff:=zModemInfo.tTEFF
+    pcps:=zModemInfo.tTCPS
   ENDIF
 
   CopyMem(uTBT,tmpBCD,8)
   divBCD1024(tmpBCD)
   formatBCD(tmpBCD,tempstr)
 
-  ulTTTM:=Div(ulTTTM,50)
-  StringF(string,' \d file(s), \sk bytes, \d minute(s). \d second(s), \d cps, \d% efficiency.',ulFileCount,tempstr,Div(ulTTTM,60),Mod(ulTTTM,60),pcps,peff)
+  zModemInfo.ulTTTM:=Div(zModemInfo.ulTTTM,50)
+  StringF(string,' \d file(s), \sk bytes, \d minute(s). \d second(s), \d cps, \d% efficiency.',ulFileCount,tempstr,Div(zModemInfo.ulTTTM,60),Mod(zModemInfo.ulTTTM,60),pcps,peff)
   aePuts(string)
 
   IF (pcps > loggedOnUserKeys.upCPS2)
@@ -19101,13 +19158,13 @@ PROC uploadaFile(uLFType,cmd,attach,alreadyUploaded=FALSE)            -> JOE
     udLog('\tUpload Failed..')
   ENDIF
 
-  IF ulTTTM<0
-    StringF(str,'\t\t****UL ERROR (-) TIME USED = \d',-ulTTTM)
+  IF zModemInfo.ulTTTM<0
+    StringF(str,'\t\t****UL ERROR (-) TIME USED = \d',-zModemInfo.ulTTTM)
     callersLog(str)
   ENDIF
 
-  peff:=(Div(Mul(ulTTTM,3),2)+60)
-  IF(ulFileCount<1) OR (ulTTTM<1) THEN peff:=0
+  peff:=(Div(Mul(zModemInfo.ulTTTM,3),2)+60)
+  IF(ulFileCount<1) OR (zModemInfo.ulTTTM<1) THEN peff:=0
 
   IF(skipdFiles.count()>0)
     aePuts('The file(s) :\b\n')
@@ -20232,10 +20289,10 @@ breakd:
 
   convertToBCD(0,dTBT)
   convertToBCD(0,uTBT)
-  ulTTTM:=0
-  dlTTTM:=0
-  tTEFF:=0
-  tTCPS:=0
+  zModemInfo.ulTTTM:=0
+  zModemInfo.dlTTTM:=0
+  zModemInfo.tTEFF:=0
+  zModemInfo.tTCPS:=0
   dlFileCount:=0
   ulFileCount:=0
 
@@ -20254,16 +20311,16 @@ breakd:
   IF(dlFileCount<>0)
     ->peff:=Div(tTEFF,onlineNFiles)
     ->pcps:=Div(tTCPS,onlineNFiles)
-    peff:=tTEFF
-    pcps:=tTCPS 
+    peff:=zModemInfo.tTEFF
+    pcps:=zModemInfo.tTCPS 
     loggedOnUserMisc.lastDlCPS:=pcps
   ENDIF
   ->// (RTS) added dnload cps rate Fri Mar 27 13:13:29 1992
   CopyMem(dTBT,tmpBCD,8)
   divBCD1024(tmpBCD)
   formatBCD(tmpBCD,tempStr)
-  dlTTTM:=Div(dlTTTM,50)
-  StringF(string,' \d files, \sk bytes, \d minutes \d seconds \d cps, \d% efficiency at \d',dlFileCount,tempStr,Div(dlTTTM,60),Mod(dlTTTM,60),pcps,peff,onlineBaud)
+  zModemInfo.dlTTTM:=Div(zModemInfo.dlTTTM,50)
+  StringF(string,' \d files, \sk bytes, \d minutes \d seconds \d cps, \d% efficiency at \d',dlFileCount,tempStr,Div(zModemInfo.dlTTTM,60),Mod(zModemInfo.dlTTTM,60),pcps,peff,onlineBaud)
   aePuts(string)
   aePuts('\b\n\b\n')
 
@@ -20295,14 +20352,14 @@ breakd:
     convertToBCD(0,bgData.checkedBytes)
     ReleaseSemaphore(bgData)
 
-    IF ulTTTM
+    IF zModemInfo.ulTTTM
       CopyMem(uTBT,tmpBCD,8)
       mulBCD(tmpBCD,50)
-      tTCPS:=divBCD(tmpBCD,ulTTTM)
+      zModemInfo.tTCPS:=divBCD(tmpBCD,zModemInfo.ulTTTM)
     ELSE
-      tTCPS:=convertFromBCD(uTBT)
+      zModemInfo.tTCPS:=convertFromBCD(uTBT)
     ENDIF
-    tTEFF:=calcEfficiency(tTCPS,onlineBaud)    
+    zModemInfo.tTEFF:=calcEfficiency(zModemInfo.tTCPS,onlineBaud)    
 
     receivePlayPen(TRUE)
     uploadaFile(0,'',FALSE,TRUE)
@@ -25687,7 +25744,7 @@ ENDPROC RESULT_SUCCESS
 
 PROC internalCommandVER()
   DEF tempStr[255]:STRING
-  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ©2018-2023 Darren Coles\b\n\b\n',expressVer,expressDate)
+  StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright ©2018-2026 Darren Coles\b\n\b\n',expressVer,expressDate)
   aePuts(tempStr)
   aePuts('Original Version:\b\n')
   aePuts('  (C)1989-91 Mike Thomas, Synthetic Technologies\b\n')
@@ -26325,10 +26382,10 @@ PROC internalCommandZOOM()
     ENDIF
     convertToBCD(0,dTBT)
     convertToBCD(0,uTBT)
-    dlTTTM:=0
-    ulTTTM:=0
-    tTEFF:=NIL
-    tTCPS:=NIL
+    zModemInfo.dlTTTM:=0
+    zModemInfo.ulTTTM:=0
+    zModemInfo.tTEFF:=NIL
+    zModemInfo.tTCPS:=NIL
     aePuts('[33mPrepare for ZoomMail Zmodem Download:\b\n')
     mystat:=doPause()
     IF(mystat<0)
@@ -28781,7 +28838,7 @@ PROC processFtpLogon()
   ENDIF
   telnetSend(sendStr,EstrLen(sendStr))
 
-  StringF(sendStr,'230-\b\n230-Running AmiExpress \s Copyright ©2018-2023 Darren Coles\b\n',expressVer)
+  StringF(sendStr,'230-\b\n230-Running AmiExpress \s Copyright ©2018-2026 Darren Coles\b\n',expressVer)
   telnetSend(sendStr,EstrLen(sendStr))
   StringF(sendStr,'230-Registration \s. You are connected to Node \d\b\n',regKey,node)
   telnetSend(sendStr,EstrLen(sendStr))
@@ -28871,14 +28928,22 @@ PROC processFtpLoggedOnUser()
   DEF cdirs:PTR TO stringlist
   DEF cnums:PTR TO stdlist
   DEF confULBlock:PTR TO stringlist
-  DEF ftpData:PTR TO ftpData
   DEF res
+  DEF socketList:PTR TO stdlist
+  DEF maxConnections
+
+  blockOLM:=TRUE
   
   setEnvStat(ENV_IDLE)
 
   reqState:=REQ_STATE_NONE
   StrCopy(tempstr,'')
   StrCopy(tempstr2,'')
+
+  maxConnections:=readToolTypeInt(TOOLTYPE_BBSCONFIG,0,'MAX_FTP_CONNECTIONS') 
+  IF maxConnections=-1 THEN maxConnections:=5
+  IF maxConnections=0 THEN maxConnections:=1
+
   readToolType(TOOLTYPE_BBSCONFIG,'','FTPDATAPORT',tempstr)
   readToolType(TOOLTYPE_NODE,node,'FTPDATAPORT',tempstr2)
   IF (StrLen(tempstr)>0) AND (StrLen(tempstr2)>0) THEN StrAdd(tempstr,',')
@@ -28887,8 +28952,6 @@ PROC processFtpLoggedOnUser()
   IF ListLen(ftpDataPorts)=0 THEN ListAddItem(ftpDataPorts,10001+(node*2))
 
   IoctlSocket(telnetSocket,FIONBIO,[0])
-
-  blockOLM:=TRUE
 
   zModemInfo.currentUL:=0
   zModemInfo.currentDL:=0
@@ -28979,35 +29042,41 @@ PROC processFtpLoggedOnUser()
   
   IF reqState=REQ_STATE_NONE
   
-    ftpData:=NEW ftpData
-    ftpData.aePuts:=NIL
-    ftpData.conPuts:={conPuts}
-    ftpData.readChar:=NIL
-    ftpData.sCheckInput:=NIL
-    ftpData.getPath:={ftpGetPath}
-    ftpData.findFile:={ftpFindFile}
-    ftpData.checkDownloadRatio:={ftpCheckRatio}
-    ftpData.uploadFileStart:={ftpUploadFileStart}
-    ftpData.uploadFileEnd:={ftpUploadFileEnd}
-    ftpData.uploadFileProgress:={ftpTransferFileProgress}
-    ftpData.downloadFileStart:={ftpDownloadFileStart}
-    ftpData.downloadFileEnd:={ftpDownloadFileEnd}
-    ftpData.downloadFileProgress:={ftpTransferFileProgress}
-    ftpData.callersLog:={callersLog}
-    ftpData.fileDupeCheck:={ftpDupeCheck}
-    ftpData.ftpAuth:=NIL
-    ftpData.processMessages:={processMessages}
-    ftpData.getSigs:={getSigs}
-    ftpData.startFileCheck:={ftpStartFileCheck}
-    ftpData.waitFileCheck:={ftpWaitFileCheck}
+    ftpGData:=NEW ftpGData
+    ftpGData.node:=node
+    ftpGData.aePuts:=NIL
+    ftpGData.conPuts:={conPuts}
+    ftpGData.readChar:=NIL
+    ftpGData.sCheckInput:=NIL
+    ftpGData.getPath:={ftpGetPath}
+    ftpGData.findFile:={ftpFindFile}
+    ftpGData.checkDownloadRatio:={ftpCheckRatio}
+    ftpGData.uploadFileStart:={ftpUploadFileStart}
+    ftpGData.uploadFileEnd:={ftpUploadFileEnd}
+    ftpGData.uploadFileProgress:={ftpUploadFileProgress}
+    ftpGData.downloadFileStart:={ftpDownloadFileStart}
+    ftpGData.downloadFileEnd:={ftpDownloadFileEnd}
+    ftpGData.downloadFileProgress:={ftpDownloadFileProgress}
+    ftpGData.callersLog:={callersLog}
+    ftpGData.fileDupeCheck:={ftpDupeCheck}
+    ftpGData.ftpAuth:=NIL
+    ftpGData.processMessages:={processMessages}
+    ftpGData.getSigs:={getSigs}
+    ftpGData.startFileCheck:={ftpStartFileCheck}
+    ftpGData.waitFileCheck:={ftpWaitFileCheck}
 
-    ftpData.confNames:=cnames
-    ftpData.confDirs:=cdirs
-    ftpData.confNums:=cnums
-    ftpData.confULBlock:=confULBlock
-
-    ftpServerMode(ftpData,telnetSocket,tempstr,uploadPath,ftpDataPorts,cmds.acLvl[LVL_CAPITOLS_in_FILE]<>0)
-    END ftpData
+    ftpGData.confNames:=cnames
+    ftpGData.confDirs:=cdirs
+    ftpGData.confNums:=cnums
+    ftpGData.confULBlock:=confULBlock
+    ftpGData.maxConnections:=maxConnections
+    
+    NEW socketList.stdlist(maxConnections) 
+    ftpGData.extraSockets:=socketList
+    ftpServerMode(ftpGData,telnetSocket,tempstr,uploadPath,ftpDataPorts,cmds.acLvl[LVL_CAPITOLS_in_FILE]<>0)
+    END socketList
+    END ftpGData
+    ftpGData:=0
   ENDIF
 
   END cnames
@@ -29511,7 +29580,7 @@ PROC processLogon()
   ENDIF
   aePuts(tempStr)
 
-  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018-2023 Darren Coles\b\n',expressVer)
+  StringF(tempStr,'\b\n\b\nRunning AmiExpress \s Copyright ©2018-2026 Darren Coles\b\n',expressVer)
   aePuts(tempStr)
   StringF(tempStr,'Registration \s. You are connected to Node \d at \d baud',regKey,node,onlineBaud)
   aePuts(tempStr)
@@ -29874,7 +29943,7 @@ PROC processAwait()
   DEF tempstr[255]:STRING
   DEF wasControl,ch
   DEF subState: PTR TO awaitState
-  DEF ni:PTR TO nodeInfo
+  DEF ni:PTR TO nodeInfo2
 
   IF (stateData=0)
     ansiColour:=TRUE
@@ -29911,7 +29980,7 @@ PROC processAwait()
       send017()
       sendCLS()
 
-      StringF(tempstr,'\b\n                     [33m©2018-2023 AmiExpress [37mby[35m Darren Coles[0m\b\n\b\n')
+      StringF(tempstr,'\b\n                     [33m©2018-2026 AmiExpress [37mby[35m Darren Coles[0m\b\n\b\n')
       aePuts(tempstr)
 
       StringF(tempstr,'                              [33m Original Version:[0m\b\n\b\n')
@@ -29954,12 +30023,13 @@ PROC processAwait()
   ELSE
     IF sopt.toggles[TOGGLES_MULTICOM]
       ObtainSemaphore(masterNode)
-      ni:=(masterNode.myNode[node])
+      ni:=(masterNode.myNode2[node])
       IF ni.netSocket=-2
         cntr:=cntr+1
         IF cntr=20
           cntr:=0
           ni.netSocket:=-1
+          ni.netIP:=0
         ENDIF
       ELSE
         cntr:=0
@@ -31543,6 +31613,10 @@ PROC main() HANDLE
     StringF(shutDownMsg,'Node   \d already running!',node)
     Raise(ERR_ALREADYRUNNING)
   ENDIF
+  GetProgramName(tempstr,EstrLen(tempstr))
+  SetStr(tempstr)
+  StringF(tempstr,'\s - Node \d',tempstr,node)
+  SetProgramName(tempstr)
 
   mailOptions:=NEW mailOptions
 

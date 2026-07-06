@@ -8,8 +8,12 @@ CONST BIO_CTRL_FLUSH=11
 CONST BIO_FLAGS_BASE64_NO_NL=$100
 CONST BIO_CTRL_INFO=3
 
+
 CONST AMISSLMASTER_MIN_VERSION=4
 CONST AMISSL_CURRENT_VERSION=6
+
+//CONST AMISSLMASTER_MIN_VERSION=5
+//CONST AMISSL_CURRENT_VERSION=$29       //AMISSL_V352 = AmiSSL v5.22
 
 CONST SSL_VERIFY_PEER=1
 CONST SSL_VERIFY_FAIL_IF_NO_PEER_CERT=2
@@ -521,18 +525,21 @@ EXPORT PROC connectToServer(host:PTR TO CHAR, port)
   IF ((sock:=Socket(AF_INET, SOCK_STREAM, 0)) >= 0)
 
     hostEnt:=GetHostByName(host)
-    hostaddr:=hostEnt.h_addr_list[]
-    hostaddr:=hostaddr[]
+    
+    hostaddr:=Long(hostEnt.h_addr_list)
+    hostaddr:=Long(hostaddr)
 
     NEW addr
     addr.sin_family:=AF_INET;
-    addr.sin_addr:=hostaddr[]; /* This should be checked against INADDR_NONE */
+    addr.sin_addr:=hostaddr; /* This should be checked against INADDR_NONE */
     addr.sin_port:=port->htons(port);
 
     IF (Connect(sock, addr, SIZEOF sockaddr_in) >= 0)
         is_ok:=TRUE
     ELSE
       WriteF('Couldn''t connect to server\n');
+      WriteF('server: \s\n',host);
+      WriteF('port: \d\n',port);
     ENDIF
     END addr
     IF (is_ok=FALSE)

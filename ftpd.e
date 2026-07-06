@@ -7,7 +7,8 @@ OPT LARGE,MODULE
 
 CONST LISTENQ=100
 CONST EINTR=4
-CONST EWOULDBLOCK=35
+CONST EWOULDBLOCK1=35
+CONST EWOULDBLOCK2=11
 CONST MAX_LINE=255
 CONST FIONBIO=$8004667e
 
@@ -27,6 +28,7 @@ MODULE	'socket',
         'devices/timer',
        'exec/tasks',
        'exec/alerts',
+       'exec/semaphores',
        'asyncio',
        'libraries/asyncio',
        '*stringlist',
@@ -38,17 +40,13 @@ MODULE	'socket',
        
  
 EXPORT OBJECT ftpData
-  rest:LONG
+  semi: ss
+  node:INT
   tcount:LONG
-  scount:LONG
   hostName:PTR TO CHAR
-  workingPath:PTR TO CHAR
-  uploadPath:PTR TO CHAR
-  subDirPath:PTR TO CHAR
   fileList:PTR TO stdlist
   port:LONG
   dataPorts:PTR TO LONG
-  restPos:LONG
   sockId:LONG
   aePuts:LONG
   conPuts:LONG
@@ -72,18 +70,65 @@ EXPORT OBJECT ftpData
   ftpDir:LONG
   getPath:LONG
   findFile:LONG
-  authUser[255]:ARRAY OF CHAR
-  transType:CHAR
   confNames:PTR TO stringlist
   confDirs:PTR TO stringlist
   confNums:PTR TO stdlist
   confULBlock:PTR TO stringlist
-  currentConf:LONG
   setReuseAddr:INT
   filenameCAPS:INT
   mode:INT
+  extraSockets: PTR TO stdlist
+  maxConnections:INT
+  forceWorkingPath:PTR TO CHAR
+  forceUploadPath:PTR TO CHAR
 ENDOBJECT
- 
+
+OBJECT ftpConnection
+  socket:LONG
+  input:PTR TO CHAR
+  data_c:LONG
+  authFlag:CHAR
+  threadActive:CHAR
+  completedFlag:CHAR
+  ftpData:PTR TO ftpData
+  filename:PTR TO CHAR
+  subDirPath:PTR TO CHAR
+
+  workingPath:PTR TO CHAR
+  uploadPath:PTR TO CHAR
+  transType:CHAR
+  currentConf:LONG
+  restPos:LONG
+
+  authUser[255]:ARRAY OF CHAR
+  threadName[25]:ARRAY OF CHAR
+
+  flen:LONG
+  zModemInfo:PTR TO zModem
+ENDOBJECT
+
+PROC new(sock) OF ftpConnection
+  self.input:=String(255)
+  self.filename:=String(500)
+  self.subDirPath:=String(1000)
+  self.restPos:=0
+  self.workingPath:=String(255)
+  self.uploadPath:=String(255)
+  self.currentConf:=0
+
+  self.socket:=sock
+  self.authFlag:=FALSE
+  self.data_c:=-1
+ENDPROC
+
+PROC end() OF ftpConnection
+  DisposeLink(self.input)
+  DisposeLink(self.subDirPath)
+  DisposeLink(self.filename)
+  DisposeLink(self.workingPath)
+  DisposeLink(self.uploadPath)
+  IF self.zModemInfo THEN END self.zModemInfo
+ENDPROC
 
 PROC errno(sb)
   MOVE.L sb,A6
@@ -250,75 +295,83 @@ PROC setSockOpt(sb,s,level,optname,optval,optlen )
   MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
-PROC uploadFileStart(ftpData:PTR TO ftpData,fn,resumepos)
-  DEF fs
-  fs:=ftpData.uploadFileStart
-  MOVE.L fn,-(A7)
-  MOVE.L resumepos,-(A7)
-  fs()
-  ADD.L #8,A7
-ENDPROC
-
-PROC checkDownloadRatio(ftpData:PTR TO ftpData,fn,flen,res:PTR TO CHAR)
+PROC checkDownloadRatio(zm:PTR TO zModem,ftpData:PTR TO ftpData,fn,flen,res:PTR TO CHAR)
   DEF cdr
   cdr:=ftpData.checkDownloadRatio
+  MOVE.L zm,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L flen,-(A7)
   MOVE.L res,-(A7)
   cdr()
-  ADD.L #12,A7
+  ADD.L #16,A7
 ENDPROC D0
 
-PROC downloadFileStart(ftpData:PTR TO ftpData,fn,flen,pos)
+PROC uploadFileStart(zm:PTR TO zModem,ftpData:PTR TO ftpData,fn,resumepos)
   DEF fs
-  fs:=ftpData.downloadFileStart
+  fs:=ftpData.uploadFileStart
+  MOVE.L zm,-(A7)
   MOVE.L fn,-(A7)
-  MOVE.L flen,-(A7)
-  MOVE.L pos,-(A7)
+  MOVE.L resumepos,-(A7)
   fs()
   ADD.L #12,A7
 ENDPROC
 
-PROC uploadFileEnd(ftpData:PTR TO ftpData,fn,result)
+PROC downloadFileStart(zm:PTR TO zModem,ftpData:PTR TO ftpData,fn,flen,pos)
+  DEF fs
+  fs:=ftpData.downloadFileStart
+  MOVE.L zm,-(A7)
+  MOVE.L fn,-(A7)
+  MOVE.L flen,-(A7)
+  MOVE.L pos,-(A7)
+  fs()
+  ADD.L #16,A7
+ENDPROC
+
+PROC uploadFileEnd(zm:PTR TO zModem,ftpData:PTR TO ftpData,fn,result)
   DEF fe
   fe:=ftpData.uploadFileEnd
 
+  MOVE.L zm,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L result,-(A7)  
   fe()
-  ADDQ.L #8,A7
+  LEA 12(A7),A7
 ENDPROC
 
-PROC downloadFileEnd(ftpData:PTR TO ftpData,fn,result)
+PROC downloadFileEnd(zm:PTR TO zModem,ftpData:PTR TO ftpData,fn,result)
   DEF fe
   fe:=ftpData.downloadFileEnd
 
+  MOVE.L zm,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L result,-(A7)  
   fe()
-  ADDQ.L #8,A7
+  LEA 12(A7),A7
 ENDPROC
 
-PROC uploadFileProgress(ftpData:PTR TO ftpData,fn,pos,cps)
+PROC uploadFileProgress(zm:PTR TO zModem,ftpData:PTR TO ftpData,fn,pos,cps)
   DEF fp
   fp:=ftpData.uploadFileProgress
   
+  MOVE.L zm,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L pos,-(A7)
   MOVE.L cps,-(A7)
   fp()
-  ADD.L #12,A7
+  LEA 16(A7),A7
 ENDPROC
 
-PROC downloadFileProgress(ftpData:PTR TO ftpData,fn,pos,cps)
+PROC downloadFileProgress(zm:PTR TO zModem,ftpData:PTR TO ftpData,fn,pos,flen,cps)
   DEF fp
   fp:=ftpData.downloadFileProgress
   
+  MOVE.L zm,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L pos,-(A7)
+  MOVE.L flen,-(A7)
   MOVE.L cps,-(A7)
   fp()
-  ADD.L #12,A7
+  LEA 20(A7),A7
 ENDPROC
 
 PROC fileDupeCheck(ftpData:PTR TO ftpData,fn)
@@ -405,7 +458,7 @@ PROC doAuth(ftpData:PTR TO ftpData,userName:PTR TO CHAR,password:PTR TO CHAR)
   DEF fAuth,r
   
   fAuth:=ftpData.ftpAuth
-  IF fAuth<>NIL
+  IF fAuth
     MOVE.L userName,-(A7)
     MOVE.L password,-(A7)
     r:=fAuth()
@@ -419,25 +472,25 @@ PROC startFileCheck(ftpData:PTR TO ftpData,filename:PTR TO CHAR,success)
   DEF startCheck
   
   startCheck:=ftpData.startFileCheck
-  IF startCheck<>NIL
+  IF startCheck
     startCheck(filename,success)
   ENDIF
 ENDPROC
 
-PROC waitFileCheck(ftpData:PTR TO ftpData,timeout)
+PROC waitFileCheck(ftpData:PTR TO ftpData,filename,timeout)
   DEF waitCheck
   DEF res=0
   
   waitCheck:=ftpData.waitFileCheck
-  IF waitCheck<>NIL
-    res:=waitCheck(timeout)
+  IF waitCheck
+    res:=waitCheck(filename,timeout)
   ENDIF
 ENDPROC res
 
 PROC freeFileList(fileList:PTR TO stdlist)
   DEF i
   DEF item:PTR TO flagFileItem
-  IF fileList<>NIL
+  IF fileList
     FOR i:=0 TO fileList.count()-1
       item:=fileList.item(i)
       END item
@@ -484,7 +537,7 @@ PROC testSocket(sb,ftpData:PTR TO ftpData,port)
   ENDIF
 ENDPROC
 
-PROC getFileName(ftpData:PTR TO ftpData, filename:PTR TO CHAR,outFilename:PTR TO CHAR)
+PROC getFileName(ftpData:PTR TO ftpData, connection:PTR TO ftpConnection, filename:PTR TO CHAR,outFilename:PTR TO CHAR)
   DEF i
   DEF fileList:PTR TO stdlist
   DEF item:PTR TO flagFileItem
@@ -492,13 +545,13 @@ PROC getFileName(ftpData:PTR TO ftpData, filename:PTR TO CHAR,outFilename:PTR TO
   StrCopy(outFilename,'')
   fileList:=ftpData.fileList
 
-  IF fileList<>NIL
+  IF fileList
     FOR i:=0 TO fileList.count()-1
       item:=fileList.item(i)
       IF StriCmp(FilePart(item.fileName),filename) THEN StrCopy(outFilename,item.fileName)
     ENDFOR
-  ELSEIF ftpData.findFile<>NIL
-    findFile(ftpData,filename,ftpData.subDirPath,outFilename)
+  ELSEIF ftpData.findFile
+    findFile(ftpData,filename,connection.subDirPath,outFilename)
   ENDIF
 ENDPROC
 
@@ -571,7 +624,6 @@ PROC openSocket(sb,port, reuseable,ftpData:PTR TO ftpData)
 	ENDIF
 
   END servaddr
-  ftpData.scount:=ftpData.scount+1
 ENDPROC TRUE,server_s
 
 PROC readLine(ftpData:PTR TO ftpData,sb,sockd,vptr:PTR TO CHAR, maxlen)
@@ -592,10 +644,10 @@ PROC readLine(ftpData:PTR TO ftpData,sb,sockd,vptr:PTR TO CHAR, maxlen)
     tv.micro:=0
     fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
     setSingleFDS(fds,sockd)
-    IF ftpData<>NIL THEN sigs:=getSigs(ftpData)
+    IF ftpData THEN sigs:=getSigs(ftpData)
     IF sigs<>0 THEN sigsPtr:={sigs}
     res:=waitSelect(sb,sockd+1,fds,NIL,NIL,tv,sigsPtr)
-    IF ftpData<>NIL THEN processMessages(ftpData)
+    IF ftpData THEN processMessages(ftpData)
     END fds[32]
     CONT (res<1) AND (sigs<>0)
     IF res<=0 THEN RETURN -1
@@ -680,7 +732,7 @@ PROC formatFileDate2(dts: PTR TO datestamp,outDateStr)
   ENDIF
 ENDPROC FALSE
 
-PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
+PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData, connection:PTR TO ftpConnection)
   DEF temp[255]:STRING
   DEF addr: LONG
   DEF hostEnt: PTR TO hostent
@@ -696,8 +748,6 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
   addr:=Long(hostEnt.h_addr_list)
   addr:=Long(addr)
   
-  ftpData.rest:=0  
-
   i:=0
   r:=0
   REPEAT
@@ -714,20 +764,19 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
   StringF(temp,'227 Entering Passive Mode (\d,\d,\d,\d,\d,\d)\b\n',Shr(addr AND $FF000000,24)AND $FF,Shr(addr AND $FF0000,16) AND $FF,Shr(addr AND $FF00,8) AND $FF,addr AND $FF,Shr(port,8) AND $FF,port AND $FF)
   ->WriteF(temp)
   writeLineEx(sb,ftp_c, temp)
-  ftpData.restPos:=0
+  connection.restPos:=0
 
   REPEAT
     tv.secs:=TIMEOUT
     tv.micro:=0
     fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
     setSingleFDS(fds,data_s)
-    IF ftpData<>NIL THEN sigs:=getSigs(ftpData)
+    IF ftpData THEN sigs:=getSigs(ftpData)
     IF sigs<>0 THEN sigsPtr:={sigs}
     res:=waitSelect(sb,data_s+1,fds,NIL,NIL,tv,sigsPtr)
-    IF ftpData<>NIL THEN processMessages(ftpData)
+    IF ftpData THEN processMessages(ftpData)
     END fds[32]
     IF (res<1) AND (sigs=0)
-      ftpData.scount:=ftpData.scount-1
       closeSocket(sb,data_s)
       writeLineEx(sb,ftp_c, '425 Timed out waiting for data connection\b\n')
       RETURN -1,-1
@@ -736,31 +785,30 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData)
   
   IF((data_c:=accept(sb,data_s, NIL, NIL) ) < 0)
     ->aePuts(ftpData,'/XFTP: Error calling accept()\b\n')
-    ftpData.scount:=ftpData.scount-1
     closeSocket(sb,data_s)
     writeLineEx(sb,ftp_c, '425 Can''t open data connection\b\n')
-    RETURN -1,-1
+    RETURN -1
   ELSE
-    ftpData.scount:=ftpData.scount+1
     /*StringF(temp,'Data connection at port \d accepted\b\n', port)
     aePuts(ftpData,temp)*/
-    RETURN data_s,data_c
+    closeSocket(sb,data_s)
+    RETURN data_c
   ENDIF      
 ENDPROC
 
-PROC uploadDir(sb,data_c, ftpData:PTR TO ftpData, cmdType)
+PROC uploadDir(sb,data_c, ftpData:PTR TO ftpData,connection:PTR TO ftpConnection,cmdType)
   DEF lock
   DEF f_info: PTR TO fileinfoblock
   DEF tempstr[255]:STRING
   DEF dirline[255]:STRING
   DEF size,i
 
-  IF(StrLen(ftpData.workingPath)=0) THEN RETURN
+  IF(StrLen(connection.workingPath)=0) THEN RETURN
 
   f_info:=AllocDosObject(DOS_FIB,NIL)
   IF(f_info)=NIL THEN RETURN
 
-  lock:=Lock(ftpData.workingPath,ACCESS_READ)
+  lock:=Lock(connection.workingPath,ACCESS_READ)
   IF(lock)=0
     FreeDosObject(DOS_FIB,f_info)
     RETURN
@@ -793,7 +841,7 @@ PROC uploadDir(sb,data_c, ftpData:PTR TO ftpData, cmdType)
   FreeDosObject(DOS_FIB,f_info)
 ENDPROC TRUE
 
-PROC downloadDir(sb,data_c, ftpData:PTR TO ftpData,cmdType)
+PROC downloadDir(sb,data_c, ftpData:PTR TO ftpData,connection:PTR TO ftpConnection,cmdType)
   DEF lock
   DEF f_info: PTR TO fileinfoblock
   DEF tempstr[255]:STRING
@@ -835,13 +883,13 @@ PROC downloadDir(sb,data_c, ftpData:PTR TO ftpData,cmdType)
   FreeDosObject(DOS_FIB,f_info) 
 ENDPROC TRUE
 
-PROC fullDir(sb,data_c, ftpData:PTR TO ftpData,cmdType)
+PROC fullDir(sb,data_c, ftpData:PTR TO ftpData,connection:PTR TO ftpConnection, cmdType)
   DEF i
   DEF tempstr[255]:STRING
   DEF dirline[255]:STRING
   DEF filedate:datestamp
 
-  IF (ftpData.currentConf=0)
+  IF (connection.currentConf=0)
     dateTimeToDateStamp(getSystemTime(),filedate)
     
     FOR i:=0 TO ftpData.confNames.count()-1
@@ -863,7 +911,7 @@ PROC fullDir(sb,data_c, ftpData:PTR TO ftpData,cmdType)
     callersLog(ftpData,'\tDirectory Scan via ftp')
   ENDIF
   
-  makeConfFileList(ftpData,cmdType,sb,data_c)
+  makeConfFileList(ftpData,connection,cmdType,sb,data_c)
 
 ENDPROC
 
@@ -950,7 +998,7 @@ PROC makeList(path:PTR TO CHAR,dirCache:PTR TO CHAR,fib:PTR TO fileinfoblock, st
     ELSE*/
       fh:=Open(dirCache,MODE_OLDFILE)
       IF fh<>0
-        WHILE(Fgets(fh,dirLine,40)<>NIL)
+        WHILE(Fgets(fh,dirLine,40))
           IF StrLen(dirLine)>18
             c:=TRUE
             StrCopy(tmp,'$')
@@ -1007,7 +1055,7 @@ PROC makeList(path:PTR TO CHAR,dirCache:PTR TO CHAR,fib:PTR TO fileinfoblock, st
 ENDPROC
    
 
-PROC makeFtpListFromDlDirs(ftpData:PTR TO ftpData, startDate, cmdType, sb, data_c)
+PROC makeFtpListFromDlDirs(ftpData:PTR TO ftpData, connection:PTR TO ftpConnection,startDate, cmdType, sb, data_c)
   DEF path[255]:STRING
   DEF dirCache[255]:STRING
   DEF fib:PTR TO fileinfoblock
@@ -1022,7 +1070,7 @@ PROC makeFtpListFromDlDirs(ftpData:PTR TO ftpData, startDate, cmdType, sb, data_
 
   dirNum:=1
   StringF(path,'DLPATH.\d',dirNum++)
-  WHILE(readToolType(TOOLTYPE_CONF,ftpData.confNums.item(ftpData.currentConf-1),path,path))
+  WHILE(readToolType(TOOLTYPE_CONF,ftpData.confNums.item(connection.currentConf-1),path,path))
     checkPathSlash(path)
     dlDirList.add(path)
     StringF(path,'DLPATH.\d',dirNum++)
@@ -1043,12 +1091,12 @@ PROC makeFtpListFromDlDirs(ftpData:PTR TO ftpData, startDate, cmdType, sb, data_
   FOR j:=0 TO dlDirList.count()-1
     IF EstrLen(dlDirList.item(j))>0
       StrCopy(path,dlDirList.item(j))
-      IF StrLen(ftpData.subDirPath)
-        StrAdd(path,ftpData.subDirPath)
+      IF StrLen(connection.subDirPath)
+        StrAdd(path,connection.subDirPath)
         checkPathSlash(path)
       ENDIF
       
-      StringF(dirCache,'RAM:DirCaches/Conf\dDir\d\s\s',ftpData.currentConf,j,IF StrLen(ftpData.subDirPath)>0 THEN '_' ELSE '', ftpData.subDirPath)
+      StringF(dirCache,'RAM:DirCaches/Conf\dDir\d\s\s',connection.currentConf,j,IF StrLen(connection.subDirPath)>0 THEN '_' ELSE '', connection.subDirPath)
       FOR i:=14 TO StrLen(dirCache)-1 DO IF dirCache[i]="/" THEN dirCache[i]:="_"
       
       makeList(path,dirCache,fib,startDate,cmdType,sb,data_c)
@@ -1060,7 +1108,7 @@ PROC makeFtpListFromDlDirs(ftpData:PTR TO ftpData, startDate, cmdType, sb, data_
 
 ENDPROC
 
-PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, startDate, cmdType, sb, data_c)
+PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, connection:PTR TO ftpConnection,startDate, cmdType, sb, data_c)
   DEF dtStr[20]:STRING
   DEF sizeStr[20]:STRING
   DEF dtcomp1,dtcomp2
@@ -1074,7 +1122,7 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, startDate, cmdType, sb, data
 
   output:=String(10000)
 
-  maxDirs:=readToolTypeInt(TOOLTYPE_CONF,ftpData.confNums.item(ftpData.currentConf-1),'NDIRS')
+  maxDirs:=readToolTypeInt(TOOLTYPE_CONF,ftpData.confNums.item(connection.currentConf-1),'NDIRS')
 
   formatLongDate(startDate,dtStr)
   dtcomp1:=getDateCompareVal(dtStr)
@@ -1082,11 +1130,11 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, startDate, cmdType, sb, data
   dirNum:=maxDirs+1
   REPEAT
     dirNum--
-    StringF(dirFile,'\sDIR\d',ftpData.confDirs.item(ftpData.currentConf-1),dirNum)   
+    StringF(dirFile,'\sDIR\d',ftpData.confDirs.item(connection.currentConf-1),dirNum)   
     fh:=Open(dirFile,MODE_OLDFILE)
     IF fh<>0
     
-      IF(Fgets(fh,tempstr,255)<>NIL) AND (StrLen(tempstr)>0)
+      IF(Fgets(fh,tempstr,255)) AND (StrLen(tempstr)>0)
         tempstr[254]:=0
         SetStr(tempstr,StrLen(tempstr))      
         IF (dirLineNewFile(tempstr))
@@ -1146,7 +1194,7 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, startDate, cmdType, sb, data
     Close(fh)
     dirNum++
     IF dirNum<=maxDirs
-      StringF(dirFile,'\sDIR\d',ftpData.confDirs.item(ftpData.currentConf-1),dirNum)   
+      StringF(dirFile,'\sDIR\d',ftpData.confDirs.item(connection.currentConf-1),dirNum)   
       fh:=Open(dirFile,MODE_OLDFILE)
     ENDIF
   ENDWHILE
@@ -1154,55 +1202,58 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, startDate, cmdType, sb, data
   DisposeLink(output)
 ENDPROC
 
-PROC makeConfFileList(ftpData:PTR TO ftpData, cmdType, sb, data_c)
+PROC makeConfFileList(ftpData:PTR TO ftpData, connection:PTR TO ftpConnection, cmdType, sb, data_c)
   DEF startDate,dayOffset
   
-  dayOffset:=readToolTypeInt(TOOLTYPE_CONF,ftpData.confNums.item(ftpData.currentConf-1),'FTP_DIR_DAYS')
+  dayOffset:=readToolTypeInt(TOOLTYPE_CONF,ftpData.confNums.item(connection.currentConf-1),'FTP_DIR_DAYS')
   IF dayOffset=-1 THEN dayOffset:=10
   dayOffset:=Mul(dayOffset,86400)
   
   startDate:=getSystemDate()-dayOffset
 
  
-  IF ftpData.currentConf>0
-    IF (StrLen(ftpData.subDirPath)>0)
-      makeFtpListFromDlDirs(ftpData,startDate,cmdType, sb, data_c)
-    ELSEIF checkToolTypeExists(TOOLTYPE_CONF,ftpData.confNums.item(ftpData.currentConf-1),'FTP_NO_DIRLIST')
-      makeFtpListFromDlDirs(ftpData,startDate,cmdType, sb, data_c)
+  IF connection.currentConf>0
+    IF (StrLen(connection.subDirPath)>0)
+      makeFtpListFromDlDirs(ftpData,connection,startDate,cmdType, sb, data_c)
+    ELSEIF checkToolTypeExists(TOOLTYPE_CONF,ftpData.confNums.item(connection.currentConf-1),'FTP_NO_DIRLIST')
+      makeFtpListFromDlDirs(ftpData,connection,startDate,cmdType, sb, data_c)
     ELSE
-      makeFtpListFromDirList(ftpData,startDate,cmdType, sb, data_c)
+      makeFtpListFromDirList(ftpData,connection,startDate,cmdType, sb, data_c)
     ENDIF
   ENDIF
 ENDPROC
 
-PROC cmdUser(sb,ftp_c,params:PTR TO CHAR,ftpData:PTR TO ftpData)
+PROC cmdUser(sb,ftp_c,params:PTR TO CHAR,ftpData:PTR TO ftpData, connection: PTR TO ftpConnection)
   ->WriteF('user=\s\b\n',params)
   writeLineEx(sb,ftp_c, '331 user accepted\b\n')
-  AstrCopy(ftpData.authUser,params,255)
+  AstrCopy(connection.authUser,params,255)
 ENDPROC
 
-PROC cmdPass(sb,ftp_c,params,ftpData:PTR TO ftpData)
+PROC cmdPass(sb,ftp_c,params,ftpData:PTR TO ftpData, connection: PTR TO ftpConnection)
   ->WriteF('pass=\s\b\n',params)
-  IF doAuth(ftpData,ftpData.authUser,params)
+  IF doAuth(ftpData,connection.authUser,params)
     writeLineEx(sb,ftp_c, '230 password accepted\b\n')
+    RETURN -1
   ELSE
     writeLineEx(sb,ftp_c, '430 Invalid username or password\b\n')
+    closeSocket(sb,ftp_c)
+    RETURN 0
   ENDIF
 ENDPROC
 
-PROC cmdPwd(sb,ftp_c,ftpData:PTR TO ftpData)
+PROC cmdPwd(sb,ftp_c,ftpData:PTR TO ftpData,connection:PTR TO ftpConnection)
   DEF sendStr[300]:STRING
   DEF dirName[255]:STRING
   IF ftpData.mode=MODE_FULLSERVER
-    IF ftpData.currentConf=0
+    IF connection.currentConf=0
       StrCopy(sendStr, '257 "/" is current directory.\b\n')
       writeLineEx(sb,ftp_c,sendStr)
     ELSE
      
-      StringF(dirName,'/\r\z\d[3]-\s',ftpData.currentConf,ftpData.confNames.item(ftpData.currentConf-1))
-      IF StrLen(ftpData.subDirPath)>0
+      StringF(dirName,'/\r\z\d[3]-\s',connection.currentConf,ftpData.confNames.item(connection.currentConf-1))
+      IF StrLen(connection.subDirPath)>0
         StrAdd(dirName,'/')
-        StrAdd(dirName,ftpData.subDirPath)
+        StrAdd(dirName,connection.subDirPath)
       ENDIF
       StringF(sendStr, '257 "\s" is current directory.\b\n',dirName)
       writeLineEx(sb,ftp_c,sendStr)
@@ -1229,7 +1280,7 @@ PROC cmdNoop(sb,ftp_c)
   writeLineEx(sb,ftp_c, '200 OK\b\n')
 ENDPROC
 
-PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,path:PTR TO CHAR)
+PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,connection:PTR TO ftpConnection, path:PTR TO CHAR)
   DEF sendStr[255]:STRING
   DEF temp[255]:STRING
   DEF outFileName[255]:STRING
@@ -1239,23 +1290,23 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,path:PTR TO CHAR)
     IF StrCmp(path,'/')
       StrCopy(sendStr, '250 CWD command successful.\b\n')
       writeLineEx(sb,ftp_c,sendStr) 
-      StrCopy(ftpData.subDirPath,'')
-      ftpData.currentConf:=0
+      StrCopy(connection.subDirPath,'')
+      connection.currentConf:=0
     ELSEIF StrCmp(path,'..')
-      IF ftpData.currentConf<>0
+      IF connection.currentConf<>0
         StrCopy(sendStr, '250 CWD command successful.\b\n')
         writeLineEx(sb,ftp_c,sendStr) 
         
-        IF StrLen(ftpData.subDirPath)>0
-          IF InStr(ftpData.subDirPath,'/')>=0
-            p:=StrLen(ftpData.subDirPath)-1
-            WHILE ftpData.subDirPath[p]<>"/" DO p--
-            SetStr(ftpData.subDirPath,p)
+        IF StrLen(connection.subDirPath)>0
+          IF InStr(connection.subDirPath,'/')>=0
+            p:=StrLen(connection.subDirPath)-1
+            WHILE connection.subDirPath[p]<>"/" DO p--
+            SetStr(connection.subDirPath,p)
           ELSE
-            StrCopy(ftpData.subDirPath,'')
+            StrCopy(connection.subDirPath,'')
           ENDIF
         ELSE
-          ftpData.currentConf:=0
+          connection.currentConf:=0
         ENDIF
       ELSE
         StringF(sendStr, '550 \s: No such file or directory.\b\n',path)
@@ -1269,7 +1320,7 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,path:PTR TO CHAR)
       ENDFOR
       
       IF stat=-1
-        IF ftpData.currentConf=0
+        IF connection.currentConf=0
           FOR i:=0 TO ftpData.confNames.count()-1
             StringF(temp,'\r\z\d[3]-\s',i+1,ftpData.confNames.item(i))
             IF StrCmp(temp,path) THEN stat:=i
@@ -1280,9 +1331,9 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,path:PTR TO CHAR)
       IF stat>=0
         StrCopy(sendStr, '250 CWD command successful.\b\n')
         writeLineEx(sb,ftp_c,sendStr) 
-        ftpData.currentConf:=stat+1
-        getPath(ftpData,ftpData.confNums.item(ftpData.currentConf-1),'',outFileName)
-        StrCopy(ftpData.subDirPath,'')
+        connection.currentConf:=stat+1
+        getPath(ftpData,ftpData.confNums.item(connection.currentConf-1),'',outFileName)
+        StrCopy(connection.subDirPath,'')
         RETURN
       ENDIF
 
@@ -1295,7 +1346,7 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,path:PTR TO CHAR)
       ENDFOR
 
       IF stat=-1
-        IF ftpData.currentConf=0
+        IF connection.currentConf=0
           FOR i:=0 TO ftpData.confNames.count()-1
             StringF(temp,'\r\z\d[3]-\s/',i+1,ftpData.confNames.item(i))
             IF StrCmp(temp,path,StrLen(temp))
@@ -1307,19 +1358,19 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,path:PTR TO CHAR)
       ENDIF
 
       IF stat>=0
-        ftpData.currentConf:=stat+1
-        getPath(ftpData,ftpData.confNums.item(ftpData.currentConf-1),path,outFileName)
+        connection.currentConf:=stat+1
+        getPath(ftpData,ftpData.confNums.item(connection.currentConf-1),path,outFileName)
         IF StrLen(outFileName)>0
-          StrCopy(ftpData.subDirPath,path)
+          StrCopy(connection.subDirPath,path)
         ELSE
           stat:=-1
         ENDIF
       ELSE
-        IF ftpData.currentConf<>0
-          IF StrLen(ftpData.subDirPath)>0 THEN StringF(path,'\s/\s',ftpData.subDirPath,path)
-          getPath(ftpData,ftpData.confNums.item(ftpData.currentConf-1),path,outFileName)
+        IF connection.currentConf<>0
+          IF StrLen(connection.subDirPath)>0 THEN StringF(path,'\s/\s',connection.subDirPath,path)
+          getPath(ftpData,ftpData.confNums.item(connection.currentConf-1),path,outFileName)
           IF StrLen(outFileName)>0
-            StrCopy(ftpData.subDirPath,path)
+            StrCopy(connection.subDirPath,path)
             stat:=1
           ENDIF
         ENDIF
@@ -1343,10 +1394,10 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,path:PTR TO CHAR)
   ENDIF
 ENDPROC
 
-PROC cmdType(sb,ftp_c,params,ftpData:PTR TO ftpData)
+PROC cmdType(sb,ftp_c,params,connection:PTR TO ftpConnection)
   DEF temp[255]:STRING
   IF StriCmp(params,'I') OR StriCmp(params,'A')
-    ftpData.transType:=params[0]
+    connection.transType:=params[0]
     StringF(temp,'200 Type set to \s!!!\b\n',params)
   ELSE
     StringF(temp,'502 Type not implemented\b\n',params)
@@ -1378,14 +1429,14 @@ PROC cmdStru(sb,ftp_c,params)
   writeLineEx(sb,ftp_c,temp)
 ENDPROC
 
-PROC cmdMdtm(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
+PROC cmdMdtm(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData, connection:PTR TO ftpConnection)
   DEF fn[255]:STRING
   DEF ds:datestamp
   DEF temp[255]:STRING
   DEF outDateStr[255]:STRING
 
   IF filename[0]="/" THEN filename++
-  getFileName(ftpData,filename,fn)
+  getFileName(ftpData,connection,filename,fn)
   IF StrLen(fn) AND (getFileDate(fn,ds))
     formatFileDate2(ds,outDateStr)
     StringF(temp,'213 \s\b\n',outDateStr)
@@ -1396,13 +1447,13 @@ PROC cmdMdtm(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   ENDIF
 ENDPROC
 
-PROC cmdSize(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
+PROC cmdSize(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData,connection:PTR TO ftpConnection)
   DEF fn[255]:STRING
   DEF temp[255]:STRING
   DEF len
 
   IF filename[0]="/" THEN filename++
-  getFileName(ftpData,filename,fn)
+  getFileName(ftpData,connection,filename,fn)
   
   IF StrLen(fn)
     len:=FileLength(fn)
@@ -1419,43 +1470,40 @@ PROC cmdSize(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   ENDIF
 ENDPROC
 
-PROC cmdRest(sb,ftp_c,params:PTR TO CHAR,ftpData:PTR TO ftpData)
+PROC cmdRest(sb,ftp_c,params:PTR TO CHAR,ftpData:PTR TO ftpData, connection:PTR TO ftpConnection)
   DEF tempstr[255]:STRING
   
-  ftpData.restPos:=Val(params)
-  StringF(tempstr,'350 Restarting at \d. Send STORE or RETRIEVE to initiate transfer\b\n',ftpData.restPos)
+  connection.restPos:=Val(params)
+  StringF(tempstr,'350 Restarting at \d. Send STORE or RETRIEVE to initiate transfer\b\n',connection.restPos)
   writeLineEx(sb,ftp_c,tempstr)
 ENDPROC
 
-PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
+PROC cmdStor(sb,ftp_c,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData,connection:PTR TO ftpConnection,connectionIndex)
   DEF temp[255]:STRING
   DEF success=FALSE
   DEF break=FALSE
   DEF buff
   DEF fn[500]:STRING
   DEF r,l
-  DEF fh,pos,t,t2,startTime
+  DEF pos,t,t2,startTime
   DEF cps,lastpos
-  DEF asynclib
   DEF i,n,done
+  DEF asynclib,fh
+
+  connection.threadActive:=FALSE
+  connection.completedFlag:=FALSE
 
   IF ftpData.filenameCAPS THEN upperChars(filename)
 
-  IF (ftpData.transType<>"I") AND (ftpData.transType<>"A")
+  IF (connection.transType<>"I") AND (connection.transType<>"A")
     StringF(temp,'550 This server only supports binary or acii transfers\b\n',filename)
     writeLineEx(sb,ftp_c,temp)
 
     IF (data_c>=0)
-      ftpData.scount:=ftpData.scount-1
       r:=closeSocket(sb,data_c)
       data_c:=-1
     ENDIF
     
-    IF (data_s>=0)
-      ftpData.scount:=ftpData.scount-1
-      r:=closeSocket(sb,data_s)
-      data_s:=-1
-    ENDIF
     RETURN
   ENDIF
 
@@ -1464,17 +1512,10 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
     writeLineEx(sb,ftp_c,temp)
 
     IF (data_c>=0)
-      ftpData.scount:=ftpData.scount-1
       r:=closeSocket(sb,data_c)
       data_c:=-1
     ENDIF
     
-    IF (data_s>=0)
-      ftpData.scount:=ftpData.scount-1
-      r:=closeSocket(sb,data_s)
-      data_s:=-1
-    ENDIF
-
     IF ftpData.callersLog      
       callersLog(ftpData,'\tUpload Failed..')
       StringF(temp,'\tInvalid filename \s',filename)
@@ -1483,23 +1524,16 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
     RETURN
   ENDIF
 
-  IF (ftpData.fileDupeCheck<>NIL)
+  IF (ftpData.fileDupeCheck)
     IF fileDupeCheck(ftpData,filename)=TRUE
       StringF(temp,'553 \s: Duplicate file skipped\b\n',filename)
       writeLineEx(sb,ftp_c,temp)
 
       IF (data_c>=0)
-        ftpData.scount:=ftpData.scount-1
         r:=closeSocket(sb,data_c)
         data_c:=-1
       ENDIF
       
-      IF (data_s>=0)
-        ftpData.scount:=ftpData.scount-1
-        r:=closeSocket(sb,data_s)
-        data_s:=-1
-      ENDIF
-
       IF ftpData.callersLog      
         callersLog(ftpData,'\tUpload Failed..')
         StringF(temp,'\tSkipped \s',filename)
@@ -1510,63 +1544,42 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
     ENDIF
   ENDIF
 
-  IF (ftpData.mode=MODE_FULLSERVER) AND (ftpData.currentConf=0)
+  IF (ftpData.mode=MODE_FULLSERVER) AND (connection.currentConf=0)
     StrCopy(temp,'550 Cant upload here\b\n')
     writeLineEx(sb,ftp_c,temp)
 
     IF (data_c>=0)
-      ftpData.scount:=ftpData.scount-1
       r:=closeSocket(sb,data_c)
       data_c:=-1
-    ENDIF
-    
-    IF (data_s>=0)
-      ftpData.scount:=ftpData.scount-1
-      r:=closeSocket(sb,data_s)
-      data_s:=-1
     ENDIF
 
     RETURN
   ENDIF
 
-  IF ftpData.confULBlock<>NIL
-    IF ftpData.currentConf>0
-      IF StrLen(ftpData.confULBlock.item(ftpData.currentConf-1))
-        StringF(temp,'550 \s\b\n',ftpData.confULBlock.item(ftpData.currentConf-1))
+  IF ftpData.confULBlock
+    IF connection.currentConf>0
+      IF StrLen(ftpData.confULBlock.item(connection.currentConf-1))
+        StringF(temp,'550 \s\b\n',ftpData.confULBlock.item(connection.currentConf-1))
         writeLineEx(sb,ftp_c,temp)
         IF (data_c>=0)
-          ftpData.scount:=ftpData.scount-1
           r:=closeSocket(sb,data_c)
           data_c:=-1
         ENDIF
         
-        IF (data_s>=0)
-          ftpData.scount:=ftpData.scount-1
-          r:=closeSocket(sb,data_s)
-          data_s:=-1
-        ENDIF
         RETURN
       ENDIF
     ENDIF
   ENDIF
-
 
   IF ftpData.mode=MODE_DOWNLOAD
     StringF(temp,'550 \s: Not expecting any uploads\b\n',filename)
     writeLineEx(sb,ftp_c,temp)
 
     IF (data_c>=0)
-      ftpData.scount:=ftpData.scount-1
       r:=closeSocket(sb,data_c)
       data_c:=-1
     ENDIF
     
-    IF (data_s>=0)
-      ftpData.scount:=ftpData.scount-1
-      r:=closeSocket(sb,data_s)
-      data_s:=-1
-    ENDIF
-
     RETURN
   ENDIF
 
@@ -1575,38 +1588,49 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
 
   IF (data_c>=0)
     IF filename[0]="/" THEN filename++
-    StringF(fn,'\s\s',ftpData.uploadPath,filename)
-    StringF(temp,'150 Opening \s connection\b\n',IF (ftpData.transType="I") THEN 'Binary' ELSE 'Ascii')
+    StringF(fn,'\s\s',connection.uploadPath,filename)
+    StringF(temp,'150 Opening \s connection\b\n',IF (connection.transType="I") THEN 'Binary' ELSE 'Ascii')
     writeLineEx(sb,ftp_c,temp)
 
-    IF asynclib<>NIL
+    StrCopy(connection.filename,fn)
+
+    IF (ftpData.mode=MODE_FULLSERVER)
+      connection.threadActive:=TRUE
+      connection.completedFlag:=FALSE
+      createThreadStor(sb,connectionIndex,connection,ftpData)
+      RETURN
+    ENDIF
+
+    IF asynclib
       fh:=OpenAsync(fn,MODE_APPEND,32768)
     ELSE
       fh:=Open(fn,MODE_READWRITE)
-    ENDIF
-    IF asynclib<>NIL
-      SeekAsync(fh,ftpData.restPos,MODE_START)
-    ELSE
-      Seek(fh,ftpData.restPos,OFFSET_BEGINNING)
     ENDIF
     IF fh=0
       StringF(temp,'550 \s: No such file or directory\b\n',filename)
       writeLineEx(sb,ftp_c,temp)
     ELSE
-      IF ftpData.uploadFileStart<>NIL
-        uploadFileStart(ftpData,filename,ftpData.restPos)
+      IF ftpData.uploadFileStart
+        uploadFileStart(connection.zModemInfo,ftpData,filename,connection.restPos)
+      ENDIF
+      
+      pos:=connection.restPos
+      IF asynclib
+        SeekAsync(fh,pos,MODE_START)
+      ELSE
+        Seek(fh,pos,OFFSET_BEGINNING)
       ENDIF
       
       buff:=New(32768)
       t:=fastSystemTime()
       startTime:=t
-      lastpos:=ftpData.restPos
+      lastpos:=connection.restPos
       cps:=0
       REPEAT
         l:=recv(sb,data_c, buff,32768,0)
         
         IF (l>0)
-          IF (ftpData.transType="A")
+          IF (connection.transType="A")
             ->ascii transfer remove all CR characters
             n:=0
             FOR i:=0 TO l-1
@@ -1616,24 +1640,20 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
             l:=n
           ENDIF
           
-          IF asynclib<>NIL
+          IF asynclib
             WriteAsync(fh,buff,l)
           ELSE
             Fwrite(fh,buff,1,l)
           ENDIF
-          IF ftpData.uploadFileProgress<>NIL
+          pos+=l
+          IF ftpData.uploadFileProgress
             t2:=fastSystemTime()
             ->only call update maximum every 1 second
             IF (Abs(t2-t))>=50
               processMessages(ftpData)
-              IF asynclib<>NIL
-                pos:=SeekAsync(fh,0,MODE_CURRENT)
-              ELSE
-                pos:=Seek(fh,0,OFFSET_CURRENT)
-              ENDIF
               cps:=calcCPS(pos-lastpos,t,t2)
               lastpos:=pos
-              uploadFileProgress(ftpData,filename,pos,cps)
+              uploadFileProgress(connection.zModemInfo,ftpData,filename,pos,cps)
               t:=t2
             ENDIF
           ENDIF
@@ -1644,17 +1664,12 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
       UNTIL (l<=0) OR (break)
       Dispose(buff)
 
-      IF ftpData.uploadFileProgress<>NIL
-        IF asynclib<>NIL
-          pos:=SeekAsync(fh,0,MODE_CURRENT)
-        ELSE
-          pos:=Seek(fh,0,OFFSET_CURRENT)
-        ENDIF
+      IF ftpData.uploadFileProgress
         t2:=fastSystemTime()
-        cps:=calcCPS(pos-ftpData.restPos,startTime,t2)
-        uploadFileProgress(ftpData,filename,pos,cps)
+        cps:=calcCPS(pos-connection.restPos,startTime,t2)
+        uploadFileProgress(connection.zModemInfo,ftpData,filename,pos,cps)
       ENDIF
-      IF asynclib<>NIL
+      IF asynclib
         CloseAsync(fh)
       ELSE
         Close(fh)
@@ -1662,20 +1677,20 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
 
       success:=(break=FALSE) AND (l=0)
 
-      IF ftpData.uploadFileEnd<>NIL
-        uploadFileEnd(ftpData,filename,success)
+      IF ftpData.uploadFileEnd
+        uploadFileEnd(connection.zModemInfo,ftpData,filename,success)
       ENDIF
 
       StringF(temp, '226-\s ... Upload complete, file check in progress.. \b\n', filename)
       writeLineEx(sb,ftp_c,temp)
 
-      IF ftpData.startFileCheck<>NIL
+      IF ftpData.startFileCheck
         startFileCheck(ftpData,filename,success)
       ENDIF
 
       REPEAT
-        IF ftpData.waitFileCheck<>NIL
-          done:=waitFileCheck(ftpData,10)
+        IF ftpData.waitFileCheck
+          done:=waitFileCheck(ftpData,fn,10)
         ELSE
           done:=TRUE
         ENDIF
@@ -1684,7 +1699,7 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
           writeLineEx(sb,ftp_c,temp)
         ENDIF
       UNTIL done
-      
+    
       StringF(temp, '\d \s ... \s\b\n', 
       IF (success) THEN 226 ELSE 426, 
       filename, 
@@ -1698,153 +1713,146 @@ PROC cmdStor(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   ENDIF
 
   IF (data_c>=0)
-    ftpData.scount:=ftpData.scount-1
     r:=closeSocket(sb,data_c)
     data_c:=-1
   ENDIF
   
-  IF (data_s>=0)
-    ftpData.scount:=ftpData.scount-1
-    r:=closeSocket(sb,data_s)
-    data_s:=-1
-  ENDIF
   /*aePuts(ftpData,'Data connection closed\b\n')*/
-  IF asynclib<>NIL THEN CloseLibrary(asynclib)
+  IF asynclib THEN CloseLibrary(asynclib)
 ENDPROC
 
-PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
+PROC cmdRetr(sb,ftp_c,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData,connection:PTR TO ftpConnection,connectionIndex)
   DEF temp[255]:STRING
   DEF res[255]:STRING
   DEF success=FALSE
   DEF break=FALSE
   DEF buff
-  DEF asynclib
   DEF fn[255]:STRING
   DEF r,l,pos,cps,lastpos,flen
-  DEF fh
   DEF t,t2,startTime
   DEF candl=TRUE
+  DEF asynclib,fh
 
 
-  IF (ftpData.transType<>"I") AND (ftpData.transType<>"A")
+  connection.threadActive:=FALSE
+  connection.completedFlag:=FALSE
+
+  IF (connection.transType<>"I") AND (connection.transType<>"A")
     StringF(temp,'550 This server only supports binary or acii transfers\b\n',filename)
     writeLineEx(sb,ftp_c,temp)
     RETURN
   ENDIF
 
   asynclib:=OpenLibrary('asyncio.library',0)
-  asynciobase:=asynclib
+  asynciobase:=asynclib 
   
   IF ftpData.mode=MODE_UPLOAD
     StringF(temp,'550 \s: No such file or directory\b\n',filename)
     writeLineEx(sb,ftp_c,temp)
     IF (data_c>=0)
-      ftpData.scount:=ftpData.scount-1
       r:=closeSocket(sb,data_c)
       data_c:=-1
     ENDIF
     
-    IF (data_s>=0)
-      ftpData.scount:=ftpData.scount-1
-      r:=closeSocket(sb,data_s)
-      data_s:=-1
-    ENDIF
     RETURN
   ENDIF
 
   IF (data_c>=0)
     IF filename[0]="/" THEN filename++   
    
-    getFileName(ftpData,filename,fn)
+    getFileName(ftpData,connection,filename,fn)
     fh:=0
     flen:=0
     IF StrLen(fn)
       flen:=FileLength(fn)
-      IF asynclib<>NIL
-        writeLineEx(sb,ftp_c, '150 Opening BINARY connection with ASYNC\b\n')
-        fh:=OpenAsync(fn,MODE_READ,32768)
-      ELSE
-        writeLineEx(sb,ftp_c, '150 Opening BINARY connection with no ASYNC\b\n')
-
-        fh:=Open(fn,MODE_OLDFILE)
-      ENDIF
     ENDIF
-    IF fh=0
+    IF flen<=0
       StringF(temp,'/XFTP: open error \s \d\b\n',fn,IoErr())
       aePuts(ftpData,temp)
       StringF(temp,'550 \s: No such file or directory\b\n',filename)
       writeLineEx(sb,ftp_c,temp)
     ELSE
-   
-      IF (ftpData.downloadFileStart<>NIL) OR (ftpData.checkDownloadRatio<>NIL)
-        
-        pos:=ftpData.restPos
-        IF asynclib<>NIL
-          SeekAsync(fh,pos,MODE_START)
-        ELSE
-          Seek(fh,pos,OFFSET_BEGINNING)
-        ENDIF
-        IF (ftpData.checkDownloadRatio<>NIL) ANDALSO (checkDownloadRatio(ftpData,fn,flen,res)=FALSE)
+
+      IF (ftpData.downloadFileStart) OR (ftpData.checkDownloadRatio)       
+        pos:=connection.restPos
+        IF (ftpData.checkDownloadRatio) ANDALSO (checkDownloadRatio(connection.zModemInfo,ftpData,fn,flen,res)=FALSE)
           StringF(temp,'550 \s\b\n',res)
           writeLineEx(sb,ftp_c,temp)
-          candl:=FALSE
+          candl:=FALSE       
+        ELSE
+          IF (ftpData.downloadFileStart) THEN downloadFileStart(connection.zModemInfo,ftpData,fn,flen,pos)
         ENDIF
-        IF (ftpData.downloadFileStart<>NIL) THEN downloadFileStart(ftpData,fn,flen,pos)
       ENDIF
+      
+      IF (ftpData.mode=MODE_FULLSERVER) AND (candl)
+        StrCopy(connection.filename,fn)
+        connection.flen:=flen
+        connection.threadActive:=TRUE
+        connection.completedFlag:=FALSE
+        createThreadRetr(sb,connectionIndex,connection,ftpData)
+        RETURN
+      ENDIF
+      
       IF candl
-        buff:=New(32768)
-        t:=fastSystemTime()
-        startTime:=t
-        lastpos:=ftpData.restPos
-        cps:=0
-        REPEAT
-          IF asynclib<>NIL
-            l:=ReadAsync(fh,buff,32768)
+        IF asynclib
+          writeLineEx(sb,ftp_c, '150 Opening BINARY connection with ASYNC\b\n')
+          fh:=OpenAsync(fn,MODE_READ,32768)
+        ELSE
+          writeLineEx(sb,ftp_c, '150 Opening BINARY connection with no ASYNC\b\n')
+          fh:=Open(fn,MODE_OLDFILE)
+        ENDIF 
+
+        IF fh>0
+          buff:=New(32768)
+          IF asynclib
+            SeekAsync(fh,pos,MODE_START)
           ELSE
-            l:=Fread(fh,buff,1,32768)
+            Seek(fh,pos,OFFSET_BEGINNING)
           ENDIF
-          r:=0
-          IF l>0 
-            r:=send(sb,data_c, buff, l, 0)
-            IF (r>0) AND (ftpData.downloadFileProgress<>NIL)
-              t2:=fastSystemTime()
-              ->only call update maximum every 1 second
-              IF (Abs(t2-t))>=50
-                processMessages(ftpData)
-                IF asynclib<>NIL
-                  pos:=SeekAsync(fh,0,MODE_CURRENT)
-                ELSE
-                  pos:=Seek(fh,0,OFFSET_CURRENT)
+          t:=fastSystemTime()
+          startTime:=t
+          lastpos:=connection.restPos
+          cps:=0
+          REPEAT
+            IF asynclib
+              l:=ReadAsync(fh,buff,32768)
+            ELSE
+              l:=Fread(fh,buff,1,32768)
+            ENDIF
+            pos+=l
+            r:=0
+            IF l>0 
+              r:=send(sb,data_c, buff, l, 0)
+              IF (r>0) AND (ftpData.downloadFileProgress)
+                t2:=fastSystemTime()
+                ->only call update maximum every 1 second
+                IF (Abs(t2-t))>=50
+                  processMessages(ftpData)
+                  cps:=calcCPS(pos-lastpos,t,t2)
+                  lastpos:=pos
+                  downloadFileProgress(connection.zModemInfo,ftpData,filename,pos,flen,cps)
+                  t:=t2
                 ENDIF
-                cps:=calcCPS(pos-lastpos,t,t2)
-                lastpos:=pos
-                downloadFileProgress(ftpData,filename,pos,cps)
-                t:=t2
               ENDIF
             ENDIF
-          ENDIF
-          break:=CtrlC() OR (r<>l)
-        UNTIL (l=0) OR (break)
-        Dispose(buff)
+            break:=CtrlC() OR (r<>l)
+          UNTIL (l=0) OR (break)
+          Dispose(buff)
 
-        IF ftpData.downloadFileProgress<>NIL
-          IF asynclib<>NIL
-            pos:=SeekAsync(fh,0,MODE_CURRENT)
-          ELSE
-            pos:=Seek(fh,0,OFFSET_CURRENT)
+          IF ftpData.downloadFileProgress
+            t2:=fastSystemTime()
+            cps:=calcCPS(pos-connection.restPos,startTime,t2)
+            downloadFileProgress(connection.zModemInfo,ftpData,fn,pos,flen,cps)
           ENDIF
-          t2:=fastSystemTime()
-          cps:=calcCPS(pos-ftpData.restPos,startTime,t2)
-          downloadFileProgress(ftpData,fn,pos,cps)
-        ENDIF
-        IF asynclib<>NIL
-          CloseAsync(fh)
-        ELSE
-          Close(fh)
-        ENDIF
-        success:=(break=FALSE)
-        IF ftpData.downloadFileEnd<>NIL
-          downloadFileEnd(ftpData,fn,success)
+          IF asynclib
+            CloseAsync(fh)
+          ELSE
+            Close(fh)
+          ENDIF
+          success:=(break=FALSE)
+          IF ftpData.downloadFileEnd
+            downloadFileEnd(connection.zModemInfo,ftpData,fn,success)
+          ENDIF
         ENDIF
 
         StringF(temp, '\d \s ... \s\b\n', 
@@ -1861,23 +1869,17 @@ PROC cmdRetr(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   ENDIF
 
   IF (data_c>=0)
-    ftpData.scount:=ftpData.scount-1
     r:=closeSocket(sb,data_c)
     data_c:=-1
   ENDIF
   
-  IF (data_s>=0)
-    ftpData.scount:=ftpData.scount-1
-    r:=closeSocket(sb,data_s)
-    data_s:=-1
-  ENDIF
-  IF asynclib<>NIL 
+  IF asynclib 
     CloseLibrary(asynclib)
   ENDIF
   /*aePuts(ftpData,'Data connection closed\b\n')*/
 ENDPROC
 
-PROC cmdMlst(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
+PROC cmdMlst(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData, connection:PTR TO ftpConnection)
   DEF fn[255]:STRING
   DEF ds:datestamp
   DEF temp[255]:STRING
@@ -1885,7 +1887,7 @@ PROC cmdMlst(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   DEF size
 
   IF filename[0]="/" THEN filename++
-  getFileName(ftpData,filename,fn)
+  getFileName(ftpData,connection,filename,fn)
   IF StrLen(fn) AND (getFileDate(fn,ds))
     size:=FileLength(fn)
     formatFileDate2(ds,outDateStr)
@@ -1900,17 +1902,17 @@ PROC cmdMlst(sb,ftp_c,data_s,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData)
   ENDIF
 ENDPROC
 
-PROC cmdMlsd(sb,ftp_c,data_s,data_c,params:PTR TO CHAR,ftpData:PTR TO ftpData)
+PROC cmdMlsd(sb,ftp_c,data_c,params:PTR TO CHAR,ftpData:PTR TO ftpData,connection:PTR TO ftpConnection)
   DEF r
   DEF temp[255]:STRING
   DEF ftpDir
 
   IF (StrLen(params)=0) OR StrCmp(params,'/')
-    StringF(temp, '150 Opening \s connection for directory listing\b\n', IF ftpData.transType="I" THEN 'Binary' ELSE 'ASCII')
+    StringF(temp, '150 Opening \s connection for directory listing\b\n', IF connection.transType="I" THEN 'Binary' ELSE 'ASCII')
     writeLineEx(sb,ftp_c,temp)
 
     ftpDir:=ftpData.ftpDir
-    ftpDir(sb,data_c,ftpData,CMDTYPE_MLSD)
+    ftpDir(sb,data_c,ftpData,connection,CMDTYPE_MLSD)
 
     writeLineEx(sb,ftp_c, '226 Transfer Complete\b\n')
   ELSE
@@ -1918,149 +1920,283 @@ PROC cmdMlsd(sb,ftp_c,data_s,data_c,params:PTR TO CHAR,ftpData:PTR TO ftpData)
     writeLineEx(sb,ftp_c,temp)
   ENDIF
   IF data_c>=0
-    ftpData.scount:=ftpData.scount-1
     r:=closeSocket(sb,data_c)
     data_c:=-1
   ENDIF
-  IF data_s>=0
-    ftpData.scount:=ftpData.scount-1
-    r:=closeSocket(sb,data_s)
-    data_s:=-1
-  ENDIF
 ENDPROC
 
-PROC cmdList(sb,ftp_c,data_s,data_c,ftpData:PTR TO ftpData,cmdType)
+PROC cmdList(sb,ftp_c,data_c,ftpData:PTR TO ftpData,connection:PTR TO ftpConnection,cmdType)
   DEF r
   DEF temp[255]:STRING
   DEF ftpDir
   
   IF (data_c>=0)  
-    StringF(temp, '150 Opening \s connection for directory listing\b\n', IF ftpData.transType="I" THEN 'Binary' ELSE 'ASCII')
+    StringF(temp, '150 Opening \s connection for directory listing\b\n', IF connection.transType="I" THEN 'Binary' ELSE 'ASCII')
     writeLineEx(sb,ftp_c,temp)
 
     ftpDir:=ftpData.ftpDir
-    ftpDir(sb,data_c,ftpData,cmdType)
+    ftpDir(sb,data_c,ftpData,connection,cmdType)
 
     writeLineEx(sb,ftp_c, '226 Transfer Complete\b\n')
   ELSE
     writeLineEx(sb,ftp_c, '425 Can''t open data connection\b\n')
   ENDIF
   IF data_c>=0
-    ftpData.scount:=ftpData.scount-1
     r:=closeSocket(sb,data_c)
     data_c:=-1
-  ENDIF
-  IF data_s>=0
-    ftpData.scount:=ftpData.scount-1
-    r:=closeSocket(sb,data_s)
-    data_s:=-1
   ENDIF
   /*aePuts(ftpData,'Data connection closed\b\n')*/
 ENDPROC
 
-PROC mainFtpLoop(sb,ftp_c,ftpData:PTR TO ftpData)
-  DEF request[255]:ARRAY OF CHAR
+PROC mainFtpLoop(sb,ftp_c,ftpData:PTR TO ftpData,uploadPath:PTR TO CHAR,workingPath:PTR TO CHAR)
+  DEF request[255]:STRING
   DEF string[255]:STRING
+  DEF connectionList:PTR TO stdlist
+  DEF connection:PTR TO ftpConnection
   DEF r
-  DEF data_s=-1,data_c=-1
+  DEF n, rc, i
+  DEF c[1]:STRING
+  DEF buffer:PTR TO CHAR
+  DEF tv:timeval
+  DEF fds,res
+  DEF sigs=0
+  DEF sigsPtr=0
+  DEF loop=TRUE
+  DEF socket,a,b,count=0,t
+  DEF zmi:PTR TO zModem
+
+  InitSemaphore(ftpData.semi)
+
+  NEW connectionList.stdlist(ftpData.maxConnections)
+  NEW connection.new(ftp_c)
+  StrCopy(connection.uploadPath,uploadPath)
+  StrCopy(connection.workingPath,workingPath)
+  IF (ftpData.mode=MODE_FULLSERVER) OR (ftpData.ftpAuth=0) THEN connection.authFlag:=TRUE
+  IF (ftpData.mode=MODE_FULLSERVER) THEN connection.zModemInfo:=NEW zmi
+  connectionList.add(connection)
    
-  WHILE(((readLine(ftpData,sb,ftp_c, request, MAX_LINE-1)) > 0) AND (StrCmp(request, 'QUIT', 4)=FALSE)) AND (CtrlC()=FALSE)
-    StringF(string,'\tFTP Command >: \s',request)
-    IF ftpData.callersLog
-      callersLog(ftpData,string)    
+  WHILE (loop) AND (CtrlC()=FALSE)
+
+    tv.secs:=1->TIMEOUT
+    tv.micro:=0
+    fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
+
+    n:=-1
+    FOR i:=0 TO connectionList.count()-1
+      connection:=connectionList.item(i)
+      IF (connection.threadActive=FALSE)
+        setFDS(fds,connection.socket)
+        n:=Max(connection.socket,n)
+      ENDIF
+    ENDFOR
+
+    IF ftpData THEN sigs:=getSigs(ftpData)
+    IF sigs<>0 THEN sigsPtr:={sigs}
+
+    IF n>=0
+      res:=waitSelect(sb,n+1,fds,NIL,NIL,tv,sigsPtr)
+    ELSE
+      Delay(60)
+      res:=0
     ENDIF
-    StrAdd(string,'\b\n')
-    IF ftpData.conPuts THEN conPuts(ftpData,string)
-    IF(StrCmp(request, 'USER ', 5))
-      cmdUser(sb,ftp_c,request+5,ftpData)
-    ELSEIF(StrCmp(request, 'PASS ', 5))
-      cmdPass(sb,ftp_c,request+5,ftpData)
-    ELSEIF(StrCmp(request, 'LIST'))
-      cmdList(sb,ftp_c,data_s,data_c,ftpData,CMDTYPE_LIST)
-      data_c:=-1
-      data_s:=-1
-    ELSEIF(StrCmp(request, 'NLST'))
-      cmdList(sb,ftp_c,data_s,data_c,ftpData,CMDTYPE_NLST)
-      data_c:=-1
-      data_s:=-1     
-    ELSEIF(StrCmp(request, 'MLSD'))
-      cmdMlsd(sb,ftp_c,data_s,data_c,'',ftpData)
-      data_c:=-1
-      data_s:=-1
-    ELSEIF(StrCmp(request, 'MLSD ',5))
-      cmdMlsd(sb,ftp_c,data_s,data_c,request+5,ftpData)
-      data_c:=-1
-      data_s:=-1
-    ELSEIF(StrCmp(request, 'MLST ',5))
-      cmdMlst(sb,ftp_c,data_s,data_c,request+5,ftpData)
-    ELSEIF(StrCmp(request, 'MLST'))
-      cmdMlst(sb,ftp_c,data_s,data_c,'',ftpData)
-    ELSEIF(StrCmp(request, 'FEAT'))
-      cmdFeat(sb,ftp_c)
-    ELSEIF(StrCmp(request, 'NOOP'))
-      cmdNoop(sb,ftp_c)
-    ELSEIF(StrCmp(request, 'PWD'))
-      cmdPwd(sb,ftp_c,ftpData)
-    ELSEIF(StrCmp(request, 'SYST'))
-      cmdSyst(sb,ftp_c)
-    ELSEIF(StrCmp(request, 'XPWD'))
-      cmdPwd(sb,ftp_c,ftpData)
-    ELSEIF(StrCmp(request, 'CDUP'))
-      cmdCwd(sb,ftp_c,ftpData,'..')
-    ELSEIF(StrCmp(request, 'CWD ', 4))
-      cmdCwd(sb,ftp_c,ftpData,request+4)
-    ELSEIF(StrCmp(request, 'XCWD ', 5))
-      cmdCwd(sb,ftp_c,ftpData,request+5)
-    ELSEIF(StrCmp(request, 'TYPE ', 5))
-      cmdType(sb,ftp_c,request+5,ftpData)
-    ELSEIF(StrCmp(request, 'MODE ', 5))
-      cmdMode(sb,ftp_c,request+5)
-    ELSEIF(StrCmp(request, 'STRU ', 5))
-      cmdStru(sb,ftp_c,request+5)
-    ELSEIF(StrCmp(request, 'PORT ', 5))
-      cmdPort(sb,ftp_c)
-    ELSEIF(StrCmp(request, 'MDTM ', 5))
-      cmdMdtm(sb,ftp_c,request+5,ftpData)
-    ELSEIF(StrCmp(request, 'SIZE ', 5))
-      cmdSize(sb,ftp_c,request+5,ftpData)
-    ELSEIF(StrCmp(request, 'REST ', 5))
-      cmdRest(sb,ftp_c,request+5,ftpData)
-    ELSEIF(StrCmp(request, 'STOR ', 5))
-      cmdStor(sb,ftp_c,data_s,data_c,request+5,ftpData)
-      data_c:=-1
-      data_s:=-1
-    ELSEIF(StrCmp(request, 'RETR ', 5))
-      cmdRetr(sb,ftp_c,data_s,data_c,request+5,ftpData)
-      data_c:=-1
-      data_s:=-1
-    ELSEIF(StrCmp(request, 'PASV'))
-      IF (data_s>=0)
-        ftpData.scount:=ftpData.scount-1
-        r:=closeSocket(sb,data_s)
+    IF ftpData THEN processMessages(ftpData)
+    IF ftpData.extraSockets
+      WHILE ftpData.extraSockets.count()>0
+        IF connectionList.count()<connectionList.maxSize()
+
+          NEW connection.new(ftpData.extraSockets.item(0))
+
+          StringF(string,'220 Successful connection to node \d\b\n',ftpData.node)
+          writeLineEx(sb,connection.socket,string)
+
+          StrCopy(connection.uploadPath,uploadPath)
+          StrCopy(connection.workingPath,workingPath)
+          IF (ftpData.mode=MODE_FULLSERVER) THEN connection.zModemInfo:=NEW zmi
+          connectionList.add(connection)
+        ELSE
+          writeLineEx(sb,ftpData.extraSockets.item(0), '530 too many connections\b\n')
+          closeSocket(sb,ftpData.extraSockets.item(0))
+        ENDIF
+        ftpData.extraSockets.remove(0)
+      ENDWHILE
+    ENDIF
+    
+    END fds[32]
+
+    FOR i:=connectionList.count()-1 TO 0 STEP -1
+      connection:=connectionList.item(i)
+      
+      IF (connection.threadActive AND connection.completedFlag)
+        connection.socket:=obtainSocket(sb,connection.socket,AF_INET,SOCK_STREAM,0)
+       
+        connection.threadActive:=FALSE
+        connection.completedFlag:=FALSE
       ENDIF
-      IF (data_c>=0)
-        ftpData.scount:=ftpData.scount-1
-        r:=closeSocket(sb,data_c)
-      ENDIF
-      data_s,data_c:=cmdPasv(sb,ftp_c,ftpData.hostName,ftpData)
-    ELSEIF StrLen(request)>0
-      writeLineEx(sb,ftp_c, '500 command not recognized\b\n')
-      ->WriteF('UNKNOWN command: \s\b\n', request);
+    ENDFOR
+  
+    IF res>0
+      count:=0
+      FOR i:=connectionList.count()-1 TO 0 STEP -1
+        connection:=connectionList.item(i)
+             
+        IF connection.threadActive=FALSE
+          socket:=connection.socket
+          IoctlSocket(socket,FIONBIO,[1])
+          rc:=recv(sb,socket, c, 1,0)
+          IF rc<0
+            rc:=errno(sb)
+            IF (rc<>EINTR) AND (rc<>EWOULDBLOCK1) AND (rc<>EWOULDBLOCK2)
+              closeSocket(sb,socket)
+              END connection
+              connectionList.remove(i)
+            ENDIF
+          ELSEIF rc=0
+            rc:=errno(sb)
+            IF (rc<>EINTR)
+              closeSocket(sb,socket)
+              END connection
+              connectionList.remove(i)
+            ENDIF
+          ELSEIF ( rc = 1 )
+            r:=c[]     
+            IF (r<>13) AND (r<>10)
+              StrCopy(string,connection.input)
+              StrAddChar(string,r)
+              StrCopy(connection.input,string)
+            ENDIF
+            IF r="\n"
+              StrCopy(request,connection.input)
+              StrCopy(connection.input,'')
+
+              StringF(string,'\tFTP Command >: \s',request)
+              IF ftpData.callersLog
+                callersLog(ftpData,string)    
+              ENDIF
+              StrAdd(string,'\b\n')
+              IF ftpData.conPuts THEN conPuts(ftpData,string)
+              IF(StrCmp(request, 'USER ', 5))
+                cmdUser(sb,socket,request+5,ftpData,connection)
+              ELSEIF(StrCmp(request, 'PASS ', 5))
+                connection.authFlag:=cmdPass(sb,socket,request+5,ftpData,connection)
+              ELSEIF(StrCmp(request, 'QUIT'))
+                writeLineEx(sb,socket, '200 Byebye!\b\n')
+                closeSocket(sb,socket)
+                END connection
+                connectionList.remove(i)
+              ELSE
+                IF connection.authFlag
+                  IF(StrCmp(request, 'LIST'))
+                    cmdList(sb,socket,connection.data_c,ftpData,connection,CMDTYPE_LIST)
+                    connection.data_c:=-1
+                  ELSEIF(StrCmp(request, 'NLST'))
+                    cmdList(sb,socket,connection.data_c,ftpData,connection,CMDTYPE_NLST)
+                    connection.data_c:=-1
+                  ELSEIF(StrCmp(request, 'MLSD'))
+                    cmdMlsd(sb,socket,connection.data_c,'',ftpData,connection)
+                    connection.data_c:=-1
+                  ELSEIF(StrCmp(request, 'MLSD ',5))
+                    cmdMlsd(sb,socket,connection.data_c,request+5,ftpData,connection)
+                    connection.data_c:=-1
+                  ELSEIF(StrCmp(request, 'MLST ',5))
+                    cmdMlst(sb,socket,request+5,ftpData,connection)
+                  ELSEIF(StrCmp(request, 'MLST'))
+                    cmdMlst(sb,socket,'',ftpData,connection)
+                  ELSEIF(StrCmp(request, 'FEAT'))
+                    cmdFeat(sb,socket)
+                  ELSEIF(StrCmp(request, 'NOOP'))
+                    cmdNoop(sb,socket)
+                  ELSEIF(StrCmp(request, 'PWD'))
+                    cmdPwd(sb,socket,ftpData,connection)
+                  ELSEIF(StrCmp(request, 'SYST'))
+                    cmdSyst(sb,socket)
+                  ELSEIF(StrCmp(request, 'XPWD'))
+                    cmdPwd(sb,socket,ftpData,connection)
+                  ELSEIF(StrCmp(request, 'CDUP'))
+                    cmdCwd(sb,socket,ftpData,connection,'..')
+                  ELSEIF(StrCmp(request, 'CWD ', 4))
+                    cmdCwd(sb,socket,ftpData,connection,request+4)
+                  ELSEIF(StrCmp(request, 'XCWD ', 5))
+                    cmdCwd(sb,socket,ftpData,connection,request+5)
+                  ELSEIF(StrCmp(request, 'TYPE ', 5))
+                    cmdType(sb,socket,request+5,connection)
+                  ELSEIF(StrCmp(request, 'MODE ', 5))
+                    cmdMode(sb,socket,request+5)
+                  ELSEIF(StrCmp(request, 'STRU ', 5))
+                    cmdStru(sb,socket,request+5)
+                  ELSEIF(StrCmp(request, 'PORT ', 5))
+                    cmdPort(sb,socket)
+                  ELSEIF(StrCmp(request, 'MDTM ', 5))
+                    cmdMdtm(sb,socket,request+5,ftpData,connection)
+                  ELSEIF(StrCmp(request, 'SIZE ', 5))
+                    cmdSize(sb,socket,request+5,ftpData,connection)
+                  ELSEIF(StrCmp(request, 'REST ', 5))
+                    cmdRest(sb,socket,request+5,ftpData,connection)
+                  ELSEIF(StrCmp(request, 'STOR ', 5))
+                    cmdStor(sb,socket,connection.data_c,request+5,ftpData,connection,i)
+                    IF connection.threadActive=FALSE
+                      connection.data_c:=-1
+                    ENDIF
+                  ELSEIF(StrCmp(request, 'RETR ', 5))
+                    cmdRetr(sb,socket,connection.data_c,request+5,ftpData,connection,i)
+                    IF connection.threadActive=FALSE
+                      connection.data_c:=-1
+                    ENDIF
+                  ELSEIF(StrCmp(request, 'PASV'))
+                    IF (connection.data_c>=0)
+                      r:=closeSocket(sb,connection.data_c)
+                    ENDIF
+                    connection.data_c:=cmdPasv(sb,socket,ftpData.hostName,ftpData,connection)
+                  ELSEIF StrLen(request)>0
+                    writeLineEx(sb,socket, '500 command not recognized\b\n')
+                  ->WriteF('UNKNOWN command: \s\b\n', request);
+                  ENDIF
+                ELSE
+                  writeLineEx(sb,socket, '530 not logged in\b\n')
+                ENDIF
+              ENDIF
+            ENDIF
+          ENDIF
+        ENDIF
+      ENDFOR
     ENDIF
     ->IF errno<>0 THEN WriteF('error \d\b\n',errno)
+    count++
+
+
+    ->no active uploads/downloads then timeout after TIMEOUT seconds
+    r:=0
+    FOR i:=0 TO connectionList.count()-1
+      connection:=connectionList.item(i)
+      IF connection.threadActive THEN r:=TRUE
+    ENDFOR
+    IF (r=0) AND (count=TIMEOUT) THEN loop:=FALSE
+    
+    ->no active connections then timeout after 20 seconds
+    IF (connectionList.count()=0)  AND ((count=20) OR (ftpData.mode<>MODE_FULLSERVER)) THEN loop:=FALSE
   ENDWHILE
-  writeLineEx(sb,ftp_c, '200 Byebye!\b\n')
+
+  ->wait for upload/download threads to complete
+  FOR i:=0 TO connectionList.count()-1
+    connection:=connectionList.item(i)
+    IF connection.threadActive AND (connection.completedFlag=FALSE)
+      Forbid()
+      t:=FindTask(connection.threadName)
+      IF t THEN Signal(t,SIGBREAKF_CTRL_C)
+      Permit()       
+      WHILE connection.threadActive AND (connection.completedFlag=FALSE) DO Delay(30)
+    ENDIF
+
+    closeSocket(sb,connection.socket)
+
+    IF (connection.data_c>=0) 
+      r:=closeSocket(sb,connection.data_c)
+      connection.data_c:=-1
+    ENDIF
+
+    END connection
+  ENDFOR
+  END connectionList
   
-  IF (data_s>=0)
-    ftpData.scount:=ftpData.scount-1
-    r:=closeSocket(sb,data_s)
-    data_s:=-1
-  ENDIF
-  IF (data_c>=0) 
-    ftpData.scount:=ftpData.scount-1
-    r:=closeSocket(sb,data_c)
-    data_c:=-1
-  ENDIF
 ENDPROC
   
 
@@ -2068,23 +2204,25 @@ PROC ftpThread()
   DEF ftp_c,sockid
   DEF sb
   DEF ftpData:PTR TO ftpData
+  DEF temp[50]:STRING
 
   ftpData:=loadA4()
 
   sockid:=ftpData.sockId
+  
+  StringF(temp,'AmiExpress Node \d - ftp processor',ftpData.node)
+  SetProgramName(temp)
   
 	sb:=OpenLibrary('bsdsocket.library',2)
   ftp_c:=obtainSocket(sb,sockid,AF_INET,SOCK_STREAM,0)
 
   ioctlSocket(sb,ftp_c,FIONBIO,[0])
 
-  ftpData.scount:=ftpData.scount+1
   writeLineEx(sb,ftp_c, '220 Welcome to Ami-Express FTP server.\b\n')
      
-  mainFtpLoop(sb,ftp_c,ftpData)
+  mainFtpLoop(sb,ftp_c,ftpData,ftpData.forceUploadPath,ftpData.forceWorkingPath)
   
   IF (ftp_c>=0) 
-    ftpData.scount:=ftpData.scount-1
     closeSocket(sb,ftp_c)
   ENDIF
 
@@ -2095,11 +2233,324 @@ PROC ftpThread()
   Exit(0)
 ENDPROC
 
-PROC saveA4(taskID,ftpData,node)
+PROC doAttemptSemaphore(s)
+  //AttemptSemaphore is listed as not preserving registers
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  AttemptSemaphore(s)
+  MOVEM.L (A7)+,D1-D7/A0-A6
+  //result is in D0
+ENDPROC D0
+
+PROC ftpThreadStor()
+  DEF connection:PTR TO ftpConnection
+  DEF ftpData:PTR TO ftpData
+  DEF buff,n,i,t,t2,startTime,lastpos,cps,r,l,break,pos,success,done,sb
+  DEF temp[255]:STRING
+  DEF asynclib,fh
+
+  connection:=loadA4()
+  ftpData:=connection.ftpData
+
+  StringF(temp,'AmiExpress Node \d - ftp store',ftpData.node)
+  SetProgramName(temp)
+
+	sb:=OpenLibrary('bsdsocket.library',2)
+  connection.socket:=obtainSocket(sb,connection.socket,AF_INET,SOCK_STREAM,0)
+  connection.data_c:=obtainSocket(sb,connection.data_c,AF_INET,SOCK_STREAM,0)
+
+  asynclib:=OpenLibrary('asyncio.library',0)
+  asynciobase:=asynclib
+
+  IF asynclib
+    fh:=OpenAsync(connection.filename,MODE_APPEND,32768)
+  ELSE
+    fh:=Open(connection.filename,MODE_READWRITE)
+  ENDIF
+
+  IF fh=0
+    StringF(temp,'550 \s: No such file or directory\b\n',FilePart(connection.filename))
+    writeLineEx(sb,connection.socket,temp)
+
+    IF (connection.data_c>=0)
+      r:=closeSocket(sb,connection.data_c)
+      connection.data_c:=-1
+    ENDIF
+    
+    IF asynclib THEN CloseLibrary(asynclib)
+    connection.completedFlag:=TRUE
+    CloseLibrary(sb)
+    Exit(0)
+  ENDIF
+
+  IF ftpData.uploadFileStart
+    ObtainSemaphore(ftpData.semi)
+    uploadFileStart(connection.zModemInfo,ftpData,FilePart(connection.filename),connection.restPos)
+    ReleaseSemaphore(ftpData.semi)
+  ENDIF
+
+  pos:=connection.restPos
+  IF asynclib
+    SeekAsync(fh,pos,MODE_START)
+  ELSE
+    Seek(fh,pos,OFFSET_BEGINNING)
+  ENDIF
+
+  buff:=New(32768)
+  t:=fastSystemTime()
+  startTime:=t
+  lastpos:=connection.restPos
+  cps:=0
+
+  REPEAT
+    l:=recv(sb,connection.data_c, buff,32768,0)
+    
+    IF (l>0)
+      IF (connection.transType="A")
+        ->ascii transfer remove all CR characters
+        n:=0
+        FOR i:=0 TO l-1
+          IF n<>i THEN buff[n]:=buff[i]
+          IF buff[i]<>13 THEN n++
+        ENDFOR
+        l:=n
+      ENDIF
+      
+      IF asynclib
+        WriteAsync(fh,buff,l)
+      ELSE
+        Fwrite(fh,buff,1,l)
+      ENDIF
+      pos+=l
+      IF ftpData.uploadFileProgress
+        t2:=fastSystemTime()
+        ->only call update maximum every 1 second
+        IF (Abs(t2-t))>=50
+          ObtainSemaphore(ftpData.semi)
+          processMessages(ftpData)
+          cps:=calcCPS(pos-lastpos,t,t2)
+          lastpos:=pos
+          uploadFileProgress(connection.zModemInfo,ftpData,FilePart(connection.filename),pos,cps)
+          t:=t2
+          ReleaseSemaphore(ftpData.semi)
+        ENDIF
+      ENDIF
+      break:=CtrlC()
+     ENDIF
+     
+     IF (l=-1) AND (errno(sb)=EINTR) THEN l:=1
+  UNTIL (l<=0) OR (break)
+  Dispose(buff)
+
+  IF asynclib
+    CloseAsync(fh)
+  ELSE
+    Close(fh)
+  ENDIF
+
+  success:=(break=FALSE) AND (l=0)
+
+  n:=0
+  WHILE doAttemptSemaphore(ftpData.semi)=FALSE
+    n++
+    IF (n=10)
+      writeLineEx(sb,connection.socket,'226-Please wait, Checking..\b\n')
+      n:=0
+    ENDIF
+    Delay(60)
+  ENDWHILE
+
+  IF ftpData.uploadFileProgress
+    t2:=fastSystemTime()
+    cps:=calcCPS(pos-connection.restPos,startTime,t2)
+    uploadFileProgress(connection.zModemInfo,ftpData,FilePart(connection.filename),pos,cps)
+  ENDIF
+
+  StringF(temp, '226-\s ... Upload complete, file check in progress.. \b\n', FilePart(connection.filename))
+  writeLineEx(sb,connection.socket,temp)
+
+  IF ftpData.uploadFileEnd
+    uploadFileEnd(connection.zModemInfo,ftpData,FilePart(connection.filename),success)
+  ENDIF
+
+  IF ftpData.startFileCheck
+    startFileCheck(ftpData,FilePart(connection.filename),success)
+  ENDIF
+
+  REPEAT
+    IF ftpData.waitFileCheck
+      done:=waitFileCheck(ftpData,connection.filename,10)
+    ELSE
+      done:=TRUE
+    ENDIF
+    IF (done=FALSE) AND (success)
+      writeLineEx(sb,connection.socket,'226-Please wait, Checking..\b\n')
+    ENDIF
+  UNTIL done
+
+  ReleaseSemaphore(ftpData.semi)
+  
+  StringF(temp, '\d \s ... \s\b\n', 
+  IF (success) THEN 226 ELSE 426, 
+  FilePart(connection.filename), 
+  IF (success) THEN 'Transfer Complete' ELSE 'Transfer aborted')
+
+  writeLineEx(sb,connection.socket, temp)
+
+  IF (connection.data_c>=0)
+    r:=closeSocket(sb,connection.data_c)
+    connection.data_c:=-1
+  ENDIF
+  
+  /*aePuts(ftpData,'Data connection closed\b\n')*/
+  IF asynclib THEN CloseLibrary(asynclib)
+  connection.completedFlag:=TRUE
+  CloseLibrary(sb)
+  Exit(0)
+ENDPROC
+
+PROC ftpThreadRetr()
+  DEF connection:PTR TO ftpConnection
+  DEF ftpData:PTR TO ftpData
+  DEF buff,t,t2,startTime,lastpos,cps,r,l,break,pos,success=FALSE,sb
+  DEF temp[255]:STRING
+  DEF asynclib,fh
+  
+  connection:=loadA4()
+  ftpData:=connection.ftpData
+
+  StringF(temp,'AmiExpress Node \d - ftp retrieve',ftpData.node)
+  SetProgramName(temp)
+
+	sb:=OpenLibrary('bsdsocket.library',2)
+
+  connection.socket:=obtainSocket(sb,connection.socket,AF_INET,SOCK_STREAM,0)
+  connection.data_c:=obtainSocket(sb,connection.data_c,AF_INET,SOCK_STREAM,0)
+
+  asynclib:=OpenLibrary('asyncio.library',0)
+  asynciobase:=asynclib
+
+  IF asynclib
+    StrCopy(temp,'150 Opening BINARY connection with ASYNC\b\n')
+    fh:=OpenAsync(connection.filename,MODE_READ,32768)
+  ELSE
+    StrCopy(temp,'150 Opening BINARY connection with no ASYNC\b\n')
+    fh:=Open(connection.filename,MODE_OLDFILE)
+  ENDIF 
+
+  IF fh>0
+    pos:=connection.restPos
+    writeLineEx(sb,connection.socket,temp)
+    IF asynclib
+      SeekAsync(fh,pos,MODE_START)
+    ELSE
+      Seek(fh,pos,OFFSET_BEGINNING)
+    ENDIF
+
+    buff:=New(32768)
+    t:=fastSystemTime()
+    startTime:=t
+    lastpos:=connection.restPos
+    cps:=0
+    REPEAT
+      IF asynclib
+        l:=ReadAsync(fh,buff,32768)
+      ELSE
+        l:=Fread(fh,buff,1,32768)
+      ENDIF
+      pos+=l
+
+      r:=0
+      IF l>0 
+        r:=send(sb,connection.data_c, buff, l, 0)
+
+        IF (r>0) AND (ftpData.downloadFileProgress)
+          t2:=fastSystemTime()
+          ->only call update maximum every 1 second
+          IF (Abs(t2-t))>=50
+            ObtainSemaphore(ftpData.semi)
+            processMessages(ftpData)
+            cps:=calcCPS(pos-lastpos,t,t2)
+            lastpos:=pos
+            downloadFileProgress(connection.zModemInfo,ftpData,FilePart(connection.filename),pos,connection.flen,cps)
+            t:=t2
+            ReleaseSemaphore(ftpData.semi)
+          ENDIF
+        ENDIF
+      ENDIF
+      break:=CtrlC() OR (r<>l)
+    UNTIL (l=0) OR (break)
+    Dispose(buff)
+
+    IF ftpData.downloadFileProgress
+      t2:=fastSystemTime()
+      cps:=calcCPS(pos-connection.restPos,startTime,t2)
+      ObtainSemaphore(ftpData.semi)
+      downloadFileProgress(connection.zModemInfo,ftpData,FilePart(connection.filename),pos,connection.flen,cps)
+      ReleaseSemaphore(ftpData.semi)
+    ENDIF
+        
+    IF asynclib
+      CloseAsync(fh)
+    ELSE
+      Close(fh)
+    ENDIF
+    
+    success:=(break=FALSE)
+    IF ftpData.downloadFileEnd
+      ObtainSemaphore(ftpData.semi)
+      downloadFileEnd(connection.zModemInfo,ftpData,connection.filename,success)
+      ReleaseSemaphore(ftpData.semi)
+    ENDIF
+
+  ENDIF
+
+  StringF(temp, '\d \s ... \s\b\n', 
+  IF (success) THEN 226 ELSE 426, 
+  FilePart(connection.filename), 
+  IF (success) THEN 'Transfer Complete' ELSE 'Transfer aborted')
+
+  writeLineEx(sb,connection.socket, temp)
+  connection.socket:=releaseSocket(sb,connection.socket,UNIQUE_ID)
+  
+  IF (connection.data_c>=0)
+    closeSocket(sb,connection.data_c)
+    connection.data_c:=-1
+  ENDIF
+  
+  IF asynclib
+    CloseLibrary(asynclib)
+  ENDIF
+  CloseLibrary(sb)
+  connection.completedFlag:=TRUE
+  /*aePuts(ftpData,'Data connection closed\b\n')*/
+  Exit(0)
+ENDPROC
+
+PROC getA4slot(nd)
+  LEA regA4(PC),A0
+  MOVE.L nd,D0
+  ADD.W D0,D0
+  ADD.W D0,D0
+  MOVE.L 0(A0,D0.W), D0
+ENDPROC D0
+
+PROC waitA4SlotFree(node)
+  DEF v
+  REPEAT
+    v:=getA4slot(node) 
+    IF v
+      Permit()
+      Delay(10)
+      Forbid()
+    ENDIF
+  UNTIL v=0
+ENDPROC
+
+PROC saveA4(taskID,saveData,node)
   DEF pa,nd,tid
   MOVEM.L D0-D7/A0-A6,-(A7)
   tid:=taskID
-  pa:=ftpData
+  pa:=saveData
   nd:=node
   
   LEA regA4(PC),A0
@@ -2139,64 +2590,95 @@ findA4task:
 
 taskfound:
   MOVE.L 0(A0,D0),A4
+  CLR.L 0(A0,D0)
   MOVE.L 0(A2,D0),D0
   MOVEM.L (A7)+,D1-D7/A0-A3/A5-A6
 ENDPROC D0
 
 
-PROC createThread(num,node,sockid,ftpData:PTR TO ftpData)
+PROC createThread(num,sockid,ftpData:PTR TO ftpData)
   DEF tags:PTR TO LONG,proc:PTR TO process
   DEF name[255]:STRING
   
-  StringF(name,'ftpThread\d-\d',node,num)
-  tags:=NEW [NP_ENTRY,{ftpThread},NP_NAME,name,NP_STACKSIZE,10000,0]
+  StringF(name,'ftpThread\d-\d',ftpData.node,num)
+  tags:=NEW [NP_ENTRY,{ftpThread},NP_CLI,TRUE,NP_NAME,name,NP_STACKSIZE,10000,0]
  
   ftpData.sockId:=sockid
 
   Forbid()
+  waitA4SlotFree(ftpData.node)
   proc:=CreateNewProc(tags)
-  saveA4(proc,ftpData,node)
+  saveA4(proc,ftpData,ftpData.node)
+  Permit()
+  FastDisposeList(tags)
+ENDPROC
+
+PROC createThreadStor(sb,num,connection:PTR TO ftpConnection,ftpData:PTR TO ftpData)
+  DEF tags:PTR TO LONG,proc:PTR TO process
+  DEF name[255]:STRING
+  
+  StringF(name,'ftpThreadStor\d-\d',ftpData.node,num)
+  AstrCopy(connection.threadName,name)
+  tags:=NEW [NP_ENTRY,{ftpThreadStor},NP_CLI,TRUE,NP_NAME,name,NP_STACKSIZE,10000,0]
+ 
+  connection.ftpData:=ftpData
+
+  connection.socket:=releaseSocket(sb,connection.socket,UNIQUE_ID)
+  connection.data_c:=releaseSocket(sb,connection.data_c,UNIQUE_ID)
+
+  Forbid()
+  waitA4SlotFree(ftpData.node)    //also ends with forbid in place
+  proc:=CreateNewProc(tags)
+  saveA4(proc,connection,ftpData.node)
+  Permit()
+  FastDisposeList(tags)
+ENDPROC
+
+PROC createThreadRetr(sb,num,connection:PTR TO ftpConnection,ftpData:PTR TO ftpData)
+  DEF tags:PTR TO LONG,proc:PTR TO process
+  DEF name[255]:STRING
+  
+  StringF(name,'ftpThreadRetr\d-\d',ftpData.node,num)
+  AstrCopy(connection.threadName,name)
+  tags:=NEW [NP_ENTRY,{ftpThreadRetr},NP_CLI,TRUE,NP_NAME,name,NP_STACKSIZE,10000,0]
+ 
+  connection.ftpData:=ftpData
+
+  connection.socket:=releaseSocket(sb,connection.socket,UNIQUE_ID)
+  connection.data_c:=releaseSocket(sb,connection.data_c,UNIQUE_ID)
+
+  Forbid()
+  waitA4SlotFree(ftpData.node)
+  proc:=CreateNewProc(tags)
+  saveA4(proc,connection,ftpData.node)
   Permit()
   FastDisposeList(tags)
 ENDPROC
 
 EXPORT PROC ftpServerMode(ftpData:PTR TO ftpData, ftp_c,ftpHost:PTR TO CHAR,uploadPath:PTR TO CHAR,ftpDataPorts:PTR TO LONG,filenameCAPS)
 
-  ftpData.rest:=0
   ftpData.tcount:=0
-  ftpData.scount:=0
   ftpData.port:=-1
   ftpData.mode:=MODE_FULLSERVER
   ftpData.fileList:=NIL
-  ftpData.restPos:=0
   ftpData.filenameCAPS:=filenameCAPS
 
-  ftpData.workingPath:=String(255)
-  ftpData.uploadPath:=String(255)
   ftpData.hostName:=String(255)
-  ftpData.subDirPath:=String(1000)
   ftpData.dataPorts:=ftpDataPorts
   ftpData.ftpDir:={fullDir}
-  ftpData.currentConf:=0
   ftpData.setReuseAddr:=TRUE
 
   IF ListLen(ftpDataPorts)>0 THEN testSocket(socketbase,ftpData,ftpDataPorts[0])
 
   StrCopy(ftpData.hostName,ftpHost)
   
-  StrCopy(ftpData.workingPath,'')
-  StrCopy(ftpData.uploadPath,uploadPath)
-
   ioctlSocket(socketbase,ftp_c,FIONBIO,[0])
 
-  mainFtpLoop(socketbase,ftp_c,ftpData)
+  mainFtpLoop(socketbase,ftp_c,ftpData,uploadPath,'')
 
   freeFileList(ftpData.fileList)
   
-  DisposeLink(ftpData.workingPath)
-  DisposeLink(ftpData.uploadPath)
   DisposeLink(ftpData.hostName)
-  DisposeLink(ftpData.subDirPath)
 ENDPROC
 
 EXPORT PROC ftpDoLogin(sb,ftp_c,userName:PTR TO CHAR,password:PTR TO CHAR)
@@ -2222,7 +2704,7 @@ EXPORT PROC ftpDoLogin(sb,ftp_c,userName:PTR TO CHAR,password:PTR TO CHAR)
   ENDWHILE
 ENDPROC authDone
 
-EXPORT PROC doftp(ftpData:PTR TO ftpData,node,ftphost,ftpports:PTR TO LONG,ftpdataports:PTR TO LONG,fileList: PTR TO stdlist,uploadpath,filenameCAPS,uploadMode)
+EXPORT PROC doftp(ftpData:PTR TO ftpData,ftphost,ftpports:PTR TO LONG,ftpdataports:PTR TO LONG,fileList: PTR TO stdlist,uploadpath,filenameCAPS,uploadMode)
   DEF r,ftp_s,ftp_c,s,sb
   DEF temp[255]:STRING
   DEF flg,rchar
@@ -2230,21 +2712,19 @@ EXPORT PROC doftp(ftpData:PTR TO ftpData,node,ftphost,ftpports:PTR TO LONG,ftpda
   DEF connected=TRUE
   DEF port
   
-  ftpData.rest:=0
   ftpData.tcount:=0
-  ftpData.scount:=0
   ftpData.port:=-1
   ftpData.mode:=IF uploadMode THEN MODE_UPLOAD ELSE MODE_DOWNLOAD
   ftpData.fileList:=fileList
-  ftpData.restPos:=0
   ftpData.filenameCAPS:=filenameCAPS
 
-  ftpData.workingPath:=String(255)
-  ftpData.uploadPath:=String(255)
   ftpData.hostName:=String(255)
   ftpData.dataPorts:=ftpdataports
   ftpData.setReuseAddr:=TRUE
   
+  ftpData.forceWorkingPath:=String(255)
+  ftpData.forceUploadPath:=String(255)
+
   IF uploadMode
     ftpData.ftpDir:={uploadDir}
   ELSE
@@ -2252,8 +2732,9 @@ EXPORT PROC doftp(ftpData:PTR TO ftpData,node,ftphost,ftpports:PTR TO LONG,ftpda
   ENDIF
 
   StrCopy(ftpData.hostName,ftphost) 
-  StrCopy(ftpData.workingPath,uploadpath)
-  StrCopy(ftpData.uploadPath,uploadpath)
+  
+  StrCopy(ftpData.forceWorkingPath,uploadpath)
+  StrCopy(ftpData.forceUploadPath,uploadpath)
   
 	sb:=OpenLibrary('bsdsocket.library',2)
 	IF (sb)
@@ -2273,7 +2754,6 @@ EXPORT PROC doftp(ftpData:PTR TO ftpData,node,ftphost,ftpports:PTR TO LONG,ftpda
       aePuts(ftpData,temp)
       aePuts(ftpData,'Transfer will finish on CTRL-C or when all connections are closed\b\n\b\n')
 
-      ioctlSocket(sb,ftp_s,FIONBIO,[1])
       WHILE ((flg=FALSE) OR (ftpData.tcount<>0))
         Delay(10)
         rchar:=0
@@ -2282,9 +2762,10 @@ EXPORT PROC doftp(ftpData:PTR TO ftpData,node,ftphost,ftpports:PTR TO LONG,ftpda
         ENDIF
         EXIT rchar=3
         
-        IF ftpData.ftpCheckConnection<>NIL THEN connected:=ftpData.ftpCheckConnection()
+        IF ftpData.ftpCheckConnection THEN connected:=ftpData.ftpCheckConnection()
         EXIT connected=FALSE
         
+        ioctlSocket(sb,ftp_s,FIONBIO,[1])
         ftp_c:=accept(sb,ftp_s,NIL,NIL)
         IF(ftp_c< 0)
           IF errno(sb)<>35
@@ -2299,11 +2780,11 @@ EXPORT PROC doftp(ftpData:PTR TO ftpData,node,ftphost,ftpports:PTR TO LONG,ftpda
 
           s:=releaseSocket(sb,ftp_c,UNIQUE_ID)
           ->r:=closeSocket(sb,ftp_c)
-          createThread(tcount,node,s,ftpData)
+          WriteF('FTP connection at port \d accepted\b\n', ftpData.port)
+          createThread(tcount,s,ftpData)
           tcount++
         ENDIF
       ENDWHILE
-      ftpData.scount:=ftpData.scount-1
       r:=closeSocket(sb,ftp_s)
 
       IF flg THEN aePuts(ftpData,'\b\n')
@@ -2311,10 +2792,10 @@ EXPORT PROC doftp(ftpData:PTR TO ftpData,node,ftphost,ftpports:PTR TO LONG,ftpda
         StringF(temp,'\s detected, FTP transfer aborted\b\n',IF rchar=3 THEN 'CTRL-C' ELSE 'Disconnect')
         aePuts(ftpData,temp)
         FOR i:=0 TO tcount-1
-          StringF(temp,'ftpThread\d-\d',node,i)
+          StringF(temp,'ftpThread\d-\d',ftpData.node,i)
           Forbid()
           t:=FindTask(temp)
-          IF t<>NIL THEN Signal(t,SIGBREAKF_CTRL_C)
+          IF t THEN Signal(t,SIGBREAKF_CTRL_C)
           Permit()       
         ENDFOR
       ELSE
@@ -2324,8 +2805,9 @@ EXPORT PROC doftp(ftpData:PTR TO ftpData,node,ftphost,ftpports:PTR TO LONG,ftpda
     CloseLibrary(sb)
 	ENDIF
   DisposeLink(ftpData.hostName)
-  DisposeLink(ftpData.workingPath)
-  DisposeLink(ftpData.uploadPath)
+  DisposeLink(ftpData.forceWorkingPath)
+  DisposeLink(ftpData.forceUploadPath)
+
 ENDPROC
 
 

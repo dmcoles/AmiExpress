@@ -569,11 +569,12 @@ EXPORT OBJECT semiNodestat
   info:CHAR
 ENDOBJECT
    
+->changing this may break external WHO command
 EXPORT OBJECT nodeInfo
   handle[31]:ARRAY OF CHAR
-  netSocket:LONG
+  startTime:LONG
   chatColor:LONG
-  offHook:LONG
+  channel:LONG
   private:LONG
   stats[MAX_NODES]:ARRAY OF semiNodestat ->- 64
   t: LONG
@@ -581,11 +582,18 @@ EXPORT OBJECT nodeInfo
   taskSignal:LONG
 ENDOBJECT  -> should be 124
 
+EXPORT OBJECT nodeInfo2
+  netSocket:LONG
+  offHook:LONG
+  netIP:LONG
+ENDOBJECT
+
 EXPORT OBJECT multiPort
   semi:ss  ->length 46
   list: mlh  ->length 12
   myNode[MAX_NODES]:ARRAY OF nodeInfo
   semiName[20]:ARRAY OF CHAR
+  myNode2[MAX_NODES]:ARRAY OF nodeInfo2
 ENDOBJECT
 
 EXPORT OBJECT singlePort

@@ -52,7 +52,6 @@ CONST LISTENQ=100
 CONST EINTR=4
 CONST MAX_LINE=255
 CONST FIONBIO=$8004667e
-CONST EWOULDBLOCK=35
 
 #ifndef EVO_3_5_0
 CONST TAG_END=0    
@@ -2316,10 +2315,10 @@ PROC initSemaSemiNodes(s:PTR TO multiPort)
     
     s.myNode[i].t:=NIL
     s.myNode[i].taskSignal:=NIL
-    s.myNode[i].netSocket:=-1
     s.myNode[i].private:=FALSE
-    s.myNode[i].offHook:=TRUE
     s.myNode[i].chatColor:=i+1
+    s.myNode2[i].netSocket:=-1
+    s.myNode2[i].offHook:=TRUE
     StringF(singleName,'AEStat\d',i)
     singleNode:=FindSemaphore(singleName)
     IF(singleNode=FALSE)
@@ -3658,7 +3657,7 @@ PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
   DEF n,t
   DEF connItem: PTR TO connectionItem
   DEF saveConn=FALSE
-  DEF num
+  DEF num,dodoscheck
 
   ftpSocket:=Accept(ftpServerSocket,NIL,NIL)
   IF ftpSocket>=0
@@ -3667,7 +3666,23 @@ PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
     n:=SIZEOF sockaddr_in
     GetPeerName(ftpSocket,peeraddr,{n})
 
-    IF (dosCheckTime>0) AND (dosCheckTrigger>0)
+    dodoscheck:=TRUE
+    FOR i:=0 TO MAX_NODES-1
+      IF (users[i].active) AND (users[i].actionVal<>ENV_NOTACTIVE) AND (users[i].actionVal<>ENV_AWAITCONNECT) AND (ftpNode[i]=1)
+        IF(doMultiCom)
+          ObtainSemaphore(semiNodes)
+          IF semiNodes.myNode2[i].offHook=FALSE
+
+            //compare new ip address with node ip address
+            IF (peeraddr.sin_addr=semiNodes.myNode2[i].netIP) THEN dodoscheck:=FALSE
+          ENDIF
+          ReleaseSemaphore(semiNodes)
+        ENDIF
+      ENDIF
+    ENDFOR
+    
+
+    IF (dodoscheck) AND (dosCheckTime>0) AND (dosCheckTrigger>0)
       t:=getSystemTime()
       IF updateDosConnectionList(connectionList,t) THEN saveConn:=TRUE
         
@@ -3718,29 +3733,25 @@ PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
       IF f=FALSE
         i:=0
         REPEAT
-          IF(users[i].actionVal=ENV_AWAITCONNECT) AND (ftpNode[i]=1)
+          IF (users[i].active) AND (users[i].actionVal<>ENV_NOTACTIVE) AND (users[i].actionVal<>ENV_AWAITCONNECT) AND (ftpNode[i]=1)
             IF(doMultiCom)
               ObtainSemaphore(semiNodes)
-              IF semiNodes.myNode[i].offHook=FALSE
-                ftpSocket2:=semiNodes.myNode[i].netSocket
-                
-                ->set to -2 to prevent the node from being used between here and when the incoming_telnet message arrives
-                IF ftpSocket2=-1 THEN semiNodes.myNode[i].netSocket:=-2
+              IF semiNodes.myNode2[i].offHook=TRUE
+
+                //compare new ip address with node ip address
+                IF (peeraddr.sin_addr=semiNodes.myNode2[i].netIP)
+                  IoctlSocket(ftpSocket,FIONBIO,[1])
+                  ftpSocket2:=ReleaseSocket(ftpSocket,UNIQUE_ID)
+                  callNode(i,INCOMING_FTP,ftpSocket2)
+                  ftpSocket:=-1
+                  i:=-1
+                ELSE
+                  i++
+                ENDIF
+              ELSE
+                i++
               ENDIF
               ReleaseSemaphore(semiNodes)
-            ELSE
-              ftpSocket2:=-1
-            ENDIF
-
-            IF ftpSocket2=-1
-              StringF(tempstr,'220 Successful connection to node \d\b\n',i)
-              telnetSend(ftpSocket,tempstr)
-
-              IoctlSocket(ftpSocket,FIONBIO,[1])
-              ftpSocket2:=ReleaseSocket(ftpSocket,UNIQUE_ID)
-              callNode(i,INCOMING_FTP,ftpSocket2)
-              ftpSocket:=-1
-              i:=-1
             ELSE
               i++
             ENDIF
@@ -3748,6 +3759,42 @@ PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
             i++
           ENDIF
         UNTIL (i=MAX_NODES) OR (i=-1)
+
+        IF (i>=0)
+          i:=0
+          REPEAT
+            IF(users[i].actionVal=ENV_AWAITCONNECT) AND (ftpNode[i]=1)
+              IF(doMultiCom)
+                ObtainSemaphore(semiNodes)
+                IF semiNodes.myNode2[i].offHook=FALSE
+                  ftpSocket2:=semiNodes.myNode2[i].netSocket
+                  
+                  ->set to -2 to prevent the node from being used between here and when the incoming_telnet message arrives
+                  IF ftpSocket2=-1 THEN semiNodes.myNode2[i].netSocket:=-2
+                ENDIF
+                ReleaseSemaphore(semiNodes)
+              ELSE
+                ftpSocket2:=-1
+              ENDIF
+
+              IF ftpSocket2=-1
+                StringF(tempstr,'220 Successful connection to node \d\b\n',i)
+                telnetSend(ftpSocket,tempstr)
+
+                IoctlSocket(ftpSocket,FIONBIO,[1])
+                ftpSocket2:=ReleaseSocket(ftpSocket,UNIQUE_ID)
+                callNode(i,INCOMING_FTP,ftpSocket2)
+                ftpSocket:=-1
+                i:=-1
+              ELSE
+                i++
+              ENDIF
+            ELSE
+              i++
+            ENDIF
+          UNTIL (i=MAX_NODES) OR (i=-1)
+        ENDIF
+
         IF i<>-1
           telnetSend(ftpSocket,'530 No nodes available to handle your connection \b\n\b\n')                   
         ENDIF
@@ -3838,11 +3885,11 @@ PROC acceptTelnet(telnetServerSocket,connectionList:PTR TO stdlist)
           IF(users[i].actionVal=ENV_AWAITCONNECT) AND (telnetNode[i]=1)
             IF(doMultiCom)
               ObtainSemaphore(semiNodes)
-              IF semiNodes.myNode[i].offHook=FALSE
-                telnetSocket2:=semiNodes.myNode[i].netSocket
+              IF semiNodes.myNode2[i].offHook=FALSE
+                telnetSocket2:=semiNodes.myNode2[i].netSocket
                 
                 ->set to -2 to prevent the node from being used between here and when the incoming_telnet message arrives
-                IF telnetSocket2=-1 THEN semiNodes.myNode[i].netSocket:=-2
+                IF telnetSocket2=-1 THEN semiNodes.myNode2[i].netSocket:=-2
               ENDIF
               ReleaseSemaphore(semiNodes)
             ELSE

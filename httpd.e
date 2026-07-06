@@ -7,7 +7,6 @@ OPT LARGE,MODULE
 
 CONST LISTENQ=100
 CONST EINTR=4
-CONST EWOULDBLOCK=35
 CONST MAX_LINE=255
 CONST FIONBIO=$8004667e
 
@@ -40,9 +39,12 @@ OBJECT httpData
   aePuts:LONG
   readChar:LONG
   sCheckInput:LONG
-  fileStart:LONG
-  fileEnd:LONG
-  fileProgress:LONG
+  fileUpStart:LONG
+  fileUpEnd:LONG
+  fileUpProgress:LONG
+  fileDnStart:LONG
+  fileDnEnd:LONG
+  fileDnProgress:LONG
   fileDupeCheck:LONG
 ENDOBJECT
  
@@ -161,34 +163,71 @@ PROC setSockOpt(sb,s,level,optname,optval,optlen )
   MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
-PROC fileStart(httpData:PTR TO httpData,fn,pos)
+PROC fileUpStart(httpData:PTR TO httpData,fn,pos)
   DEF fs
-  fs:=httpData.fileStart
+  fs:=httpData.fileUpStart
+  MOVE.L #0,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L pos,-(A7)
   fs()
-  ADD.L #8,A7
+  ADD.L #12,A7
 ENDPROC
 
-PROC fileEnd(httpData:PTR TO httpData,fn,result)
+PROC fileUpEnd(httpData:PTR TO httpData,fn,result)
   DEF fe
-  fe:=httpData.fileEnd
+  fe:=httpData.fileUpEnd
 
+  MOVE.L #0,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L result,-(A7)
   fe()
-  ADDQ.L #8,A7
+  ADD.L #12,A7
 ENDPROC
 
-PROC fileProgress(httpData:PTR TO httpData,fn,pos,cps)
+PROC fileUpProgress(httpData:PTR TO httpData,fn,pos,cps)
   DEF fp
-  fp:=httpData.fileProgress
+  fp:=httpData.fileUpProgress
   
+  MOVE.L #0,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L pos,-(A7)
   MOVE.L cps,-(A7)
   fp()
-  ADD.L #8,A7
+  ADD.L #16,A7
+ENDPROC
+PROC fileDnStart(httpData:PTR TO httpData,fn,flen,pos)
+  DEF fs
+  fs:=httpData.fileDnStart
+  MOVE.L #0,-(A7)
+  MOVE.L fn,-(A7)
+  MOVE.L flen,-(A7)
+  MOVE.L pos,-(A7)
+  fs()
+  ADD.L #16,A7
+ENDPROC
+
+PROC fileDnEnd(httpData:PTR TO httpData,fn,result)
+  DEF fe
+  fe:=httpData.fileDnEnd
+
+  MOVE.L #0,-(A7)
+  MOVE.L fn,-(A7)
+  MOVE.L result,-(A7)
+  fe()
+  ADD.L #12,A7
+ENDPROC
+
+PROC fileDnProgress(httpData:PTR TO httpData,fn,pos,flen,cps)
+  DEF fp
+  fp:=httpData.fileDnProgress
+  
+  MOVE.L #0,-(A7)
+  MOVE.L fn,-(A7)
+  MOVE.L pos,-(A7)
+  MOVE.L flen,-(A7)
+  MOVE.L cps,-(A7)
+  fp()
+  ADD.L #20,A7
 ENDPROC
 
 PROC fileDupeCheck(httpData:PTR TO httpData,fn)
@@ -484,8 +523,8 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
         ELSE
           fh:=Open(fname,MODE_NEWFILE)
         ENDIF
-        IF httpData.fileStart<>NIL
-          fileStart(httpData,fname,0)
+        IF httpData.fileUpStart<>NIL
+          fileUpStart(httpData,fname,0)
         ENDIF
         t:=fastSystemTime()
         lastfilepos:=0
@@ -513,7 +552,7 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
           ENDIF
           IF (t<t2) THEN cps:=Div(Mul((filepos-lastfilepos),50),(t2-t))
           lastfilepos:=filepos
-          fileProgress(httpData,fname,filepos,cps)
+          fileUpProgress(httpData,fname,filepos,cps)
           t:=t2
         ENDIF
       ENDIF
@@ -545,8 +584,8 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
       ELSE
         Close(fh)
       ENDIF
-      IF httpData.fileEnd<>NIL
-        fileEnd(httpData,fname,TRUE)
+      IF httpData.fileUpEnd<>NIL
+        fileUpEnd(httpData,fname,TRUE)
       ENDIF
     ENDIF
 
@@ -559,6 +598,7 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
   DEF r,http_s,http_c,sb
   DEF temp[255]:STRING
   DEF httpData:PTR TO httpData
+  DEF hd:PTR TO httpData
   DEF flg,rchar
   DEF request[255]:STRING
   DEF getCmd[255]:STRING
@@ -568,7 +608,7 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
   DEF fh,buff,l,t,t2,lastpos,pos,cps
   DEF p,contentLength
   DEF connected=TRUE
-  DEF i,port
+  DEF i,port,flen
   
   httpData:=NEW httpData
   httpData.rest:=0
@@ -580,13 +620,19 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
   httpData.aePuts:=aePutsPtr
   httpData.readChar:=readCharPtr
   httpData.sCheckInput:=sCheckInputPtr
-  httpData.fileStart:=httpFileStartPtr
-  httpData.fileEnd:=httpFileEndPtr
-  httpData.fileProgress:=httpFileProgressPtr
+  IF uploadMode
+    httpData.fileUpStart:=httpFileStartPtr
+    httpData.fileUpEnd:=httpFileEndPtr
+    httpData.fileUpProgress:=httpFileProgressPtr
+  ELSE
+    httpData.fileDnStart:=httpFileStartPtr
+    httpData.fileDnEnd:=httpFileEndPtr
+    httpData.fileDnProgress:=httpFileProgressPtr
+  ENDIF
   httpData.fileDupeCheck:=httpDupeCheckPtr
   httpData.workingPath:=String(255)
   httpData.hostName:=String(255)
-
+  
   StrCopy(httpData.hostName,httphost)
   StrCopy(httpData.workingPath,httppath)
 
@@ -657,6 +703,8 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
             ELSEIF (StrCmp(getCmd,'/',1))
 
               StringF(temp,'\s\s',httppath,getCmd+1)          
+
+              flen:=FileLength(temp)
               
               IF asynciobase<>NIL
                 fh:=OpenAsync(temp,MODE_READ,32768)
@@ -665,8 +713,8 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
               ENDIF
               
               IF fh<>0
-                IF httpData.fileStart<>NIL
-                  fileStart(httpData,temp,FileLength(temp))
+                IF httpData.fileDnStart<>NIL
+                  fileDnStart(httpData,temp,flen,0)
                 ENDIF
 
                 writeLineEx(sb,http_c,'HTTP/1.1 200 OK\b\n')
@@ -686,7 +734,7 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
                   ENDIF
                   IF l>0 
                     writeLine(sb,http_c,buff,l)
-                    IF (httpData.fileProgress<>NIL)
+                    IF (httpData.fileDnProgress<>NIL)
                       t2:=fastSystemTime()
                       ->only call update maximum every 1 second
                       IF (Abs(t2-t))>=50
@@ -697,7 +745,7 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
                         ENDIF
                         IF (t<t2) THEN cps:=Div(Mul((pos-lastpos),50),(t2-t))
                         lastpos:=pos
-                        fileProgress(httpData,temp,pos,cps)
+                        fileDnProgress(httpData,temp,pos,flen,cps)
                         t:=t2
                       ENDIF
                     ENDIF
@@ -710,8 +758,8 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
                 ELSE
                   Close(fh)
                 ENDIF
-                IF httpData.fileEnd<>NIL
-                  fileEnd(httpData,temp,TRUE)
+                IF httpData.fileDnEnd<>NIL
+                  fileDnEnd(httpData,temp,TRUE)
                 ENDIF
               
               ELSE              
