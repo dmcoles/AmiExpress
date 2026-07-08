@@ -568,16 +568,11 @@ PROC trimStr(src:PTR TO CHAR, dest:PTR TO CHAR)
   DEF i
   StrCopy(dest,TrimStr(src))
 
-  i:=StrLen(dest)-1
-  WHILE (i>=0)
-    IF dest[i]<>" "
-      i:=-1
-    ELSE
-      SetStr(dest,i)
-      i--
-    ENDIF
+  i:=EstrLen(dest)
+  WHILE (i>0) ANDALSO (dest[i-1]=" ")
+    i--
   ENDWHILE
-  
+  SetStr(dest,i)
 ENDPROC
 
 PROC myrequest(s:PTR TO CHAR)
@@ -799,7 +794,7 @@ PROC getToolTypes(filename:PTR TO CHAR)
       ENDIF
     ENDIF
     
-    IF StrLen(fn)>0
+    IF EstrLen(fn)>0
       dobj:=GetDefDiskObject(WBPROJECT)
       IF dobj<>NIL
         fileBuf:=New(len+1)     ->allow an extra char in case file does not end in LF
@@ -808,7 +803,7 @@ PROC getToolTypes(filename:PTR TO CHAR)
         IF fh<>0
           off:=0
           lineCount:=0
-          WHILE(ReadStr(fh,fn)<>-1) OR (StrLen(fn)>0)
+          WHILE(ReadStr(fh,fn)<>-1) OR (EstrLen(fn)>0)
             len:=0
             WHILE (fn[len]<>0) AND (fn[len]<>";")
               len++
@@ -966,7 +961,7 @@ PROC callNode(node,code,data=1)
    
   StringF(response,'AmiExpress_Node.\d',node)
   IF(FindPort(response))=FALSE
-    IF(StrLen(startNode[node])>0)
+    IF(EstrLen(startNode[node])>0)
       ->ActiveNodeCount +=1; Down[node]=FALSE;
       IF(startProcess(startNode[node],bbsStack))
         activeNodeCount++
@@ -1574,6 +1569,7 @@ ENDPROC 0
 PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PTR TO CHAR,node)
   DEF action2[50]:STRING
   DEF v,a,top
+  DEF nameLen,locLen
   DEF tempstr[25]:STRING
   DEF datestr[255]:STRING
   DEF tempstr2[255]:STRING
@@ -1670,10 +1666,12 @@ PROC updateNode(name:PTR TO CHAR,location:PTR TO CHAR,action:PTR TO CHAR,baud:PT
   RectFill(eWin.rport,GLEF_ACTION,top-7,GLEF_ACTION+GWID_ACTION,top+1)
   SetAPen(eWin.rport,drawPen)
   IF(a<>SV_NEWMSG) AND (a<>ENV_DOORS)
+    nameLen:=StrLen(name)
+    locLen:=StrLen(location)
     Move(eWin.rport,GLEF_USER+3,top)
-    Text(eWin.rport,name,IF StrLen(name)>22 THEN 22 ELSE StrLen(name))
+    Text(eWin.rport,name,IF nameLen>22 THEN 22 ELSE nameLen)
     Move(eWin.rport,GLEF_LOCATION+2,top)
-    Text(eWin.rport,location,IF StrLen(location)>22 THEN 22 ELSE StrLen(location))
+    Text(eWin.rport,location,IF locLen>22 THEN 22 ELSE locLen)
     Move(eWin.rport,GLEF_BAUD+5,top)
     StringF(tempstr,'\r\s[7]',baud)
     Text(eWin.rport,tempstr,7)
@@ -1721,8 +1719,8 @@ ENDPROC
 
 PROC backup(str:PTR TO CHAR,cycle)
   DEF fi,fo
-  DEF ch[10]:STRING
-  DEF num
+  DEF buf[256]:ARRAY OF CHAR
+  DEF num,n
   DEF im1[200]:STRING
   DEF im2[200]:STRING
   
@@ -1747,8 +1745,8 @@ PROC backup(str:PTR TO CHAR,cycle)
     Rename(str,im1)
     fi:=Open(im1,MODE_OLDFILE)
     fo:=Open(str,MODE_NEWFILE)
-    WHILE(Fread(fi,ch,1,1)<>0)
-      Fwrite(fo,ch,1,1)
+    WHILE (n:=Fread(fi,buf,1,256))>0
+      Fwrite(fo,buf,1,n)    
     ENDWHILE
     Close(fo)
     Close(fi)
@@ -1850,7 +1848,7 @@ PROC regNodeUploads(name:PTR TO CHAR,dateStr:PTR TO CHAR, node)
 ENDPROC
 
 PROC showQuiet(i)
-  DEF rowTop
+  DEF rowTop,ulen
   rowTop:=topOffset+32+(i*11)
 
   SetAPen(eWin.rport,0)
@@ -1858,13 +1856,16 @@ PROC showQuiet(i)
 
   SetAPen(eWin.rport,getNodeTextColour(i))
   Move(eWin.rport,GLEF_USER+3,rowTop)
-  Text(eWin.rport,users[i].user,IF StrLen(users[i].user)>22 THEN 22 ELSE StrLen(users[i].user))
+  ulen:=StrLen(users[i].user)
+  Text(eWin.rport,users[i].user,IF ulen>22 THEN 22 ELSE ulen)
 
   Move(eWin.rport,GLEF_LOCATION+2,rowTop)
-  Text(eWin.rport,users[i].location,IF StrLen(users[i].location)>22 THEN 22 ELSE StrLen(users[i].location))
+  ulen:=StrLen(users[i].location)
+  Text(eWin.rport,users[i].location,IF ulen>22 THEN 22 ELSE ulen)
 
   Move(eWin.rport,GLEF_ACTION,rowTop)
-  Text(eWin.rport,users[i].action,IF StrLen(users[i].action)>16 THEN 16 ELSE StrLen(users[i].action))
+  ulen:=StrLen(users[i].action)
+  Text(eWin.rport,users[i].action,IF ulen>16 THEN 16 ELSE ulen)
 
   Move(eWin.rport,GLEF_BAUD+5,rowTop)
   Text(eWin.rport,users[i].baud,7)
@@ -2066,7 +2067,7 @@ PROC showNdLastDownloads(win:PTR TO window,node)
 ENDPROC
 
 PROC showNodes()
-  DEF i,rowTop
+  DEF i,rowTop,ulen
   SetAPen(eWin.rport,0)
   RectFill(eWin.rport,BLEF_0+2,topOffset+BTOP_0+1,BLEF_0+BWID_0-3,topOffset+BTOP_0+(theight*11)-2)
   FOR i:=0 TO theight-1
@@ -2075,11 +2076,14 @@ PROC showNodes()
      
     IF(users[i].active)
       Move(eWin.rport,GLEF_USER+3,rowTop)
-      Text(eWin.rport,users[i].user,IF StrLen(users[i].user)>22 THEN 22 ELSE StrLen(users[i].user))
+      ulen:=StrLen(users[i].user)
+      Text(eWin.rport,users[i].user,IF ulen>22 THEN 22 ELSE ulen)
       Move(eWin.rport,GLEF_LOCATION+2,rowTop)
-      Text(eWin.rport,users[i].location,IF StrLen(users[i].location)>22 THEN 22 ELSE StrLen(users[i].location))
+      ulen:=StrLen(users[i].location)
+      Text(eWin.rport,users[i].location,IF ulen>22 THEN 22 ELSE ulen)
       Move(eWin.rport,GLEF_ACTION,rowTop);
-      Text(eWin.rport,users[i].action,IF StrLen(users[i].action)>16 THEN 16 ELSE StrLen(users[i].action))
+      ulen:=StrLen(users[i].action)
+      Text(eWin.rport,users[i].action,IF ulen>16 THEN 16 ELSE ulen)
       Move(eWin.rport,GLEF_BAUD+5,rowTop)
       Text(eWin.rport,users[i].baud,7)
     ENDIF
@@ -2106,12 +2110,12 @@ PROC checkStartingScript()
   DEF i,allStarted=TRUE
   IF starting
     FOR i:=0 TO MAX_NODES-1
-      IF (StrLen(startNode[i])>0) AND (nodeIdle[i]=FALSE)
+      IF (EstrLen(startNode[i])>0) AND (nodeIdle[i]=FALSE)
         IF (users[i].active=FALSE) OR (users[i].actionVal=ENV_NOTACTIVE) THEN allStarted:=FALSE
       ENDIF
     ENDFOR
     IF allStarted
-      IF StrLen(startupCompleteScript)>0 THEN Execute(startupCompleteScript,NIL,NIL)
+      IF EstrLen(startupCompleteScript)>0 THEN Execute(startupCompleteScript,NIL,NIL)
       starting:=FALSE
     ENDIF
   ENDIF
@@ -2428,7 +2432,7 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
           LowerStr(tempstr1)
           LowerStr(tempstr2)
           cnt:=0
-          WHILE((StrLen(tempstr1)>0) OR (StrLen(tempstr2)>0))
+          WHILE((EstrLen(tempstr1)>0) OR (EstrLen(tempstr2)>0))
             cnt++
             AstrCopy(outtxt,tempstr1,256)
             IF (outtxt[0]>="a") AND (outtxt[0]<="z")
@@ -2755,7 +2759,7 @@ PROC setTheGads()
   IF(setTheGadsj=FALSE)
     StrCopy(setOriText[0],'Sysop Login')
     StrCopy(setOriText[1],'Instant Login')
-    StrCopy(setOriText[2],'AEShell')
+    StrCopy(setOriText[2], IF shellMode THEN 'AEShell' ELSE 'Config')
     StrCopy(setOriText[3],'Toggle Chat')
     StrCopy(setOriText[4],'Exit Node')
     StrCopy(setOriText[5],'Local Login')
@@ -3381,7 +3385,7 @@ PROC attemptShutdown()
     notDone:=0
   ELSE
     FOR i:=0 TO MAX_NODES-1
-      IF(StrLen(startNode[i])>0)
+      IF(EstrLen(startNode[i])>0)
         IF((users[i].actionVal=ENV_AWAITCONNECT) AND (down[i])=FALSE)
           control:=SV_NODEOFFHOOK
           ->down[i]:=TRUE
@@ -3462,40 +3466,40 @@ PROC saveState()
       FOR j:=0 TO 4
         list:=ndUser[i]
         StringF(tempStr,'\s\n',list.getItem(j))
-        Write(fh,tempStr,StrLen(tempStr))
+        Write(fh,tempStr,EstrLen(tempStr))
         StringF(tempStr,'\s\n',list.getItemDate(j))
-        Write(fh,tempStr,StrLen(tempStr))
+        Write(fh,tempStr,EstrLen(tempStr))
         list:=ndUploads[i]
         StringF(tempStr,'\s\n',list.getItem(j))
-        Write(fh,tempStr,StrLen(tempStr))
+        Write(fh,tempStr,EstrLen(tempStr))
         StringF(tempStr,'\s\n',list.getItemDate(j))
-        Write(fh,tempStr,StrLen(tempStr))
+        Write(fh,tempStr,EstrLen(tempStr))
         list:=ndDownloads[i]
         StringF(tempStr,'\s\n',list.getItem(j))
-        Write(fh,tempStr,StrLen(tempStr))
+        Write(fh,tempStr,EstrLen(tempStr))
         StringF(tempStr,'\s\n',list.getItemDate(j))
-        Write(fh,tempStr,StrLen(tempStr))
+        Write(fh,tempStr,EstrLen(tempStr))
       ENDFOR
     ENDFOR
 
     StringF(tempStr,'##\n')
-    Write(fh,tempStr,StrLen(tempStr))
+    Write(fh,tempStr,EstrLen(tempStr))
     
     FOR j:=0 TO 4
       StringF(tempStr,'\s\n',lastUsers.getItem(j))
-      Write(fh,tempStr,StrLen(tempStr))
+      Write(fh,tempStr,EstrLen(tempStr))
       StringF(tempStr,'\s\n',lastUsers.getItemDate(j))
-      Write(fh,tempStr,StrLen(tempStr))
+      Write(fh,tempStr,EstrLen(tempStr))
       
       StringF(tempStr,'\s\n',lastUploads.getItem(j))
-      Write(fh,tempStr,StrLen(tempStr))
+      Write(fh,tempStr,EstrLen(tempStr))
       StringF(tempStr,'\s\n',lastUploads.getItemDate(j))
-      Write(fh,tempStr,StrLen(tempStr))
+      Write(fh,tempStr,EstrLen(tempStr))
 
       StringF(tempStr,'\s\n',lastDownloads.getItem(j))
-      Write(fh,tempStr,StrLen(tempStr))
+      Write(fh,tempStr,EstrLen(tempStr))
       StringF(tempStr,'\s\n',lastDownloads.getItemDate(j))
-      Write(fh,tempStr,StrLen(tempStr))
+      Write(fh,tempStr,EstrLen(tempStr))
     ENDFOR
     Close(fh)
   ENDIF
@@ -3537,13 +3541,13 @@ PROC saveConnectionList(connList:PTR TO stdlist)
       connItem:=connList.item(i)
      
       StringF(tempStr,'$\h\n',connItem.ipAddr)
-      Write(fh,tempStr,StrLen(tempStr))
+      Write(fh,tempStr,EstrLen(tempStr))
       StringF(tempStr,'\d\n',connItem.connectionTime)
-      Write(fh,tempStr,StrLen(tempStr))
+      Write(fh,tempStr,EstrLen(tempStr))
       StringF(tempStr,'\d\n',connItem.blocked)
-      Write(fh,tempStr,StrLen(tempStr))
+      Write(fh,tempStr,EstrLen(tempStr))
       StringF(tempStr,'\d\n',connItem.blockExpiry)
-      Write(fh,tempStr,StrLen(tempStr))
+      Write(fh,tempStr,EstrLen(tempStr))
     ENDFOR
     Close(fh)
   ENDIF
@@ -4277,7 +4281,7 @@ PROC main() HANDLE
         myappsig:=(Shl(1,myappport.sigbit))
         IF(eWin AND startUp)
           FOR i:=0 TO MAX_NODES-1
-            IF(StrLen(startNode[i])>0)
+            IF(EstrLen(startNode[i])>0)
               drawChatBlock(i)
               sopt:=sopts[i]
               IF sopt THEN sopt.acpWindow:=eWin
@@ -4348,7 +4352,7 @@ PROC main() HANDLE
                       showSessionStats(eWin)
                   ENDSELECT
                   FOR i:=0 TO MAX_NODES-1
-                    IF(StrLen(startNode[i])>0)
+                    IF(EstrLen(startNode[i])>0)
                       drawChatBlock(i)
                     ENDIF
                   ENDFOR

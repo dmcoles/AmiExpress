@@ -211,10 +211,10 @@ PROC fileWriteLn(fh,str: PTR TO CHAR)
 ENDPROC fileWrite(fh,'\n')
 
 PROC fileWrite(fh,str: PTR TO CHAR)
-  DEF s
-
-  s:=Write(fh,str,StrLen(str))
-  IF s<>StrLen(str) THEN RETURN RESULT_FAILURE
+  DEF s,len
+  len:=StrLen(str)
+  s:=Write(fh,str,len)
+  IF s<>len THEN RETURN RESULT_FAILURE
 ENDPROC RESULT_SUCCESS
 
 PROC formatLongDateTime2(cDateVal,outDateStr,seperatorChar)
@@ -278,7 +278,7 @@ PROC createControlDat(controlFilename:PTR TO CHAR)
     StringF(tempstr,'\s\b\n',confIds.item(conf))
     fileWrite(fo,tempstr)
     StringF(tempstr,'\s',confNames.item(conf))
-    IF StrLen(tempstr)>10 THEN SetStr(tempstr,10)
+    IF EstrLen(tempstr)>10 THEN SetStr(tempstr,10)
     StrAdd(tempstr,'\b\n')
     fileWrite(fo,tempstr)
   ENDFOR
@@ -292,17 +292,10 @@ ENDPROC
 PROC getSystemTime()
   DEF currDate: datestamp
   DEF startds:PTR TO datestamp
-  DEF s1,s2,s3,s4
+  DEF s4
 
   startds:=DateStamp(currDate)
-
-  s1:=startds.days+2922
-  s1:=Mul(1440,s1)
-  s1:=Mul(60,s1)
-  s2:=Mul(60,startds.minute)
-  s3:=startds.tick/50
   s4:=Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50)
-
   ->2922 days between 1/1/70 and 1/1/78
 
 ENDPROC s4+21600
@@ -434,25 +427,27 @@ PROC main() HANDLE
   IF fh<>0
   
     REPEAT
-      eof:=(ReadStr(fh,tempStr)=-1) AND (StrLen(tempStr)=0)
+      eof:=(ReadStr(fh,tempStr)=-1) AND (EstrLen(tempStr)=0)
       processConfigLine(tempStr,category,optionName,optionValue)
 
-      IF StrCmp('MAIN',category) AND StrCmp('MODE',optionName) THEN StrCopy(mode,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('BBSNAME',optionName) THEN StrCopy(bbsName,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('BBSLOCATION',optionName) THEN StrCopy(bbsLocation,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('BBSNUMBER',optionName) THEN StrCopy(bbsNumber,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('BBSID',optionName) THEN StrCopy(bbsId,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('SYSOPNAME',optionName) THEN StrCopy(sysopName,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('USERNAME',optionName) THEN StrCopy(userName,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('GETCMD',optionName) THEN StrCopy(qwkGetCommand,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('PUTCMD',optionName) THEN StrCopy(qwkPutCommand,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('UNPACKCMD',optionName) THEN StrCopy(qwkUnpackCommand,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('PACKCMD',optionName) THEN StrCopy(qwkPackCommand,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('PACKEDTEMP',optionName) THEN StrCopy(qwkFilename,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('MSGTEMP',optionName) THEN StrCopy(qwkMessageFilename,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('CONTROLTEMP',optionName) THEN StrCopy(qwkControlFilename,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('MSGFILE',optionName) THEN StrCopy(qwkRepMessageFilename,optionValue)
-      IF StrCmp('MAIN',category) AND StrCmp('REPFILE',optionName) THEN StrCopy(qwkOutputFilename,optionValue)
+      IF StrCmp('MAIN',category)
+        IF StrCmp('MODE',optionName) THEN StrCopy(mode,optionValue)
+        IF StrCmp('BBSNAME',optionName) THEN StrCopy(bbsName,optionValue)
+        IF StrCmp('BBSLOCATION',optionName) THEN StrCopy(bbsLocation,optionValue)
+        IF StrCmp('BBSNUMBER',optionName) THEN StrCopy(bbsNumber,optionValue)
+        IF StrCmp('BBSID',optionName) THEN StrCopy(bbsId,optionValue)
+        IF StrCmp('SYSOPNAME',optionName) THEN StrCopy(sysopName,optionValue)
+        IF StrCmp('USERNAME',optionName) THEN StrCopy(userName,optionValue)
+        IF StrCmp('GETCMD',optionName) THEN StrCopy(qwkGetCommand,optionValue)
+        IF StrCmp('PUTCMD',optionName) THEN StrCopy(qwkPutCommand,optionValue)
+        IF StrCmp('UNPACKCMD',optionName) THEN StrCopy(qwkUnpackCommand,optionValue)
+        IF StrCmp('PACKCMD',optionName) THEN StrCopy(qwkPackCommand,optionValue)
+        IF StrCmp('PACKEDTEMP',optionName) THEN StrCopy(qwkFilename,optionValue)
+        IF StrCmp('MSGTEMP',optionName) THEN StrCopy(qwkMessageFilename,optionValue)
+        IF StrCmp('CONTROLTEMP',optionName) THEN StrCopy(qwkControlFilename,optionValue)
+        IF StrCmp('MSGFILE',optionName) THEN StrCopy(qwkRepMessageFilename,optionValue)
+        IF StrCmp('REPFILE',optionName) THEN StrCopy(qwkOutputFilename,optionValue)
+      ENDIF
 
     UNTIL StrCmp(category,'CONFS') OR eof
     UpperStr(mode)
@@ -473,7 +468,7 @@ PROC main() HANDLE
     replacestr(qwkRepMessageFilename,'{bbsid}',bbsId)
     replacestr(qwkOutputFilename,'{bbsid}',bbsId)
 
-    WHILE(ReadStr(fh,tempStr)<>-1) OR (StrLen(tempStr)>0)
+    WHILE(ReadStr(fh,tempStr)<>-1) OR (EstrLen(tempStr)>0)
       confIds.add(tempStr)
       ReadStr(fh,tempStr)
       confNames.add(tempStr)
@@ -608,7 +603,7 @@ PROC main() HANDLE
             ENDIF
 
             getMsgBasePath(qh.confNum,msgBase)
-            IF StrLen(msgBase)=0
+            IF EstrLen(msgBase)=0
               WriteF('Qwk conf \d not configured, skipping messages for this conf\n\n',qh.confNum)
               qwkConfId:=-1
             ELSE

@@ -2565,7 +2565,7 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
 			skip:=TRUE
 			loop:=FALSE
 
-      IF fpath[StrLen(fpath)-1]<>":" THEN StrAdd(fpath,'/')
+			IF fpath[EstrLen(fpath)-1]<>":" THEN StrAdd(fpath,'/')
 			StringF(fpath,'\s\s',download_dir,zm.current_file_name)
 			StringF(tempstr,'fpath=\s',fpath)
 			lprintf(zm,LOG_DEBUG,tempstr)

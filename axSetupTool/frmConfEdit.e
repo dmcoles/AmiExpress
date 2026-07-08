@@ -787,7 +787,7 @@ PROC saveChanges() OF frmConfEdit
   StrCopy(confPath,self.paConfPath.getValue())
 
   writeToolType(self.confConfig,tempStr,confPath)
-  IF confPath[StrLen(confPath)-1]="/" THEN SetStr(confPath,StrLen(confPath)-1)
+  IF confPath[EstrLen(confPath)-1]="/" THEN SetStr(confPath,EstrLen(confPath)-1)
  
    IF (self.newConf)
     //create the folder structure
@@ -995,7 +995,7 @@ PROC loadConf(conf) OF frmConfEdit
   set( self.btnNextConf, MUIA_Disabled , conf>=self.confCount)
   set( self.btnRemoveConf, MUIA_Disabled , (conf<self.confCount) OR (conf=1))
 
-  IF confPath[StrLen(confPath)-1]="/" THEN SetStr(confPath,StrLen(confPath)-1)
+  IF confPath[EstrLen(confPath)-1]="/" THEN SetStr(confPath,EstrLen(confPath)-1)
 
   self.boolFreeDownloads.setValue(IF checkToolTypeExists(confPath,'FREEDOWNLOADS') THEN MUI_TRUE ELSE FALSE)
     

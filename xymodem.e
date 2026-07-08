@@ -746,7 +746,7 @@ PROC xmodem_send_file(xym:PTR TO xymodem_t, fname:PTR TO CHAR, sent:PTR TO LONG,
         ,tempstr2  ->-xym.sent_bytes
         )
       AstrCopy(block+StrLen(block)+1,tempstr)
-      block_len:=StrLen(block)+1+StrLen(tempstr)
+      block_len:=StrLen(block)+1+EstrLen(tempstr)
       
       StringF(tempstr,'Sending YMODEM header block: ''\s''',block+StrLen(block)+1)
       lprintf(xym,LOG_DEBUG,tempstr)

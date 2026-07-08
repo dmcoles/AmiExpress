@@ -35,18 +35,18 @@ PROC main() HANDLE
   IF StrLen(inFile)>5
     StrCopy(tempstr,inFile)
     UpperStr(tempstr)
-    IF StrCmp(tempstr+StrLen(tempstr)-5,'.INFO')
-      StrCopy(sourceFile,inFile,StrLen(tempstr)-5)
+    IF StrCmp(tempstr+EstrLen(tempstr)-5,'.INFO')
+      StrCopy(sourceFile,inFile,EstrLen(tempstr)-5)
       StringF(destFile,'\s.cfg',sourceFile)
     ENDIF
   ENDIF
   
-  IF (StrLen(inFile)>4) AND (StrLen(destFile)=0)
+  IF (StrLen(inFile)>4) AND (EstrLen(destFile)=0)
     StrCopy(tempstr,inFile)
     UpperStr(tempstr)
-    IF StrCmp(tempstr+StrLen(tempstr)-4,'.CFG')
+    IF StrCmp(tempstr+EstrLen(tempstr)-4,'.CFG')
       StrCopy(sourceFile,inFile)
-      StrCopy(destFile,inFile,StrLen(tempstr)-4)
+      StrCopy(destFile,inFile,EstrLen(tempstr)-4)
       source:=SOURCE_CFG
     ENDIF
   ENDIF
@@ -65,7 +65,7 @@ PROC main() HANDLE
       i:=0
       WHILE tt[i]<>0
         StringF(tempstr,'\s\n',tt[i])
-        Write(fh,tempstr,StrLen(tempstr))
+        Write(fh,tempstr,EstrLen(tempstr))
         i++
       ENDWHILE
       WriteF('done\n')
@@ -101,7 +101,7 @@ PROC main() HANDLE
       IF fh<>0
         off:=0
         lineCount:=0
-        WHILE(ReadStr(fh,fn2)<>-1) OR (StrLen(fn2)>0)
+        WHILE(ReadStr(fh,fn2)<>-1) OR (EstrLen(fn2)>0)
           len:=0
           WHILE (fn2[len]<>0) AND (fn2[len]<>";")
             len++

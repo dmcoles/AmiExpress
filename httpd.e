@@ -476,10 +476,10 @@ PROC readMemLine(outBuf:PTR TO CHAR,sb,socket,inBuf:PTR TO CHAR,bufsize:PTR TO L
     ELSE
       loop:=FALSE
     ENDIF
-    IF StrLen(outBuf)=maxlen THEN loop:=FALSE
+    IF EstrLen(outBuf)=maxlen THEN loop:=FALSE
     pos[]:=pos[]+1
   ENDWHILE
-ENDPROC StrLen(outBuf)
+ENDPROC EstrLen(outBuf)
 
 PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,contentLength)
   DEF buff,fh
@@ -515,7 +515,7 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
     ENDIF
     ENDWHILE
     fh:=0
-    IF StrLen(fname)>0
+    IF EstrLen(fname)>0
       IF fileDupeCheck(httpData,fname)=FALSE
         IF asynciobase<>NIL
           DeleteFile(fname)
@@ -695,7 +695,7 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
             ENDIF
           ENDWHILE
           
-          IF StrLen(getCmd)>0
+          IF EstrLen(getCmd)>0
             IF (spcPos:=InStr(getCmd,' '))>=0 THEN SetStr(getCmd,spcPos)
             IF StrCmp(getCmd,'/')
               generatePage(sb,http_c,httppath,node,uploadMode,fileList)
@@ -772,7 +772,7 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
             ENDIF
           ENDIF
           
-          IF StrLen(postCmd)>0
+          IF EstrLen(postCmd)>0
             IF (spcPos:=InStr(postCmd,' '))>=0 THEN SetStr(postCmd,spcPos)
             IF StrCmp(postCmd,'/')
               extractFileData(sb,http_c,httpData,boundary,contentLength)

@@ -318,16 +318,16 @@ PROC canClose() OF frmMain
   GetA4()
 
   readToolType(self.acpConfigName,'SYSOP_NAME',tempStr)
-  IF StrLen(tempStr)=0 THEN configOk:=FALSE
+  IF EstrLen(tempStr)=0 THEN configOk:=FALSE
 
   readToolType(self.acpConfigName,'BBS_LOCATION',tempStr)
-  IF StrLen(tempStr)=0 THEN configOk:=FALSE
+  IF EstrLen(tempStr)=0 THEN configOk:=FALSE
 
   readToolType(self.acpConfigName,'BBS_NAME',tempStr)
-  IF StrLen(tempStr)=0 THEN configOk:=FALSE
+  IF EstrLen(tempStr)=0 THEN configOk:=FALSE
 
   readToolType(self.acpConfigName,'BBS_GEOGRAPHIC',tempStr)
-  IF StrLen(tempStr)=0 THEN configOk:=FALSE
+  IF EstrLen(tempStr)=0 THEN configOk:=FALSE
 
   IF configOk=FALSE
     IF Mui_RequestA(0,self.winMain,0,'Warning' ,'*Ok|Cancel','You have not cofigured the minimal settings to allow Ami-Express to start up.. Are you sure you wish to exit?',0)=0 THEN RETURN FALSE

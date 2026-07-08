@@ -1282,7 +1282,7 @@ PROC loadNode(node) OF frmNodeEdit
   self.intWinHeight.setValue(val)
   IF checkToolTypeExists(windowTooltype,'WINDOW.PUBSCREEN')
     readToolType(windowTooltype,'WINDOW.PUBSCREEN',tooltypeValue)
-    IF StrLen(tooltypeValue)=0
+    IF EstrLen(tooltypeValue)=0
       self.boolWinPubScreen.setValue(-1)
       self.strWinPubScreen.setValue('')
     ELSE

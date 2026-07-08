@@ -328,7 +328,7 @@ PROC getOrCreateCacheItem(fileName:PTR TO CHAR,getDef=FALSE)
         IF fh<>0
           off:=0
           lineCount:=0
-          WHILE(ReadStr(fh,fn2)<>-1) OR (StrLen(fn2)>0)
+          WHILE(ReadStr(fh,fn2)<>-1) OR (EstrLen(fn2)>0)
             len:=0
             WHILE (fn2[len]<>0) AND (fn2[len]<>";")
               len++

@@ -744,9 +744,12 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData, connection:
   DEF sigsPtr=0
 	 
   hostEnt:=getHostByName(sb,serverHost)
-
-  addr:=Long(hostEnt.h_addr_list)
-  addr:=Long(addr)
+  IF hostEnt=NIL
+    addr:=0
+  ELSE
+    addr:=Long(hostEnt.h_addr_list)
+    addr:=Long(addr)
+  ENDIF
   
   i:=0
   r:=0
@@ -803,7 +806,7 @@ PROC uploadDir(sb,data_c, ftpData:PTR TO ftpData,connection:PTR TO ftpConnection
   DEF dirline[255]:STRING
   DEF size,i
 
-  IF(StrLen(connection.workingPath)=0) THEN RETURN
+  IF(EstrLen(connection.workingPath)=0) THEN RETURN
 
   f_info:=AllocDosObject(DOS_FIB,NIL)
   IF(f_info)=NIL THEN RETURN
@@ -1091,13 +1094,13 @@ PROC makeFtpListFromDlDirs(ftpData:PTR TO ftpData, connection:PTR TO ftpConnecti
   FOR j:=0 TO dlDirList.count()-1
     IF EstrLen(dlDirList.item(j))>0
       StrCopy(path,dlDirList.item(j))
-      IF StrLen(connection.subDirPath)
+      IF EstrLen(connection.subDirPath)
         StrAdd(path,connection.subDirPath)
         checkPathSlash(path)
       ENDIF
       
-      StringF(dirCache,'RAM:DirCaches/Conf\dDir\d\s\s',connection.currentConf,j,IF StrLen(connection.subDirPath)>0 THEN '_' ELSE '', connection.subDirPath)
-      FOR i:=14 TO StrLen(dirCache)-1 DO IF dirCache[i]="/" THEN dirCache[i]:="_"
+      StringF(dirCache,'RAM:DirCaches/Conf\dDir\d\s\s',connection.currentConf,j,IF EstrLen(connection.subDirPath)>0 THEN '_' ELSE '', connection.subDirPath)
+      FOR i:=14 TO EstrLen(dirCache)-1 DO IF dirCache[i]="/" THEN dirCache[i]:="_"
       
       makeList(path,dirCache,fib,startDate,cmdType,sb,data_c)
     ENDIF
@@ -1142,7 +1145,7 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, connection:PTR TO ftpConnect
           spPos:=InStr(t,' ')               
           StrCopy(dtStr,TrimStr(t+spPos))
 
-          IF (StrLen(dtStr)>=8) AND (dtStr[2]="-") AND (dtStr[5]="-")
+          IF (EstrLen(dtStr)>=8) AND (dtStr[2]="-") AND (dtStr[5]="-")
             dtcomp2:=getDateCompareVal(dtStr)
           
             IF dtcomp2<dtcomp1 THEN found:=TRUE
@@ -1157,7 +1160,7 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, connection:PTR TO ftpConnect
   WHILE (dirNum<=maxDirs) AND (fh<>0)
     found:=FALSE
     REPEAT
-      IF StrLen(tempstr)>0
+      IF EstrLen(tempstr)>0
         IF dirLineNewFile(tempstr)
         
           IF found=FALSE
@@ -1165,7 +1168,7 @@ PROC makeFtpListFromDirList(ftpData:PTR TO ftpData, connection:PTR TO ftpConnect
             spPos:=InStr(t,' ')               
             StrCopy(dtStr,TrimStr(t+spPos))
             
-            IF (StrLen(dtStr)>=8) AND (dtStr[2]="-") AND (dtStr[5]="-")
+            IF (EstrLen(dtStr)>=8) AND (dtStr[2]="-") AND (dtStr[5]="-")
               dtcomp2:=getDateCompareVal(dtStr)
             
               IF dtcomp2>=dtcomp1 THEN found:=TRUE
@@ -1213,7 +1216,7 @@ PROC makeConfFileList(ftpData:PTR TO ftpData, connection:PTR TO ftpConnection, c
 
  
   IF connection.currentConf>0
-    IF (StrLen(connection.subDirPath)>0)
+    IF (EstrLen(connection.subDirPath)>0)
       makeFtpListFromDlDirs(ftpData,connection,startDate,cmdType, sb, data_c)
     ELSEIF checkToolTypeExists(TOOLTYPE_CONF,ftpData.confNums.item(connection.currentConf-1),'FTP_NO_DIRLIST')
       makeFtpListFromDlDirs(ftpData,connection,startDate,cmdType, sb, data_c)
@@ -1251,7 +1254,7 @@ PROC cmdPwd(sb,ftp_c,ftpData:PTR TO ftpData,connection:PTR TO ftpConnection)
     ELSE
      
       StringF(dirName,'/\r\z\d[3]-\s',connection.currentConf,ftpData.confNames.item(connection.currentConf-1))
-      IF StrLen(connection.subDirPath)>0
+      IF EstrLen(connection.subDirPath)>0
         StrAdd(dirName,'/')
         StrAdd(dirName,connection.subDirPath)
       ENDIF
@@ -1297,9 +1300,9 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,connection:PTR TO ftpConnection, pat
         StrCopy(sendStr, '250 CWD command successful.\b\n')
         writeLineEx(sb,ftp_c,sendStr) 
         
-        IF StrLen(connection.subDirPath)>0
+        IF EstrLen(connection.subDirPath)>0
           IF InStr(connection.subDirPath,'/')>=0
-            p:=StrLen(connection.subDirPath)-1
+            p:=EstrLen(connection.subDirPath)-1
             WHILE connection.subDirPath[p]<>"/" DO p--
             SetStr(connection.subDirPath,p)
           ELSE
@@ -1339,9 +1342,9 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,connection:PTR TO ftpConnection, pat
 
       FOR i:=0 TO ftpData.confNames.count()-1
         StringF(temp,'/\r\z\d[3]-\s/',i+1,ftpData.confNames.item(i))
-        IF StrCmp(temp,path,StrLen(temp))
+        IF StrCmp(temp,path,EstrLen(temp))
           stat:=i
-          StrCopy(path,path+StrLen(temp))
+          StrCopy(path,path+EstrLen(temp))
         ENDIF
       ENDFOR
 
@@ -1349,9 +1352,9 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,connection:PTR TO ftpConnection, pat
         IF connection.currentConf=0
           FOR i:=0 TO ftpData.confNames.count()-1
             StringF(temp,'\r\z\d[3]-\s/',i+1,ftpData.confNames.item(i))
-            IF StrCmp(temp,path,StrLen(temp))
+            IF StrCmp(temp,path,EstrLen(temp))
               stat:=i
-              StrCopy(path,path+StrLen(temp))
+              StrCopy(path,path+EstrLen(temp))
             ENDIF
           ENDFOR
         ENDIF
@@ -1367,7 +1370,7 @@ PROC cmdCwd(sb,ftp_c,ftpData:PTR TO ftpData,connection:PTR TO ftpConnection, pat
         ENDIF
       ELSE
         IF connection.currentConf<>0
-          IF StrLen(connection.subDirPath)>0 THEN StringF(path,'\s/\s',connection.subDirPath,path)
+          IF EstrLen(connection.subDirPath)>0 THEN StringF(path,'\s/\s',connection.subDirPath,path)
           getPath(ftpData,ftpData.confNums.item(connection.currentConf-1),path,outFileName)
           IF StrLen(outFileName)>0
             StrCopy(connection.subDirPath,path)
@@ -1455,7 +1458,7 @@ PROC cmdSize(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData,connection:PTR
   IF filename[0]="/" THEN filename++
   getFileName(ftpData,connection,filename,fn)
   
-  IF StrLen(fn)
+  IF EstrLen(fn)
     len:=FileLength(fn)
   ELSE
     len:=-1   
@@ -1558,7 +1561,7 @@ PROC cmdStor(sb,ftp_c,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData,connect
 
   IF ftpData.confULBlock
     IF connection.currentConf>0
-      IF StrLen(ftpData.confULBlock.item(connection.currentConf-1))
+      IF EstrLen(ftpData.confULBlock.item(connection.currentConf-1))
         StringF(temp,'550 \s\b\n',ftpData.confULBlock.item(connection.currentConf-1))
         writeLineEx(sb,ftp_c,temp)
         IF (data_c>=0)
@@ -1763,7 +1766,7 @@ PROC cmdRetr(sb,ftp_c,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData,connect
     getFileName(ftpData,connection,filename,fn)
     fh:=0
     flen:=0
-    IF StrLen(fn)
+    IF EstrLen(fn)
       flen:=FileLength(fn)
     ENDIF
     IF flen<=0
@@ -1888,7 +1891,7 @@ PROC cmdMlst(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData, connection:PT
 
   IF filename[0]="/" THEN filename++
   getFileName(ftpData,connection,filename,fn)
-  IF StrLen(fn) AND (getFileDate(fn,ds))
+  IF EstrLen(fn) AND (getFileDate(fn,ds))
     size:=FileLength(fn)
     formatFileDate2(ds,outDateStr)
     StringF(temp,'250- Listing \s\b\n',FilePart(fn))
@@ -2146,7 +2149,7 @@ PROC mainFtpLoop(sb,ftp_c,ftpData:PTR TO ftpData,uploadPath:PTR TO CHAR,workingP
                       r:=closeSocket(sb,connection.data_c)
                     ENDIF
                     connection.data_c:=cmdPasv(sb,socket,ftpData.hostName,ftpData,connection)
-                  ELSEIF StrLen(request)>0
+                  ELSEIF EstrLen(request)>0
                     writeLineEx(sb,socket, '500 command not recognized\b\n')
                   ->WriteF('UNKNOWN command: \s\b\n', request);
                   ENDIF

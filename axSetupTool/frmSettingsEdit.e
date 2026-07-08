@@ -882,7 +882,7 @@ PROC editSystemSettings(acpName:PTR TO CHAR, initialSetup=FALSE) OF frmSettingsE
   WHILE (loop)
     StringF(temppath,'LANGUAGE.\d',count+1)
     readToolType(languagesTooltype,temppath,tempstr)
-    IF StrLen(tempstr)>0
+    IF EstrLen(tempstr)>0
       languages.add(tempstr)
       count++   
     ELSE

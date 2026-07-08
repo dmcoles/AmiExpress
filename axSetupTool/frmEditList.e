@@ -918,7 +918,7 @@ PROC editNamesNotAllowed(acpName) OF frmEditList
   WHILE (loop)
     StringF(temppath,'NAME.\d',count+1)
     readToolType(self.namesTooltype,temppath,tempstr)
-    IF StrLen(tempstr)>0
+    IF EstrLen(tempstr)>0
       domethod( self.lList , [ MUIM_List_InsertSingle , tempstr , MUIV_List_Insert_Bottom ] )
       count++   
     ELSE
@@ -1011,7 +1011,7 @@ PROC editDrives(acpName) OF frmEditList
   WHILE (loop)
     StringF(temppath,'DRIVE.\d',count+1)
     readToolType(self.drivesTooltype,temppath,tempstr)
-    IF StrLen(tempstr)>0
+    IF EstrLen(tempstr)>0
       domethod( self.lList , [ MUIM_List_InsertSingle , tempstr , MUIV_List_Insert_Bottom ] )
       count++   
     ELSE
@@ -1105,7 +1105,7 @@ PROC editLanguages(acpName) OF frmEditList
   WHILE (loop)
     StringF(temppath,'LANGUAGE.\d',count+1)
     readToolType(self.languagesTooltype,temppath,tempstr)
-    IF StrLen(tempstr)>0
+    IF EstrLen(tempstr)>0
       domethod( self.lList , [ MUIM_List_InsertSingle , tempstr , MUIV_List_Insert_Bottom ] )
       count++   
     ELSE
@@ -1217,17 +1217,17 @@ PROC editScreens(acpName) OF frmEditList
     StringF(temppath,'TITLE.\d',count+1)
     readToolType(self.screenTypesTooltype,temppath,tempstr2)
     
-    IF StrLen(tempstr2)>0
+    IF EstrLen(tempstr2)>0
       self.extensions.add(tempstr)
       self.titles.add(tempstr2)
-      IF StrLen(tempstr)>0
+      IF EstrLen(tempstr)>0
         StringF(tempstr,'\s (\s)',tempstr2,tempstr)
       ELSE
         StrCopy(tempstr,'\s',tempstr2)
       ENDIF
     ENDIF
 
-    IF StrLen(tempstr)>0
+    IF EstrLen(tempstr)>0
       domethod( self.lList , [ MUIM_List_InsertSingle , tempstr , MUIV_List_Insert_Bottom ] )
       count++   
     ELSE
@@ -2514,7 +2514,7 @@ PROC editRestricted(acpName) OF frmEditList
   WHILE (loop)
     StringF(temppath,'RESTRICT.\d',count+1)
     readToolType(acpName,temppath,tempstr)
-    IF StrLen(tempstr)>0
+    IF EstrLen(tempstr)>0
       domethod( self.lList , [ MUIM_List_InsertSingle , tempstr , MUIV_List_Insert_Bottom ] )
       count++   
     ELSE
@@ -2602,7 +2602,7 @@ PROC editBackup(acpName) OF frmEditList
   WHILE (loop)
     StringF(temppath,'BACKUP.\d',count+1)
     readToolType(acpName,temppath,tempstr)
-    IF StrLen(tempstr)>0
+    IF EstrLen(tempstr)>0
       domethod( self.lList , [ MUIM_List_InsertSingle , tempstr , MUIV_List_Insert_Bottom ] )
       count++   
     ELSE

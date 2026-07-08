@@ -663,7 +663,7 @@ PROC xfer_del(hyd:PTR TO hydra_t)
     AddPart(new_log,'BAD-XFER.$$$',256)
     IF ((new_fp:=Open(new_log, MODE_NEWFILE))>=0)
       left:=FALSE
-      WHILE (ReadStr(fp,linebuf)<>-1) OR (StrLen(linebuf)>0)
+      WHILE (ReadStr(fp,linebuf)<>-1) OR (EstrLen(linebuf)>0)
             StrCopy(bad_real,'')
             StrCopy(bad_temp,'')
             bad_fsize:=0
@@ -729,7 +729,7 @@ PROC xfer_init(hyd:PTR TO hydra_t,fname:PTR TO CHAR,fsize,ftime)
   AddPart(hyd.xfer_log,'BAD-XFER.LOG',256)
 
   IF ((fp:=Open(hyd.xfer_log,MODE_OLDFILE))>0)
-     WHILE (ReadStr(fp,linebuf)<>-1) OR (StrLen(linebuf)>0)
+     WHILE (ReadStr(fp,linebuf)<>-1) OR (EstrLen(linebuf)>0)
           StrCopy(bad_real,'')
           StrCopy(bad_temp,'')
           bad_fsize:=0

@@ -174,7 +174,7 @@ PROC tools(acpConfigName:PTR TO CHAR) OF frmTools
   self.configOk:=TRUE
   
   readToolType(acpConfigName,'BBS_LOCATION',bbsPath)
-  IF StrLen(bbsPath)=0 THEN self.configOk:=FALSE
+  IF EstrLen(bbsPath)=0 THEN self.configOk:=FALSE
 
   StringF(confConfig,'\sCONFCONFIG',bbsPath) 
   confCount:=readToolTypeInt(confConfig,'NCONFS')  
@@ -184,13 +184,13 @@ PROC tools(acpConfigName:PTR TO CHAR) OF frmTools
   IF (nodeCount<0) OR (confCount<0) THEN self.configOk:=FALSE
 
   readToolType(acpConfigName,'SYSOP_NAME',tempStr)
-  IF StrLen(tempStr)=0 THEN self.configOk:=FALSE
+  IF EstrLen(tempStr)=0 THEN self.configOk:=FALSE
 
   readToolType(acpConfigName,'BBS_NAME',tempStr)
-  IF StrLen(tempStr)=0 THEN self.configOk:=FALSE
+  IF EstrLen(tempStr)=0 THEN self.configOk:=FALSE
 
   readToolType(acpConfigName,'BBS_GEOGRAPHIC',tempStr)
-  IF StrLen(tempStr)=0 THEN self.configOk:=FALSE
+  IF EstrLen(tempStr)=0 THEN self.configOk:=FALSE
   self.addNotifications()
 
   self.refreshAcpStatus()

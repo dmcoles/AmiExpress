@@ -81,7 +81,7 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
           ENDIF
 
           StrCopy(request,'EHLO relay.example.com\n')
-          IF ((errcode:=SsL_write(ssl, request, StrLen(request))) <=0 )
+          IF ((errcode:=SsL_write(ssl, request, EstrLen(request))) <=0 )
             WriteF('error sending EHLO\n');
           ENDIF
 
@@ -94,7 +94,7 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
 
           IF (failed=FALSE)
             StringF(request,'\n\s\n\s',mailOptions.username,mailOptions.password)
-            v:=StrLen(request)-1
+            v:=EstrLen(request)-1
             FOR i:=0 TO v
               IF request[i]="\n" THEN request[i]:=0
             ENDFOR
@@ -114,7 +114,7 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
 
           IF (failed=FALSE)
             StringF(request,'mail from:<\s>\n',mailOptions.bbsEmail)
-            IF ((errcode:=SsL_write(ssl, request, StrLen(request))) <=0 )
+            IF ((errcode:=SsL_write(ssl, request, EstrLen(request))) <=0 )
               WriteF('error sending FROM\n');
             ENDIF
 
@@ -128,7 +128,7 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
 
           IF (failed=FALSE)
             StringF(request,'rcpt to:<\s>\n',toemail)
-            IF ((errcode:=SsL_write(ssl, request, StrLen(request))) <=0 )
+            IF ((errcode:=SsL_write(ssl, request, EstrLen(request))) <=0 )
               WriteF('error sending TO\n');
             ENDIF
 
@@ -142,7 +142,7 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
 
           IF (failed=FALSE)
             StrCopy(request,'DATA\n')
-            IF ((errcode:=SsL_write(ssl, request, StrLen(request))) <=0 )
+            IF ((errcode:=SsL_write(ssl, request, EstrLen(request))) <=0 )
               WriteF('error sending DATA\n');
             ENDIF
 
@@ -156,22 +156,22 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
 
           IF (failed=FALSE)
             StrCopy(request,'From: <\s>\b\n',mailOptions.bbsEmail)
-            IF ((errcode:=SsL_write(ssl, request, StrLen(request))) <=0 )
+            IF ((errcode:=SsL_write(ssl, request, EstrLen(request))) <=0 )
               WriteF('error sending msg data\n');
             ENDIF
 
             StrCopy(request,'To: <toemail>\b\n')
-            IF ((errcode:=SsL_write(ssl, request, StrLen(request))) <=0 )
+            IF ((errcode:=SsL_write(ssl, request, EstrLen(request))) <=0 )
               WriteF('error sending msg data\n');
             ENDIF
 
             StringF(request,'Subject: \s\b\n',subject)
-            IF ((errcode:=SsL_write(ssl, request, StrLen(request))) <=0 )
+            IF ((errcode:=SsL_write(ssl, request, EstrLen(request))) <=0 )
               WriteF('error sending msg data\n');
             ENDIF
 
             StrCopy(request,'\b\n')
-            IF ((errcode:=SsL_write(ssl, request, StrLen(request))) <=0 )
+            IF ((errcode:=SsL_write(ssl, request, EstrLen(request))) <=0 )
               WriteF('error sending msg data\n');
             ENDIF
 
@@ -186,7 +186,7 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
                 StrAdd(request,'\b\n')
                 i:=v+1
               ENDIF
-              IF ((errcode:=SsL_write(ssl, request, StrLen(request))) <=0 )
+              IF ((errcode:=SsL_write(ssl, request, EstrLen(request))) <=0 )
                 WriteF('error sending msg data\n');
               ENDIF
             ENDWHILE
@@ -194,14 +194,14 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
             IF appendMsgBuf
               FOR i:=0 TO lines-1
                  StringF(request,'\s\b\n',msgBuf.item(i))
-                 IF ((errcode:=SsL_write(ssl, request, StrLen(request))) <=0 )
+                 IF ((errcode:=SsL_write(ssl, request, EstrLen(request))) <=0 )
                    WriteF('error sending msg data\n');
                  ENDIF
               ENDFOR
             ENDIF
 
             StrCopy(request,'\b\n.\b\n')
-            IF ((errcode:=SsL_write(ssl, request, StrLen(request))) <=0 )
+            IF ((errcode:=SsL_write(ssl, request, EstrLen(request))) <=0 )
               WriteF('error sending DATA\n');
             ENDIF
 
@@ -212,7 +212,7 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
 
 
             StrCopy(request,'QUIT\n')
-            IF ((errcode:=SsL_write(ssl, request, StrLen(request))) <=0 )
+            IF ((errcode:=SsL_write(ssl, request, EstrLen(request))) <=0 )
               WriteF('error sending QUIT\n');
             ENDIF
           ENDIF
@@ -242,7 +242,7 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
       ENDIF
 
       StrCopy(request,'EHLO relay.example.com\n')
-      IF ((errcode:=Send(sock, request, StrLen(request),0)) <=0 )
+      IF ((errcode:=Send(sock, request, EstrLen(request),0)) <=0 )
         WriteF('error sending EHLO\n');
       ENDIF
 
@@ -255,7 +255,7 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
 
       IF (failed=FALSE)
         StringF(request,'\n\s\n\s',mailOptions.username,mailOptions.password)
-        v:=StrLen(request)-1
+        v:=EstrLen(request)-1
         FOR i:=0 TO v
           IF request[i]="\n" THEN request[i]:=0
         ENDFOR
@@ -275,7 +275,7 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
 
       IF (failed=FALSE)
         StringF(request,'mail from:<\s>\n',mailOptions.bbsEmail)
-        IF ((errcode:=Send(sock, request, StrLen(request),0)) <=0 )
+        IF ((errcode:=Send(sock, request, EstrLen(request),0)) <=0 )
           WriteF('error sending FROM\n');
         ENDIF
 
@@ -289,7 +289,7 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
 
       IF (failed=FALSE)
         StringF(request,'rcpt to:<\s>\n',toemail)
-        IF ((errcode:=Send(sock, request, StrLen(request),0)) <=0 )
+        IF ((errcode:=Send(sock, request, EstrLen(request),0)) <=0 )
           WriteF('error sending TO\n');
         ENDIF
 
@@ -303,7 +303,7 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
 
       IF (failed=FALSE)
         StrCopy(request,'DATA\n')
-        IF ((errcode:=Send(sock, request, StrLen(request),0)) <=0 )
+        IF ((errcode:=Send(sock, request, EstrLen(request),0)) <=0 )
           WriteF('error sending DATA\n');
         ENDIF
 
@@ -317,22 +317,22 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
 
       IF (failed=FALSE)
         StrCopy(request,'From: <\s>\b\n',mailOptions.bbsEmail)
-        IF ((errcode:=Send(sock, request, StrLen(request),0)) <=0 )
+        IF ((errcode:=Send(sock, request, EstrLen(request),0)) <=0 )
           WriteF('error sending msg data\n');
         ENDIF
 
         StrCopy(request,'To: <toemail>\b\n')
-        IF ((errcode:=Send(sock, request, StrLen(request),0)) <=0 )
+        IF ((errcode:=Send(sock, request, EstrLen(request),0)) <=0 )
           WriteF('error sending msg data\n');
         ENDIF
 
         StringF(request,'Subject: \s\b\n',subject)
-        IF ((errcode:=Send(sock, request, StrLen(request),0)) <=0 )
+        IF ((errcode:=Send(sock, request, EstrLen(request),0)) <=0 )
           WriteF('error sending msg data\n');
         ENDIF
 
         StrCopy(request,'\b\n')
-        IF ((errcode:=Send(sock, request, StrLen(request),0)) <=0 )
+        IF ((errcode:=Send(sock, request, EstrLen(request),0)) <=0 )
           WriteF('error sending msg data\n');
         ENDIF
 
@@ -347,7 +347,7 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
             StrAdd(request,'\b\n')
             i:=v+1
           ENDIF
-          IF ((errcode:=Send(sock, request, StrLen(request),0)) <=0 )
+          IF ((errcode:=Send(sock, request, EstrLen(request),0)) <=0 )
             WriteF('error sending msg data\n');
           ENDIF
         ENDWHILE
@@ -355,14 +355,14 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
         IF appendMsgBuf
           FOR i:=0 TO lines-1
              StringF(request,'\s\b\n',msgBuf.item(i))
-             IF ((errcode:=Send(sock, request, StrLen(request),0)) <=0 )
+             IF ((errcode:=Send(sock, request, EstrLen(request),0)) <=0 )
                WriteF('error sending msg data\n');
              ENDIF
           ENDFOR
         ENDIF
 
         StrCopy(request,'\b\n.\b\n')
-        IF ((errcode:=Send(sock, request, StrLen(request),0)) <=0 )
+        IF ((errcode:=Send(sock, request, EstrLen(request),0)) <=0 )
           WriteF('error sending DATA\n');
         ENDIF
 
@@ -373,7 +373,7 @@ EXPORT PROC sendMail(subject:PTR TO CHAR,bodytext:PTR TO CHAR, appendMsgBuf, msg
 
 
         StrCopy(request,'QUIT\n')
-        IF ((errcode:=Send(sock, request, StrLen(request),0)) <=0 )
+        IF ((errcode:=Send(sock, request, EstrLen(request),0)) <=0 )
           WriteF('error sending QUIT\n');
         ENDIF
       ENDIF

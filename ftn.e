@@ -149,7 +149,7 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
     ReadStr(fh2,toName)
     IF EstrLen(toName)>35 THEN SetStr(toName,35)
     ReadStr(fh2,subject)
-    IF EstrLen(subject)>71 THEN SetStr(toName,71)
+    IF EstrLen(subject)>71 THEN SetStr(subject,71)
     ReadStr(fh2,msgDateTime)
     ReadStr(fh2,msgId)
   
@@ -360,7 +360,7 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
         Seek(flofh,0,OFFSET_END)
         NameFromFH(msgPktFileHandle,tempStr2,255)
         StringF(tempStr,'^\s\s\n',floPath,FilePart(tempStr2))
-        Write(flofh,tempStr,StrLen(tempStr))
+        Write(flofh,tempStr,EstrLen(tempStr))
         Close(flofh)
       ENDIF
       
@@ -760,7 +760,7 @@ PROC processPacketFile(filename:PTR TO CHAR,netMailConf:PTR TO CHAR) HANDLE
               ENDIF
 
               getMsgBasePath(ftnh.confId,msgBase)
-              IF StrLen(msgBase)=0
+              IF EstrLen(msgBase)=0
                 WriteF('FTN conf \s not configured, skipping messages for this conf\n\n',ftnh.confId)
                 StrCopy(ftnConfId,'######')
               ELSE
@@ -871,7 +871,7 @@ PROC processPacketFile(filename:PTR TO CHAR,netMailConf:PTR TO CHAR) HANDLE
                     i++
                   ENDIF
                 ENDWHILE
-                IF StrLen(lineBuff)>0
+                IF EstrLen(lineBuff)>0
                   writeMailLine(fh2,lineBuff)
                 ENDIF
                 DisposeLink(lineBuff)
@@ -1103,7 +1103,7 @@ PROC main() HANDLE
   IF fh<>0
 
     REPEAT
-      eof:=(ReadStr(fh,tempStr)=-1) AND (StrLen(tempStr)=0)
+      eof:=(ReadStr(fh,tempStr)=-1) AND (EstrLen(tempStr)=0)
       processConfigLine(tempStr,category,optionName,optionValue)
 
       IF StrCmp('MAIN',category) AND StrCmp('MODE',optionName) THEN StrCopy(mode,optionValue)
@@ -1133,14 +1133,14 @@ PROC main() HANDLE
       IF StrCmp('MISC',category) AND StrCmp('NETMAIL',optionName) THEN StrCopy(netMailConf,optionValue)
     UNTIL StrCmp(category,'CONFS') OR eof
     UpperStr(mode)
-    IF StrLen(floPath)=0 THEN StrCopy(floPath,outboundDir)
+    IF EstrLen(floPath)=0 THEN StrCopy(floPath,outboundDir)
 
     IF StrCmp(category,'CONFS')=FALSE
       WriteF('Error reading CONFS data in FTN.cfg\n\n')
       Raise(ERR_NOCFG)
     ENDIF
 
-    WHILE(ReadStr(fh,tempStr)<>-1) OR (StrLen(tempStr)>0)
+    WHILE(ReadStr(fh,tempStr)<>-1) OR (EstrLen(tempStr)>0)
       confNames.add(tempStr)
       ReadStr(fh,tempStr)
       msgBasePaths.add(tempStr)
@@ -1178,10 +1178,10 @@ PROC main() HANDLE
   
   IF StrCmp(mode,'IN') OR StrCmp(mode,'BOTH')
     WriteF('Processing incoming messages\n')
-    IF StrLen(inboundDir)>0 THEN processBundles(ftnUnpackCommand,inboundDir,netMailConf)
-    IF StrLen(inboundInsecureDir)>0 THEN processBundles(ftnUnpackCommand,inboundInsecureDir,netMailConf)
-    IF StrLen(inboundDir)>0 THEN processPackets(inboundDir,netMailConf)
-    IF StrLen(inboundInsecureDir)>0 THEN processPackets(inboundInsecureDir,netMailConf)
+    IF EstrLen(inboundDir)>0 THEN processBundles(ftnUnpackCommand,inboundDir,netMailConf)
+    IF EstrLen(inboundInsecureDir)>0 THEN processBundles(ftnUnpackCommand,inboundInsecureDir,netMailConf)
+    IF EstrLen(inboundDir)>0 THEN processPackets(inboundDir,netMailConf)
+    IF EstrLen(inboundInsecureDir)>0 THEN processPackets(inboundInsecureDir,netMailConf)
   ENDIF
   WriteF('All done\n')
 
