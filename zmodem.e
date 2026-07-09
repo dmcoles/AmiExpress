@@ -1,6 +1,6 @@
 OPT LARGE,MODULE
 
- MODULE 'dos/dos','socket','*axenums','*bcd','exec'
+ MODULE 'dos/dos','socket','*axenums','*bcd','exec','exec/memory','*miscfuncs'
 
 /*
 way to update errors, error/resume position
@@ -85,9 +85,6 @@ PROC flength(file)
   UnLock(fLock)
   FreeDosObject(DOS_FIB,fBlock)
 ENDPROC fsize
-
-->todo proper disk space check
-PROC getFreeDiskSpace() IS 300000000
 
 EXPORT PROC getZmSystemTime()
   DEF currDate: datestamp 
@@ -394,6 +391,10 @@ EXPORT OBJECT zmodem_t
   sendBufferPtr:PTR TO CHAR
   sendBufferEnd
 
+  safetyMargin: LONG
+  spaceCheck:CHAR
+  spaceCheckPath:PTR TO CHAR
+
   crc16tbl:PTR TO INT
   crc32tbl:PTR TO LONG
 
@@ -477,6 +478,31 @@ EXPORT OBJECT zmodem_t
 	->BOOL		(*duplicate_filename)(void*, void *zm)
 	->void		(*flush)(void*)
 ENDOBJECT
+
+PROC getFreeDiskSpace(zm:PTR TO zmodem_t, path:PTR TO CHAR)
+  DEF fLock
+  DEF i_data:PTR TO infodata
+  DEF temp1, temp2
+  DEF freebytes=0:LONG
+  DEF tempstr[255]:STRING
+
+  IF (i_data:=AllocMem(SIZEOF infodata, MEMF_CHIP))
+    IF (fLock:=Lock(path, ACCESS_READ))
+      IF Info(fLock, i_data)
+        temp1, temp2:=mulu64(i_data.numblocks - i_data.numblocksused,
+                             i_data.bytesperblock)
+        ->saturate to 4GB for disks >4GB
+        IF temp1 THEN freebytes:=$FFFFFFFF ELSE freebytes:=temp2
+      ENDIF
+      UnLock(fLock)
+    ELSE
+      StringF(tempstr, 'Cannot lock path for disk space check: \s', path)
+      lprintf(zm, LOG_ERROR, tempstr)
+    ENDIF
+    FreeMem(i_data, SIZEOF infodata)
+  ENDIF
+ENDPROC freebytes
+
 
 ->PROC ucrc16(zm:PTR TO zmodem_t,ch,crc) IS Eor(zm.crc16tbl[Eor(Shr(crc,8) AND $ff,ch)],Shl(crc,8)) AND $ffff
 #define ucrc16(ch,crc) Eor(zm.crc16tbl[Eor(Shr(crc,8) AND $ff,ch)],Shl(crc,8)) AND $ffff
@@ -1849,7 +1875,7 @@ zmrhcont:
 		CASE ZCOMMAND
 			IF(zmodem_recv_subpacket(zm,/* ack? */TRUE))=FALSE THEN  frame_type:=frame_type OR BADSUBPKT
 		CASE ZFREECNT
-			zmodem_send_pos_header(zm, ZACK, getFreeDiskSpace(), /* Hex? */ TRUE)
+			zmodem_send_pos_header(zm, ZACK, getFreeDiskSpace(zm,zm.spaceCheckPath), /* Hex? */ TRUE)
 	ENDSELECT
 
 ->#if 0 /* def _DEBUG */
@@ -2194,6 +2220,7 @@ EXPORT PROC zmodem_send_files(zm: PTR TO zmodem_t,sentptr: PTR TO LONG, timetake
 
   timetaken[]:=0
 
+  zm.spaceCheckPath:=fname
   p:=zm.zm_firstfile
   IF p<>NIL
     IF p(fname)
@@ -2551,9 +2578,12 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
   DEF brk=FALSE
   DEF p
   DEF t1,t2
+  DEF freespace
 
   timetaken[]:=0
 	zm.current_file_num:=1
+  zm.spaceCheckPath:=download_dir
+
 	WHILE(zmodem_recv_init(zm)=ZFILE)
 		bytes:=zm.current_file_size
 		kbytes:=Shr(bytes,10)
@@ -2565,6 +2595,24 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
 			skip:=TRUE
 			loop:=FALSE
 
+			->disk space check
+      IF zm.spaceCheck
+        freespace:=getFreeDiskSpace(zm, download_dir)
+
+        //signed calculation below cant handle >2GB
+        IF (freespace AND $80000000) THEN freespace:=$7FFFFFFF       
+        
+        IF ((bytes > freespace) OR ((freespace - bytes) < zm.safetyMargin))
+          StringF(tempstr, 'Insufficient disk space: need \d bytes, only \d available',
+                  bytes, freespace)
+          lprintf(zm, LOG_ERROR, tempstr)
+          zmodem_send_zskip(zm)
+          skip:=FALSE
+          brk:=TRUE
+          JUMP zreccont1
+        ENDIF
+      ENDIF
+      
 			IF fpath[EstrLen(fpath)-1]<>":" THEN StrAdd(fpath,'/')
 			StringF(fpath,'\s\s',download_dir,zm.current_file_name)
 			StringF(tempstr,'fpath=\s',fpath)
@@ -3078,6 +3126,9 @@ EXPORT PROC zmodem_init(zm: PTR TO zmodem_t, cbdata: PTR TO CHAR,
   
   zm.crc16tbl:={crc16tbl}
   zm.crc32tbl:={crc32tbl}
+  
+  zm.safetyMargin:=20480
+  zm.spaceCheck:=0
 ENDPROC
 
 EXPORT PROC zmodem_cleanup(zm: PTR TO zmodem_t)

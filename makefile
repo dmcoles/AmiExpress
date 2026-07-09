@@ -50,7 +50,7 @@ jsonParser.m: jsonParser.e MiscFuncs.m
 jsonCreate.m: jsonCreate.e MiscFuncs.m jsonParser.m
 							$(compiler) jsonCreate $(options)
 
-zmodem.m:			zmodem.e bcd.m
+zmodem.m:			zmodem.e axenums.m bcd.m miscfuncs.m
 							$(compiler) zmodem $(options)
 
 xymodem.m:		xymodem.e bcd.m

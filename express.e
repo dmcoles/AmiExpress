@@ -3502,11 +3502,11 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,tooltype,command,privcmd,params,n
       msg.string[1]:=0
       msg.command:=ximPort /*XIMPort=1 for console,2for serial  */
     CASE JH_20
-       ch:=readChar(doorTimeout)
+       ch:=readChar(doorTimeout,0,TRUE,TRUE)
        msg.data:=ch
        msg.command:=ximPort
     CASE QUICK_KEY
-       ch:=readChar(doorTimeout)
+       ch:=readChar(doorTimeout,0,FALSE,TRUE)
        msg.data:=ch
        msg.command:=ximPort
     CASE JH_MCI
@@ -5207,14 +5207,14 @@ PROC doPause()
   IF ch<0 THEN RETURN ch
 ENDPROC 0
 
-PROC readChar(timeout, extsig = 0, raw=FALSE)
+PROC readChar(timeout, extsig = 0, raw=FALSE, raw2=FALSE)
   DEF wasControl,ch
   DEF timedout,signalled
   DEF tempstr[100]:STRING
 
   conCursorOn()
   REPEAT
-    wasControl,ch:=processInputMessage(timeout, extsig,raw)
+    wasControl,ch:=processInputMessage(timeout, extsig,raw,TRUE,raw2)
     timedout:=(ch=RESULT_TIMEOUT)
     signalled:=(ch=RESULT_SIGNALLED)
   UNTIL (((wasControl=FALSE) OR (raw)) AND (ch<>0)) OR (reqState<>REQ_STATE_NONE) OR (timedout) OR (signalled)
@@ -7463,7 +7463,7 @@ reserveRedo:
   StrCopy(reservedName,tempUserKeys.userName)
 ENDPROC
 
-PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
+PROC processInputMessage(timeout, extsig = 0,conRawMode=FALSE, allowSer=TRUE, serRawMode=FALSE)
   DEF consolesig=0,windowsig=0,telnetsig=0,telnetSigBit, obuf[255]:STRING
   DEF ch=0,lch,wasControl=0,signals
   DEF doorsig=0,rexxsig=0,serialsig=0,timersig=0,timedout=0
@@ -7562,7 +7562,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
   ENDIF
 
   IF (ch=0) AND allowSer AND (signals AND (serialsig OR telnetsig))
-    IF rawMode
+    IF serRawMode
       IF (ioFlags[IOFLAG_SER_IN])
         lch:=readMayGetChar(serialReadMP,TRUE,{serbuff})
         IF lch<>-1 THEN ch:=lch
@@ -7603,7 +7603,7 @@ PROC processInputMessage(timeout, extsig = 0,rawMode=FALSE, allowSer=TRUE)
   IF (ch=0) AND signals AND consolesig
     -> If a console signal was received, get the character
 
-    IF rawMode
+    IF conRawMode
       IF (ioFlags[IOFLAG_KBD_IN])
         lch:=readMayGetChar(consoleReadMP, FALSE,{ibuf})
         IF lch<>-1 THEN ch:=lch
@@ -17330,6 +17330,7 @@ PROC fileUpload(file,forceZmodem=FALSE) HANDLE
             {zmfirstfile},
             {zmnextfile},
             maxBlkSize,0,binaryRaw,0)
+      zm.spaceCheck:=checkToolTypeExists(TOOLTYPE_XFERLIB,protocol,'FREE_SPACE_CHECK')
     ENDIF
   ENDIF
 
