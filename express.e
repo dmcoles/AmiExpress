@@ -5319,7 +5319,7 @@ PROC processMciCmd(mcidata,len,pos,outdata = NIL)
   DEF filename[100]:STRING
   DEF screenfilename[100]:STRING
   DEF maxLen,nval,res
-  DEF t=0,i
+  DEF t=0,i,num2
   DEF item:PTR TO flagFileItem
 
   IF (mcidata[pos]="~")
@@ -5644,11 +5644,11 @@ PROC processMciCmd(mcidata,len,pos,outdata = NIL)
     ELSEIF StrCmp(cmd,'CL')
       pos:=pos+2+t
       IF outdata=NIL
-        num:=0
+        num2:=0
         FOR nval:=1 TO cmds.numConf
           IF((checkConfAccess(nval)=TRUE) OR (sopt.toggles[TOGGLES_CONFRELATIVE]=FALSE))
-            num++
-            StringF(tempstr,'                     [32m\d[3][33m) [35m',num)
+            num2++
+            StringF(tempstr,'                     [32m\d[3][33m) [35m',num2)
             aePuts(tempstr)
             getConfName(nval,tempstr)
             res:=EstrLen(tempstr)
@@ -5664,25 +5664,25 @@ PROC processMciCmd(mcidata,len,pos,outdata = NIL)
     ELSEIF StrCmp(cmd,'CD')
       pos:=pos+2+t
       IF outdata=NIL
-        num:=0
+        num2:=0
         FOR nval:=1 TO cmds.numConf
           IF((checkConfAccess(nval)=TRUE) OR (sopt.toggles[TOGGLES_CONFRELATIVE]=FALSE))
-            num++
-            StringF(tempstr,'   [34m[[0m\r\z\d[3][34m] [0m\l\s[30]',num,getConfName(nval))
+            num2++
+            StringF(tempstr,'   [34m[[0m\r\z\d[3][34m] [0m\l\s[30]',num2,getConfName(nval))
             aePuts(tempstr)
-            IF (num AND 1)=0 THEN aePuts('\b\n')
+            IF (num2 AND 1)=0 THEN aePuts('\b\n')
           ENDIF
         ENDFOR
       ENDIF
     ELSEIF StrCmp(cmd,'ML')
       pos:=pos+2+t
       IF outdata=NIL
-        num:=getConfMsgBaseCount(currentConf)
-        FOR nval:=1 TO num
+        num2:=getConfMsgBaseCount(currentConf)
+        FOR nval:=1 TO num2
           StringF(tempstr,'                     [32m\d[3][33m) [35m',nval)
           aePuts(tempstr)
           getMsgBaseName(currentConf,nval,tempstr)
-          IF (num=1) AND (EstrLen(tempstr)=0) THEN StrCopy(tempstr,'Default')
+          IF (num2=1) AND (EstrLen(tempstr)=0) THEN StrCopy(tempstr,'Default')
           res:=StrLen(tempstr)
           WHILE(res<30)
             aePuts(' ')
@@ -5695,10 +5695,10 @@ PROC processMciCmd(mcidata,len,pos,outdata = NIL)
     ELSEIF StrCmp(cmd,'MD')
       pos:=pos+2+t
       IF outdata=NIL
-        num:=getConfMsgBaseCount(currentConf)
-        FOR nval:=1 TO num
+        num2:=getConfMsgBaseCount(currentConf)
+        FOR nval:=1 TO num2
           getMsgBaseName(currentConf,nval,tempstr2)
-          IF (num=1) AND (EstrLen(tempstr2)=0) THEN StrCopy(tempstr2,'Default')
+          IF (num2=1) AND (EstrLen(tempstr2)=0) THEN StrCopy(tempstr2,'Default')
           StringF(tempstr,'   [34m[[0m\r\z\d[3][34m] [0m\l\s[30]',nval,tempstr2)
           aePuts(tempstr)
           IF (nval AND 1)=0 THEN aePuts('\b\n')
@@ -12838,7 +12838,7 @@ PROC checkForFileSize(checkFilename:PTR TO CHAR, subDirs:PTR TO CHAR, checkConfN
   DEF stat,pstat=1,i
   DEF fflag=0,wflag=0,doflag=0
   DEF path[255]:STRING,str[255]:STRING,tempstr[100]:STRING,tempstr2[100]:STRING
-  DEF fname1[255]:STRING,fname2[255]:STRING
+  DEF fname1,fname2
   DEF final[255]:STRING
   DEF ft=0,dp
 

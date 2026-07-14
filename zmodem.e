@@ -2214,11 +2214,16 @@ EXPORT PROC zmodem_send_files(zm: PTR TO zmodem_t,sentptr: PTR TO LONG, timetake
   DEF p,res,init=TRUE
   DEF fname[255]:STRING
   DEF sent
+  DEF t1,t2,t
 
   zm.files_remaining:=zm.total_files
   CopyMem(zm.total_bytes,zm.bytes_remaining,8)
 
-  timetaken[]:=0
+  IF(timetaken<>NIL) THEN timetaken[]:=0
+
+  t1,t2:=getZmSystemTime()
+  zm.transfer_start_time1:=t1
+  zm.transfer_start_time2:=t2
 
   zm.spaceCheckPath:=fname
   p:=zm.zm_firstfile
@@ -2226,7 +2231,7 @@ EXPORT PROC zmodem_send_files(zm: PTR TO zmodem_t,sentptr: PTR TO LONG, timetake
     IF p(fname)
       REPEAT
         sent:=0
-        res:=zmodem_send_file(zm, fname, init,{sent}, timetaken)
+        res:=zmodem_send_file(zm, fname, init,{sent})
         IF res=FALSE THEN RETURN res
         
         IF (zm.send_successful) AND (zm.file_skipped=FALSE)
@@ -2253,13 +2258,18 @@ EXPORT PROC zmodem_send_files(zm: PTR TO zmodem_t,sentptr: PTR TO LONG, timetake
       
     ENDIF
   ENDIF
+  t1,t2:=getZmSystemTime()
+  t:=Mul((t1-zm.transfer_start_time1),50)+t2-zm.transfer_start_time2
+  IF t<=0 THEN t:=1
+  IF(timetaken<>NIL) THEN timetaken[]:=t
+
 ENDPROC TRUE
 
 /*
  * send a file; returns true when session is successful. (or file is skipped)
  */
 
-PROC zmodem_send_file(zm: PTR TO zmodem_t, fname: PTR TO CHAR, request_init,sent: PTR TO LONG, timetaken: PTR TO LONG)
+PROC zmodem_send_file(zm: PTR TO zmodem_t, fname: PTR TO CHAR, request_init,sent: PTR TO LONG)
 
 	DEF	pos=0
 	DEF	sent_bytes=0
@@ -2272,7 +2282,6 @@ PROC zmodem_send_file(zm: PTR TO zmodem_t, fname: PTR TO CHAR, request_init,sent
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
   DEF loop = TRUE
-  DEF t1,t2,t
 
   fp:=doOpen(zm,fname,MODE_OLDFILE)
   IF fp=NIL
@@ -2475,10 +2484,6 @@ zsendignore:
 
 	zm.transfer_start_pos:=pos
   
-  t1,t2:=getZmSystemTime()
-	zm.transfer_start_time1:=t1
-  zm.transfer_start_time2:=t2
-
   doSeek(zm,fp,0,OFFSET_BEGINNING)
 	zm.errors:=0
 	zm.consecutive_errors:=0
@@ -2496,11 +2501,7 @@ zsendcont2:
 
 		type:=zmodem_send_from(zm, fp, pos, {sent_bytes})
 
-    t1,t2:=getZmSystemTime()
-    t:=Mul((t1-zm.transfer_start_time1),50)+t2-zm.transfer_start_time2
-
 		IF(sent<>NIL) THEN sent[]:=sent[]+sent_bytes
-    IF(timetaken<>NIL) THEN timetaken[]:=timetaken[]+t
 
 		IF(is_connected(zm))=FALSE
       doClose(zm,fp)
@@ -2581,8 +2582,12 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
   DEF freespace
 
   timetaken[]:=0
-	zm.current_file_num:=1
+  zm.current_file_num:=1
   zm.spaceCheckPath:=download_dir
+
+  t1,t2:=getZmSystemTime()
+  zm.transfer_start_time1:=t1
+  zm.transfer_start_time2:=t2
 
 	WHILE(zmodem_recv_init(zm)=ZFILE)
 		bytes:=zm.current_file_size
@@ -2698,10 +2703,6 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
         lprintf(zm,LOG_DEBUG,tempstr)
 			ENDIF
 
-      t1,t2:=getZmSystemTime()
-      zm.transfer_start_time1:=t1
-      zm.transfer_start_time2:=t2
-
 			IF((fp:=doOpen(zm,fpath,MODE_READWRITE)))=NIL
         StringF(tempstr,'Error \d opening/creating/appending \s',IoErr(),fpath)
 				lprintf(zm,LOG_ERROR,tempstr)
@@ -2724,11 +2725,6 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
 
 			doClose(zm,fp)
       
-      t1,t2:=getZmSystemTime()
-      t:=Mul((t1-zm.transfer_start_time1),50)+t2-zm.transfer_start_time2
-      IF t<=0 THEN t:=1
-      IF timetaken<>NIL THEN timetaken[]:=timetaken[]+t
-
 			l:=flength(fpath)
 			IF(errors AND (l=0))	/* aborted/failed download */
 				IF(DeleteFile(fpath))	/* don't save 0-byte file */
@@ -2781,6 +2777,11 @@ zreccont1:
 	zm.recv_timeout:=2
 	IF(zmodem_rx(zm)="O") THEN zmodem_rx(zm)
 	zm.recv_timeout:=timeout
+
+  t1,t2:=getZmSystemTime()
+  t:=Mul((t1-zm.transfer_start_time1),50)+t2-zm.transfer_start_time2
+  IF t<=0 THEN t:=1
+  IF timetaken<>NIL THEN timetaken[]:=t
 
 ENDPROC files_received
 
