@@ -223,7 +223,7 @@ PROC loadAreaNames(bbsPath:PTR TO CHAR) OF frmPresetsEdit
   DEF dir_info:PTR TO fileinfoblock
   DEF pdir,r,entry
 
-  DEF buf[255]:STRING
+  DEF buf
   DEF parseBuf[100]:STRING
 
   StringF(accessPath,'\saccess/',bbsPath)
