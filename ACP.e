@@ -3152,7 +3152,7 @@ PROC loadScreen()
   fi:=Open('S:ACP.config',MODE_OLDFILE)
   IF(fi=NIL) THEN RETURN
   
-  Read(fi,pref,SIZEOF screenPref)
+  Fread(fi,pref,SIZEOF screenPref,1)
   Close(fi)
   
   FOR i:=0 TO MAX_NODES-1
@@ -3191,7 +3191,7 @@ PROC screenSave()
   ->Pref.Zoom[2]=DIM[2];
   ->Pref.Zoom[3]=DIM[3];
   fi:=Open('S:ACP.config',MODE_NEWFILE);
-  Write(fi,pref,SIZEOF screenPref)
+  Fwrite(fi,pref,SIZEOF screenPref,1)
   Close(fi) 
 ENDPROC
 
@@ -3310,9 +3310,9 @@ PROC runConfig(infile:PTR TO CHAR,outpath:PTR TO CHAR) HANDLE
   ENDIF
   
   /* Read json into memory */
-  r:=Read(fh,buf, filesize)
+  r:=Fread(fh,buf, filesize,1)
   Close(fh)
-  IF (r <> filesize)
+  IF (r <> 1)
     myrequest('Error reading json config file.')
     RETURN 1
   ENDIF
@@ -3466,40 +3466,40 @@ PROC saveState()
       FOR j:=0 TO 4
         list:=ndUser[i]
         StringF(tempStr,'\s\n',list.getItem(j))
-        Write(fh,tempStr,EstrLen(tempStr))
+        Fwrite(fh,tempStr,EstrLen(tempStr),1)
         StringF(tempStr,'\s\n',list.getItemDate(j))
-        Write(fh,tempStr,EstrLen(tempStr))
+        Fwrite(fh,tempStr,EstrLen(tempStr),1)
         list:=ndUploads[i]
         StringF(tempStr,'\s\n',list.getItem(j))
-        Write(fh,tempStr,EstrLen(tempStr))
+        Fwrite(fh,tempStr,EstrLen(tempStr),1)
         StringF(tempStr,'\s\n',list.getItemDate(j))
-        Write(fh,tempStr,EstrLen(tempStr))
+        Fwrite(fh,tempStr,EstrLen(tempStr),1)
         list:=ndDownloads[i]
         StringF(tempStr,'\s\n',list.getItem(j))
-        Write(fh,tempStr,EstrLen(tempStr))
+        Fwrite(fh,tempStr,EstrLen(tempStr),1)
         StringF(tempStr,'\s\n',list.getItemDate(j))
-        Write(fh,tempStr,EstrLen(tempStr))
+        Fwrite(fh,tempStr,EstrLen(tempStr),1)
       ENDFOR
     ENDFOR
 
     StringF(tempStr,'##\n')
-    Write(fh,tempStr,EstrLen(tempStr))
+    Fwrite(fh,tempStr,EstrLen(tempStr),1)
     
     FOR j:=0 TO 4
       StringF(tempStr,'\s\n',lastUsers.getItem(j))
-      Write(fh,tempStr,EstrLen(tempStr))
+      Fwrite(fh,tempStr,EstrLen(tempStr),1)
       StringF(tempStr,'\s\n',lastUsers.getItemDate(j))
-      Write(fh,tempStr,EstrLen(tempStr))
+      Fwrite(fh,tempStr,EstrLen(tempStr),1)
       
       StringF(tempStr,'\s\n',lastUploads.getItem(j))
-      Write(fh,tempStr,EstrLen(tempStr))
+      Fwrite(fh,tempStr,EstrLen(tempStr),1)
       StringF(tempStr,'\s\n',lastUploads.getItemDate(j))
-      Write(fh,tempStr,EstrLen(tempStr))
+      Fwrite(fh,tempStr,EstrLen(tempStr),1)
 
       StringF(tempStr,'\s\n',lastDownloads.getItem(j))
-      Write(fh,tempStr,EstrLen(tempStr))
+      Fwrite(fh,tempStr,EstrLen(tempStr),1)
       StringF(tempStr,'\s\n',lastDownloads.getItemDate(j))
-      Write(fh,tempStr,EstrLen(tempStr))
+      Fwrite(fh,tempStr,EstrLen(tempStr),1)
     ENDFOR
     Close(fh)
   ENDIF
@@ -3541,13 +3541,13 @@ PROC saveConnectionList(connList:PTR TO stdlist)
       connItem:=connList.item(i)
      
       StringF(tempStr,'$\h\n',connItem.ipAddr)
-      Write(fh,tempStr,EstrLen(tempStr))
+      Fwrite(fh,tempStr,EstrLen(tempStr),1)
       StringF(tempStr,'\d\n',connItem.connectionTime)
-      Write(fh,tempStr,EstrLen(tempStr))
+      Fwrite(fh,tempStr,EstrLen(tempStr),1)
       StringF(tempStr,'\d\n',connItem.blocked)
-      Write(fh,tempStr,EstrLen(tempStr))
+      Fwrite(fh,tempStr,EstrLen(tempStr),1)
       StringF(tempStr,'\d\n',connItem.blockExpiry)
-      Write(fh,tempStr,EstrLen(tempStr))
+      Fwrite(fh,tempStr,EstrLen(tempStr),1)
     ENDFOR
     Close(fh)
   ENDIF

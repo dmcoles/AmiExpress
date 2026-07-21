@@ -1,8 +1,8 @@
 -> Ami Express 5 
 OPT LARGE,OSVERSION=37,PURE
 
-#ifndef EVO_3_4_0
-  FATAL 'Ami-Express should only be compiled with E-VO Amiga E Compiler'
+#ifndef EVO_3_9_2
+  FATAL 'Ami-Express should only be compiled with E-VO Amiga E Compiler V3.9.2 or higher'
 #endif
 
 /*
@@ -2875,7 +2875,7 @@ PROC saveFlagged()
       FOR i:=0 TO flagFilesList.count()-1
         item:=flagFilesList.item(i)
         StringF(fname,'\d \s\n',item.confNum,item.fileName)
-        Write(fh,fname,EstrLen(fname))
+        fileWrite(fh,fname,EstrLen(fname))
       ENDFOR
       Close(fh)
     ENDIF
@@ -2952,7 +2952,7 @@ PROC tidyPlayPen()
       StringF(tempStr,'\snode\d.user',cmds.bbsLoc,node)
       IF(fh:=Open(tempStr,MODE_OLDFILE))<>0
         loggedOnUser:=NEW loggedOnUser
-        Read(fh,loggedOnUser,SIZEOF user)     
+        Fread(fh,loggedOnUser,SIZEOF user,1)
         getConfLocation(loggedOnUser.confRJoin,currentConfDir)
         checkPathSlash(currentConfDir)
         Close(fh)
@@ -2983,7 +2983,7 @@ ENDPROC
 PROC dumpActiveUser(filename: PTR TO CHAR)
   DEF fi
   fi:=Open(filename,MODE_NEWFILE)
-  Write(fi,loggedOnUser,SIZEOF user)
+  fileWrite(fi,loggedOnUser,SIZEOF user)
   Close(fi)
 ENDPROC
 
@@ -2993,13 +2993,13 @@ PROC createNodeUserFiles()
   
   StringF(tempStr,'\snode\d.user',cmds.bbsLoc,node)
   IF(fh:=Open(tempStr,MODE_NEWFILE))<>0
-    IF(Write(fh,loggedOnUser,SIZEOF user)) THEN res:=1
+    IF(fileWrite(fh,loggedOnUser,SIZEOF user)=RESULT_SUCCESS) THEN res:=1
   ENDIF
   Close(fh)
   /* Write current userkeys information */
   StringF(tempStr,'\snode\d.userkeys',cmds.bbsLoc,node) /* file name */
   IF(fh:=Open(tempStr,MODE_NEWFILE))<>0
-    IF(Write(fh,loggedOnUserKeys,SIZEOF userKeys)) THEN res:=1
+    IF(fileWrite(fh,loggedOnUserKeys,SIZEOF userKeys)=RESULT_SUCCESS) THEN res:=1
   ENDIF
   Close(fh)
 ENDPROC res
@@ -3050,7 +3050,7 @@ PROC checkUserOnLine(check)
           UnLock(lock)
           StringF(tempStr,'\snode\d.user',cmds.bbsLoc,loop)
           IF(fh:=Open(tempStr,MODE_OLDFILE))<>0
-            IF(Read(fh,tuser,SIZEOF user))
+            IF(Fread(fh,tuser,SIZEOF user,1)=1)
               IF(stringCompare(tuser.name,loggedOnUser.name)=RESULT_SUCCESS)
                 error:=0
                 lock:=NIL
@@ -4895,7 +4895,7 @@ PROC loadConfDB(account,confNum,msgBase,addr,force=FALSE)
     RETURN
   ENDIF
 
-  IF (Read(bi,addr,SIZEOF confBase)<>SIZEOF confBase)
+  IF (Fread(bi,addr,SIZEOF confBase,1)<>1)
     ->if we can't read the conf db then clear out any existing data
     tmpMem:=New(SIZEOF confBase)
     CopyMem(tmpMem,addr,SIZEOF confBase)
@@ -4931,7 +4931,7 @@ PROC saveConfDB(account,confNum,msgBase,addr,force=FALSE)
     RETURN
   ENDIF
 
-  Write(bi,addr,SIZEOF confBase)
+  fileWrite(bi,addr,SIZEOF confBase)
   Close(bi)
 ENDPROC
 
@@ -8036,7 +8036,7 @@ PROC loadAccount(slot,userPtr:PTR TO user, userKeysPtr:PTR TO userKeys, userMisc
   l:=SIZEOF user
   IF (fh:=Open(userDataFile,OLDFILE))<>0
     Seek(fh,(slot-1)*l,OFFSET_BEGINNING)
-    IF Read(fh,userPtr,l)<>l THEN result:=RESULT_FAILURE
+    IF Fread(fh,userPtr,l,1)<>1 THEN result:=RESULT_FAILURE
     Close(fh)
   ELSE
     result:=RESULT_FAILURE
@@ -8046,7 +8046,7 @@ PROC loadAccount(slot,userPtr:PTR TO user, userKeysPtr:PTR TO userKeys, userMisc
     l:=SIZEOF userKeys
     IF (fh:=Open(userKeysFile,OLDFILE))<>0
       Seek(fh,(slot-1)*l,OFFSET_BEGINNING)
-      IF Read(fh,userKeysPtr,l)<>l THEN result:=RESULT_FAILURE
+      IF Fread(fh,userKeysPtr,l,1)<>1 THEN result:=RESULT_FAILURE
       Close(fh)
     ELSE
       result:=RESULT_FAILURE
@@ -8057,7 +8057,7 @@ PROC loadAccount(slot,userPtr:PTR TO user, userKeysPtr:PTR TO userKeys, userMisc
     l:=SIZEOF userMisc
     IF (fh:=Open(userMiscFile,OLDFILE))<>0
       Seek(fh,(slot-1)*l,OFFSET_BEGINNING)
-      IF Read(fh,userMiscPtr,l)<>l THEN result:=RESULT_FAILURE
+      IF Fread(fh,userMiscPtr,l,1)<>1 THEN result:=RESULT_FAILURE
       Close(fh)
     ELSE
       result:=RESULT_FAILURE
@@ -8101,8 +8101,8 @@ PROC saveAccount(hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO 
 
   Seek(fh,slot*l,OFFSET_BEGINNING)
 
-  stat:=Write(fh,hoozer,l)
-  IF(stat<>l)
+  stat:=fileWrite(fh,hoozer,l)
+  IF(stat<>RESULT_SUCCESS)
     Raise(ERR_EXCEPT)
   ENDIF
 
@@ -8116,8 +8116,8 @@ PROC saveAccount(hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO 
 
   IF(hoozer.newUser)  THEN hoozer2.newUser:=1 ELSE hoozer2.newUser:=0
 
-  stat:=Write(fh,hoozer2,l)
-  IF(stat<>l)
+  stat:=fileWrite(fh,hoozer2,l)
+  IF(stat<>RESULT_SUCCESS)
     Raise(ERR_EXCEPT)
   ENDIF
 
@@ -8130,8 +8130,8 @@ PROC saveAccount(hoozer: PTR TO user, hoozer2: PTR TO userKeys, hoozer3: PTR TO 
 
     Seek(fh,slot*l,OFFSET_BEGINNING)
 
-    stat:=Write(fh,hoozer3,l)
-    IF(stat<>l)
+    stat:=fileWrite(fh,hoozer3,l)
+    IF(stat<>RESULT_SUCCESS)
       Raise(ERR_EXCEPT)
     ENDIF
 
@@ -8163,7 +8163,7 @@ PROC writeLogoffLog(stringout:PTR TO CHAR,newFile)
   IF(gfp1<>0)
     Seek(gfp1,0,OFFSET_END)
     StringF(xgstr2,'\s ',xgstr1)
-    Write(gfp1,xgstr2,EstrLen(xgstr2))
+    fileWrite(gfp1,xgstr2,EstrLen(xgstr2))
     fileWriteLn(gfp1,stringout)
     Close(gfp1)
   ENDIF
@@ -8745,12 +8745,12 @@ PROC getMailStatFile(confNum,msgBaseNum)
     mailStat.lowestNotDel:=0
     mailStat.lowestKey:=1
     mailStat.highMsgNum:=1
-    stat:=Write(fd,mailStat,SIZEOF mailStat)
+    stat:=Fwrite(fd,mailStat,SIZEOF mailStat,1)
   ELSE
-    stat:=Read(fd,mailStat,SIZEOF mailStat)
+    stat:=Fread(fd,mailStat,SIZEOF mailStat,1)
   ENDIF
 
-  IF (stat<>SIZEOF mailStat)
+  IF (stat<>1)
     Close(fd)
     myError(ERR_MSGBASE)
     RETURN RESULT_FAILURE
@@ -9039,7 +9039,7 @@ PROC errorLog(stringout: PTR TO CHAR)
   IF(gfp1<>0)
     Seek(gfp1,0,OFFSET_END)
     StringF(xgstr2,'\s ',xgstr1)
-    Write(gfp1,xgstr2,EstrLen(xgstr2))
+    fileWrite(gfp1,xgstr2,EstrLen(xgstr2))
     fileWriteLn(gfp1,stringout)
     Close(gfp1)
   ENDIF
@@ -9074,7 +9074,7 @@ PROC fileListReverse(filename: PTR TO CHAR) HANDLE
         ENDIF
 
         Seek(fh,currentPos,OFFSET_BEGINNING)
-        Read(fh,bufptr2,readsize)
+        Fread(fh,bufptr2,readsize,1)
         bufptr2[readsize]:=0
         FOR loop:=readsize-1 TO 0 STEP -1
           IF (bufptr2[loop]="\n") AND (((bufend) AND (loop=(readsize-1)) AND (bufptr1[0]>" ")) OR (bufptr2[loop+1]>" "))
@@ -9147,12 +9147,12 @@ PROC displayCallersLog(filename: PTR TO CHAR,tf)
         stat:=Seek(fh,currentPos,OFFSET_BEGINNING)
         IF(stat>=0)
           Seek(fh,0,OFFSET_CURRENT)
-          IF((stat:=Read(fh,buf,readSize)))>0
+          IF((stat:=Fread(fh,buf,1,readSize)))>0
             buf[readSize-1]:=0
             lnlp:=0
             FOR loop:=readSize TO 1 STEP -1
               IF(buf[loop]="\n")
-                StringF(tempstr,'\s\b\n',buf+loop+1)
+                StringF(tempstr,'\s\s\b\n',buf+loop+1, IF ansiColour THEN '[0m' ELSE '')
                 
                 ->bit of a hack to the lineCount to try and take account of long log lines that wrap around
                 ->usually log lines start with a tab so anything over 72 characters would probably wrap around
@@ -9549,7 +9549,7 @@ ENDPROC
 
 PROC callersLog(stringout: PTR TO CHAR,linefeed=TRUE)
   DEF buff[100]:STRING
-  DEF gfp1
+  DEF gfp1,p
 
   IF cmds.acLvl[LVL_DO_CALLERSLOG]=FALSE THEN RETURN
 
@@ -9565,11 +9565,8 @@ PROC callersLog(stringout: PTR TO CHAR,linefeed=TRUE)
   ENDIF
 
   IF(gfp1)
-    IF linefeed
-      fileWriteLn(gfp1,stringout)
-    ELSE
-      fileWrite(gfp1,stringout)
-    ENDIF
+    fileWrite(gfp1,stringout)
+    IF linefeed THEN fileWrite(gfp1,'\n')
     Close(gfp1)
   ENDIF
 ENDPROC
@@ -10674,7 +10671,7 @@ PROC getMsgId()
   fh:=Open(fname,MODE_NEWFILE)
   IF fh<>0
     StringF(tempstr,'\z\h[8]\n',v)
-    Write(fh,tempstr,EstrLen(tempstr))
+    fileWrite(fh,tempstr,EstrLen(tempstr))
     Close(fh)
   ENDIF
   
@@ -10736,7 +10733,7 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader, update=TRUE)
         
         FOR i:=0 TO lines-1
           StringF(tempStr2,'\s\n',msgBuf.item(i))
-          Write(f,tempStr2,EstrLen(tempStr2))
+          fileWrite(f,tempStr2,EstrLen(tempStr2))
         ENDFOR
         Close(f)
       ENDIF
@@ -10757,7 +10754,7 @@ PROC saveNewMSG(gfh,mh:PTR TO mailHeader, update=TRUE)
       ENDIF
       FOR i:=0 TO lines-1
         StringF(tempStr2,'\s\n',msgBuf.item(i))
-        Write(f,tempStr2,EstrLen(tempStr2))
+        fileWrite(f,tempStr2,EstrLen(tempStr2))
       ENDFOR
       Close(f)
       aePuts('done!\b\n\b\n')
@@ -11486,7 +11483,7 @@ PROC findUserFromNumber(start,hoozer:PTR TO userKeys)
   fh:=Open(userKeysFile,MODE_OLDFILE)
   IF(fh=0) THEN RETURN 0
   Seek(fh,(start-1)*SIZEOF userKeys,OFFSET_BEGINNING)
-  IF(Read(fh,hoozer,SIZEOF userKeys)>0)
+  IF(Fread(fh,hoozer,SIZEOF userKeys,1)>0)
     Close(fh)
     RETURN 1
   ENDIF
@@ -11506,18 +11503,18 @@ PROC deactivateOldUsers(days)
 
     IF(fh2:=Open(userKeysFile,MODE_READWRITE))<>0
       i:=0
-      WHILE(Read(fh,tempUser,l)=l)
+      WHILE(Fread(fh,tempUser,l,1)=1)
         IF tempUser.timeLastOn<deactivateLimit
           IF tempUser.slotNumber<>0
             Seek(fh,-l,OFFSET_CURRENT)
             tempUser.slotNumber:=0
-            Write(fh,tempUser,l)
+            fileWrite(fh,tempUser,l)
 
             Seek(fh2,Mul(i,l2),OFFSET_BEGINNING)
-            IF (Read(fh2,tempUserKeys,l2)=l2)
+            IF (Fread(fh2,tempUserKeys,l2,1)=l)
               Seek(fh2,-l2,OFFSET_CURRENT)
               tempUserKeys.number:=0
-              Write(fh2,tempUserKeys,l2)
+              fileWrite(fh2,tempUserKeys,l2)
             ENDIF
           ENDIF
         ENDIF
@@ -11547,13 +11544,13 @@ PROC findUserFromName(start,nameType,name, hoozer: PTR TO user, hoozer2: PTR TO 
 
   slot:=0
   LOOP
-    stat:=Read(fh,hoozer2,SIZEOF userKeys)
-    IF(stat<>SIZEOF userKeys)
+    stat:=Fread(fh,hoozer2,SIZEOF userKeys,1)
+    IF(stat<>1)
       Throw(ERR_EXCEPT,0)
     ENDIF
 
-    stat:=Read(fh2,hoozer3,SIZEOF userMisc)
-    IF(stat<>SIZEOF userMisc)
+    stat:=Fread(fh2,hoozer3,SIZEOF userMisc,1)
+    IF(stat<>1)
       Throw(ERR_EXCEPT,0)
     ENDIF
 
@@ -11849,10 +11846,10 @@ PROC saveOverHeader(gfh)
     RETURN RESULT_FAILURE
   ENDIF
 
-  error:=Write(gfh,mailHeader,size)
+  error:=fileWrite(gfh,mailHeader,size)
   Seek(gfh,currentSeekPos,OFFSET_BEGINNING)
 
-  IF(error<>size)
+  IF(error<>RESULT_SUCCESS)
     myError(ERR_MSGBASE)
     RETURN RESULT_FAILURE
   ENDIF
@@ -11871,8 +11868,8 @@ PROC saveStatOnly()
     RETURN RESULT_FAILURE
   ENDIF
 
-  error:=Write(fd,mailStat,SIZEOF mailStat)
-  IF(error<>SIZEOF mailStat)
+  error:=fileWrite(fd,mailStat,SIZEOF mailStat)
+  IF(error<>RESULT_SUCCESS)
     aePuts('Wasn''t the same!\b\n')
     Close(fd)
     myError(ERR_MSGBASE)
@@ -12453,10 +12450,10 @@ PROC loadMessageHeader(gfh)
     ENDIF
   ENDIF
 
-  error:=Read(gfh,mailHeader,size)
+  error:=Fread(gfh,mailHeader,size,1)
   currentSeekPos:=Seek(gfh,0,OFFSET_CURRENT)
 
-  IF(error<>size)
+  IF(error<>1)
     myError(ERR_MSGBASE)
     RETURN RESULT_FAILURE
   ENDIF
@@ -12468,10 +12465,10 @@ DEF stat, error,size
   Seek(gfh,0,OFFSET_END)
   size:=SIZEOF mailHeader
 
-  error:=Write(gfh,mh,size)
+  error:=fileWrite(gfh,mh,size)
   Seek(gfh,currentSeekPos,OFFSET_BEGINNING)
 
-  IF(error<>size) THEN RETURN RESULT_FAILURE
+  IF(error<>RESULT_SUCCESS) THEN RETURN RESULT_FAILURE
 
   mailStat.highMsgNum:=mailStat.highMsgNum+1
   IF(mailStat.highMsgNum=2) THEN mailStat.lowestNotDel:=1
@@ -14038,12 +14035,11 @@ PROC xprfread()
 
   IF asynciobase<>NIL
     res:=ReadAsync(fp,buf,Mul(bsize,bcount))
+    ->calculate number of items read
+    res:=Div(res,bsize)
   ELSE
-    res:=Read(fp,buf,Mul(bsize,bcount))
+    res:=Fread(fp,buf,bsize,bcount)
   ENDIF
-
-  ->calculate number of items read
-  res:=Div(res,bsize)
 ENDPROC res
 
 PROC xprfwriteAsm()
@@ -14072,12 +14068,12 @@ PROC xprfwrite()
 
   IF asynciobase<>NIL
     res:=WriteAsync(fp,buf,Mul(bsize,bcount))
+    ->calculate number of items written
+    res:=Div(res,bsize)
   ELSE
-    res:=Write(fp,buf,Mul(bsize,bcount))
+    res:=Fwrite(fp,buf,bsize,bcount)
   ENDIF
 
-  ->calculate number of items written
-  res:=Div(res,bsize)
 ENDPROC res
 
 PROC xprsreadAsm()
@@ -16253,15 +16249,15 @@ PROC fileCopy(from,to)
     IF(fhs:=Open(from,MODE_OLDFILE))
       IF(fhd:=Open(to,MODE_NEWFILE))
         REPEAT
-          stat1:=Read(fhs,buf,bufsize)   /* Read from file */
-          IF(stat1>0)   THEN stat2:=Write(fhd,buf,stat1) /* write to file*/
-        UNTIL (stat1<=0) OR (stat2<=0)
+          stat1:=Fread(fhs,buf,1,bufsize)   /* Read from file */
+          IF(stat1>0)   THEN stat2:=fileWrite(fhd,buf,stat1) /* write to file*/
+        UNTIL (stat1<=0) OR (stat2<>RESULT_SUCCESS)
 
         IF(stat1<0)
           StringF(tempstr,'\b\nERROR while reading from \s!\b\n',from)
           aePuts(tempstr)
         ENDIF
-        IF(stat2<0)
+        IF(stat2<>RESULT_SUCCESS)
           StringF(tempstr,'\b\nERROR while writing to \s!\b\n',to)
           aePuts(tempstr);
         ENDIF
@@ -16278,7 +16274,7 @@ PROC fileCopy(from,to)
     FreeMem(buf,bufsize)
   ENDIF
 
-  IF(((stat1>=0) AND (stat2>=0)))
+  IF(((stat1>=0) AND (stat2=RESULT_SUCCESS)))
     RETURN 1
   ENDIF
 
@@ -21850,9 +21846,9 @@ PROC listNewAccounts(f6)
   maximum:=findLastAccount()
   IF(fh:=Open(userKeysFile,MODE_OLDFILE))<>0
     FOR x:=1 TO maximum
-      stat:=Read(fh,tempUserKeys,SIZEOF userKeys)
+      stat:=Fread(fh,tempUserKeys,SIZEOF userKeys,1)
       ->//      printf("Name %-31s New User = %d\b\n",GHoozer2.UserName,GHoozer2.New_User)
-      IF(stat<>SIZEOF userKeys)
+      IF(stat<>1)
         StringF(tempStr,'FILE-FAULT[\d], ',x)
         aePuts(tempStr)
       ELSE
@@ -21953,9 +21949,9 @@ PROC listCreditAccounts(f6)
   maximum:=findLastAccount()
   IF(fh:=Open(userDataFile,MODE_OLDFILE))<>0
     FOR x:=1 TO maximum
-      stat:=Read(fh,tempUser,SIZEOF user)
+      stat:=Fread(fh,tempUser,SIZEOF user,1)
       ->//      printf("Name %-31s New User = %d\b\n",GHoozer2.UserName,GHoozer2.New_User)
-      IF(stat<>SIZEOF user)
+      IF(stat<>1)
         StringF(tempStr,'FILE-FAULT[\d], ',x)
         aePuts(tempStr)
       ELSE
@@ -22444,7 +22440,7 @@ PROC deleteConfAccess(slot)
       bi:=Open(temp,MODE_OLDFILE)
       IF(bi<>0)
         Seek(bi,(slot-1)*SIZEOF confBase,OFFSET_BEGINNING)
-        Read(bi,t,SIZEOF confBase)
+        Fread(bi,t,SIZEOF confBase,1)
         t.confRead:=0
         t.newSinceDate:=0
         t.confRead:=0
@@ -22466,7 +22462,7 @@ PROC deleteConfAccess(slot)
            t.uploadBytesBCD[j]:=0
         ENDFOR
         Seek(bi,(slot-1)*SIZEOF confBase,OFFSET_BEGINNING)
-        Write(bi,t,SIZEOF confBase)
+        fileWrite(bi,t,SIZEOF confBase)
 
         Close(bi)
       ENDIF
@@ -22567,8 +22563,8 @@ PROC updateAllUsers(confnum,msgBaseNum,updateType, newVal)
 
   IF fh<>0
     REPEAT
-      stat:=Read(fh,cb,SIZEOF confBase)
-      IF stat=SIZEOF confBase
+      stat:=Fread(fh,cb,SIZEOF confBase,1)
+      IF stat=1
         Seek(fh,-stat,OFFSET_CURRENT)
 
         SELECT updateType
@@ -22607,9 +22603,9 @@ PROC updateAllUsers(confnum,msgBaseNum,updateType, newVal)
             cb.handle[3]:=0
         ENDSELECT
 
-        stat:=Write(fh,cb,SIZEOF confBase)
+        stat:=Fwrite(fh,cb,SIZEOF confBase,1)
       ENDIF
-    UNTIL stat<>SIZEOF confBase
+    UNTIL stat<>1
     Close(fh)
   ENDIF
   END cb
@@ -22641,8 +22637,8 @@ PROC dumpUserStats(confnum,msgBaseNum)
       fileWriteLn(fhs,tempstr)
       fileWriteLn(fhs,'==========================================')
       REPEAT
-        stat:=Read(fh,cb,SIZEOF confBase)
-        IF stat=SIZEOF confBase
+        stat:=Fread(fh,cb,SIZEOF confBase,1)
+        IF stat=1
           IF loadAccount(n,tempUser,NIL,NIL)=RESULT_SUCCESS
             StringF(tempstr,'Name            : \s',tempUser.name)
             fileWriteLn(fhs,tempstr)
@@ -22701,10 +22697,10 @@ PROC resizeConfDB(confnum,msgBaseNum,newSize)
   IF (fh1:=Open(confDbFile,MODE_NEWFILE))<>0
     IF (fh2:=Open(oldConfDbFile,MODE_OLDFILE))<>0
       WHILE newSize>0
-        IF (Read(fh2,cb,SIZEOF confBase)=SIZEOF confBase)
-          Write(fh1,cb,SIZEOF confBase)
+        IF (Fread(fh2,cb,SIZEOF confBase,1)=1)
+          fileWrite(fh1,cb,SIZEOF confBase)
         ELSE
-          Write(fh1,cb2,SIZEOF confBase)
+          fileWrite(fh1,cb2,SIZEOF confBase)
         ENDIF
         newSize--
       ENDWHILE
@@ -22769,7 +22765,7 @@ PROC makeFtpDirCache(confLoc:PTR TO CHAR, confnum, dirnum, dlpath:PTR TO CHAR, s
           ENDIF
           StringF(tempstr,'\z\h[8] \z\h[8] \s\n',t,s,f_info.filename)
           WriteF(tempstr)
-          Write(fh,tempstr,EstrLen(tempstr))
+          fileWrite(fh,tempstr,EstrLen(tempstr))
         ENDIF
       ENDWHILE
     ENDIF
@@ -23805,9 +23801,9 @@ PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO 
   ENDIF
 
   REPEAT
-    stat:=Read(fh,tempUser,SIZEOF user)
+    stat:=Fread(fh,tempUser,SIZEOF user,1)
     IF stat<>0
-      IF(stat<>SIZEOF user)
+      IF(stat<>1)
         Close(fh)
         Close(fh2)
         Close(fh3)
@@ -23815,9 +23811,9 @@ PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO 
       ENDIF
     ENDIF
 
-    stat2:=Read(fh2,tempUserMisc,SIZEOF userMisc)
+    stat2:=Fread(fh2,tempUserMisc,SIZEOF userMisc,1)
     IF stat2<>0
-      IF(stat2<>SIZEOF userMisc)
+      IF(stat2<>1)
         Close(fh)
         Close(fh2)
         Close(fh3)
@@ -23825,9 +23821,9 @@ PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO 
       ENDIF
     ENDIF
 
-    stat3:=Read(fh3,tempUserKeys,SIZEOF userKeys)
+    stat3:=Fread(fh3,tempUserKeys,SIZEOF userKeys,1)
     IF stat3<>0
-      IF(stat3<>SIZEOF userKeys)
+      IF(stat3<>1)
         Close(fh)
         Close(fh2)
         Close(fh3)
@@ -23904,13 +23900,13 @@ PROC applyBulkChanges(settings:PTR TO LONG,areaName:PTR TO CHAR,secLevel:PTR TO 
         ENDIF
 
         Seek(fh,-SIZEOF user,OFFSET_CURRENT)
-        Write(fh,tempUser,SIZEOF user)
+        fileWrite(fh,tempUser,SIZEOF user)
 
         Seek(fh2,-SIZEOF userMisc,OFFSET_CURRENT)
-        Write(fh2,tempUserMisc,SIZEOF userMisc)
+        fileWrite(fh2,tempUserMisc,SIZEOF userMisc)
 
         Seek(fh3,-SIZEOF userKeys,OFFSET_CURRENT)
-        Write(fh3,tempUserKeys,SIZEOF userKeys)
+        fileWrite(fh3,tempUserKeys,SIZEOF userKeys)
       ENDIF
     ENDIF
     sn++
@@ -24114,9 +24110,9 @@ PROC applyBulkPresetChanges(preset:LONG,allConf:LONG,areaName:PTR TO CHAR,secLev
   ENDIF
 
   REPEAT
-    stat:=Read(fh,tempUser,SIZEOF user)
+    stat:=Fread(fh,tempUser,SIZEOF user,1)
     IF stat<>0
-      IF(stat<>SIZEOF user)
+      IF(stat<>1)
         Close(fh)
         Close(fh2)
         Close(fh3)
@@ -24124,9 +24120,9 @@ PROC applyBulkPresetChanges(preset:LONG,allConf:LONG,areaName:PTR TO CHAR,secLev
       ENDIF
     ENDIF
 
-    stat2:=Read(fh2,tempUserMisc,SIZEOF userMisc)
+    stat2:=Fread(fh2,tempUserMisc,SIZEOF userMisc,1)
     IF stat2<>0
-      IF(stat2<>SIZEOF userMisc)
+      IF(stat2<>1)
         Close(fh)
         Close(fh2)
         Close(fh3)
@@ -24134,9 +24130,9 @@ PROC applyBulkPresetChanges(preset:LONG,allConf:LONG,areaName:PTR TO CHAR,secLev
       ENDIF
     ENDIF
 
-    stat3:=Read(fh3,tempUserKeys,SIZEOF userKeys)
+    stat3:=Fread(fh3,tempUserKeys,SIZEOF userKeys,1)
     IF stat3<>0
-      IF(stat3<>SIZEOF userKeys)
+      IF(stat3<>1)
         Close(fh)
         Close(fh2)
         Close(fh3)
@@ -24171,10 +24167,10 @@ PROC applyBulkPresetChanges(preset:LONG,allConf:LONG,areaName:PTR TO CHAR,secLev
         ENDIF
 
         Seek(fh,-SIZEOF user,OFFSET_CURRENT)
-        Write(fh,tempUser,SIZEOF user)
+        fileWrite(fh,tempUser,SIZEOF user)
 
         Seek(fh2,-SIZEOF userMisc,OFFSET_CURRENT)
-        Write(fh2,tempUserMisc,SIZEOF userMisc)
+        fileWrite(fh2,tempUserMisc,SIZEOF userMisc)
       ENDIF
     ENDIF
   UNTIL (stat2=0) OR (stat=0) OR (stat3=0)
@@ -24196,18 +24192,18 @@ PROC calcAffected(areaName:PTR TO CHAR, secLevel:PTR TO CHAR)
   ENDIF
 
   REPEAT
-    stat:=Read(fh,tempUser,SIZEOF user)
+    stat:=Fread(fh,tempUser,SIZEOF user,1)
     IF stat<>0
-      IF(stat<>SIZEOF user)
+      IF(stat<>1)
         Close(fh)
         Close(fh2)
         RETURN RESULT_FAILURE
       ENDIF
     ENDIF
 
-    stat2:=Read(fh2,tempUserKeys,SIZEOF userKeys)
+    stat2:=Fread(fh2,tempUserKeys,SIZEOF userKeys,1)
     IF stat2<>0
-      IF(stat2<>SIZEOF userKeys)
+      IF(stat2<>1)
         Close(fh)
         Close(fh2)
         RETURN RESULT_FAILURE
@@ -26782,16 +26778,16 @@ PROC qwkZoomConf(confNum,msgBaseNum,recNum,confNameType)
             StringF(tempstr,'\s[128]','')
             StringF(tempstr,'\c\z\r\d[7]\l\s[8]\l\s[5]\l\s[25]\l\s[25]\l\s[25]                    \l\d[6]\c\c\c   ',status,mailHeader.msgNumb,
                 date,time,mailHeader.toName,mailHeader.fromName,mailHeader.subject,msgLen+1,$E1,confNum,0)
-            cnt:=Write(fo,tempstr,128)
-            IF cnt<>128 THEN aePuts('error writing mail file')
+            cnt:=fileWrite(fo,tempstr,128)
+            IF cnt<>RESULT_SUCCESS THEN aePuts('error writing mail file')
 
             StrCopy(tempstr2,'')
             FOR i:=0 TO lines-1
               StringF(tempstr,'\s\c',msgBuf.item(i),$e3)
               StrAdd(tempstr2,tempstr)
               IF (EstrLen(tempstr2)>=128)
-                cnt:=Write(fo,tempstr2,128)
-                IF cnt<>128 THEN aePuts('error writing mail file')
+                cnt:=fileWrite(fo,tempstr2,128)
+                IF cnt<>RESULT_SUCCESS THEN aePuts('error writing mail file')
                 FOR j:=128 TO EstrLen(tempstr2)-1
                   tempstr2[j-128]:=tempstr2[j]
                 ENDFOR
@@ -26800,15 +26796,15 @@ PROC qwkZoomConf(confNum,msgBaseNum,recNum,confNameType)
             ENDFOR
             IF EstrLen(tempstr2)>0
               StringF(tempstr,'\l\s[128]',tempstr2)
-              cnt:=Write(fo,tempstr,128)
-              IF cnt<>128 THEN aePuts('error writing mail file')
+              cnt:=fileWrite(fo,tempstr,128)
+              IF cnt<>RESULT_SUCCESS THEN aePuts('error writing mail file')
             ENDIF
 
             ->append to MESSAGES.NDX
             ndx.recNum:=recNum
             ndx.conf:=confNum
-            cnt:=Write(fo2,ndx,5)   ->SHOULD BE SIZEOF qwkNDX but it pads it to even size
-            IF cnt<>5 THEN aePuts('error writing mail file')
+            cnt:=fileWrite(fo2,ndx,5)   ->SHOULD BE SIZEOF qwkNDX but it pads it to even size
+            IF cnt<>RESULT_SUCCESS THEN aePuts('error writing mail file')
             count++
           ENDIF
         ENDIF
@@ -30612,13 +30608,13 @@ PROC findFreeSlot()
 
   slot:=0
   REPEAT
-    stat:=Read(fh,tempUser,SIZEOF user)
+    stat:=Fread(fh,tempUser,SIZEOF user,1)
     slot++
-    IF (stat=SIZEOF user) AND (tempUser.slotNumber=0)
+    IF (stat=1) AND (tempUser.slotNumber=0)
       Close(fh)
       RETURN slot
     ENDIF
-  UNTIL stat<>SIZEOF user
+  UNTIL stat<>1
   Close(fh)
 ENDPROC slot
 

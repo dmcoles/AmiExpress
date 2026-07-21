@@ -476,12 +476,12 @@ EXPORT PROC fileWriteLn(fh,str: PTR TO CHAR)
   IF (stat:=fileWrite(fh,str))<>RESULT_SUCCESS THEN RETURN stat
 ENDPROC fileWrite(fh,'\n')
 
-EXPORT PROC fileWrite(fh,str: PTR TO CHAR)
-  DEF s,len
+EXPORT PROC fileWrite(fh,str: PTR TO CHAR,len=ALL)
+  DEF s
 
-  len:=StrLen(str)
-  s:=Write(fh,str,len)
-  IF s<>len THEN RETURN RESULT_FAILURE
+  IF len=ALL THEN len:=StrLen(str)
+  s:=Fwrite(fh,str,len,1)
+  IF s<>1 THEN RETURN RESULT_FAILURE
 ENDPROC RESULT_SUCCESS
 
 EXPORT PROC countSpaces(str:PTR TO CHAR)

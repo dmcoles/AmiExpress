@@ -2214,16 +2214,14 @@ EXPORT PROC zmodem_send_files(zm: PTR TO zmodem_t,sentptr: PTR TO LONG, timetake
   DEF p,res,init=TRUE
   DEF fname[255]:STRING
   DEF sent
-  DEF t1,t2,t
+  DEF t1,t2,t,s1,s2
 
   zm.files_remaining:=zm.total_files
   CopyMem(zm.total_bytes,zm.bytes_remaining,8)
 
   IF(timetaken<>NIL) THEN timetaken[]:=0
 
-  t1,t2:=getZmSystemTime()
-  zm.transfer_start_time1:=t1
-  zm.transfer_start_time2:=t2
+  s1,s2:=getZmSystemTime()
 
   zm.spaceCheckPath:=fname
   p:=zm.zm_firstfile
@@ -2259,7 +2257,7 @@ EXPORT PROC zmodem_send_files(zm: PTR TO zmodem_t,sentptr: PTR TO LONG, timetake
     ENDIF
   ENDIF
   t1,t2:=getZmSystemTime()
-  t:=Mul((t1-zm.transfer_start_time1),50)+t2-zm.transfer_start_time2
+  t:=Mul((t1-s1),50)+t2-s2
   IF t<=0 THEN t:=1
   IF(timetaken<>NIL) THEN timetaken[]:=t
 
@@ -2282,6 +2280,7 @@ PROC zmodem_send_file(zm: PTR TO zmodem_t, fname: PTR TO CHAR, request_init,sent
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
   DEF loop = TRUE
+  DEF t1,t2,t
 
   fp:=doOpen(zm,fname,MODE_OLDFILE)
   IF fp=NIL
@@ -2484,7 +2483,11 @@ zsendignore:
 
 	zm.transfer_start_pos:=pos
   
-  doSeek(zm,fp,0,OFFSET_BEGINNING)
+	t1,t2:=getZmSystemTime()
+	zm.transfer_start_time1:=t1
+	zm.transfer_start_time2:=t2
+
+	doSeek(zm,fp,0,OFFSET_BEGINNING)
 	zm.errors:=0
 	zm.consecutive_errors:=0
 
@@ -2579,17 +2582,18 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
   DEF brk=FALSE
   DEF p
   DEF t1,t2
+  DEF s1=0,s2=0
   DEF freespace
 
   timetaken[]:=0
   zm.current_file_num:=1
   zm.spaceCheckPath:=download_dir
 
-  t1,t2:=getZmSystemTime()
-  zm.transfer_start_time1:=t1
-  zm.transfer_start_time2:=t2
 
 	WHILE(zmodem_recv_init(zm)=ZFILE)
+
+		IF s1=0 THEN s1,s2:=getZmSystemTime()
+
 		bytes:=zm.current_file_size
 		kbytes:=Shr(bytes,10)
 		IF(kbytes<1) THEN kbytes:=0
@@ -2720,6 +2724,10 @@ EXPORT PROC zmodem_recv_files(zm: PTR TO zmodem_t, download_dir:PTR TO CHAR,byte
         JUMP zreccont1
 			ENDIF
 
+			t1,t2:=getZmSystemTime()
+			zm.transfer_start_time1:=t1
+			zm.transfer_start_time2:=t2
+
 			skip:=FALSE
 			errors:=zmodem_recv_file_data(zm,fp,start_bytes)
 
@@ -2772,16 +2780,19 @@ zreccont1:
 	ENDWHILE
 	IF(zm.local_abort) THEN zmodem_send_zabort(zm)
 
+	IF s1<>0
+		t1,t2:=getZmSystemTime()
+		t:=Mul((t1-s1),50)+t2-s2
+		IF t<=0 THEN t:=1
+		IF timetaken<>NIL THEN timetaken[]:=t
+	ENDIF
+
 	/* wait for "over-and-out" */
 	timeout:=zm.recv_timeout
 	zm.recv_timeout:=2
 	IF(zmodem_rx(zm)="O") THEN zmodem_rx(zm)
 	zm.recv_timeout:=timeout
 
-  t1,t2:=getZmSystemTime()
-  t:=Mul((t1-zm.transfer_start_time1),50)+t2-zm.transfer_start_time2
-  IF t<=0 THEN t:=1
-  IF timetaken<>NIL THEN timetaken[]:=t
 
 ENDPROC files_received
 
