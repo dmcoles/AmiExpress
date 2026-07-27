@@ -136,7 +136,7 @@ dist:					ACP express5 jsonImport icon2cfg qwk ftn axSetupTool axUserEditor
 							Copy icon2cfg Rel/AmiExpress/AmiExpress/Utils/
 							Copy icon2cfg Rel/AmiExpress/AmiExpress/Utils/
 							Copy axSetupTool/axSetupTool Rel/AmiExpress/AmiExpress/Utils/
-              Copy axSetupTool/axUserEditor Rel/AmiExpress/AmiExpress/Utils/
+							Copy axSetupTool/axUserEditor Rel/AmiExpress/AmiExpress/Utils/
 							Copy qwk Rel/AmiExpress/AmiExpress/Utils/
 							Copy ftn Rel/AmiExpress/AmiExpress/Utils/
 							Copy deployment/Install\ Ami-Express Rel/
