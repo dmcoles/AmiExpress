@@ -21,6 +21,7 @@ jobs:
         run: |
            vamos -c /usr/amiga/.vamosrc --cwd esource: -V system:/usr/amiga -V esource:$GITHUB_WORKSPACE make build=release
            vamos -c /usr/amiga/.vamosrc --cwd esource:axSetupTool -V system:/usr/amiga -V esource:$GITHUB_WORKSPACE make build=release
+           vamos -c /usr/amiga/.vamosrc --cwd esource:axUserEditor -V system:/usr/amiga -V esource:$GITHUB_WORKSPACE make build=release           
 
       - name: add build artifacts to publish
         run: |
@@ -34,6 +35,7 @@ jobs:
           cp $GITHUB_WORKSPACE/qwk downloads/utils
           cp $GITHUB_WORKSPACE/ftn downloads/utils
           cp $GITHUB_WORKSPACE/axSetupTool/axSetupTool downloads/utils 
+          cp $GITHUB_WORKSPACE/axSetupTool/axUserEditor downloads/utils 
           cd downloads
           lha a ../amiExpress-nightly${{ github.sha }}.lha *
           ls ../
