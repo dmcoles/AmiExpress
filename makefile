@@ -21,6 +21,9 @@ release:				ACP express5 jsonImport icon2cfg qwk ftn
 axSetupTool:
 							$(MAKE) MAKEFLAGS=-B -C axSetupTool build=$(build)
 
+axUserEditor:
+							$(MAKE) MAKEFLAGS=-B -C axUserEditor build=$(build)
+
 ACP:					ACP.e acpversion.m axcommon.m jsonParser.m jsonCreate.m stringlist.m 
 							$(compiler) ACP $(options)
 
@@ -118,7 +121,7 @@ clean:
 
 dist:					options=$(releaseoptions)
 dist:					build=release
-dist:					ACP express5 jsonImport icon2cfg qwk ftn axSetupTool
+dist:					ACP express5 jsonImport icon2cfg qwk ftn axSetupTool axUserEditor
 							-delete Rel ALL FORCE
 							makedir Rel
 							makedir Rel/AmiExpress
@@ -133,6 +136,7 @@ dist:					ACP express5 jsonImport icon2cfg qwk ftn axSetupTool
 							Copy icon2cfg Rel/AmiExpress/AmiExpress/Utils/
 							Copy icon2cfg Rel/AmiExpress/AmiExpress/Utils/
 							Copy axSetupTool/axSetupTool Rel/AmiExpress/AmiExpress/Utils/
+              Copy axSetupTool/axUserEditor Rel/AmiExpress/AmiExpress/Utils/
 							Copy qwk Rel/AmiExpress/AmiExpress/Utils/
 							Copy ftn Rel/AmiExpress/AmiExpress/Utils/
 							Copy deployment/Install\ Ami-Express Rel/
