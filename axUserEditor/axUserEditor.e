@@ -7,7 +7,7 @@ MODULE 'utility/tagitem'
 MODULE 'tools/boopsi'
 MODULE 'icon','intuition/classusr'
 
-MODULE '*frmMain','*axuseredit','*tooltypes'
+MODULE '*frmMain','*axuseredit','*/axSetupTool/tooltypes'
 
 PROC main() HANDLE
   DEF frmMain=NIL: PTR TO frmMain

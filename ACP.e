@@ -47,6 +47,7 @@
 ENUM ERR_NONE,ERR_ALREADY_RUNNING,ERR_STARTUP, ERR_VALIDATE,ERR_NO_DISKFONT,ERR_FDS_RANGE
 
 CONST AX_SETUP_TOOL='BBS:Utils/axSetupTool'
+CONST AX_USER_EDITOR='BBS:Utils/axUserEditor'
 
 CONST LISTENQ=100
 CONST EINTR=4
@@ -1093,7 +1094,7 @@ PROC createCustomMenus(nodes)
     maddItem( NM_ITEM,'Set NRAMS',0,0,0,0)
     maddNodes(nodes)
     maddItem( NM_ITEM,'Config Editor',0,IF FileLength(AX_SETUP_TOOL)>=0 THEN 0 ELSE ITEMENABLED,0,0)
-
+    maddItem( NM_ITEM,'User Editor',0,IF FileLength(AX_USER_EDITOR)>=0 THEN 0 ELSE ITEMENABLED,0,0)
     maddItem( NM_TITLE, 'Custom Control',0,0,0,0)
 
     FOR j:=1 TO 15
@@ -4370,6 +4371,8 @@ PROC main() HANDLE
                   IF(menunum(im.code)=1) 
                     IF (itemnum(im.code)=14) 
                       IF FileLength(AX_SETUP_TOOL)>=0 THEN Execute(AX_SETUP_TOOL,0,0)
+                    ELSEIF (itemnum(im.code)=15) 
+                      IF FileLength(AX_USER_EDITOR)>=0 THEN Execute(AX_USER_EDITOR,0,0)
                     ELSE
                       i:=button
                       button:=0
