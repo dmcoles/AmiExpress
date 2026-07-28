@@ -43,6 +43,7 @@ EXPORT OBJECT app_obj
 	btnSelectUserNext       :	PTR TO LONG
 	cyPreset                :	PTR TO LONG
 	btnApply                :	PTR TO LONG
+	mainPanel               :	PTR TO LONG
 	strUsername             :	PTR TO LONG
 	cyActive                :	PTR TO LONG
 	strRealname             :	PTR TO LONG
@@ -103,10 +104,10 @@ PROC create() OF app_obj
 
 	DEF mnlabel1File , mnlabel1Edit , grOUP_ROOT_0 , gr_grp_17
 	DEF la_label_40 , gr_grp_0 , mnlabel2Project , mnlabel2Presets
-	DEF grOUP_ROOT_1 , presetPanel , la_label_39 , mainPanel
-	DEF userDetailsPanel , gr_grp_12 , la_label_0 , la_label_37
-	DEF la_label_1 , la_label_2 , la_label_3 , la_label_9
-	DEF gr_grp_13 , la_label_8 , la_label_7 , la_label_15 , space_11
+	DEF grOUP_ROOT_1 , presetPanel , la_label_39 , userDetailsPanel
+	DEF gr_grp_12 , la_label_0 , la_label_37 , la_label_1
+	DEF la_label_2 , la_label_3 , la_label_9 , gr_grp_13
+	DEF la_label_8 , la_label_7 , la_label_15 , space_11
 	DEF userStatsPanel , la_label_6 , la_label_10 , la_label_11
 	DEF la_label_12 , la_label_13 , la_label_14 , la_label_16
 	DEF la_label_18 , la_label_19 , space_2 , space_3 , space_14
@@ -839,7 +840,7 @@ PROC create() OF app_obj
 		Child , space_26 ,
 	End
 
-	mainPanel := RegisterObject ,
+	self.mainPanel := RegisterObject ,
 		MUIA_Register_Titles , self.stR_mainPanel ,
 		MUIA_HelpNode , 'mainPanel' ,
 		Child , userDetailsPanel ,
@@ -864,7 +865,7 @@ PROC create() OF app_obj
 	grOUP_ROOT_1 := GroupObject ,
 		Child , self.headerPanel ,
 		Child , presetPanel ,
-		Child , mainPanel ,
+		Child , self.mainPanel ,
 		Child , footerPanel ,
 		Child , space_27 ,
 	End

@@ -89,6 +89,9 @@ DEF commandText[255]:STRING
 DEF loggedOnUser=NIL: PTR TO user       ->shared with tooltypes.e
 DEF loggedOnUserKeys=NIL: PTR TO userKeys
 DEF loggedOnUserMisc=NIL: PTR TO userMisc
+DEF snapshotUser: user
+DEF snapshotUserKeys: userKeys
+DEF snapshotUserMisc: userMisc
 DEF tempAccess: tempAccess
 DEF tempAccessGranted=FALSE
 DEF sopt=NIL: PTR TO startOption
@@ -8028,6 +8031,365 @@ PROC processInputMessage(timeout, extsig = 0,conRawMode=FALSE, allowSer=TRUE, se
   ENDIF
 ENDPROC wasControl, ch
 
+PROC snapShotAccount()
+  IF loggedOnUser<>0
+    CopyMem(loggedOnUser,snapshotUser,SIZEOF user)
+  ELSE
+    MemFill(snapshotUser,SIZEOF user,0)
+  ENDIF
+  IF loggedOnUserKeys<>0
+    CopyMem(loggedOnUserKeys,snapshotUserKeys,SIZEOF userKeys)
+  ELSE
+    MemFill(snapshotUserKeys,SIZEOF userKeys,0)
+  ENDIF
+  IF loggedOnUserMisc<>0
+    CopyMem(loggedOnUserMisc,snapshotUserMisc,SIZEOF userMisc)
+  ELSE
+    MemFill(snapshotUserMisc,SIZEOF userMisc,0)
+  ENDIF
+ENDPROC
+
+//reload user and apply changes
+PROC applyAccountChanges()
+  DEF tempUser:user
+  DEF tempUserKeys:userKeys
+  DEF tempUserMisc:userMisc
+  
+  IF loggedOnUser.slotNumber=0 THEN RETURN
+  
+  CopyMem(loggedOnUser,tempUser,SIZEOF user)
+  CopyMem(loggedOnUserKeys,tempUserKeys,SIZEOF userKeys)
+  CopyMem(loggedOnUserMisc,tempUserMisc,SIZEOF userMisc) 
+
+  loadAccount(loggedOnUser.slotNumber,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
+
+  IF MemCompare(snapshotUser.name,tempUser.name,ARRAYSIZE snapshotUser.name)<>0
+    CopyMem(tempUser.name,loggedOnUser.name,ARRAYSIZE snapshotUser.name)
+  ENDIF
+
+  IF MemCompare(snapshotUser.pass,tempUser.pass,ARRAYSIZE snapshotUser.pass)<>0
+    CopyMem(tempUser.pass,loggedOnUser.pass,ARRAYSIZE snapshotUser.pass)
+  ENDIF
+
+  IF MemCompare(snapshotUser.location,tempUser.location,ARRAYSIZE snapshotUser.location)<>0
+    CopyMem(tempUser.location,loggedOnUser.location,ARRAYSIZE snapshotUser.location)
+  ENDIF
+
+  IF MemCompare(snapshotUser.phoneNumber,tempUser.phoneNumber,ARRAYSIZE snapshotUser.phoneNumber)<>0
+    CopyMem(tempUser.phoneNumber,loggedOnUser.phoneNumber,ARRAYSIZE snapshotUser.phoneNumber)
+  ENDIF
+
+  IF snapshotUser.slotNumber<>tempUser.slotNumber
+    loggedOnUser.slotNumber:=tempUser.slotNumber
+  ENDIF
+
+  IF snapshotUser.secStatus<>tempUser.secStatus
+    loggedOnUser.secStatus:=tempUser.secStatus
+  ENDIF
+
+  IF snapshotUser.secBoard<>tempUser.secBoard
+    loggedOnUser.secBoard:=tempUser.secBoard
+  ENDIF
+  
+  IF snapshotUser.secLibrary<>tempUser.secLibrary
+    loggedOnUser.secLibrary:=tempUser.secLibrary
+  ENDIF
+
+  IF snapshotUser.secBulletin<>tempUser.secBulletin
+    loggedOnUser.secBulletin:=tempUser.secBulletin
+  ENDIF
+
+  IF snapshotUser.messagesPosted<>tempUser.messagesPosted
+    loggedOnUser.messagesPosted:=tempUser.messagesPosted
+  ENDIF
+
+  IF snapshotUser.newSinceDate<>tempUser.newSinceDate
+    loggedOnUser.newSinceDate:=tempUser.newSinceDate
+  ENDIF
+
+  IF snapshotUser.pwdHash<>tempUser.pwdHash
+    loggedOnUser.pwdHash:=tempUser.pwdHash
+  ENDIF
+
+
+  IF snapshotUser.confRead2<>tempUser.confRead2
+    loggedOnUser.confRead2:=tempUser.confRead2
+  ENDIF
+
+
+  IF snapshotUser.confRead3<>tempUser.confRead3
+    loggedOnUser.confRead3:=tempUser.confRead3
+  ENDIF
+
+  IF snapshotUser.zoomType<>tempUser.zoomType
+    loggedOnUser.zoomType:=tempUser.zoomType
+  ENDIF
+
+  IF snapshotUser.unknown<>tempUser.unknown
+    loggedOnUser.unknown:=tempUser.unknown
+  ENDIF
+
+  IF snapshotUser.unknown2<>tempUser.unknown2
+    loggedOnUser.unknown2:=tempUser.unknown2
+  ENDIF
+
+  IF snapshotUser.unknown3<>tempUser.unknown3
+    loggedOnUser.unknown3:=tempUser.unknown3
+  ENDIF
+  
+  IF snapshotUser.xferProtocol<>tempUser.xferProtocol
+    loggedOnUser.xferProtocol:=tempUser.xferProtocol
+  ENDIF
+ 
+  IF snapshotUser.filler2<>tempUser.filler2
+    loggedOnUser.filler2:=tempUser.filler2
+  ENDIF
+  
+  IF snapshotUser.lcFiles<>tempUser.lcFiles
+    loggedOnUser.lcFiles:=tempUser.lcFiles
+  ENDIF
+  
+  IF snapshotUser.badFiles<>tempUser.badFiles
+    loggedOnUser.badFiles:=tempUser.badFiles
+  ENDIF
+  
+  IF snapshotUser.accountDate<>tempUser.accountDate
+    loggedOnUser.accountDate:=tempUser.accountDate
+  ENDIF
+
+  IF snapshotUser.screenType<>tempUser.screenType
+    loggedOnUser.screenType:=tempUser.screenType
+  ENDIF
+
+  IF snapshotUser.editorType<>tempUser.editorType
+    loggedOnUser.editorType:=tempUser.editorType
+  ENDIF
+
+  IF MemCompare(snapshotUser.conferenceAccess,tempUser.conferenceAccess,ARRAYSIZE snapshotUser.conferenceAccess)<>0
+    CopyMem(tempUser.conferenceAccess,loggedOnUser.conferenceAccess,ARRAYSIZE snapshotUser.conferenceAccess)
+  ENDIF
+
+  IF snapshotUser.uploads<>tempUser.uploads
+    loggedOnUser.uploads:=tempUser.uploads
+  ENDIF
+
+  IF snapshotUser.downloads<>tempUser.downloads
+    loggedOnUser.downloads:=tempUser.downloads
+  ENDIF
+
+  IF snapshotUser.confRJoin<>tempUser.confRJoin
+    loggedOnUser.confRJoin:=tempUser.confRJoin
+  ENDIF
+
+  IF snapshotUser.timesCalled<>tempUser.timesCalled
+    loggedOnUser.timesCalled:=tempUser.timesCalled
+  ENDIF
+
+  IF snapshotUser.timeLastOn<>tempUser.timeLastOn
+    loggedOnUser.timeLastOn:=tempUser.timeLastOn
+  ENDIF
+
+  IF snapshotUser.timeUsed<>tempUser.timeUsed
+    loggedOnUser.timeUsed:=tempUser.timeUsed
+  ENDIF
+
+  IF snapshotUser.timeLimit<>tempUser.timeLimit
+    loggedOnUser.timeLimit:=tempUser.timeLimit
+  ENDIF
+
+  IF snapshotUser.timeTotal<>tempUser.timeTotal
+    loggedOnUser.timeTotal:=tempUser.timeTotal
+  ENDIF
+
+  IF snapshotUser.bytesDownload<>tempUser.bytesDownload
+    loggedOnUser.bytesDownload:=tempUser.bytesDownload
+  ENDIF
+
+  IF snapshotUser.bytesUpload<>tempUser.bytesUpload
+    loggedOnUser.bytesUpload:=tempUser.bytesUpload
+  ENDIF
+
+  IF snapshotUser.dailyBytesLimit<>tempUser.dailyBytesLimit
+    loggedOnUser.dailyBytesLimit:=tempUser.dailyBytesLimit
+  ENDIF
+
+  IF snapshotUser.dailyBytesDld<>tempUser.dailyBytesDld
+    loggedOnUser.dailyBytesDld:=tempUser.dailyBytesDld
+  ENDIF
+
+  IF snapshotUser.expert<>tempUser.expert
+    loggedOnUser.expert:=tempUser.expert
+  ENDIF
+
+  IF snapshotUser.chatRemain<>tempUser.chatRemain
+    loggedOnUser.chatRemain:=tempUser.chatRemain
+  ENDIF
+
+  IF snapshotUser.chatLimit<>tempUser.chatLimit
+    loggedOnUser.chatLimit:=tempUser.chatLimit
+  ENDIF
+
+  IF snapshotUser.creditDays<>tempUser.creditDays
+    loggedOnUser.creditDays:=tempUser.creditDays
+  ENDIF
+
+  IF snapshotUser.creditAmount<>tempUser.creditAmount
+    loggedOnUser.creditAmount:=tempUser.creditAmount
+  ENDIF
+
+  IF snapshotUser.creditStartDate<>tempUser.creditStartDate
+    loggedOnUser.creditStartDate:=tempUser.creditStartDate
+  ENDIF
+
+  IF snapshotUser.creditTotalToDate<>tempUser.creditTotalToDate
+    loggedOnUser.creditTotalToDate:=tempUser.creditTotalToDate
+  ENDIF
+
+  IF snapshotUser.creditTotalDate<>tempUser.creditTotalDate
+    loggedOnUser.creditTotalDate:=tempUser.creditTotalDate
+  ENDIF
+
+  IF snapshotUser.creditTracking<>tempUser.creditTracking
+    loggedOnUser.creditTracking:=tempUser.creditTracking
+  ENDIF
+
+  IF snapshotUser.translatorID<>tempUser.translatorID
+    loggedOnUser.translatorID:=tempUser.translatorID
+  ENDIF
+
+  IF snapshotUser.msgBaseRJoin<>tempUser.msgBaseRJoin
+    loggedOnUser.msgBaseRJoin:=tempUser.msgBaseRJoin
+  ENDIF
+
+  IF snapshotUser.confYM9<>tempUser.confYM9
+    loggedOnUser.confYM9:=tempUser.confYM9
+  ENDIF
+
+  IF snapshotUser.todaysBytesLimit<>tempUser.todaysBytesLimit
+    loggedOnUser.todaysBytesLimit:=tempUser.todaysBytesLimit
+  ENDIF
+
+  IF snapshotUser.protocol<>tempUser.protocol
+    loggedOnUser.protocol:=tempUser.protocol
+  ENDIF
+
+  IF snapshotUser.uucpa<>tempUser.uucpa
+    loggedOnUser.uucpa:=tempUser.uucpa
+  ENDIF
+
+  IF snapshotUser.lineLength<>tempUser.lineLength
+    loggedOnUser.lineLength:=tempUser.lineLength
+  ENDIF
+
+  IF snapshotUser.newUser<>tempUser.newUser
+    loggedOnUser.newUser:=tempUser.newUser
+  ENDIF
+
+  IF MemCompare(snapshotUserKeys.userName,tempUserKeys.userName,ARRAYSIZE snapshotUserKeys.userName)<>0
+    CopyMem(tempUserKeys.userName,loggedOnUserKeys.userName,ARRAYSIZE snapshotUserKeys.userName)
+  ENDIF
+
+  IF snapshotUserKeys.number<>tempUserKeys.number
+    loggedOnUserKeys.number:=tempUserKeys.number
+  ENDIF
+
+  IF snapshotUserKeys.newUser<>tempUserKeys.newUser
+    loggedOnUserKeys.newUser:=tempUserKeys.newUser
+  ENDIF
+  
+  IF snapshotUserKeys.oldUpCPS<>tempUserKeys.oldUpCPS
+    loggedOnUserKeys.oldUpCPS:=tempUserKeys.oldUpCPS
+  ENDIF
+
+  IF snapshotUserKeys.oldDnCPS<>tempUserKeys.oldDnCPS
+    loggedOnUserKeys.oldDnCPS:=tempUserKeys.oldDnCPS
+  ENDIF
+
+  IF snapshotUserKeys.userFlags<>tempUserKeys.userFlags
+    loggedOnUserKeys.userFlags:=tempUserKeys.userFlags
+  ENDIF
+
+  IF snapshotUserKeys.baud<>tempUserKeys.baud
+    loggedOnUserKeys.baud:=tempUserKeys.baud
+  ENDIF
+
+  IF snapshotUserKeys.upCPS2<>tempUserKeys.upCPS2
+    loggedOnUserKeys.upCPS2:=tempUserKeys.upCPS2
+  ENDIF
+
+  IF snapshotUserKeys.dnCPS2<>tempUserKeys.dnCPS2
+    loggedOnUserKeys.dnCPS2:=tempUserKeys.dnCPS2
+  ENDIF
+
+  IF snapshotUserKeys.timesOnToday<>tempUserKeys.timesOnToday
+    loggedOnUserKeys.timesOnToday:=tempUserKeys.timesOnToday
+  ENDIF
+
+  IF MemCompare(snapshotUserMisc.internetName,tempUserMisc.internetName,ARRAYSIZE snapshotUserMisc.internetName)<>0
+    CopyMem(tempUserMisc.internetName,loggedOnUserMisc.internetName,ARRAYSIZE snapshotUserMisc.internetName)
+  ENDIF
+
+  IF MemCompare(snapshotUserMisc.realName,tempUserMisc.realName,ARRAYSIZE snapshotUserMisc.realName)<>0
+    CopyMem(tempUserMisc.realName,loggedOnUserMisc.realName,ARRAYSIZE snapshotUserMisc.realName)
+  ENDIF
+
+  IF MemCompare(snapshotUserMisc.downloadBytesBCD,tempUserMisc.downloadBytesBCD,ARRAYSIZE snapshotUserMisc.downloadBytesBCD)<>0
+    CopyMem(tempUserMisc.downloadBytesBCD,loggedOnUserMisc.downloadBytesBCD,ARRAYSIZE snapshotUserMisc.downloadBytesBCD)
+  ENDIF
+
+  IF MemCompare(snapshotUserMisc.uploadBytesBCD,tempUserMisc.uploadBytesBCD,ARRAYSIZE snapshotUserMisc.uploadBytesBCD)<>0
+    CopyMem(tempUserMisc.uploadBytesBCD,loggedOnUserMisc.uploadBytesBCD,ARRAYSIZE snapshotUserMisc.uploadBytesBCD)
+  ENDIF
+
+  IF MemCompare(snapshotUserMisc.eMail,tempUserMisc.eMail,ARRAYSIZE snapshotUserMisc.eMail)<>0
+    CopyMem(tempUserMisc.eMail,loggedOnUserMisc.eMail,ARRAYSIZE snapshotUserMisc.eMail)
+  ENDIF
+
+  IF snapshotUserMisc.lastDlCPS<>tempUserMisc.lastDlCPS
+    loggedOnUserMisc.lastDlCPS:=tempUserMisc.lastDlCPS
+  ENDIF
+
+  IF MemCompare(snapshotUserMisc.pwdHash,tempUserMisc.pwdHash,ARRAYSIZE snapshotUserMisc.pwdHash)<>0
+    CopyMem(tempUserMisc.pwdHash,loggedOnUserMisc.pwdHash,ARRAYSIZE snapshotUserMisc.pwdHash)
+  ENDIF
+
+  IF MemCompare(snapshotUserMisc.salt,tempUserMisc.salt,ARRAYSIZE snapshotUserMisc.salt)<>0
+    CopyMem(tempUserMisc.salt,loggedOnUserMisc.salt,ARRAYSIZE snapshotUserMisc.salt)
+  ENDIF
+
+  IF snapshotUserMisc.pwdType<>tempUserMisc.pwdType
+    loggedOnUserMisc.pwdType:=tempUserMisc.pwdType
+  ENDIF
+
+  IF snapshotUserMisc.forcePwdReset<>tempUserMisc.forcePwdReset
+    loggedOnUserMisc.forcePwdReset:=tempUserMisc.forcePwdReset
+  ENDIF
+
+  IF snapshotUserMisc.accountLocked<>tempUserMisc.accountLocked
+    loggedOnUserMisc.accountLocked:=tempUserMisc.accountLocked
+  ENDIF
+
+  IF snapshotUserMisc.invalidAttempts<>tempUserMisc.invalidAttempts
+    loggedOnUserMisc.invalidAttempts:=tempUserMisc.invalidAttempts
+  ENDIF
+
+  IF snapshotUserMisc.pwdLastUpdated<>tempUserMisc.pwdLastUpdated
+    loggedOnUserMisc.pwdLastUpdated:=tempUserMisc.pwdLastUpdated
+  ENDIF
+
+  IF snapshotUserMisc.lastIP<>tempUserMisc.lastIP
+    loggedOnUserMisc.lastIP:=tempUserMisc.lastIP
+  ENDIF
+
+  IF snapshotUserMisc.ipMask<>tempUserMisc.ipMask
+    loggedOnUserMisc.ipMask:=tempUserMisc.ipMask
+  ENDIF
+
+  IF MemCompare(snapshotUserMisc.unused,tempUserMisc.unused,ARRAYSIZE snapshotUserMisc.unused)<>0
+    CopyMem(tempUserMisc.unused,loggedOnUserMisc.unused,ARRAYSIZE snapshotUserMisc.unused)
+  ENDIF
+ENDPROC
+
 PROC loadAccount(slot,userPtr:PTR TO user, userKeysPtr:PTR TO userKeys, userMiscPtr:PTR TO userMisc)
   DEF l,fh
   DEF result
@@ -8258,7 +8620,9 @@ PROC processLoggingOff()
     addMsgPointers()
     masterSavePointers(loggedOnUser)
     writeLogoffLog('logging off 12',FALSE)
-    saveAccount(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc,0,0) /* Reseave users account after logoff */
+    
+    applyAccountChanges()
+    saveAccount(loggedOnUser,loggedOnUserKeys,loggedOnUserMisc,0,0) /* Resave users account after logoff */
 
     writeLogoffLog('logging off 13',FALSE)
 
@@ -28810,6 +29174,7 @@ PROC processFtpLogon()
     state:=STATE_LOGGING_OFF
     RETURN
   ENDIF
+  snapShotAccount()
 
   IF ftpAuth(userName,password)=FALSE
     END loggedOnUser
@@ -29157,6 +29522,7 @@ PROC processSysopLogon()
       RETURN
     ENDIF
   ENDIF
+  snapShotAccount()
 
   IF (netTrans<>0)
     AstrCopy(loggedOnUser.name,'NetMail Transfer',31)
@@ -29779,6 +30145,7 @@ logonLoop:
       JUMP logonLoop
     ENDIF
   ENDIF
+  snapShotAccount()
 
   IF loggedOnUser.newUser
     IF readToolType(TOOLTYPE_NODE,node,'AUTOVAL_DELAY',tempStr)=FALSE

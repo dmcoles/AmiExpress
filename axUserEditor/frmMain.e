@@ -9,6 +9,7 @@ MODULE '*frmBase','*axuseredit','*frmEditUser','*axuserobjects','*/stringlist'
 
 
 EXPORT OBJECT frmMain OF frmBase
+  bbsPath[200]:ARRAY OF CHAR
   aboutwin:LONG
   currentSlot:LONG
   btnExitClickHook: hook
@@ -56,7 +57,7 @@ PROC addbuttonPressed() OF frmMain
 
   self.sleep()
   NEW frmEditUser.create(self.app)
-  res:=frmEditUser.addUser()
+  res:=frmEditUser.addUser(self.bbsPath)
   END frmEditUser
   IF res THEN self.loadUsers()
 
@@ -71,7 +72,7 @@ PROC editbuttonPressed() OF frmMain
 
   self.sleep()
   NEW frmEditUser.create(self.app)
-  res:=frmEditUser.editUser(self.currentSlot)
+  res:=frmEditUser.editUser(self.bbsPath,self.currentSlot)
   END frmEditUser
   IF res THEN self.loadUsers()
   self.wake()
@@ -188,21 +189,25 @@ PROC loadUsers() OF frmMain
   DEF userData:PTR TO user
   DEF tempStr[200]:STRING
   DEF totalUserCount=0
+  DEF fname[200]:STRING
   
   NEW userData
   self.userNames.clear()
   self.userIds.clear()
   self.userLocations.clear()
   
-  fh:=Open('bbs:user.data',MODE_OLDFILE)
+  StringF(fname,'\suser.data',self.bbsPath)
+  fh:=Open(fname,MODE_OLDFILE)
   IF fh
     REPEAT
       f:=Fread(fh,userData,SIZEOF user,1)
-      self.userNames.add(userData.name)
-      self.userLocations.add(userData.location)
-      StringF(tempStr,'\d',totalUserCount+1)
-      self.userIds.add(tempStr)
-      totalUserCount++
+      IF f=1
+        self.userNames.add(userData.name)
+        self.userLocations.add(userData.location)
+        StringF(tempStr,'\d',totalUserCount+1)
+        self.userIds.add(tempStr)
+        totalUserCount++
+      ENDIF
     UNTIL f=0
     Close(fh)
   ENDIF
@@ -227,6 +232,7 @@ PROC doMain() OF frmMain
   NEW listChangeHook
   NEW aboutClickHook
 
+  AstrCopy(self.bbsPath,'BBS:')
 
   self.userNames:=NEW stringlist.stringlist(1000)
   self.userIds:=NEW stringlist.stringlist(1000)

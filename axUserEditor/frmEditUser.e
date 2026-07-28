@@ -10,7 +10,7 @@ MODULE '*frmBase','*axuseredit','*axuserobjects','*/axSetupTool/tooltypes','*/st
 ENUM PWD_LEGACY=0, PWD_PBKDF2_5=1, PWD_PBKDF2_50=2, PWD_PBKDF2_100=3,PWD_PBKDF2_1000=4,PWD_PBKDF2_10000=5
 
 EXPORT OBJECT frmEditUser OF frmBase
-  bbsPath[200]:ARRAY OF CHAR
+  bbsPath:PTR TO CHAR
   aboutwin:LONG
   selectUser[80]:ARRAY OF CHAR
   btnSaveClickHook: hook
@@ -586,14 +586,16 @@ PROC saveUser(userId) OF frmEditUser
 
   self.loadUserData(userId)
 
+  
   get(self.app.strUsername, MUIA_Text_Contents,{tempval})
+  
   IF StrCmp(oldUserData.name,tempval)=FALSE
     AstrCopy(self.userData.name,tempval,ARRAYSIZE oldUserData.name)
   ENDIF
 
   get(self.app.cyActive, MUIA_Cycle_Active,{tempval})
   IF oldUserData.slotNumber<>(IF tempval=1 THEN 0 ELSE userId)
-    IF tempval=1 THEN self.userData.slotNumber:=0 ELSE self.userData:=userId
+    IF tempval=1 THEN self.userData.slotNumber:=0 ELSE self.userData.slotNumber:=userId
   ENDIF
 
   get(self.app.strRealname, MUIA_Text_Contents,{tempval})
@@ -822,19 +824,19 @@ PROC saveUser(userId) OF frmEditUser
   userId--
  
   //save data
-  fh:=Open(userdatafname,MODE_OLDFILE)
+  fh:=Open(userdatafname,MODE_READWRITE)
   Seek(fh,userId*SIZEOF user,OFFSET_BEGINNING)
-  Fwrite(fh,self.userData,1,SIZEOF user)
+  Fwrite(fh,self.userData,SIZEOF user,1)
   Close(fh)
   
-  fh:=Open(userkeysfname,MODE_OLDFILE)
+  fh:=Open(userkeysfname,MODE_READWRITE)
   Seek(fh,userId*SIZEOF userKeys,OFFSET_BEGINNING)
-  Fwrite(fh,self.userKeys,1,SIZEOF userKeys)
+  Fwrite(fh,self.userKeys,SIZEOF userKeys,1)
   Close(fh)
   
-  fh:=Open(usermiscfname,MODE_OLDFILE)
+  fh:=Open(usermiscfname,MODE_READWRITE)
   Seek(fh,userId*SIZEOF userMisc,OFFSET_BEGINNING)
-  Fwrite(fh,self.userMisc,1,SIZEOF userMisc)
+  Fwrite(fh,self.userMisc,SIZEOF userMisc,1)
   Close(fh)
 
   END oldUserData
@@ -990,7 +992,7 @@ PROC applyPreset(presetNum) OF frmEditUser
   set( self.app.strTimeLimit, MUIA_Text_Contents,tempstring)
 ENDPROC
 
-PROC editUser(userId) OF frmEditUser
+PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
   DEF closeHook:PTR TO hook
   DEF showHook:PTR TO hook
   DEF sliderChangeHook:PTR TO hook
@@ -1005,7 +1007,8 @@ PROC editUser(userId) OF frmEditUser
   NEW self.userKeys
   NEW self.userMisc
 
-  AstrCopy(self.bbsPath,'BBS:')
+  self.bbsPath:=bbsPath
+
   StringF(userDataFname,'\suser.data',self.bbsPath)
 
   installhook( closeHook, {canClose})    
@@ -1023,6 +1026,7 @@ PROC editUser(userId) OF frmEditUser
   set ( self.app.headerPanel,MUIA_Slider_Min,1)
   set ( self.app.headerPanel,MUIA_Slider_Max,Div(FileLength(userDataFname),SIZEOF user))
   set ( self.app.headerPanel,MUIA_Slider_Level,userId)
+  set ( self.app.mainPanel,MUIA_Group_ActivePage,MUIV_Group_ActivePage_First)
 
   domethod( self.app.slUserId , [
     MUIM_Notify ,  MUIA_Slider_Level , MUIV_EveryTime ,
@@ -1064,6 +1068,7 @@ PROC editUser(userId) OF frmEditUser
   domethod(self.app.btnSelectUserLoad,[MUIM_KillNotify,MUIA_Pressed])
   domethod(self.app.btnSelectUserPrev,[MUIM_KillNotify,MUIA_Pressed])
   domethod(self.app.btnSelectUserNext,[MUIM_KillNotify,MUIA_Pressed])
+  domethod(self.app.btnApply,[MUIM_KillNotify,MUIA_Pressed])
   
   domethod(self.app.slUserId,[MUIM_KillNotify,MUIA_Slider_Level])
   domethod(self.app.mnlabel2Save,[MUIM_KillNotify,MUIA_Menuitem_Trigger])
@@ -1087,7 +1092,7 @@ PROC editUser(userId) OF frmEditUser
   END self.userMisc
 ENDPROC res
 
-PROC addUser() OF frmEditUser
+PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
   DEF closeHook:PTR TO hook
   DEF showHook:PTR TO hook
   DEF res
@@ -1099,7 +1104,7 @@ PROC addUser() OF frmEditUser
   NEW self.userKeys
   NEW self.userMisc
 
-  AstrCopy(self.bbsPath,'BBS:')
+  self.bbsPath:=bbsPath
 
   installhook( closeHook, {canClose})    
   self.closeHook:=closeHook
@@ -1113,6 +1118,7 @@ PROC addUser() OF frmEditUser
   set( self.winMain, MUIA_Window_ID, "AXUN")
   
   set ( self.app.headerPanel,MUIA_ShowMe,FALSE)
+  set ( self.app.mainPanel,MUIA_Group_ActivePage,MUIV_Group_ActivePage_First)
 
 	domethod( self.app.mnlabel2Save , [
 		MUIM_Notify , MUIA_Menuitem_Trigger, MUIV_EveryTime,
@@ -1139,6 +1145,7 @@ PROC addUser() OF frmEditUser
 
   domethod(self.app.btnSave,[MUIM_KillNotify,MUIA_Pressed])
   domethod(self.app.btnCancel,[MUIM_KillNotify,MUIA_Pressed])
+  domethod(self.app.btnApply,[MUIM_KillNotify,MUIA_Pressed])
   domethod(self.app.mnlabel2Save,[MUIM_KillNotify,MUIA_Menuitem_Trigger])
   domethod(self.app.mnlabel2Cancel,[MUIM_KillNotify,MUIA_Menuitem_Trigger])
 
