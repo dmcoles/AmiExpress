@@ -8055,7 +8055,7 @@ PROC applyAccountChanges()
   DEF tempUserKeys:userKeys
   DEF tempUserMisc:userMisc
   
-  IF loggedOnUser.slotNumber=0 THEN RETURN
+  IF (loggedOnUser.slotNumber=0) OR (snapshotUser.slotNumber=0) THEN RETURN
   
   CopyMem(loggedOnUser,tempUser,SIZEOF user)
   CopyMem(loggedOnUserKeys,tempUserKeys,SIZEOF userKeys)
@@ -8388,6 +8388,10 @@ PROC applyAccountChanges()
   IF MemCompare(snapshotUserMisc.unused,tempUserMisc.unused,ARRAYSIZE snapshotUserMisc.unused)<>0
     CopyMem(tempUserMisc.unused,loggedOnUserMisc.unused,ARRAYSIZE snapshotUserMisc.unused)
   ENDIF
+  
+  MemFill(snapshotUser,SIZEOF user,0)
+  MemFill(snapshotUserKeys,SIZEOF userKeys,0)
+  MemFill(snapshotUserMisc,SIZEOF userMisc,0)
 ENDPROC
 
 PROC loadAccount(slot,userPtr:PTR TO user, userKeysPtr:PTR TO userKeys, userMiscPtr:PTR TO userMisc)
@@ -8434,6 +8438,10 @@ PROC loadAccount(slot,userPtr:PTR TO user, userKeysPtr:PTR TO userKeys, userMisc
     ->populate long download and upload cps if not already done
     IF (userKeysPtr.oldUpCPS<>-1) AND ((userKeysPtr.upCPS2)<>(userKeysPtr.oldUpCPS AND $ffff)) THEN userKeysPtr.upCPS2:=userKeysPtr.oldUpCPS AND $ffff
     IF (userKeysPtr.oldDnCPS<>-1) AND ((userKeysPtr.dnCPS2)<>(userKeysPtr.oldDnCPS AND $ffff)) THEN userKeysPtr.dnCPS2:=userKeysPtr.oldDnCPS AND $ffff
+    
+    IF userPtr.confRJoin<1 THEN userPtr.confRJoin:=1
+    IF userPtr.msgBaseRJoin<1 THEN userPtr.msgBaseRJoin:=1
+    
   ENDIF
 ENDPROC result
 
@@ -8681,6 +8689,10 @@ PROC processLoggingOff()
   writeLogoffLog('logging off 22',FALSE)
   disableNodeMenus(FALSE)
   disableOnlineMenus(TRUE)
+
+  MemFill(snapshotUser,SIZEOF user,0)
+  MemFill(snapshotUserKeys,SIZEOF userKeys,0)
+  MemFill(snapshotUserMisc,SIZEOF userMisc,0)
 
   StrCopy(telnetUsername,'')
   StrCopy(telnetPassword,'')
@@ -22553,8 +22565,8 @@ PROC conferenceAccounting(hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
       conf++
       IF conf>cmds.numConf THEN conf:=1
       i++
-    UNTIL (checkConfAccess(conf,hoozer)) OR (i>cmds.numConf)
-    IF (i>cmds.numConf)
+    UNTIL (checkConfAccess(conf,hoozer)) OR (i>=cmds.numConf)
+    IF (i>=cmds.numConf)
       RETURN 1
     ENDIF
   ENDIF
@@ -29163,6 +29175,9 @@ PROC processFtpLogon()
   loggedOnUser:=NEW loggedOnUser
   loggedOnUserKeys:=NEW loggedOnUserKeys
   loggedOnUserMisc:=NEW loggedOnUserMisc
+  MemFill(snapshotUser,SIZEOF user,0)
+  MemFill(snapshotUserKeys,SIZEOF userKeys,0)
+  MemFill(snapshotUserMisc,SIZEOF userMisc,0)
 
   stat:=loadAccount(tempUser.slotNumber,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
   IF(stat=RESULT_FAILURE)
@@ -29505,6 +29520,10 @@ PROC processSysopLogon()
   loggedOnUser:=NEW loggedOnUser
   loggedOnUserKeys:=NEW loggedOnUserKeys
   loggedOnUserMisc:=NEW loggedOnUserMisc
+  MemFill(snapshotUser,SIZEOF user,0)
+  MemFill(snapshotUserKeys,SIZEOF userKeys,0)
+  MemFill(snapshotUserMisc,SIZEOF userMisc,0)
+
   IF cacheResetOn=CACHE_RESET_LOGON THEN clearDiskObjectCache()
 
   sendCLS()
@@ -29518,6 +29537,9 @@ PROC processSysopLogon()
       loggedOnUser:=NIL
       loggedOnUserKeys:=NIL
       loggedOnUserMisc:=NIL
+      MemFill(snapshotUser,SIZEOF user,0)
+      MemFill(snapshotUserKeys,SIZEOF userKeys,0)
+      MemFill(snapshotUserMisc,SIZEOF userMisc,0)
       reqState:=REQ_STATE_LOGOFF
       RETURN
     ENDIF
@@ -29571,6 +29593,9 @@ PROC processSysopLogon()
     loggedOnUser:=NIL
     loggedOnUserKeys:=NIL
     loggedOnUserMisc:=NIL
+    MemFill(snapshotUser,SIZEOF user,0)
+    MemFill(snapshotUserKeys,SIZEOF userKeys,0)
+    MemFill(snapshotUserMisc,SIZEOF userMisc,0)
     reqState:=REQ_STATE_LOGOFF
     checkShutDown()
     RETURN
@@ -30125,6 +30150,9 @@ logonLoop:
       loggedOnUser:=NIL
       loggedOnUserKeys:=NIL
       loggedOnUserMisc:=NIL
+      MemFill(snapshotUser,SIZEOF user,0)
+      MemFill(snapshotUserKeys,SIZEOF userKeys,0)
+      MemFill(snapshotUserMisc,SIZEOF userMisc,0)
       state:=STATE_LOGGING_OFF
       RETURN
     ENDIF
@@ -30134,6 +30162,9 @@ logonLoop:
     loggedOnUser:=NEW loggedOnUser
     loggedOnUserKeys:=NEW loggedOnUserKeys
     loggedOnUserMisc:=NEW loggedOnUserMisc
+    MemFill(snapshotUser,SIZEOF user,0)
+    MemFill(snapshotUserKeys,SIZEOF userKeys,0)
+    MemFill(snapshotUserMisc,SIZEOF userMisc,0)
 
     stat:=loadAccount(userNum,loggedOnUser,loggedOnUserKeys,loggedOnUserMisc)
     IF(stat=RESULT_FAILURE)
@@ -30183,6 +30214,10 @@ logonLoop:
     END loggedOnUserMisc
     loggedOnUserMisc:=NIL
 
+    MemFill(snapshotUser,SIZEOF user,0)
+    MemFill(snapshotUserKeys,SIZEOF userKeys,0)
+    MemFill(snapshotUserMisc,SIZEOF userMisc,0)
+
     state:=STATE_LOGGING_OFF
     RETURN
   ENDIF
@@ -30200,6 +30235,9 @@ logonLoop:
     loggedOnUserKeys:=NIL
     END loggedOnUserMisc
     loggedOnUserMisc:=NIL
+    MemFill(snapshotUser,SIZEOF user,0)
+    MemFill(snapshotUserKeys,SIZEOF userKeys,0)
+    MemFill(snapshotUserMisc,SIZEOF userMisc,0)
     RETURN
   ENDIF
 
@@ -30220,6 +30258,9 @@ logonLoop:
         loggedOnUserKeys:=NIL
         END loggedOnUserMisc
         loggedOnUserMisc:=NIL
+        MemFill(snapshotUser,SIZEOF user,0)
+        MemFill(snapshotUserKeys,SIZEOF userKeys,0)
+        MemFill(snapshotUserMisc,SIZEOF userMisc,0)
         state:=STATE_LOGGING_OFF
         RETURN
       ENDIF
@@ -30940,6 +30981,9 @@ PROC createNewAccount()
   loggedOnUser:=NEW loggedOnUser
   loggedOnUserKeys:=NEW loggedOnUserKeys
   loggedOnUserMisc:=NEW loggedOnUserMisc
+  MemFill(snapshotUser,SIZEOF user,0)
+  MemFill(snapshotUserKeys,SIZEOF userKeys,0)
+  MemFill(snapshotUserMisc,SIZEOF userMisc,0)
 
   AstrCopy(loggedOnUser.pass,'')
 

@@ -19,6 +19,7 @@ EXPORT OBJECT frmEditUser OF frmBase
   btnPrevClickHook: hook
   btnNextClickHook: hook
   btnApplyClickHook: hook
+  controlChangeHook: hook
   userData:PTR TO user
   userKeys:PTR TO userKeys
   userMisc:PTR TO userMisc
@@ -28,6 +29,7 @@ EXPORT OBJECT frmEditUser OF frmBase
   areaList:PTR TO LONG
   presetmenus[10]:ARRAY OF LONG
   presetCycleItems[10]:ARRAY OF LONG
+  unsavedChanges:CHAR
 ENDOBJECT
 
 PROC dateTimeToDateStamp(dateVal,datestamp:PTR TO datestamp)
@@ -112,6 +114,37 @@ EXPORT PROC formatBCD(valArrayBCD:PTR TO CHAR, outStr)
 ENDPROC
 
 
+EXPORT PROC subBCD2(bcdTotal:PTR TO CHAR, bcdValToSub: PTR TO CHAR)
+  MOVE.L bcdValToSub,A0
+  LEA 8(A0),A0
+  MOVE.L bcdTotal,A1
+  LEA 8(A1),A1
+
+  SUB.L D0,D0        ->clear X flag
+
+  SBCD -(A0),-(A1)
+  SBCD -(A0),-(A1)
+  SBCD -(A0),-(A1)
+  SBCD -(A0),-(A1)
+  SBCD -(A0),-(A1)
+  SBCD -(A0),-(A1)
+  SBCD -(A0),-(A1)
+  SBCD -(A0),-(A1)
+ENDPROC
+
+EXPORT PROC convertFromBCD(inArray:PTR TO CHAR)
+  DEF tempBCD[8]:ARRAY
+  DEF bcdStr[20]:STRING
+
+  convertToBCD($ffffffff,tempBCD)
+  subBCD2(tempBCD,inArray)
+  IF ((tempBCD[0] AND $F0)<>0)
+    RETURN $ffffffff
+  ENDIF
+  formatBCD(inArray,bcdStr)
+ENDPROC Val(bcdStr)
+
+
 PROC cancelbuttonPressed() OF frmEditUser
   MOVE.L (A1),self
   GetA4()
@@ -121,6 +154,9 @@ ENDPROC
 PROC savebuttonPressed() OF frmEditUser
   MOVE.L (A1),self
   GetA4()
+
+  IF self.validateSettings()=FALSE THEN RETURN
+  
   domethod(self.app.app,[MUIM_Application_ReturnID,ID_SAVE])
 ENDPROC
 
@@ -129,8 +165,19 @@ PROC loadbuttonPressed() OF frmEditUser
   MOVE.L (A1),self
   GetA4()
 
+  IF self.unsavedChanges
+    IF self.unsavedChangesWarning()=0 THEN RETURN
+  ENDIF
+
   get( self.app.slUserId, MUIA_Slider_Level,{level})
   self.loadUser(level)
+ENDPROC
+
+PROC controlchanged() OF frmEditUser
+  MOVE.L (A1),self
+  GetA4()
+  
+  self.unsavedChanges:=TRUE
 ENDPROC
 
 PROC prevbuttonPressed() OF frmEditUser
@@ -177,6 +224,16 @@ ENDPROC
 PROC canClose() OF frmEditUser
   MOVE.L (A1),self
   GetA4() 
+  
+  IF self.unsavedChanges
+    IF self.unsavedChangesWarning()=0 THEN RETURN FALSE
+  ENDIF
+
+ENDPROC TRUE
+
+PROC unsavedChangesWarning() OF frmEditUser
+  IF Mui_RequestA(0,self.winMain,0,'Unsaved changes',
+    '*OK|CANCEL','You have unsaved changes,\nif you continue you will lose them.',0)=0 THEN RETURN FALSE
 ENDPROC TRUE
 
 PROC getUserName(userId) OF frmEditUser
@@ -222,9 +279,9 @@ PROC newUser() OF frmEditUser
   set( self.app.strUploadBytes, MUIA_Text_Contents,'0')
   set( self.app.strMessages, MUIA_Text_Contents,'0')
     
-    set( self.app.strUploadCPS, MUIA_Text_Contents,'0')
+  set( self.app.strUploadCPS, MUIA_Text_Contents,'0')
 
-    set( self.app.strDownloadCPS, MUIA_Text_Contents,'0')
+  set( self.app.strDownloadCPS, MUIA_Text_Contents,'0')
     
     set( self.app.strByteLimit, MUIA_Text_Contents,'0')
 
@@ -239,6 +296,7 @@ PROC newUser() OF frmEditUser
     set( self.app.strChatUsed, MUIA_Text_Contents,'0')
 
     set( self.app.cyPwdReset, MUIA_Cycle_Active,1)
+
     set( self.app.cyAccountLocked, MUIA_Cycle_Active,1)
 
     set( self.app.strInvalidAttempts, MUIA_Text_Contents,'0')
@@ -430,7 +488,7 @@ PROC loadUserData(userId) OF frmEditUser
     result+=Fread(fh,self.userMisc,SIZEOF userMisc,1)
     Close(fh)
   ENDIF
- 
+  
 ENDPROC result
 
 PROC loadUser(userId) OF frmEditUser
@@ -554,8 +612,114 @@ PROC loadUser(userId) OF frmEditUser
     set( self.app.strLastPwdReset, MUIA_Text_Contents,tempstring)
 
   ENDIF
+
+  self.unsavedChanges:=FALSE
   
 ENDPROC
+
+PROC showControlError(control,page,errorText:PTR TO CHAR) OF frmEditUser
+    set ( self.app.mainPanel,MUIA_Group_ActivePage,page)
+    set ( self.winMain,MUIA_Window_ActiveObject,control)
+    Mui_RequestA(0,self.winMain,0,'Error','*OK',errorText,0)
+ENDPROC
+
+PROC validateNumber(control) OF frmEditUser
+  DEF tempstr[200]:STRING
+  DEF i,tempval:PTR TO CHAR
+  
+  get(control, MUIA_Text_Contents,{tempval})
+  fullTrim(tempval,tempstr)
+  
+  FOR i:=0 TO EstrLen(tempstr)-1
+    IF NOT(tempstr[i]==["0" TO "9"]) THEN RETURN FALSE
+  ENDFOR
+ENDPROC TRUE
+
+PROC validateSettings() OF frmEditUser
+  DEF tempval,r,l
+  
+  get(self.app.strUsername, MUIA_Text_Contents,{tempval})
+  IF StrLen(tempval)=0
+    self.showControlError(self.app.strUsername,0,'UserName cannot be blank.')
+    RETURN FALSE
+  ENDIF
+  
+  IF self.validateNumber(self.app.strRatio)=FALSE
+    self.showControlError(self.app.strRatio,1,'Ratio is not a valid value.')
+    RETURN FALSE
+  ENDIF
+
+  IF self.validateNumber(self.app.strUploads)=FALSE
+    self.showControlError(self.app.strUploads,1,'Uploads is not a valid value.')
+    RETURN FALSE
+  ENDIF
+
+  IF self.validateNumber(self.app.strDownloads)=FALSE
+    self.showControlError(self.app.strDownloads,1,'Downloads is not a valid value.')
+    RETURN FALSE
+  ENDIF
+
+  IF self.validateNumber(self.app.strUploadBytes)=FALSE
+    self.showControlError(self.app.strDownloads,1,'Bytes U/L is not a valid value.')
+    RETURN FALSE
+  ENDIF
+
+  IF self.validateNumber(self.app.strDownloadBytes)=FALSE
+    self.showControlError(self.app.strDownloads,1,'Bytes D/L is not a valid value.')
+    RETURN FALSE
+  ENDIF
+
+  IF self.validateNumber(self.app.strMessages)=FALSE
+    self.showControlError(self.app.strMessages,1,'Messages Posted is not a valid value.')
+    RETURN FALSE
+  ENDIF
+
+  IF self.validateNumber(self.app.strUploadCPS)=FALSE
+    self.showControlError(self.app.strUploadCPS,1,'CPS Up is not a valid value.')
+    RETURN FALSE
+  ENDIF
+
+  IF self.validateNumber(self.app.strDownloadCPS)=FALSE
+    self.showControlError(self.app.strDownloadCPS,1,'CPS Down is not a valid value.')
+    RETURN FALSE
+  ENDIF
+
+  IF self.validateNumber(self.app.strByteLimit)=FALSE
+    self.showControlError(self.app.strByteLimit,2,'Byte Limit is not a valid value.')
+    RETURN FALSE
+  ENDIF
+
+  IF self.validateNumber(self.app.strTimeTotal)=FALSE
+    self.showControlError(self.app.strTimeTotal,2,'Time Total is not a valid value.')
+    RETURN FALSE
+  ENDIF
+
+  IF self.validateNumber(self.app.strTimeLimit)=FALSE
+    self.showControlError(self.app.strTimeLimit,2,'Time Limit is not a valid value.')
+    RETURN FALSE
+  ENDIF
+
+  IF self.validateNumber(self.app.strChatLimit)=FALSE
+    self.showControlError(self.app.strChatLimit,2,'Chat Limit is not a valid value.')
+    RETURN FALSE
+  ENDIF
+
+  IF self.validateNumber(self.app.strTimeUsed)=FALSE
+    self.showControlError(self.app.strTimeUsed,2,'Time Used is not a valid value.')
+    RETURN FALSE
+  ENDIF
+
+  IF self.validateNumber(self.app.strChatUsed)=FALSE
+    self.showControlError(self.app.strChatUsed,2,'Chat Used is not a valid value.')
+    RETURN FALSE
+  ENDIF
+
+  IF self.validateNumber(self.app.strInvalidAttempts)=FALSE
+    self.showControlError(self.app.strInvalidAttempts,2,'Invalid Attempts is not a valid value.')
+    RETURN FALSE
+  ENDIF
+ENDPROC TRUE
+
 
 PROC saveUser(userId) OF frmEditUser
   DEF fh,flen,tempval,i
@@ -566,6 +730,7 @@ PROC saveUser(userId) OF frmEditUser
   DEF oldUserData:PTR TO user
   DEF oldUserKeys:PTR TO userKeys
   DEF oldUserMisc:PTR TO userMisc
+  DEF newUser=FALSE
 
   StringF(userdatafname,'\suser.data',self.bbsPath)
   StringF(userkeysfname,'\suser.keys',self.bbsPath)
@@ -575,27 +740,40 @@ PROC saveUser(userId) OF frmEditUser
    //create new user id
     flen:=FileLength(userdatafname)
     userId:=Div(flen+SIZEOF user-1,SIZEOF user)+1
+    newUser:=TRUE
   ENDIF
   
   NEW oldUserData
-  CopyMem(self.userData,oldUserData,SIZEOF user)
   NEW oldUserKeys
-  CopyMem(self.userKeys,oldUserKeys,SIZEOF userKeys)
   NEW oldUserMisc
-  CopyMem(self.userMisc,oldUserMisc,SIZEOF userMisc)
+  
+  IF newUser=FALSE
+    CopyMem(self.userData,oldUserData,SIZEOF user)
+    CopyMem(self.userKeys,oldUserKeys,SIZEOF userKeys)
+    CopyMem(self.userMisc,oldUserMisc,SIZEOF userMisc)
+  ENDIF
 
   self.loadUserData(userId)
-
   
   get(self.app.strUsername, MUIA_Text_Contents,{tempval})
   
   IF StrCmp(oldUserData.name,tempval)=FALSE
     AstrCopy(self.userData.name,tempval,ARRAYSIZE oldUserData.name)
   ENDIF
+  
+  StrCopy(tempstring,tempval)
+  UpperStr(tempstring)
+  IF StrCmp(oldUserKeys.userName,tempstring)=FALSE
+    AstrCopy(self.userKeys.userName,tempstring,ARRAYSIZE oldUserKeys.userName)
+  ENDIF
 
   get(self.app.cyActive, MUIA_Cycle_Active,{tempval})
   IF oldUserData.slotNumber<>(IF tempval=1 THEN 0 ELSE userId)
-    IF tempval=1 THEN self.userData.slotNumber:=0 ELSE self.userData.slotNumber:=userId
+    self.userData.slotNumber:=IF tempval=1 THEN 0 ELSE userId
+  ENDIF
+
+  IF oldUserKeys.number<>(IF tempval=1 THEN 0 ELSE userId)
+    self.userKeys.number:=IF tempval=1 THEN 0 ELSE userId
   ENDIF
 
   get(self.app.strRealname, MUIA_Text_Contents,{tempval})
@@ -630,197 +808,116 @@ PROC saveUser(userId) OF frmEditUser
     self.userData.secStatus:=tempval
   ENDIF
 
-    /*AstrCopy(self.selectUser,self.userData.name,80)
-    set( self.app.txtSelectUserName, MUIA_Text_Contents,self.selectUser)
-    set( self.app.strUsername, MUIA_Text_Contents,self.userData.name)
-    set( self.app.cyActive, MUIA_Cycle_Active,IF self.userData.slotNumber=0 THEN 1 ELSE 0)
-    set( self.app.strRealname, MUIA_Text_Contents,self.userMisc.realName)
-    set( self.app.strPassword, MUIA_Text_Contents,'1234567890')
-    set( self.app.strLocation, MUIA_Text_Contents,self.userData.location)
-    set( self.app.strPhone, MUIA_Text_Contents,self.userData.phoneNumber)
-    set( self.app.cyRejoinConf, MUIA_Cycle_Active,self.userData.confRJoin-1)
+  get(self.app.strRatio, MUIA_Text_Contents,{tempval})
+  IF oldUserData.secLibrary<>Val(tempval)
+    self.userData.secLibrary:=Val(tempval)
+  ENDIF
+  
+  get(self.app.cyRatioType, MUIA_Cycle_Active,{tempval})
+  IF oldUserData.secBoard<>tempval
+    self.userData.secBoard:=tempval
+  ENDIF
 
-    i:=0
-    WHILE self.areaList[i]
-      IF StriCmp(self.areaList[i],self.userData.conferenceAccess) THEN set( self.app.cySecArea, MUIA_Cycle_Active,i)
-      i++
-    ENDWHILE
-    
-    set( self.app.slSecLevel, MUIA_Slider_Level,self.userData.secStatus)*/
-    
-    
-    get(self.app.strRatio, MUIA_Text_Contents,{tempval})
-    IF oldUserData.secLibrary<>Val(tempval)
-      self.userData.secLibrary:=Val(tempval)
-    ENDIF
-    
-    get(self.app.cyRatioType, MUIA_Cycle_Active,{tempval})
-    IF oldUserData.secBoard<>tempval
-      self.userData.secBoard:=tempval
-    ENDIF
+  get(self.app.strUploads, MUIA_Text_Contents,{tempval})
+  IF oldUserData.uploads<>Val(tempval)
+    self.userData.uploads:=Val(tempval)
+  ENDIF
 
-    get(self.app.strUploads, MUIA_Text_Contents,{tempval})
-    IF oldUserData.uploads<>Val(tempval)
-      self.userData.uploads:=Val(tempval)
-    ENDIF
+  get(self.app.strDownloads, MUIA_Text_Contents,{tempval})
+  IF oldUserData.downloads<>Val(tempval)
+    self.userData.downloads:=Val(tempval)
+  ENDIF
 
-    get(self.app.strDownloads, MUIA_Text_Contents,{tempval})
-    IF oldUserData.downloads<>Val(tempval)
-      self.userData.downloads:=Val(tempval)
-    ENDIF
+  get(self.app.strDownloadBytes, MUIA_Text_Contents,{tempval})
+  formatBCD(oldUserMisc.downloadBytesBCD,tempstring)
+  IF StrCmp(tempstring,tempval)=FALSE
+    convertToBCD(tempval,self.userMisc.downloadBytesBCD)
+    self.userData.bytesDownload:=convertFromBCD(self.userMisc.downloadBytesBCD)
+  ENDIF
 
-    get(self.app.strDownloadBytes, MUIA_Text_Contents,{tempval})
-    formatBCD(oldUserMisc.downloadBytesBCD,tempstring)
-    IF StrCmp(tempstring,tempval)=FALSE
-      convertToBCD(tempval,self.userMisc.downloadBytesBCD)
-    ENDIF
+  get(self.app.strUploadBytes, MUIA_Text_Contents,{tempval})
+  formatBCD(oldUserMisc.uploadBytesBCD,tempstring)
+  IF StrCmp(tempstring,tempval)=FALSE
+    convertToBCD(tempval,self.userMisc.uploadBytesBCD)
+    self.userData.bytesUpload:=convertFromBCD(self.userMisc.uploadBytesBCD)
+  ENDIF
 
-    get(self.app.strUploadBytes, MUIA_Text_Contents,{tempval})
-    formatBCD(oldUserMisc.uploadBytesBCD,tempstring)
-    IF StrCmp(tempstring,tempval)=FALSE
-      convertToBCD(tempval,self.userMisc.uploadBytesBCD)
-    ENDIF
+  get(self.app.strMessages, MUIA_Text_Contents,{tempval})
+  IF oldUserData.messagesPosted<>Val(tempval)
+    self.userData.messagesPosted:=Val(tempval)
+  ENDIF
 
-    get(self.app.strMessages, MUIA_Text_Contents,{tempval})
-    IF oldUserData.messagesPosted<>Val(tempval)
-      self.userData.messagesPosted:=Val(tempval)
-    ENDIF
+  get(self.app.strUploadCPS, MUIA_Text_Contents,{tempval})
+  IF oldUserKeys.upCPS2<>Val(tempval)
+    self.userKeys.upCPS2:=Val(tempval)
+  ENDIF
 
-    get(self.app.strUploadCPS, MUIA_Text_Contents,{tempval})
-    IF oldUserKeys.upCPS2<>Val(tempval)
-      self.userKeys.upCPS2:=Val(tempval)
-    ENDIF
+  get(self.app.strDownloadCPS, MUIA_Text_Contents,{tempval})
+  IF oldUserKeys.dnCPS2<>Val(tempval)
+    self.userKeys.dnCPS2:=Val(tempval)
+  ENDIF
+  
+  get(self.app.strByteLimit, MUIA_Text_Contents,{tempval})
+  IF oldUserData.dailyBytesLimit<>Val(tempval)
+    self.userData.dailyBytesLimit:=Val(tempval)
+  ENDIF
 
-    get(self.app.strDownloadCPS, MUIA_Text_Contents,{tempval})
-    IF oldUserKeys.dnCPS2<>Val(tempval)
-      self.userKeys.dnCPS2:=Val(tempval)
-    ENDIF
-    
-    /*StringF(tempstring,'\d',self.userData.secLibrary)
-    set( self.app.strRatio, MUIA_Text_Contents,tempstring)
+  get(self.app.strTimeTotal, MUIA_Text_Contents,{tempval})
+  IF oldUserData.timeTotal<>Val(tempval)
+    self.userData.timeTotal:=Val(tempval)
+  ENDIF
 
-    set( self.app.cyRatioType, MUIA_Cycle_Active,self.userData.secBoard)
-    
-    StringF(tempstring,'\d',self.userData.uploads)
-    set( self.app.strUploads, MUIA_Text_Contents,tempstring)
-    
-    StringF(tempstring,'\d',self.userData.downloads)
-    set( self.app.strDownloads, MUIA_Text_Contents,tempstring)
+  get(self.app.strTimeLimit, MUIA_Text_Contents,{tempval})
+  IF oldUserData.timeLimit<>Val(tempval)
+    self.userData.timeLimit:=Val(tempval)
+  ENDIF
+  
+  get(self.app.strChatLimit, MUIA_Text_Contents,{tempval})
+  IF oldUserData.chatLimit<>Val(tempval)
+    self.userData.chatLimit:=Val(tempval)
+  ENDIF
 
-    IF self.userData.bytesDownload=-1
-      formatBCD(self.userMisc.downloadBytesBCD,tempstring)
-    ELSE
-      StringF(tempstring,'\d',self.userData.bytesDownload)
-    ENDIF
-    set( self.app.strDownloadBytes, MUIA_Text_Contents,tempstring)
+  get(self.app.strTimeUsed, MUIA_Text_Contents,{tempval})
+  IF oldUserData.timeUsed<>Val(tempval)
+    self.userData.timeUsed:=Val(tempval)
+  ENDIF
 
-    IF self.userData.bytesUpload=-1
-      formatBCD(self.userMisc.uploadBytesBCD,tempstring)
-    ELSE
-      StringF(tempstring,'\d',self.userData.bytesUpload)
-    ENDIF
-    set( self.app.strUploadBytes, MUIA_Text_Contents,tempstring)
+  get(self.app.strChatUsed, MUIA_Text_Contents,{tempval})
+  IF (oldUserData.chatLimit-oldUserData.chatRemain)<>Val(tempval)
+    self.userData.chatRemain:=self.userData.chatLimit-Val(tempval)
+  ENDIF
 
-    StringF(tempstring,'\d',self.userData.messagesPosted)
-    set( self.app.strMessages, MUIA_Text_Contents,tempstring)
-    
-    StringF(tempstring,'\d',self.userKeys.upCPS2)
-    set( self.app.strUploadCPS, MUIA_Text_Contents,tempstring)
+  get(self.app.cyPwdReset, MUIA_Cycle_Active,{tempval})
+  IF (IF oldUserMisc.forcePwdReset=0 THEN 1 ELSE 0)<>tempval
+    self.userMisc.forcePwdReset:=IF tempval=0 THEN -1 ELSE 0
+  ENDIF
 
-    StringF(tempstring,'\d',self.userKeys.dnCPS2)
-    set( self.app.strDownloadCPS, MUIA_Text_Contents,tempstring)*/
-    
-    get(self.app.strByteLimit, MUIA_Text_Contents,{tempval})
-    IF oldUserData.dailyBytesLimit<>Val(tempval)
-      self.userData.dailyBytesLimit:=Val(tempval)
-    ENDIF
+  get(self.app.cyAccountLocked, MUIA_Cycle_Active,{tempval})
+  IF (IF oldUserMisc.accountLocked=0 THEN 1 ELSE 0)<>tempval
+    self.userMisc.accountLocked:=IF tempval=0 THEN -1 ELSE 0
+  ENDIF
 
-    get(self.app.strTimeTotal, MUIA_Text_Contents,{tempval})
-    IF oldUserData.timeTotal<>Val(tempval)
-      self.userData.timeTotal:=Val(tempval)
-    ENDIF
+  get(self.app.strInvalidAttempts, MUIA_Text_Contents,{tempval})
+  IF oldUserMisc.invalidAttempts<>Val(tempval)
+    self.userMisc.invalidAttempts:=Val(tempval)
+  ENDIF
 
-    get(self.app.strTimeLimit, MUIA_Text_Contents,{tempval})
-    IF oldUserData.timeLimit<>Val(tempval)
-      self.userData.timeLimit:=Val(tempval)
-    ENDIF
-    
-    get(self.app.strChatLimit, MUIA_Text_Contents,{tempval})
-    IF oldUserData.chatLimit<>Val(tempval)
-      self.userData.chatLimit:=Val(tempval)
-    ENDIF
+  get(self.app.cyNewUser, MUIA_Cycle_Active,{tempval})
+  IF (IF oldUserData.newUser=0 THEN 1 ELSE 0)<>tempval
+    self.userData.newUser:=IF tempval=0 THEN -1 ELSE 0
+  ENDIF
 
-    get(self.app.strTimeUsed, MUIA_Text_Contents,{tempval})
-    IF oldUserData.timeUsed<>Val(tempval)
-      self.userData.timeUsed:=Val(tempval)
-    ENDIF
+  get(self.app.cyComputers, MUIA_Cycle_Active,{tempval})
+  IF oldUserData.secBulletin<>tempval
+    self.userData.secBulletin:=tempval
+  ENDIF
 
-    get(self.app.strChatUsed, MUIA_Text_Contents,{tempval})
-    IF (oldUserData.chatLimit-oldUserData.chatRemain)<>Val(tempval)
-      self.userData.chatRemain:=self.userData.chatLimit-Val(tempval)
-    ENDIF
+  get(self.app.cyScreens, MUIA_Cycle_Active,{tempval})
+  IF oldUserData.screenType<>tempval
+    self.userData.screenType:=tempval
+  ENDIF
 
-    get(self.app.cyPwdReset, MUIA_Cycle_Active,{tempval})
-    IF (IF oldUserMisc.forcePwdReset=0 THEN 1 ELSE 0)<>tempval
-      self.userMisc.forcePwdReset:=IF tempval=0 THEN -1 ELSE 0
-    ENDIF
-
-    get(self.app.cyAccountLocked, MUIA_Cycle_Active,{tempval})
-    IF (IF oldUserMisc.accountLocked=0 THEN 1 ELSE 0)<>tempval
-      self.userMisc.accountLocked:=IF tempval=0 THEN -1 ELSE 0
-    ENDIF
-
-    get(self.app.strInvalidAttempts, MUIA_Text_Contents,{tempval})
-    IF oldUserMisc.invalidAttempts<>Val(tempval)
-      self.userMisc.invalidAttempts:=Val(tempval)
-    ENDIF
-
-    /*StringF(tempstring,'\d',self.userData.dailyBytesLimit)
-    set( self.app.strByteLimit, MUIA_Text_Contents,tempstring)
-
-    StringF(tempstring,'\d',self.userData.timeTotal)
-    set( self.app.strTimeTotal, MUIA_Text_Contents,tempstring)
-
-    StringF(tempstring,'\d',self.userData.timeLimit)
-    set( self.app.strTimeLimit, MUIA_Text_Contents,tempstring)
-
-    StringF(tempstring,'\d',self.userData.chatLimit)
-    set( self.app.strChatLimit, MUIA_Text_Contents,tempstring)
-
-    StringF(tempstring,'\d',self.userData.timeUsed)
-    set( self.app.strTimeUsed, MUIA_Text_Contents,tempstring)
-
-    StringF(tempstring,'\d',self.userData.chatLimit-self.userData.chatRemain)
-    set( self.app.strChatUsed, MUIA_Text_Contents,tempstring)
-
-    set( self.app.cyPwdReset, MUIA_Cycle_Active,IF self.userMisc.forcePwdReset=0 THEN 1 ELSE 0)
-    set( self.app.cyAccountLocked, MUIA_Cycle_Active,IF self.userMisc.accountLocked=0 THEN 1 ELSE 0)
-
-    StringF(tempstring,'\d',self.userMisc.invalidAttempts)
-    set( self.app.strInvalidAttempts, MUIA_Text_Contents,tempstring)*/
-
-    get(self.app.cyNewUser, MUIA_Cycle_Active,{tempval})
-    IF (IF oldUserData.newUser=0 THEN 1 ELSE 0)<>tempval
-      self.userData.newUser:=IF tempval=0 THEN -1 ELSE 0
-    ENDIF
-
-    get(self.app.cyComputers, MUIA_Cycle_Active,{tempval})
-    IF oldUserData.secBulletin<>tempval
-      self.userData.secBulletin:=tempval
-    ENDIF
-
-    get(self.app.cyScreens, MUIA_Cycle_Active,{tempval})
-    IF oldUserData.screenType<>tempval
-      self.userData.screenType:=tempval
-    ENDIF
-
-  /*
-    set( self.app.cyNewUser, MUIA_Cycle_Active,IF self.userData.newUser=0 THEN 1 ELSE 0)
- 
-    set( self.app.cyComputers, MUIA_Cycle_Active,self.userData.secBulletin)
-
-    set( self.app.cyScreens, MUIA_Cycle_Active,self.userData.screenType)*/
-    
+   
   userId--
  
   //save data
@@ -838,6 +935,8 @@ PROC saveUser(userId) OF frmEditUser
   Seek(fh,userId*SIZEOF userMisc,OFFSET_BEGINNING)
   Fwrite(fh,self.userMisc,SIZEOF userMisc,1)
   Close(fh)
+
+  self.unsavedChanges:=FALSE
 
   END oldUserData
   END oldUserKeys
@@ -992,6 +1091,110 @@ PROC applyPreset(presetNum) OF frmEditUser
   set( self.app.strTimeLimit, MUIA_Text_Contents,tempstring)
 ENDPROC
 
+PROC setupStrControlChangeNotify(control) OF frmEditUser
+  domethod( control , [
+    MUIM_Notify , MUIA_Text_Contents, MUIV_EveryTime,
+    control,
+    3,
+    MUIM_CallHook , self.controlChangeHook , self ] )
+ENDPROC
+
+PROC setupCycleControlChangeNotify(control) OF frmEditUser
+  domethod( control , [
+    MUIM_Notify , MUIA_Cycle_Active, MUIV_EveryTime,
+    control,
+    3,
+    MUIM_CallHook , self.controlChangeHook , self ] )
+ENDPROC
+
+PROC setupSliderControlChangeNotify(control) OF frmEditUser
+  domethod( control , [
+    MUIM_Notify , MUIA_Slider_Level, MUIV_EveryTime,
+    control,
+    3,
+    MUIM_CallHook , self.controlChangeHook , self ] )
+ENDPROC
+
+PROC setupControlChangeNotify() OF frmEditUser  
+  installhook( self.controlChangeHook, {controlchanged})
+    
+  self.setupStrControlChangeNotify(self.app.strUsername)
+  self.setupCycleControlChangeNotify(self.app.cyActive)
+  self.setupStrControlChangeNotify(self.app.strRealname)
+  self.setupStrControlChangeNotify(self.app.strPassword)
+  self.setupStrControlChangeNotify(self.app.strLocation)
+  self.setupStrControlChangeNotify(self.app.strPhone)
+  self.setupCycleControlChangeNotify(self.app.cyRejoinConf)
+  self.setupCycleControlChangeNotify(self.app.cySecArea)
+  self.setupSliderControlChangeNotify(self.app.slSecLevel)
+  self.setupStrControlChangeNotify(self.app.strRatio)
+  self.setupCycleControlChangeNotify(self.app.cyRatioType)
+  self.setupStrControlChangeNotify(self.app.strUploads)
+  self.setupStrControlChangeNotify(self.app.strDownloads)
+  self.setupStrControlChangeNotify(self.app.strDownloadBytes)
+  self.setupStrControlChangeNotify(self.app.strUploadBytes)
+  self.setupStrControlChangeNotify(self.app.strMessages)  
+  self.setupStrControlChangeNotify(self.app.strUploadCPS)
+  self.setupStrControlChangeNotify(self.app.strDownloadCPS)
+  self.setupStrControlChangeNotify(self.app.strByteLimit)
+  self.setupStrControlChangeNotify(self.app.strTimeTotal)
+  self.setupStrControlChangeNotify(self.app.strTimeLimit)
+  self.setupStrControlChangeNotify(self.app.strChatLimit)
+  self.setupStrControlChangeNotify(self.app.strTimeUsed)
+  self.setupStrControlChangeNotify(self.app.strChatUsed)
+  self.setupCycleControlChangeNotify(self.app.cyPwdReset)
+  self.setupCycleControlChangeNotify(self.app.cyAccountLocked)
+  self.setupStrControlChangeNotify(self.app.strInvalidAttempts)
+  self.setupCycleControlChangeNotify(self.app.cyNewUser)
+  self.setupCycleControlChangeNotify(self.app.cyComputers)
+  self.setupCycleControlChangeNotify(self.app.cyScreens)
+ENDPROC
+
+PROC clearStrControlChangeNotify(control) OF frmEditUser
+  domethod(control,[MUIM_KillNotify,MUIA_Text_Contents])
+ENDPROC
+
+PROC clearCycleControlChangeNotify(control) OF frmEditUser
+  domethod(control,[MUIM_KillNotify,MUIA_Cycle_Active])
+ENDPROC
+
+PROC clearSliderControlChangeNotify(control) OF frmEditUser
+  domethod(control,[MUIM_KillNotify,MUIA_Slider_Level])
+ENDPROC
+
+PROC clearControlChangeNotify() OF frmEditUser
+  self.clearStrControlChangeNotify(self.app.strUsername)
+  self.clearCycleControlChangeNotify(self.app.cyActive)
+  self.clearStrControlChangeNotify(self.app.strRealname)
+  self.clearStrControlChangeNotify(self.app.strPassword)
+  self.clearStrControlChangeNotify(self.app.strLocation)
+  self.clearStrControlChangeNotify(self.app.strPhone)
+  self.clearCycleControlChangeNotify(self.app.cyRejoinConf)
+  self.clearCycleControlChangeNotify(self.app.cySecArea)
+  self.clearSliderControlChangeNotify(self.app.slSecLevel)
+  self.clearStrControlChangeNotify(self.app.strRatio)
+  self.clearCycleControlChangeNotify(self.app.cyRatioType)
+  self.clearStrControlChangeNotify(self.app.strUploads)
+  self.clearStrControlChangeNotify(self.app.strDownloads)
+  self.clearStrControlChangeNotify(self.app.strDownloadBytes)
+  self.clearStrControlChangeNotify(self.app.strUploadBytes)
+  self.clearStrControlChangeNotify(self.app.strMessages)  
+  self.clearStrControlChangeNotify(self.app.strUploadCPS)
+  self.clearStrControlChangeNotify(self.app.strDownloadCPS)
+  self.clearStrControlChangeNotify(self.app.strByteLimit)
+  self.clearStrControlChangeNotify(self.app.strTimeTotal)
+  self.clearStrControlChangeNotify(self.app.strTimeLimit)
+  self.clearStrControlChangeNotify(self.app.strChatLimit)
+  self.clearStrControlChangeNotify(self.app.strTimeUsed)
+  self.clearStrControlChangeNotify(self.app.strChatUsed)
+  self.clearCycleControlChangeNotify(self.app.cyPwdReset)
+  self.clearCycleControlChangeNotify(self.app.cyAccountLocked)
+  self.clearStrControlChangeNotify(self.app.strInvalidAttempts)
+  self.clearCycleControlChangeNotify(self.app.cyNewUser)
+  self.clearCycleControlChangeNotify(self.app.cyComputers)
+  self.clearCycleControlChangeNotify(self.app.cyScreens)
+ENDPROC
+
 PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
   DEF closeHook:PTR TO hook
   DEF showHook:PTR TO hook
@@ -1008,6 +1211,7 @@ PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
   NEW self.userMisc
 
   self.bbsPath:=bbsPath
+  self.unsavedChanges:=FALSE
 
   StringF(userDataFname,'\suser.data',self.bbsPath)
 
@@ -1048,7 +1252,8 @@ PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
     MUIM_CallHook , self.btnCancelClickHook , self ] )
 
   self.makePresetMenuItems()
-    
+  self.setupControlChangeNotify()
+  
   self.setupButtonClick(self.app.btnSave,self.btnSaveClickHook,{savebuttonPressed})
   self.setupButtonClick(self.app.btnCancel,self.btnCancelClickHook,{cancelbuttonPressed})
   self.setupButtonClick(self.app.btnSelectUserLoad,self.btnLoadClickHook,{loadbuttonPressed})
@@ -1077,6 +1282,7 @@ PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
   domethod(self.app.mnlabel2Cancel,[MUIM_KillNotify,MUIA_Menuitem_Trigger])
 
   self.removePresetMenuItems()
+  self.clearControlChangeNotify()
 
   self.freeList(self.computerList)
   self.freeList(self.screenTypesList)
@@ -1105,6 +1311,7 @@ PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
   NEW self.userMisc
 
   self.bbsPath:=bbsPath
+  self.unsavedChanges:=FALSE
 
   installhook( closeHook, {canClose})    
   self.closeHook:=closeHook
@@ -1133,6 +1340,8 @@ PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
     MUIM_CallHook , self.btnSaveClickHook , self ] )
 
   self.makePresetMenuItems()
+  
+  self.setupControlChangeNotify()
         
   self.setupButtonClick(self.app.btnSave,self.btnSaveClickHook,{savebuttonPressed})
   self.setupButtonClick(self.app.btnCancel,self.btnCancelClickHook,{cancelbuttonPressed})
@@ -1150,6 +1359,7 @@ PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
   domethod(self.app.mnlabel2Cancel,[MUIM_KillNotify,MUIA_Menuitem_Trigger])
 
   self.removePresetMenuItems()
+  self.clearControlChangeNotify()
 
   self.freeList(self.computerList)
   self.freeList(self.screenTypesList)

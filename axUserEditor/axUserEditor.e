@@ -1,6 +1,12 @@
 OPT OSVERSION = 37,LARGE,STACK=35000->,RUNBG
 OPT PREPROCESS
 
+->user passwords
+->msgbaserjoin
+->clear confdb records on new user
+->
+
+
 MODULE 'locale'
 MODULE 'muimaster' , 'libraries/mui'
 MODULE 'utility/tagitem'

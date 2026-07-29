@@ -44,4 +44,4 @@ axuseredit.m:			axuseredit.e
 
 
 clean:
-							delete axUserEditor frmMain.m frmBase.m axuseredit.m axUserObjects.m tooltypes.m frmEditUser.m
+							delete axUserEditor frmMain.m frmBase.m axuseredit.m axUserObjects.m frmEditUser.m
