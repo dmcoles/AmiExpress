@@ -466,7 +466,7 @@ EXPORT PROC hmac_sha1(text:PTR TO CHAR, text_len, key:PTR TO CHAR, key_len, dige
   DEF tk[SHA1_DIGEST_SIZE]:ARRAY OF CHAR
   DEF i
 
-  k_pad:=New(SIZE_OF_SHA_1_CHUNK+text_len)
+  k_pad:=NewR(SIZE_OF_SHA_1_CHUNK+text_len)
 
   IF (key_len > SIZE_OF_SHA_1_CHUNK)
     calc_sha_1(tk,key, key_len)
@@ -481,7 +481,7 @@ EXPORT PROC hmac_sha1(text:PTR TO CHAR, text_len, key:PTR TO CHAR, key_len, dige
   calc_sha_1(digest,k_pad, SIZE_OF_SHA_1_CHUNK+text_len)
   Dispose(k_pad)
 
-  k_pad:=New(SIZE_OF_SHA_1_CHUNK+SHA1_DIGEST_SIZE)
+  k_pad:=NewR(SIZE_OF_SHA_1_CHUNK+SHA1_DIGEST_SIZE)
   CopyMem(key,k_pad,key_len)
   CopyMem(digest, k_pad+SIZE_OF_SHA_1_CHUNK, SHA1_DIGEST_SIZE)
 
@@ -496,7 +496,7 @@ EXPORT PROC hmac_sha256(text:PTR TO CHAR, text_len, key:PTR TO CHAR, key_len, di
   DEF tk[SIZE_OF_SHA_256_HASH]:ARRAY OF CHAR
   DEF i
 
-  k_pad:=New(SIZE_OF_SHA_256_CHUNK+text_len)
+  k_pad:=NewR(SIZE_OF_SHA_256_CHUNK+text_len)
 
   IF (key_len > SIZE_OF_SHA_256_CHUNK)
     calc_sha_256(tk,key, key_len)
@@ -511,7 +511,7 @@ EXPORT PROC hmac_sha256(text:PTR TO CHAR, text_len, key:PTR TO CHAR, key_len, di
   calc_sha_256(digest,k_pad, SIZE_OF_SHA_256_CHUNK+text_len)
   Dispose(k_pad)
 
-  k_pad:=New(SIZE_OF_SHA_256_CHUNK+SIZE_OF_SHA_256_HASH)
+  k_pad:=NewR(SIZE_OF_SHA_256_CHUNK+SIZE_OF_SHA_256_HASH)
   CopyMem(key,k_pad,key_len)
   CopyMem(digest, k_pad+SIZE_OF_SHA_256_CHUNK, SIZE_OF_SHA_256_HASH)
 
@@ -536,7 +536,7 @@ EXPORT PROC pkcs5_pbkdf2(pass:PTR TO CHAR, pass_len, salt:PTR TO CHAR, salt_len,
     
     IF ((salt_len = 0) OR (salt_len > ($7fffffff - 4))) THEN JUMP bad
     
-    IF ((asalt:=New(salt_len + 4))=0) THEN JUMP bad
+    IF ((asalt:=NewR(salt_len + 4))=0) THEN JUMP bad
 
     CopyMem(salt, asalt, salt_len)
     

@@ -1624,7 +1624,7 @@ PROC cmdStor(sb,ftp_c,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData,connect
         Seek(fh,pos,OFFSET_BEGINNING)
       ENDIF
       
-      buff:=New(32768)
+      buff:=NewR(32768)
       t:=fastSystemTime()
       startTime:=t
       lastpos:=connection.restPos
@@ -1806,7 +1806,7 @@ PROC cmdRetr(sb,ftp_c,data_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData,connect
         ENDIF 
 
         IF fh>0
-          buff:=New(32768)
+          buff:=NewR(32768)
           IF asynclib
             SeekAsync(fh,pos,MODE_START)
           ELSE
@@ -2298,7 +2298,7 @@ PROC ftpThreadStor()
     Seek(fh,pos,OFFSET_BEGINNING)
   ENDIF
 
-  buff:=New(32768)
+  buff:=NewR(32768)
   t:=fastSystemTime()
   startTime:=t
   lastpos:=connection.restPos
@@ -2449,7 +2449,7 @@ PROC ftpThreadRetr()
       Seek(fh,pos,OFFSET_BEGINNING)
     ENDIF
 
-    buff:=New(32768)
+    buff:=NewR(32768)
     t:=fastSystemTime()
     startTime:=t
     lastpos:=connection.restPos

@@ -1641,11 +1641,11 @@ EXPORT PROC hydra_init(hyd: PTR TO hydra_t,want_options,nooriginator,hdxsession,
   StringF(s,'+\s v\s \s : begin',PRGNAME,VERSION,HC_OS);
   dologmessage(hyd,1,s)
 
-  hyd.txbuf:=New(H_BUFLEN) 
-  hyd.rxbuf:=New(H_BUFLEN)
+  hyd.txbuf:=NewR(H_BUFLEN) 
+  hyd.rxbuf:=NewR(H_BUFLEN)
   
-  hyd.crc16tab:=New(512)
-  hyd.crc32tab:=New(1024)
+  hyd.crc16tab:=NewR(512)
+  hyd.crc32tab:=NewR(1024)
   
   hyd.cur_speed:=cur_speed
 

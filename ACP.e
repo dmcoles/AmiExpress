@@ -1,6 +1,6 @@
 -> ACP v5
 
-  OPT LARGE,OSVERSION=37
+  OPT LARGE,OSVERSION=37,CANPOOL
 
   MODULE 'workbench/startup',
        'exec/ports',
@@ -798,7 +798,7 @@ PROC getToolTypes(filename:PTR TO CHAR)
     IF EstrLen(fn)>0
       dobj:=GetDefDiskObject(WBPROJECT)
       IF dobj<>NIL
-        fileBuf:=New(len+1)     ->allow an extra char in case file does not end in LF
+        fileBuf:=NewR(len+1)     ->allow an extra char in case file does not end in LF
 
         fh:=Open(fn,MODE_OLDFILE)
         IF fh<>0
@@ -1762,7 +1762,7 @@ PROC restrict(str:PTR TO CHAR)
   DEF fBlock:PTR TO fileinfoblock
 
   IF((fLock:=Lock(str,ACCESS_READ)))<>0
-    IF((fBlock:=AllocMem(SIZEOF fileinfoblock,MEMF_CHIP OR MEMF_CLEAR)))=NIL
+    IF((fBlock:=New(SIZEOF fileinfoblock)))=NIL
       bad:=TRUE
     ELSE 
       IF((Examine(fLock,fBlock)))=0
@@ -1770,7 +1770,7 @@ PROC restrict(str:PTR TO CHAR)
       ELSE 
         bad:=FALSE
       ENDIF
-      FreeMem(fBlock,SIZEOF fileinfoblock);
+      Dispose(fBlock)
     ENDIF
     UnLock(fLock)
     IF(bad=FALSE) THEN SetComment(str,'Restricted')
@@ -1792,14 +1792,14 @@ PROC maddItem(type,label:PTR TO CHAR,commKey:PTR TO CHAR,flags,mutual,userData)
    DEF t:PTR TO newmenu
    DEF s:PTR TO CHAR
    IF(menuset=1)
-     eWinMenu:=AllocMem((SIZEOF newmenu)*maddItemi,MEMF_PUBLIC OR MEMF_CLEAR)
+     eWinMenu:=NewR((SIZEOF newmenu)*maddItemi)
      menuset:=-1
      maddItemi:=0
    ENDIF
    IF(menuset=-1)
      t:=eWinMenu+(maddItemi*(SIZEOF newmenu))
      t.type:=type
-     s:=AllocMem(80,MEMF_PUBLIC OR MEMF_CLEAR)
+     s:=NewR(80)
      IF(label) THEN AstrCopy(s,label) ELSE AstrCopy(s,'')
      t.label:=s
      t.commkey:=commKey
@@ -1817,9 +1817,9 @@ PROC maddRem()
   
   FOR i:=0 TO maxMenus-1
     t:=eWinMenu+(i*(SIZEOF newmenu))
-    FreeMem(t.label,80)
+    Dispose(t.label)
   ENDFOR
-  FreeMem(eWinMenu,(SIZEOF newmenu)*maxMenus)
+  Dispose(eWinMenu)
 ENDPROC
 
 PROC regLastDownloads(name:PTR TO CHAR,dateStr:PTR TO CHAR,node)
@@ -2292,7 +2292,7 @@ ENDPROC x
 PROC createSemaphores()
   Forbid()
   IF((semiNodes:=FindSemaphore(multiName)))=FALSE
-    semiNodes:=AllocMem(SIZEOF multiPort,MEMF_PUBLIC OR MEMF_CLEAR)
+    semiNodes:=NewR(SIZEOF multiPort)
     AstrCopy(semiNodes.semiName,multiName)
     semiNodes.semi.ln.pri:=0
     semiNodes.semi.ln.name:=semiNodes.semiName
@@ -2327,7 +2327,7 @@ PROC initSemaSemiNodes(s:PTR TO multiPort)
     StringF(singleName,'AEStat\d',i)
     singleNode:=FindSemaphore(singleName)
     IF(singleNode=FALSE)
-      singleNode:=AllocMem(SIZEOF singlePort,MEMF_PUBLIC OR MEMF_CLEAR)
+      singleNode:=NewR(SIZEOF singlePort)
       AstrCopy(singleNode.semiName,singleName)
       singleNode.semi.ln.pri:=0
       singleNode.semi.ln.name:=singleNode.semiName
@@ -2371,10 +2371,10 @@ PROC shutDownSemis()
      ->RemSemaphore((struct SignalSemaphore *)p);
      ObtainSemaphore(p)
      ReleaseSemaphore(p)
-     FreeMem(p,SIZEOF singlePort)
+     Dispose(p)
   ENDFOR
   ReleaseSemaphore(semiNodes)
-  FreeMem(semiNodes,SIZEOF multiPort)
+  Dispose(semiNodes)
   Permit()
 ENDPROC
 
@@ -2420,8 +2420,8 @@ PROC loadTranslators(baseDir:PTR TO CHAR)
         AstrCopy(trans2.translatorName,translatorName,80)
         fsize:=FileLength(fullFileName)
 
-        workMem:=New(fsize+2)     ->allocate some memory (two extra bytes in case there is no newline at the end of the file)
-        trans2.translationText:=New(fsize+4)     ->allocate some memory, two extra bytes for ending colon and space and some in case there is no newline
+        workMem:=NewR(fsize+2)     ->allocate some memory (two extra bytes in case there is no newline at the end of the file)
+        trans2.translationText:=NewR(fsize+4)     ->allocate some memory, two extra bytes for ending colon and space and some in case there is no newline
         
         fh:=Open(fullFileName,MODE_OLDFILE)
         IF fh<>0
@@ -2814,8 +2814,8 @@ PROC getCmds(i)
   DEF j
   DEF sopt:PTR TO startOption
   
-  cmds[i]:=AllocMem(SIZEOF commands,MEMF_PUBLIC OR MEMF_CLEAR)
-  sopts[i]:=AllocMem(SIZEOF startOption,MEMF_PUBLIC OR MEMF_CLEAR)
+  cmds[i]:=NewR(SIZEOF commands)
+  sopts[i]:=NewR(SIZEOF startOption)
   sopt:=sopts[i]
   sopt.leftEdge:=0
   sopt.topEdge:=0
@@ -4171,7 +4171,7 @@ PROC main() HANDLE
   height:=WHEI+(theight*11)
   loadScreen()
 
-  msg:=AllocMem(SIZEOF acpMessage,MEMF_PUBLIC OR MEMF_CLEAR)
+  msg:=NewR(SIZEOF acpMessage)
   IF(EstrLen(publicName)=0)
     scr:=LockPubScreen(NIL)
   ELSE
@@ -4427,12 +4427,12 @@ EXCEPT DO
   ENDIF
   FreeMenus(eWinM)
 
-  IF msg THEN FreeMem(msg,SIZEOF acpMessage)
+  IF msg THEN Dispose(msg)
   
   IF(doMultiCom) THEN shutDownSemis()
   FOR i:=0 TO MAX_NODES-1
-    IF(cmds[i]) THEN FreeMem(cmds[i],SIZEOF commands)
-    IF(sopts[i]) THEN FreeMem(sopts[i],SIZEOF startOption)
+    IF(cmds[i]) THEN Dispose(cmds[i])
+    IF(sopts[i]) THEN Dispose(sopts[i])
   ENDFOR
   
   IF acpData THEN END acpData

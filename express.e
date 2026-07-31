@@ -1,5 +1,5 @@
 -> Ami Express 5 
-OPT LARGE,OSVERSION=37,PURE
+OPT LARGE,OSVERSION=37,PURE,CANPOOL
 
 #ifndef EVO_3_9_2
   FATAL 'Ami-Express should only be compiled with E-VO Amiga E Compiler V3.9.2 or higher'
@@ -694,7 +694,7 @@ PROC openSerial(baud, dataLen, stopBits)
   IF serialReadIO<>NIL THEN RETURN FALSE
 
   IF(StrLen(cmds.serDev)>0)
-    IF (serialCacheSize>0) THEN serialCache:=New(serialCacheSize+1)
+    IF (serialCacheSize>0) THEN serialCache:=NewR(serialCacheSize+1)
     serialCacheLastFlush1,serialCacheLastFlush2:=getSystemTime()
 
     IF (serialCacheSize<=0) OR (serialCache<>NIL)
@@ -1770,7 +1770,7 @@ PROC telnetSend(string:PTR TO CHAR, putlen)
     FOR i:=0 TO putlen-1
       IF string[i]=255 THEN c++
     ENDFOR
-    buf2:=New(putlen+c)
+    buf2:=NewR(putlen+c)
     c:=0
     FOR i:=0 TO putlen-1
       IF string[i]=255
@@ -2555,8 +2555,8 @@ PROC loadTranslator(translator:PTR TO translator,fileName)
   DEF tempstr3[255]:STRING
 
   fsize:=FileLength(fileName)
-  translator.translationText:=New(fsize+4)     ->allocate some memory, two extra bytes for ending colon and space and some in case there is no newline
-  workMem:=New(fsize+2)     ->allocate some memory (two extra bytes in case there is no newline at the end of the file)
+  translator.translationText:=NewR(fsize+4)     ->allocate some memory, two extra bytes for ending colon and space and some in case there is no newline
+  workMem:=NewR(fsize+2)     ->allocate some memory (two extra bytes in case there is no newline at the end of the file)
   fh:=Open(fileName,MODE_OLDFILE)
   IF fh<>0
 
@@ -3199,10 +3199,10 @@ PROC telnetConnect(host:PTR TO CHAR,port)
   aePuts(tempstr)
   aePuts('Escape character is ''^]''.\b\n\b\n')
 
-  readBuffer:=New(8193)
+  readBuffer:=NewR(8193)
   conCursorOn()
 
-  ibuf:=New(255)
+  ibuf:=NewR(255)
 
   rawArrow:=TRUE
   REPEAT
@@ -4900,7 +4900,7 @@ PROC loadConfDB(account,confNum,msgBase,addr,force=FALSE)
 
   IF (Fread(bi,addr,SIZEOF confBase,1)<>1)
     ->if we can't read the conf db then clear out any existing data
-    tmpMem:=New(SIZEOF confBase)
+    tmpMem:=NewR(SIZEOF confBase)
     CopyMem(tmpMem,addr,SIZEOF confBase)
     Dispose(tmpMem)
     callersLog('\tError Reading confbase data')
@@ -9430,7 +9430,7 @@ PROC fileListReverse(filename: PTR TO CHAR) HANDLE
   DEF bufend,temp
   readsize:=memsize
 
-  IF (buf:=New((memsize*2)+2))<>0
+  IF (buf:=NewR((memsize*2)+2))<>0
     bufptr1:=buf
     bufptr2:=buf+memsize+1
     bufend:=FALSE
@@ -9508,7 +9508,7 @@ PROC displayCallersLog(filename: PTR TO CHAR,tf)
   nonStopDisplayFlag:=FALSE
   IF(tf) THEN nonStopDisplayFlag:=TRUE
 
-  IF(buf:=AllocMem(memsize+4,MEMF_ANY))<>0
+  IF(buf:=NewR(memsize+4))<>0
     IF(fh:=Open(filename,MODE_OLDFILE))<>0
       Seek(fh,0,OFFSET_END)
       currentPos:=Seek(fh,0,OFFSET_CURRENT)
@@ -9583,7 +9583,7 @@ PROC displayCallersLog(filename: PTR TO CHAR,tf)
       aePuts('\b\nNot a valid node!\b\n\b\n')
     ENDIF
 
-    FreeMem(buf,memsize+4)
+    Dispose(buf)
   ENDIF
 ENDPROC
 
@@ -14483,7 +14483,7 @@ PROC xprsread()
     tv.secs:=Div(timeout,1000000)
     tv.micro:=Mod(timeout,1000000)
 
-    buf2:=New(bsize)
+    buf2:=NewR(bsize)
     obuf:=buf2
     c2:=0
     REPEAT
@@ -15654,14 +15654,12 @@ PROC ftpStartFileCheck(filename:PTR TO CHAR,success)
   IF success   
     bgCheckPort:=createBackgroundFileCheckThread()
     IF bgCheckPort
-      msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
-      IF msg
-        msg.command:=BG_CHECKFILE_THEN_QUIT
-        AstrCopy(msg.string,FilePart(filename),200)
-        msg.msg.length:=SIZEOF jhMessage
-        ->signal background checking to check the file
-        PutMsg(bgCheckPort,msg)
-      ENDIF
+      msg:=NewR(SIZEOF jhMessage)
+      msg.command:=BG_CHECKFILE_THEN_QUIT
+      AstrCopy(msg.string,FilePart(filename),200)
+      msg.msg.length:=SIZEOF jhMessage
+      ->signal background checking to check the file
+      PutMsg(bgCheckPort,msg)
     ENDIF
   ENDIF
 ENDPROC
@@ -16230,7 +16228,7 @@ PROC downloadFiles(fileList: PTR TO stdlist, estimatedSize:PTR TO CHAR, updateDo
   serShared:=FALSE
 
   zModemRxBufferSize:=8192
-  zmodemRxBuffer:=New(zModemRxBufferSize)
+  zmodemRxBuffer:=NewR(zModemRxBufferSize)
 
   IF ext
     xprio:=NEW xprio
@@ -16597,7 +16595,7 @@ PROC dynAllocate(maxbufsize)
   IF maxbufsize>avail THEN maxbufsize:=avail-65536
 
   /* first try Fast mem allocate */
-  WHILE((pbuf:=AllocMem(maxbufsize,MEMF_PUBLIC OR MEMF_CLEAR)))=FALSE
+  WHILE((pbuf:=New(maxbufsize)))=FALSE
     maxbufsize:=maxbufsize-65536;
     EXIT (maxbufsize<65536)
     Delay(5)
@@ -16617,10 +16615,10 @@ PROC fileCopy(from,to)
   IF(buf<>NIL)
     /* got a buffer full of mem */
     IF(fhs:=Open(to,MODE_OLDFILE))
-          Close(fhs);                 /* file exists so return */
-      FreeMem(buf,bufsize);
-        RETURN RESULT_SUCCESS
-      ENDIF
+      Close(fhs);                 /* file exists so return */
+      Dispose(buf);
+      RETURN RESULT_SUCCESS
+    ENDIF
 
     IF(fhs:=Open(from,MODE_OLDFILE))
       IF(fhd:=Open(to,MODE_NEWFILE))
@@ -16647,7 +16645,7 @@ PROC fileCopy(from,to)
       StringF(tempstr,'\b\nERROR while opening \s for reading!\b\n',from)
       aePuts(tempstr)
     ENDIF
-    FreeMem(buf,bufsize)
+    Dispose(buf)
   ENDIF
 
   IF(((stat1>=0) AND (stat2=RESULT_SUCCESS)))
@@ -17578,7 +17576,7 @@ PROC fileUpload(file,forceZmodem=FALSE) HANDLE
   ENDIF
 
   zModemRxBufferSize:=65546
-  zmodemRxBuffer:=New(zModemRxBufferSize)
+  zmodemRxBuffer:=NewR(zModemRxBufferSize)
 
   IF ext
     IF (xprotocolbase:=OpenLibrary(tempstr,0))=NIL
@@ -17796,20 +17794,18 @@ PROC fileUpload(file,forceZmodem=FALSE) HANDLE
   IF (loggedOnUserKeys<>NIL) AND (netMailTransfer=FALSE)
       IF bgFileCheck AND ((loggedOnUserKeys.userFlags AND USER_BGFILECHECK) OR (checkToolTypeExists(TOOLTYPE_NODE,node,'FORCE_BGFILECHECK')))
       IF (bgport:=FindPort(bgCheckPortName))
-        msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
-        IF msg
-          msg.command:=BG_EXIT
-          msg.msg.length:=SIZEOF jhMessage
-          msg.msg.ln.type:=NT_FREEMSG
-          ->signal background checking to finish
-          PutMsg(bgport,msg)
-          
-          IF FindPort(bgCheckPortName)<>0
-            aePuts('Waiting for background filecheck to complete...\b\n\b\n',TRUE)
-            REPEAT
-              Delay(10)
-            UNTIL FindPort(bgCheckPortName)=0
-          ENDIF
+        msg:=NewR(SIZEOF jhMessage)
+        msg.command:=BG_EXIT
+        msg.msg.length:=SIZEOF jhMessage
+        msg.msg.ln.type:=NT_FREEMSG
+        ->signal background checking to finish
+        PutMsg(bgport,msg)
+        
+        IF FindPort(bgCheckPortName)<>0
+          aePuts('Waiting for background filecheck to complete...\b\n\b\n',TRUE)
+          REPEAT
+            Delay(10)
+          UNTIL FindPort(bgCheckPortName)=0
         ENDIF
       ENDIF
     ENDIF
@@ -17909,7 +17905,7 @@ PROC rFreeSpace(path: PTR TO CHAR)
   DEF spacehi=0,spacelo=0
   DEF temp1,temp2
 
-  IF(i_data:=AllocMem(SIZEOF infodata,MEMF_CHIP))
+  IF(i_data:=NewR(SIZEOF infodata))
     IF(fLock:=Lock(path,ACCESS_READ))
       IF(stat:=Info(fLock,i_data))
       
@@ -17928,7 +17924,7 @@ PROC rFreeSpace(path: PTR TO CHAR)
       StringF(tempstr,'\b\nCan not find free space for \s\b\n',path)
       aePuts(tempstr)
     ENDIF
-    FreeMem(i_data,SIZEOF infodata)
+    Dispose(i_data)
   ELSE
     myError(0)
   ENDIF
@@ -18948,16 +18944,14 @@ PROC doBgCheck()
   IF (zModemInfo.currentOperation=ZMODEM_UPLOAD) AND bgFileCheck AND ((loggedOnUserKeys.userFlags AND USER_BGFILECHECK) OR (checkToolTypeExists(TOOLTYPE_NODE,node,'FORCE_BGFILECHECK')))
       
     IF (bgport:=FindPort(bgCheckPortName))
-      msg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
-      IF msg
-        msg.command:=BG_CHECKFILE
-        AstrCopy(msg.string,FilePart(zModemInfo.fileName),200)
-        msg.msg.ln.type:=NT_FREEMSG
-        msg.msg.length:=SIZEOF jhMessage
+      msg:=NewR(SIZEOF jhMessage)
+      msg.command:=BG_CHECKFILE
+      AstrCopy(msg.string,FilePart(zModemInfo.fileName),200)
+      msg.msg.ln.type:=NT_FREEMSG
+      msg.msg.length:=SIZEOF jhMessage
 
-        ->signal background checking to check the file
-        PutMsg(bgport,msg)
-      ENDIF
+      ->signal background checking to check the file
+      PutMsg(bgport,msg)
     ENDIF
   ENDIF
 ENDPROC
@@ -24863,7 +24857,7 @@ PROC sendOlmPacket(nodenum,msg:PTR TO CHAR,last)
   StringF(nodeserverport,'AEServer.\d',nodenum)
   IF (np:=FindPort(nodeserverport))=NIL THEN RETURN RESULT_FAILURE
 
-  IF(olmMsg:=AllocMem(256,MEMF_ANY OR MEMF_CLEAR))
+  IF(olmMsg:=NewR(256))
     olmMsg.command:=SV_INCOMING_MSG
     olmMsg.nodeID:=node
     olmMsg.msg.length:=256
@@ -25800,7 +25794,7 @@ PROC internalCommandNM()
           IF(stat)
             StringF(str,'AEServer.\d',nd)
             IF (nodeport:=FindPort(str))<>NIL
-              serverMsg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
+              serverMsg:=NewR(SIZEOF jhMessage)
               serverMsg.msg.length:=SIZEOF jhMessage
               serverMsg.msg.replyport:=0
               serverMsg.command:=SV_EXITNODE
@@ -25825,7 +25819,7 @@ PROC internalCommandNM()
           IF(stat)
             StringF(str,'AEServer.\d',nd)
             IF (nodeport:=FindPort(str))<>NIL
-              serverMsg:=AllocMem(SIZEOF jhMessage,MEMF_ANY OR MEMF_CLEAR)
+              serverMsg:=NewR(SIZEOF jhMessage)
               serverMsg.msg.length:=SIZEOF jhMessage
               serverMsg.msg.replyport:=0
               serverMsg.command:=SV_KICKUSER
@@ -28007,7 +28001,7 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
   DEF gi1
   DEF myzip
 
-  myzip:=AllocMem(25600,MEMF_CLEAR OR MEMF_PUBLIC)
+  myzip:=New(25600)
   IF(myzip=FALSE) THEN RETURN RESULT_SUCCESS
 
   current:=myzip+257 ->ln(1,1);
@@ -28015,7 +28009,7 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
 
   fi:=Open(fname,MODE_OLDFILE)
   IF(fi=0)
-    FreeMem(myzip,25600)
+    Dispose(myzip)
     RETURN RESULT_SUCCESS
   ENDIF
 
@@ -28027,13 +28021,13 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
           gi1:=readChar(INPUT_TIMEOUT)
           IF(gi1<0)
             Close(fi);
-            FreeMem(myzip,25600)
+            Dispose(myzip)
             RETURN gi1
           ENDIF
         CASE 3  /*  ctrl-c */
           Close(fi)
           aePuts('**Break\b\n')
-          FreeMem(myzip,25600)
+          Dispose(myzip)
           RETURN RESULT_FAILURE
       ENDSELECT
     ENDIF
@@ -28054,7 +28048,7 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
           gi1:=flagPause(1)
           IF(gi1<0)
             Close(fi)
-            FreeMem(myzip,25600)
+            Dispose(myzip)
             RETURN gi1
           ENDIF
         ENDLOOP
@@ -28085,14 +28079,14 @@ PROC zippy(fname:PTR TO CHAR,search_string: PTR TO CHAR)
       gi1:=flagPause(1)
       IF(gi1<0)
         Close(fi)
-        FreeMem(myzip,25600)
+        Dispose(myzip)
         RETURN gi1
       ENDIF
     ENDLOOP
   ENDIF
 
   Close(fi)
-  FreeMem(myzip,25600)
+  Dispose(myzip)
 ENDPROC RESULT_SUCCESS
 
 PROC displayFileList(params, reverse=FALSE)
@@ -32713,6 +32707,10 @@ PROC main() HANDLE
     StringF(tempstr,'NIL pointer error at line \d',exceptioninfo)
     debugLog(LOG_ERROR,tempstr) 
     WriteF('Error: NIL pointer exception')
+  CASE "MEM"
+    StringF(tempstr,'MEM allocation error at line \d',exceptioninfo)
+    debugLog(LOG_ERROR,tempstr) 
+    WriteF('Error: MEM allocation exception')
   DEFAULT
     IF exception<>0
       StringF(tempstr,'Unknown exception \d',exception)

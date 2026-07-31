@@ -144,7 +144,7 @@ PROC createMessageDat2(confNum,msgDatFilename:PTR TO CHAR, srcFilename:PTR TO CH
       msgsz:=Seek(fh2,p,OFFSET_BEGINNING)-p
       
       bufsz:=(msgsz+127)/128*128
-      msgbuf:=New(bufsz)
+      msgbuf:=NewR(bufsz)
       Read(fh2,msgbuf,msgsz)
       FOR i:=msgsz TO bufsz-1 DO msgbuf[i]:=32
       Close(fh2)
@@ -551,7 +551,7 @@ PROC main() HANDLE
     mf:=Open(qwkMessageFilename,MODE_OLDFILE)
     IF mf<>0
       Seek(mf,128,OFFSET_BEGINNING)
-      buf:=New(128)
+      buf:=NewR(128)
       c:=0
       REPEAT
         n:=Read(mf,buf,128)
@@ -649,7 +649,7 @@ PROC main() HANDLE
           IF qh.confNum=qwkConfId
             newMsgNum++
 
-            buf2:=New(bufsz)
+            buf2:=NewR(bufsz)
             Read(mf,buf2,bufsz)
      
             mh.status:="P"
@@ -732,4 +732,5 @@ EXCEPT DO
   IF mf>0 THEN Close(mf)
   IF buf<>0 THEN Dispose(buf)
   IF buf2<>0 THEN Dispose(buf2)
+  IF exception="MEM" THEN WriteF('Error: MEM allocation exception')
 ENDPROC

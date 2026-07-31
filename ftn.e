@@ -156,7 +156,7 @@ PROC createMessagePacket(originNode,destNode,originNet,destNet,originZone,destZo
     p:=Seek(fh2,0,OFFSET_END)
     msgsz:=Seek(fh2,p,OFFSET_BEGINNING)-p
     
-    msgbuf:=New(msgsz)
+    msgbuf:=NewR(msgsz)
     Read(fh2,msgbuf,msgsz)
     Close(fh2)
 
@@ -675,7 +675,7 @@ PROC processPacketFile(filename:PTR TO CHAR,netMailConf:PTR TO CHAR) HANDLE
   
   mf:=Open(filename,MODE_OLDFILE)
   IF mf<>0
-    buf:=New(58)
+    buf:=NewR(58)
     n:=Fread(mf,buf,58,1)
     IF n>0
       originZone:=buf[46]+Shl(buf[47],8)
@@ -684,7 +684,7 @@ PROC processPacketFile(filename:PTR TO CHAR,netMailConf:PTR TO CHAR) HANDLE
       destPoint:=buf[52]+Shl(buf[53],8)
 
       Dispose(buf)
-      buf:=New(35)
+      buf:=NewR(35)
       c:=0
       REPEAT
         n:=Fread(mf,buf,2,1)
@@ -707,7 +707,7 @@ PROC processPacketFile(filename:PTR TO CHAR,netMailConf:PTR TO CHAR) HANDLE
 
             bufsz:=findBodyLength(mf)
 
-            buf2:=New(bufsz+1)
+            buf2:=NewR(bufsz+1)
             Fread(mf,buf2,bufsz,1)
             
             StrCopy(tempStr,'')
@@ -1188,4 +1188,5 @@ PROC main() HANDLE
 EXCEPT DO
   IF confNames<>NIL THEN END confNames
   IF msgBasePaths<>NIL THEN END msgBasePaths
+  IF exception="MEM" THEN WriteF('Error: MEM allocation exception')
 ENDPROC

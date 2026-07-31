@@ -1342,7 +1342,7 @@ EXPORT PROC xymodem_init(xym: PTR TO xymodem_t, cbdata: PTR TO CHAR,
 
   IF sendbufsize<(xym.max_block_size+512)*2 THEN sendbufsize:=(xym.max_block_size+512)*2
   xym.sendBufferSize:=sendbufsize
-  xym.sendBuffer:=New(xym.sendBufferSize)
+  xym.sendBuffer:=NewR(xym.sendBufferSize)
   xym.sendBufferPtr:=xym.sendBuffer
   xym.sendBufferEnd:=xym.sendBuffer+xym.sendBufferSize
 ENDPROC

@@ -493,7 +493,7 @@ PROC extractFileData(sb,socket,httpData:PTR TO httpData,boundary:PTR TO CHAR,con
   boundaryLen:=StrLen(boundary) 
   bufsize:=32768+boundaryLen
   readSize:=bufsize
-  buff:=New(readSize)
+  buff:=NewR(readSize)
   
   ->dupecheck
   
@@ -721,7 +721,7 @@ EXPORT PROC doHttpd(node,httphost,httpports:PTR TO LONG,httppath,aePutsPtr, read
                 writeLineEx(sb,http_c,'content-type: binary/octet-stream\b\n')
                 writeLineEx(sb,http_c,'\b\n')
                 
-                buff:=New(32768)
+                buff:=NewR(32768)
                 t:=fastSystemTime()
                 lastpos:=0
                 cps:=0

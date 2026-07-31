@@ -1,6 +1,6 @@
 # Compile ACP and EXPRESS and any dependencies
 
-debugoptions=DEBUG IGNORECACHE NILCHECK SYM SHOWFNAME
+debugoptions=DEBUG IGNORECACHE NILCHECK SYM SHOWFNAME DEBUGLINENOS
 releaseoptions=IGNORECACHE OPTI SHOWFNAME
 compiler=EVO
 expprogramname=AmiExpress

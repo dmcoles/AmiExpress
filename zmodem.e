@@ -486,7 +486,7 @@ PROC getFreeDiskSpace(zm:PTR TO zmodem_t, path:PTR TO CHAR)
   DEF freebytes=0:LONG
   DEF tempstr[255]:STRING
 
-  IF (i_data:=AllocMem(SIZEOF infodata, MEMF_CHIP))
+  IF (i_data:=NewR(SIZEOF infodata))
     IF (fLock:=Lock(path, ACCESS_READ))
       IF Info(fLock, i_data)
         temp1, temp2:=mulu64(i_data.numblocks - i_data.numblocksused,
@@ -499,7 +499,7 @@ PROC getFreeDiskSpace(zm:PTR TO zmodem_t, path:PTR TO CHAR)
       StringF(tempstr, 'Cannot lock path for disk space check: \s', path)
       lprintf(zm, LOG_ERROR, tempstr)
     ENDIF
-    FreeMem(i_data, SIZEOF infodata)
+    Dispose(i_data)
   ENDIF
 ENDPROC freebytes
 
@@ -529,7 +529,7 @@ PROC fcrc32(zm:PTR TO zmodem_t,fp,  len)
   DEF i,n,n2: PTR TO CHAR
 
   doSeek(zm,fp,0,OFFSET_BEGINNING)
-  n:=New(32768)
+  n:=NewR(32768)
   IF n=0 THEN RETURN $ffffffff
   
   REPEAT
@@ -3127,12 +3127,12 @@ EXPORT PROC zmodem_init(zm: PTR TO zmodem_t, cbdata: PTR TO CHAR,
   zm.zm_firstfile:=firstfile
   zm.zm_nextfile:=nextfile
 
-  zm.tx_data_subpacket:=New(TXSUBPACKETSIZE)
-  zm.rx_data_subpacket:=New(RXSUBPACKETSIZE)
+  zm.tx_data_subpacket:=NewR(TXSUBPACKETSIZE)
+  zm.rx_data_subpacket:=NewR(RXSUBPACKETSIZE)
   
   IF sendbufsize<(zm.max_block_size+512)*2 THEN sendbufsize:=(zm.max_block_size+512)*2
   zm.sendBufferSize:=sendbufsize
-  zm.sendBuffer:=New(zm.sendBufferSize)
+  zm.sendBuffer:=NewR(zm.sendBufferSize)
   zm.sendBufferPtr:=zm.sendBuffer
   zm.sendBufferEnd:=zm.sendBuffer+zm.sendBufferSize
   
