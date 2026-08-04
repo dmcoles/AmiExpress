@@ -1,7 +1,5 @@
-OPT OSVERSION = 37,LARGE,STACK=35000->,RUNBG
+OPT OSVERSION = 37,LARGE,STACK=35000,RUNBG
 OPT PREPROCESS
-
-->msgbaserjoin
 
 MODULE 'locale'
 MODULE 'muimaster' , 'libraries/mui'

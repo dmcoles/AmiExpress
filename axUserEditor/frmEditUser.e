@@ -31,6 +31,7 @@ EXPORT OBJECT frmEditUser OF frmBase
   confNameList:PTR TO LONG
   confDbList:PTR TO LONG
   confDbSharedItems:PTR TO LONG
+  confMbCounts:PTR TO LONG
   areaList:PTR TO LONG
   presetmenus[10]:ARRAY OF LONG
   presetCycleItems[10]:ARRAY OF LONG
@@ -114,6 +115,35 @@ EXPORT PROC convertToBCD(invalue,outArray: PTR TO CHAR)
   ENDFOR
 ENDPROC
 
+PROC bcdVal(inStr:PTR TO CHAR, bcdArray:PTR TO CHAR)
+  DEF valid=TRUE
+  DEF n,bit,i2,i
+
+  i2:=7
+  bit:=FALSE
+  i:=StrLen(inStr)-1
+  WHILE(i2>=0)
+    IF i>=0 THEN n:=inStr[i]-"0" ELSE n:=0
+    IF (n<0) OR (n>9) THEN valid:=FALSE
+    EXIT valid=FALSE
+
+    IF (bit)
+      bcdArray[i2]:=bcdArray[i2] OR Shl(n,4)
+      i2--
+    ELSE
+      bcdArray[i2]:=n
+    ENDIF
+    bit:=Not(bit)
+    i--
+  ENDWHILE
+
+  IF valid=FALSE
+    FOR i:=0 TO 7
+      bcdArray[i]:=0
+    ENDFOR
+  ENDIF
+ENDPROC valid
+
 EXPORT PROC formatBCD(valArrayBCD:PTR TO CHAR, outStr)
   DEF tempStr[2]:STRING
   DEF i,n,start=FALSE
@@ -133,6 +163,23 @@ EXPORT PROC formatBCD(valArrayBCD:PTR TO CHAR, outStr)
   ENDFOR
 ENDPROC
 
+EXPORT PROC addBCD2(bcdTotal:PTR TO CHAR, bcdValToAdd: PTR TO CHAR)
+  MOVE.L bcdValToAdd,A0
+  LEA 8(A0),A0
+  MOVE.L bcdTotal,A1
+  LEA 8(A1),A1
+
+  SUB.L D0,D0        ->clear X flag
+
+  ABCD -(A0),-(A1)
+  ABCD -(A0),-(A1)
+  ABCD -(A0),-(A1)
+  ABCD -(A0),-(A1)
+  ABCD -(A0),-(A1)
+  ABCD -(A0),-(A1)
+  ABCD -(A0),-(A1)
+  ABCD -(A0),-(A1)
+ENDPROC
 
 EXPORT PROC subBCD2(bcdTotal:PTR TO CHAR, bcdValToSub: PTR TO CHAR)
   MOVE.L bcdValToSub,A0
@@ -510,42 +557,89 @@ PROC loadBBSSetup() OF frmEditUser
   DEF toolname[200]:STRING
   DEF toolTypeFile[200]:STRING
   DEF toolTypeFile2[200]:STRING  
-  DEF count,i,loop,n
+  DEF count,count2,i,j,loop,n,v
   DEF tempstring[200]:STRING
+  DEF tempstring2[200]:STRING
 
   StringF(toolTypeFile,'\sConfConfig',self.bbsPath)
 
   count:=readToolTypeInt(toolTypeFile,'NCONFS')
-  self.confCount:=count
+  count2:=0
+  FOR i:=1 TO count
+    StringF(toolname,'LOCATION.\d',i)
+    readToolType(toolTypeFile,toolname,toolTypeFile2)
+    StrAdd(toolTypeFile2,'Msgbases')
+    n:=readToolTypeInt(toolTypeFile2,'NMSGBASES')
+    IF n<=0 THEN n:=1
+    count2+=n   
+  ENDFOR
+  self.confCount:=count2
   self.freeList(self.confNameList)
   self.freeList(self.confDbList)
   Dispose(self.confDbEntries)
   Dispose(self.editedConfDbEntries)
   Dispose(self.confDbSharedItems)
+  Dispose(self.confMbCounts)
 
-  self.confNameList:=New((count+1)*4)
-  self.confDbList:=New((count+1)*4)
-  self.confDbEntries:=New(count*SIZEOF confBase)
-  self.editedConfDbEntries:=New(count*SIZEOF confBase)
-  self.confDbSharedItems:=New(count*4)
+  self.confNameList:=New((count2+1)*4)
+  self.confDbList:=New((count2+1)*4)
+  self.confDbEntries:=New(count2*SIZEOF confBase)
+  self.editedConfDbEntries:=New(count2*SIZEOF confBase)
+  self.confDbSharedItems:=New(count2*4)
+  self.confMbCounts:=New(count*4)
   IF (count>0)
+    v:=0
     FOR i:=1 TO count
-      StringF(toolname,'NAME.\d',i)
-      readToolType(toolTypeFile,toolname,tempstring)
-      self.confNameList[i-1]:=StrClone(tempstring)
+      StringF(toolname,'LOCATION.\d',i)
+      readToolType(toolTypeFile,toolname,toolTypeFile2)
+      StrAdd(toolTypeFile2,'Msgbases')
+      count2:=readToolTypeInt(toolTypeFile2,'NMSGBASES')
 
-      StringF(toolTypeFile2,'\sConf\d',self.bbsPath,i)
-      StringF(toolname,'CONFDB_SHARED')
-      n:=readToolTypeInt(toolTypeFile2,toolname)
-      IF n<=0
-        StringF(toolname,'LOCATION.\d',i)
+      self.confMbCounts[i-1]:=IF count2<=0 THEN 1 ELSE count2
+      
+      IF count2<=0
+        StringF(toolname,'NAME.\d',i)
         readToolType(toolTypeFile,toolname,tempstring)
-        StrAdd(tempstring,'Conf.DB')
-        self.confDbList[i-1]:=StrClone(tempstring)
+        self.confNameList[v]:=StrClone(tempstring)
+
+        StringF(toolTypeFile2,'\sConf\d',self.bbsPath,i)
+        StringF(toolname,'CONFDB_SHARED')
+        n:=readToolTypeInt(toolTypeFile2,toolname)
+        IF n<=0
+          StringF(toolname,'LOCATION.\d',i)
+          readToolType(toolTypeFile,toolname,tempstring)
+          StrAdd(tempstring,'Conf.DB')
+          self.confDbList[i-1]:=StrClone(tempstring)
+        ELSE
+          self.confDbList[v]:=''
+        ENDIF
+        self.confDbSharedItems[v]:=n
+        v++
       ELSE
-        self.confDbList[i-1]:=''
+        FOR j:=1 TO count2
+          StringF(toolname,'NAME.\d',i)
+          readToolType(toolTypeFile,toolname,tempstring)
+
+          StringF(toolname,'NAME.\d',j)
+          readToolType(toolTypeFile2,toolname,tempstring2)
+          StrAdd(tempstring,' - ')
+          StrAdd(tempstring,tempstring2)
+          self.confNameList[v]:=StrClone(tempstring)
+
+          StringF(toolname,'CONFDB_SHARED')
+          n:=readToolTypeInt(toolTypeFile2,toolname)
+          IF n<=0
+            StringF(toolname,'LOCATION.\d',i)
+            readToolType(toolTypeFile2,toolname,tempstring)
+            StrAdd(tempstring,'Conf.DB')
+            self.confDbList[v]:=StrClone(tempstring)
+          ELSE
+            self.confDbList[v]:=''
+          ENDIF
+          self.confDbSharedItems[v]:=n
+          v++
+        ENDFOR
       ENDIF
-      self.confDbSharedItems[i-1]:=n
     ENDFOR
   ENDIF
   set(self.app.cyRejoinConf,MUIA_Cycle_Entries,self.confNameList)
@@ -684,7 +778,7 @@ PROC loadUser(userId) OF frmEditUser
     set( self.app.strPassword, MUIA_Text_Contents,'1234567890')
     set( self.app.strLocation, MUIA_Text_Contents,self.userData.location)
     set( self.app.strPhone, MUIA_Text_Contents,self.userData.phoneNumber)
-    set( self.app.cyRejoinConf, MUIA_Cycle_Active,self.userData.confRJoin-1)
+    set( self.app.cyRejoinConf, MUIA_Cycle_Active,self.calculateConfIndex(self.userData.confRJoin,self.userData.msgBaseRJoin))
 
     i:=0
     WHILE self.areaList[i]
@@ -937,24 +1031,54 @@ ENDPROC TRUE
 ENDPROC*/
 
 PROC saveCurrentConfBase() OF frmEditUser
-  DEF tempval
+  DEF tempval,diff
+  DEF tempstr[20]:STRING
+  DEF tempvalBCD[8]:ARRAY OF CHAR
+  DEF diffBCD[8]:ARRAY OF CHAR
   DEF editedConfBase:PTR TO confBase
 
   editedConfBase:=self.editedConfDbEntries+(SIZEOF confBase*self.currConf)
  
   get(self.app.strCbDownloadBytes, MUIA_Text_Contents,{tempval})
-  formatBCD(editedConfBase.downloadBytesBCD,tempval)
+  bcdVal(tempval,diffBCD)
+  subBCD2(diffBCD,editedConfBase.downloadBytesBCD)
+
+  bcdVal(tempval,editedConfBase.downloadBytesBCD)
   editedConfBase.bytesDownload:=convertFromBCD(editedConfBase.downloadBytesBCD)
+  get(self.app.strDownloadBytes, MUIA_Text_Contents,{tempval})
+  bcdVal(tempval,tempvalBCD)
+  addBCD2(tempvalBCD,diffBCD)
+  formatBCD(tempvalBCD,tempstr)
+  set(self.app.strDownloadBytes, MUIA_Text_Contents,tempstr)
+  
 
   get(self.app.strCbUploadBytes, MUIA_Text_Contents,{tempval})
-  formatBCD(editedConfBase.uploadBytesBCD,tempval)
+  bcdVal(tempval,diffBCD)
+  subBCD2(diffBCD,editedConfBase.uploadBytesBCD)
+
+  bcdVal(tempval,editedConfBase.uploadBytesBCD)
   editedConfBase.bytesUpload:=convertFromBCD(editedConfBase.uploadBytesBCD)
+  get(self.app.strUploadBytes, MUIA_Text_Contents,{tempval})
+  bcdVal(tempval,tempvalBCD)
+  addBCD2(tempvalBCD,diffBCD)
+  formatBCD(tempvalBCD,tempstr)
+  set(self.app.strUploadBytes, MUIA_Text_Contents,tempstr)
 
   get(self.app.strCbUploads, MUIA_Text_Contents,{tempval})
+  diff:=Val(tempval)-editedConfBase.upload
   editedConfBase.upload:=Val(tempval)
+  get(self.app.strUploads, MUIA_Text_Contents,{tempval})
+  diff+=Val(tempval)
+  StringF(tempstr,'\d',diff)
+  set(self.app.strUploads, MUIA_Text_Contents,tempstr)
 
   get(self.app.strCbDownloads, MUIA_Text_Contents,{tempval})
+  diff:=Val(tempval)-editedConfBase.downloads
   editedConfBase.downloads:=Val(tempval)
+  get(self.app.strDownloads, MUIA_Text_Contents,{tempval})
+  diff+=Val(tempval)
+  StringF(tempstr,'\d',diff)
+  set(self.app.strDownloads, MUIA_Text_Contents,tempstr)
 
   get(self.app.strCbRatio, MUIA_Text_Contents,{tempval})
   editedConfBase.ratio:=Val(tempval)
@@ -963,7 +1087,12 @@ PROC saveCurrentConfBase() OF frmEditUser
   editedConfBase.ratioType:=tempval
 
   get(self.app.strCbMessages, MUIA_Text_Contents,{tempval})
+  diff:=Val(tempval)-editedConfBase.messagesPosted
   editedConfBase.messagesPosted:=Val(tempval)
+  get(self.app.strMessages, MUIA_Text_Contents,{tempval})
+  diff+=Val(tempval)
+  StringF(tempstr,'\d',diff)
+  set(self.app.strMessages, MUIA_Text_Contents,tempstr)
 ENDPROC
 
 PROC loadConfBase(firstTime) OF frmEditUser
@@ -1011,6 +1140,22 @@ PROC loadConfBase(firstTime) OF frmEditUser
   self.unsavedChanges:=temp
 ENDPROC
 
+PROC calculateConfIndex(conf,mbase) OF frmEditUser
+  DEF index=0,i
+  FOR i:=1 TO conf-1
+    index+=self.confMbCounts[i-1]
+  ENDFOR
+  index+=mbase-1
+ENDPROC index
+
+PROC calculateConfAndMbase(conf) OF frmEditUser
+  DEF c=0 
+  LOOP
+    IF (conf<self.confMbCounts[c]) THEN RETURN c+1,conf+1
+    conf-=self.confMbCounts[c]
+    c++
+  ENDLOOP 
+ENDPROC
 
 PROC saveUser(userId) OF frmEditUser
   DEF fh,flen,tempval,i
@@ -1027,6 +1172,7 @@ PROC saveUser(userId) OF frmEditUser
   DEF oldConfBase:PTR TO confBase
   DEF newConfBase:PTR TO confBase
   DEF editedConfBase:PTR TO confBase
+  DEF conf,mbase
 
   StringF(userdatafname,'\suser.data',self.bbsPath)
   StringF(userkeysfname,'\suser.keys',self.bbsPath)
@@ -1090,8 +1236,10 @@ PROC saveUser(userId) OF frmEditUser
   ENDIF
 
   get(self.app.cyRejoinConf, MUIA_Cycle_Active,{tempval})
-  IF oldUserData.confRJoin<>(tempval+1)
-    self.userData.confRJoin:=tempval+1
+  conf,mbase:=self.calculateConfAndMbase(tempval)
+  IF (oldUserData.confRJoin<>conf) OR (oldUserData.msgBaseRJoin<>mbase)
+    self.userData.confRJoin:=conf
+    self.userData.msgBaseRJoin:=mbase
   ENDIF
 
   get(self.app.cySecArea, MUIA_Cycle_Active,{tempval})
@@ -1126,15 +1274,15 @@ PROC saveUser(userId) OF frmEditUser
 
   get(self.app.strDownloadBytes, MUIA_Text_Contents,{tempval})
   formatBCD(oldUserMisc.downloadBytesBCD,tempstring)
-  IF StrCmp(tempstring,tempval)=FALSE
-    formatBCD(self.userMisc.downloadBytesBCD,tempval)
+  IF StrCmp(tempstring,tempval)=FALSE 
+    bcdVal(tempval,self.userMisc.downloadBytesBCD)
     self.userData.bytesDownload:=convertFromBCD(self.userMisc.downloadBytesBCD)
   ENDIF
 
   get(self.app.strUploadBytes, MUIA_Text_Contents,{tempval})
   formatBCD(oldUserMisc.uploadBytesBCD,tempstring)
   IF StrCmp(tempstring,tempval)=FALSE
-    formatBCD(self.userMisc.uploadBytesBCD,tempval)
+    bcdVal(tempval,self.userMisc.uploadBytesBCD)
     self.userData.bytesUpload:=convertFromBCD(self.userMisc.uploadBytesBCD)
   ENDIF
 
@@ -1439,8 +1587,7 @@ PROC applyPreset(presetNum) OF frmEditUser
   ENDWHILE
   
   set( self.app.slSecLevel, MUIA_Slider_Level,readToolTypeInt(toolTypeFile,'PRESET.ACCESS'))
-  set( self.app.cyRejoinConf,MUIA_Cycle_Active,readToolTypeInt(toolTypeFile,'PRESET.CONFRJOIN')-1)
-  //set( self.app.cyRejoinMsgbase,MUIA_Cycle_Active,readToolTypeInt(toolTypeFile,'PRESET.MSGBASERJOIN')-1)
+  set( self.app.cyRejoinConf,MUIA_Cycle_Active,self.calculateConfIndex(readToolTypeInt(toolTypeFile,'PRESET.CONFRJOIN'),readToolTypeInt(toolTypeFile,'PRESET.MSGBASERJOIN')))
   
   StringF(tempstring,'\d',readToolTypeInt(toolTypeFile,'PRESET.DAILY_BYTE_LIMIT'))
   set( self.app.strByteLimit, MUIA_Text_Contents,tempstring)
@@ -1527,13 +1674,13 @@ PROC setupControlChangeNotify() OF frmEditUser
   self.setupCycleControlChangeNotify(self.app.cyComputers)
   self.setupCycleControlChangeNotify(self.app.cyScreens)
 
-  self.setupCycleControlChangeNotify(self.app.strCbDownloadBytes)
-  self.setupCycleControlChangeNotify(self.app.strCbUploadBytes)
-  self.setupCycleControlChangeNotify(self.app.strCbUploads)
-  self.setupCycleControlChangeNotify(self.app.strCbDownloads)
-  self.setupCycleControlChangeNotify(self.app.strCbRatio)
+  self.setupStrControlChangeNotify(self.app.strCbDownloadBytes)
+  self.setupStrControlChangeNotify(self.app.strCbUploadBytes)
+  self.setupStrControlChangeNotify(self.app.strCbUploads)
+  self.setupStrControlChangeNotify(self.app.strCbDownloads)
+  self.setupStrControlChangeNotify(self.app.strCbRatio)
   self.setupCycleControlChangeNotify(self.app.cyCbRatioType)
-  self.setupCycleControlChangeNotify(self.app.strCbMessages)
+  self.setupStrControlChangeNotify(self.app.strCbMessages)
 ENDPROC
 
 PROC clearStrControlChangeNotify(control) OF frmEditUser
@@ -1580,13 +1727,13 @@ PROC clearControlChangeNotify() OF frmEditUser
   self.clearCycleControlChangeNotify(self.app.cyComputers)
   self.clearCycleControlChangeNotify(self.app.cyScreens)
   
-  self.clearCycleControlChangeNotify(self.app.strCbDownloadBytes)
-  self.clearCycleControlChangeNotify(self.app.strCbUploadBytes)
-  self.clearCycleControlChangeNotify(self.app.strCbUploads)
-  self.clearCycleControlChangeNotify(self.app.strCbDownloads)
-  self.clearCycleControlChangeNotify(self.app.strCbRatio)
+  self.clearStrControlChangeNotify(self.app.strCbDownloadBytes)
+  self.clearStrControlChangeNotify(self.app.strCbUploadBytes)
+  self.clearStrControlChangeNotify(self.app.strCbUploads)
+  self.clearStrControlChangeNotify(self.app.strCbDownloads)
+  self.clearStrControlChangeNotify(self.app.strCbRatio)
   self.clearCycleControlChangeNotify(self.app.cyCbRatioType)
-  self.clearCycleControlChangeNotify(self.app.strCbMessages)
+  self.clearStrControlChangeNotify(self.app.strCbMessages)
   
 ENDPROC
 
@@ -1701,6 +1848,7 @@ PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
   Dispose(self.confDbEntries)
   Dispose(self.editedConfDbEntries)
   Dispose(self.confDbSharedItems)
+  Dispose(self.confMbCounts)
   self.freeList(self.areaList)
 
   END closeHook
@@ -1800,6 +1948,7 @@ PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
   Dispose(self.confDbEntries)
   Dispose(self.editedConfDbEntries)
   Dispose(self.confDbSharedItems)
+  Dispose(self.confMbCounts)
   self.freeList(self.areaList)
 
   END closeHook
