@@ -5,7 +5,7 @@ MODULE 'muimaster' , 'libraries/mui'
 MODULE 'tools/boopsi','dos/dos','libraries/asl','dos/var','dos/datetime'
 MODULE 'utility/tagitem' , 'utility/hooks', 'tools/installhook'
 
-MODULE '*frmBase','*axuseredit','*axuserobjects','*/axSetupTool/tooltypes','*/stringlist','*/axSetupTool/miscfuncs'
+MODULE '*frmBase','*frmSetPassword','*axuseredit','*axuserobjects','*/axSetupTool/tooltypes','*/stringlist','*/axSetupTool/miscfuncs','*/pwdHash','*/sha256'
 
 ENUM PWD_LEGACY=0, PWD_PBKDF2_5=1, PWD_PBKDF2_50=2, PWD_PBKDF2_100=3,PWD_PBKDF2_1000=4,PWD_PBKDF2_10000=5
 
@@ -19,18 +19,38 @@ EXPORT OBJECT frmEditUser OF frmBase
   btnPrevClickHook: hook
   btnNextClickHook: hook
   btnApplyClickHook: hook
+  btnSetPasswordClickHook: hook
   controlChangeHook: hook
   userData:PTR TO user
   userKeys:PTR TO userKeys
   userMisc:PTR TO userMisc
+  confDbEntries:LONG
+  editedConfDbEntries:LONG
   computerList:PTR TO LONG
   screenTypesList:PTR TO LONG
   confNameList:PTR TO LONG
+  confDbList:PTR TO LONG
+  confDbSharedItems:PTR TO LONG
   areaList:PTR TO LONG
   presetmenus[10]:ARRAY OF LONG
   presetCycleItems[10]:ARRAY OF LONG
+  newPassword[80]:ARRAY OF CHAR
   unsavedChanges:CHAR
+  userId:INT
+  passType:INT
+  confCount:INT
+  currConf:INT
 ENDOBJECT
+
+->returns system time converted to c time format and ticks
+EXPORT PROC getSystemTime()
+  DEF currDate: datestamp
+  DEF startds:PTR TO datestamp
+
+  startds:=DateStamp(currDate)
+  ->2922 days between 1/1/70 and 1/1/78
+
+ENDPROC (Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50))+21600,Mod(startds.tick,50)
 
 PROC dateTimeToDateStamp(dateVal,datestamp:PTR TO datestamp)
   dateVal:=dateVal-21600
@@ -189,6 +209,39 @@ PROC prevbuttonPressed() OF frmEditUser
   IF level>1 THEN set(self.app.slUserId, MUIA_Slider_Level,level-1)
 ENDPROC
 
+PROC setpasswordbuttonpressed() OF frmEditUser
+  DEF frmSetPwd:PTR TO frmSetPassword
+  DEF newPassword[80]:STRING
+  DEF tempstring[20]:STRING
+  MOVE.L (A1),self
+  GetA4()
+ 
+  NEW frmSetPwd.create(self.app)
+
+  IF frmSetPwd.setPassword(newPassword)
+    AstrCopy(self.newPassword,newPassword)
+
+    SELECT self.passType
+      CASE PWD_LEGACY
+        StrCopy(tempstring,'LEGACY')
+      CASE PWD_PBKDF2_5
+        StrCopy(tempstring,'PBKDF2(5)')
+      CASE PWD_PBKDF2_50
+        StrCopy(tempstring,'PBKDF2(50)')
+      CASE PWD_PBKDF2_100
+        StrCopy(tempstring,'PBKDF2(100)')
+      CASE PWD_PBKDF2_1000
+        StrCopy(tempstring,'PBKDF2(1000)')
+      CASE PWD_PBKDF2_10000
+        StrCopy(tempstring,'PBKDF2(10000)')
+    ENDSELECT
+    set( self.app.strPwdType, MUIA_Text_Contents,tempstring)
+
+    self.unsavedChanges:=TRUE
+  ENDIF
+  END frmSetPwd
+ENDPROC
+
 
 PROC sliderchanged() OF frmEditUser
   DEF level
@@ -199,6 +252,15 @@ PROC sliderchanged() OF frmEditUser
   self.getUserName(level)
   set( self.app.txtSelectUserName, MUIA_Text_Contents,self.selectUser)
   set( self.app.txtSelectUserName, MUIA_Weight,30)
+ENDPROC
+
+PROC confbasechanged() OF frmEditUser
+  DEF level
+  DEF i,cb:PTR TO confBase
+  MOVE.L (A1),self
+  GetA4()
+
+  self.loadConfBase(FALSE)
 ENDPROC
 
 PROC nextbuttonPressed() OF frmEditUser
@@ -236,6 +298,43 @@ PROC unsavedChangesWarning() OF frmEditUser
     '*OK|CANCEL','You have unsaved changes,\nif you continue you will lose them.',0)=0 THEN RETURN FALSE
 ENDPROC TRUE
 
+PROC updatePassword() OF frmEditUser
+  DEF newpass[80]:STRING
+  
+  StrCopy(newpass,self.newPassword)
+  IF EstrLen(newpass)>0
+    
+    self.userMisc.pwdType:=self.passType
+    SELECT self.passType
+      CASE PWD_LEGACY
+        UpperStr(newpass)
+        self.userData.pwdHash:=calcPasswordHash(newpass)
+        MemFill(self.userMisc.pwdHash,32,0)
+      CASE PWD_PBKDF2_5
+        calcPasswordSalt(self.userMisc.salt)
+        pkcs5_pbkdf2(newpass,StrLen(newpass), self.userMisc.salt,8, self.userMisc.pwdHash, 32, 5)
+        self.userData.pwdHash:=-1
+      CASE PWD_PBKDF2_50
+        calcPasswordSalt(self.userMisc.salt)
+        pkcs5_pbkdf2(newpass,StrLen(newpass), self.userMisc.salt,8, self.userMisc.pwdHash, 32, 50)
+        self.userData.pwdHash:=-1
+      CASE PWD_PBKDF2_100
+        calcPasswordSalt(self.userMisc.salt)
+        pkcs5_pbkdf2(newpass,StrLen(newpass), self.userMisc.salt,8, self.userMisc.pwdHash, 32, 100)
+        self.userData.pwdHash:=-1
+      CASE PWD_PBKDF2_1000
+        calcPasswordSalt(self.userMisc.salt)
+        pkcs5_pbkdf2(newpass,StrLen(newpass), self.userMisc.salt,8, self.userMisc.pwdHash, 32, 1000)
+        self.userData.pwdHash:=-1
+      CASE PWD_PBKDF2_10000
+        calcPasswordSalt(self.userMisc.salt)
+        pkcs5_pbkdf2(newpass,StrLen(newpass), self.userMisc.salt,8, self.userMisc.pwdHash, 32, 10000)
+        self.userData.pwdHash:=-1
+    ENDSELECT
+    self.userMisc.pwdLastUpdated:=getSystemTime()
+  ENDIF
+ENDPROC
+
 PROC getUserName(userId) OF frmEditUser
   DEF userData:PTR TO user
   DEF fh
@@ -259,7 +358,7 @@ PROC getUserName(userId) OF frmEditUser
 ENDPROC
 
 PROC newUser() OF frmEditUser
-  self.loadBBSSetup()
+  DEF i,cb:PTR TO confBase
 
   set( self.app.strUsername, MUIA_Text_Contents,'')
 
@@ -283,42 +382,55 @@ PROC newUser() OF frmEditUser
 
   set( self.app.strDownloadCPS, MUIA_Text_Contents,'0')
     
-    set( self.app.strByteLimit, MUIA_Text_Contents,'0')
+  set( self.app.strByteLimit, MUIA_Text_Contents,'0')
 
-    set( self.app.strTimeTotal, MUIA_Text_Contents,'0')
+  set( self.app.strTimeTotal, MUIA_Text_Contents,'0')
 
-    set( self.app.strTimeLimit, MUIA_Text_Contents,'0')
+  set( self.app.strTimeLimit, MUIA_Text_Contents,'0')
 
-    set( self.app.strChatLimit, MUIA_Text_Contents,'0')
+  set( self.app.strChatLimit, MUIA_Text_Contents,'0')
 
-    set( self.app.strTimeUsed, MUIA_Text_Contents,'0')
+  set( self.app.strTimeUsed, MUIA_Text_Contents,'0')
 
-    set( self.app.strChatUsed, MUIA_Text_Contents,'0')
+  set( self.app.strChatUsed, MUIA_Text_Contents,'0')
 
-    set( self.app.cyPwdReset, MUIA_Cycle_Active,1)
+  set( self.app.cyPwdReset, MUIA_Cycle_Active,1)
 
-    set( self.app.cyAccountLocked, MUIA_Cycle_Active,1)
+  set( self.app.cyAccountLocked, MUIA_Cycle_Active,1)
 
-    set( self.app.strInvalidAttempts, MUIA_Text_Contents,'0')
+  set( self.app.strInvalidAttempts, MUIA_Text_Contents,'0')
 
-    set( self.app.cyNewUser,MUIA_Cycle_Active,0)
- 
-    set( self.app.cyComputers, MUIA_Cycle_Active,0)
+  set( self.app.cyNewUser,MUIA_Cycle_Active,0)
 
-    set( self.app.cyScreens, MUIA_Cycle_Active,0)
+  set( self.app.cyComputers, MUIA_Cycle_Active,0)
 
-    set( self.app.strTotalCalls, MUIA_Text_Contents,'0')
+  set( self.app.cyScreens, MUIA_Cycle_Active,0)
 
-    set( self.app.strPwdType, MUIA_Text_Contents,'N/A')
+  set( self.app.strTotalCalls, MUIA_Text_Contents,'0')
 
-    set( self.app.strCallsToday, MUIA_Text_Contents,'0')
+  set( self.app.strPwdType, MUIA_Text_Contents,'N/A')
 
-    set( self.app.strLastCalled, MUIA_Text_Contents,'')
+  set( self.app.strCallsToday, MUIA_Text_Contents,'0')
 
-    set( self.app.strLastPwdReset, MUIA_Text_Contents,'')
-    
-    self.applyPreset(1)
-    
+  set( self.app.strLastCalled, MUIA_Text_Contents,'')
+
+  set( self.app.strLastPwdReset, MUIA_Text_Contents,'')
+
+  set( self.app.strCbRatio, MUIA_Text_Contents,'')
+  set( self.app.cyCbRatioType, MUIA_Cycle_Active,0)
+  set( self.app.strCbUploads, MUIA_Text_Contents,'0')  
+  set( self.app.strCbDownloads, MUIA_Text_Contents,'0')
+  set( self.app.strCbDownloadBytes, MUIA_Text_Contents,'0')
+  set( self.app.strCbUploadBytes, MUIA_Text_Contents,'0')
+  set( self.app.strCbMessages, MUIA_Text_Contents,'0')
+  
+  set ( self.app.cyCbConf,MUIA_Cycle_Active,0)
+  self.currConf:=0
+
+  self.loadConfBase(TRUE)
+
+  self.applyPreset(1)
+  
 ENDPROC
 
 PROC freeList(list:PTR TO LONG) OF frmEditUser
@@ -397,21 +509,47 @@ ENDPROC
 PROC loadBBSSetup() OF frmEditUser
   DEF toolname[200]:STRING
   DEF toolTypeFile[200]:STRING
-  DEF count,i,loop
+  DEF toolTypeFile2[200]:STRING  
+  DEF count,i,loop,n
   DEF tempstring[200]:STRING
 
   StringF(toolTypeFile,'\sConfConfig',self.bbsPath)
+
   count:=readToolTypeInt(toolTypeFile,'NCONFS')
+  self.confCount:=count
   self.freeList(self.confNameList)
+  self.freeList(self.confDbList)
+  Dispose(self.confDbEntries)
+  Dispose(self.editedConfDbEntries)
+  Dispose(self.confDbSharedItems)
+
   self.confNameList:=New((count+1)*4)
+  self.confDbList:=New((count)*4)
+  self.confDbEntries:=New(count*SIZEOF confBase)
+  self.editedConfDbEntries:=New(count*SIZEOF confBase)
+  self.confDbSharedItems:=New(count*4)
   IF (count>0)
     FOR i:=1 TO count
       StringF(toolname,'NAME.\d',i)
       readToolType(toolTypeFile,toolname,tempstring)
       self.confNameList[i-1]:=StrClone(tempstring)
+
+      StringF(toolTypeFile2,'\sConf\d',self.bbsPath,i)
+      StringF(toolname,'CONFDB_SHARED')
+      n:=readToolTypeInt(toolTypeFile2,toolname)
+      IF n<=0
+        StringF(toolname,'LOCATION.\d',i)
+        readToolType(toolTypeFile,toolname,tempstring)
+        StrAdd(tempstring,'Conf.DB')
+        self.confDbList[i-1]:=StrClone(tempstring)
+      ELSE
+        self.confDbList[i-1]:=''
+      ENDIF
+      self.confDbSharedItems[i-1]:=n
     ENDFOR
   ENDIF
   set(self.app.cyRejoinConf,MUIA_Cycle_Entries,self.confNameList)
+  set(self.app.cyCbConf,MUIA_Cycle_Entries,self.confNameList)
 
   self.loadAreaNames(count)
 
@@ -427,6 +565,7 @@ PROC loadBBSSetup() OF frmEditUser
     ENDFOR
   ENDIF
   set(self.app.cyComputers,MUIA_Cycle_Entries,self.computerList)
+  set(self.app.cyComputers,MUIA_Disabled,count=0)
 
   StringF(toolTypeFile,'\sScreenTypes',self.bbsPath)
   loop:=TRUE
@@ -452,18 +591,39 @@ PROC loadBBSSetup() OF frmEditUser
     ENDFOR
   ENDIF
   set(self.app.cyScreens,MUIA_Cycle_Entries,self.screenTypesList)
+  set(self.app.cyScreens,MUIA_Disabled,count=0)
+
+  StringF(toolTypeFile,'\sBBSConfig',self.bbsPath)
+  readToolType(toolTypeFile,'PASSWORD_SECURITY',tempstring)
+  IF StriCmp(tempstring,'LEGACY')
+    self.passType:=PWD_LEGACY
+  ELSEIF StriCmp(tempstring,'PBKDF2_5')
+    self.passType:=PWD_PBKDF2_5
+  ELSEIF StriCmp(tempstring,'PBKDF2_50')
+    self.passType:=PWD_PBKDF2_50
+  ELSEIF StriCmp(tempstring,'PBKDF2_100')
+    self.passType:=PWD_PBKDF2_100
+  ELSEIF StriCmp(tempstring,'PBKDF2_1000')
+    self.passType:=PWD_PBKDF2_1000
+  ELSEIF StriCmp(tempstring,'PBKDF2_10000')
+    self.passType:=PWD_PBKDF2_10000
+  ELSE
+    self.passType:=PWD_LEGACY
+  ENDIF
 ENDPROC
 
 PROC loadUserData(userId) OF frmEditUser
   DEF result=0
   DEF tempstring[200]:STRING
-  DEF fh
+  DEF fh,i
+  DEF cb:PTR TO confBase
 
   userId--
   
   MemFill(self.userData,SIZEOF user,0)
   MemFill(self.userKeys,SIZEOF userKeys,0)
   MemFill(self.userMisc,SIZEOF userMisc,0)
+  MemFill(self.confDbEntries,SIZEOF confBase*self.confCount,0)
   
   StringF(tempstring,'\suser.data',self.bbsPath) 
   fh:=Open(tempstring,MODE_OLDFILE)
@@ -489,20 +649,33 @@ PROC loadUserData(userId) OF frmEditUser
     Close(fh)
   ENDIF
   
+  FOR i:=0 TO self.confCount-1
+    //only load the ones that are not shared
+    IF self.confDbSharedItems[i]<=0
+      fh:=Open(self.confDbList[i],MODE_OLDFILE)
+      IF fh
+        Seek(fh,userId*SIZEOF confBase,OFFSET_BEGINNING)
+        result+=Fread(fh,self.confDbEntries+(i*SIZEOF confBase),SIZEOF confBase,1)
+        Close(fh)
+      ENDIF
+    ENDIF
+  ENDFOR
+  
 ENDPROC result
 
 PROC loadUser(userId) OF frmEditUser
   DEF result=0,i
   DEF tempstring[200]:STRING
+  DEF cb:PTR TO confBase
    
   result:=self.loadUserData(userId)
 
   userId--
 
-  IF result=3
+  IF result=(3+self.confCount)
   
-    self.loadBBSSetup()
-  
+    CopyMem(self.confDbEntries,self.editedConfDbEntries,SIZEOF confBase*self.confCount)
+
     AstrCopy(self.selectUser,self.userData.name,80)
     set( self.app.txtSelectUserName, MUIA_Text_Contents,self.selectUser)
     set( self.app.strUsername, MUIA_Text_Contents,self.userData.name)
@@ -613,6 +786,10 @@ PROC loadUser(userId) OF frmEditUser
 
   ENDIF
 
+  set ( self.app.cyCbConf,MUIA_Cycle_Active,0)
+  self.currConf:=0
+  self.loadConfBase(TRUE)
+
   self.unsavedChanges:=FALSE
   
 ENDPROC
@@ -635,12 +812,42 @@ PROC validateNumber(control) OF frmEditUser
   ENDFOR
 ENDPROC TRUE
 
+PROC checkDuplicateUser(userName:PTR TO CHAR) OF frmEditUser
+  DEF userData:PTR TO user
+  DEF fh
+  DEF fname[200]:STRING
+  DEF dupe=FALSE
+
+  NEW userData
+
+  StringF(fname,'\suser.data',self.bbsPath)
+  fh:=Open(fname,MODE_OLDFILE)
+  IF fh
+    IF Fread(fh,userData,SIZEOF user,1)=1
+      IF StrCmp(userName,userData.name,SIZEOF userData.name) AND (userData.slotNumber<>0) AND (userData.slotNumber<>self.userId) THEN dupe:=TRUE
+    ENDIF
+    Close(fh)
+  ENDIF
+  
+  END userData
+ENDPROC dupe
+
 PROC validateSettings() OF frmEditUser
   DEF tempval,r,l
   
   get(self.app.strUsername, MUIA_Text_Contents,{tempval})
   IF StrLen(tempval)=0
     self.showControlError(self.app.strUsername,0,'UserName cannot be blank.')
+    RETURN FALSE
+  ENDIF
+  
+  IF self.checkDuplicateUser(tempval)<>0
+    self.showControlError(self.app.strUsername,0,'UserName is already in use.')
+    RETURN FALSE
+  ENDIF
+  
+  IF (self.userId=-1) AND (StrLen(self.newPassword)=0)
+    self.showControlError(self.app.strRatio,0,'You must set a password for the new user.')
     RETURN FALSE
   ENDIF
   
@@ -721,16 +928,105 @@ PROC validateSettings() OF frmEditUser
 ENDPROC TRUE
 
 
+/*PROC dumpcb(title:PTR TO CHAR,cb:PTR TO confBase) OF frmEditUser
+  DEF i
+  WriteF(title)
+  FOR i:=0 TO self.confCount-1
+    WriteF('cb \d downbytes = \d\n',i,cb.bytesDownload)
+  ENDFOR
+ENDPROC*/
+
+PROC saveCurrentConfBase() OF frmEditUser
+  DEF tempval
+  DEF editedConfBase:PTR TO confBase
+
+  editedConfBase:=self.editedConfDbEntries+(SIZEOF confBase*self.currConf)
+ 
+  get(self.app.strCbDownloadBytes, MUIA_Text_Contents,{tempval})
+  formatBCD(editedConfBase.downloadBytesBCD,tempval)
+  editedConfBase.bytesDownload:=convertFromBCD(editedConfBase.downloadBytesBCD)
+
+  get(self.app.strCbUploadBytes, MUIA_Text_Contents,{tempval})
+  formatBCD(editedConfBase.uploadBytesBCD,tempval)
+  editedConfBase.bytesUpload:=convertFromBCD(editedConfBase.uploadBytesBCD)
+
+  get(self.app.strCbUploads, MUIA_Text_Contents,{tempval})
+  editedConfBase.upload:=Val(tempval)
+
+  get(self.app.strCbDownloads, MUIA_Text_Contents,{tempval})
+  editedConfBase.downloads:=Val(tempval)
+
+  get(self.app.strCbRatio, MUIA_Text_Contents,{tempval})
+  editedConfBase.ratio:=Val(tempval)
+      
+  get(self.app.cyCbRatioType, MUIA_Cycle_Active,{tempval})
+  editedConfBase.ratioType:=tempval
+
+  get(self.app.strCbMessages, MUIA_Text_Contents,{tempval})
+  editedConfBase.messagesPosted:=Val(tempval)
+ENDPROC
+
+PROC loadConfBase(firstTime) OF frmEditUser
+  DEF tempstring[200]:STRING
+  DEF temp
+  DEF tempval
+  DEF editedConfBase:PTR TO confBase
+
+  temp:=self.unsavedChanges
+  
+  IF firstTime=FALSE THEN self.saveCurrentConfBase()
+    
+  get(self.app.cyCbConf, MUIA_Cycle_Active,{tempval})
+  editedConfBase:=self.editedConfDbEntries+(SIZEOF confBase*tempval)
+  self.currConf:=tempval;
+
+  IF editedConfBase.bytesDownload=-1
+    formatBCD(editedConfBase.downloadBytesBCD,tempstring)
+  ELSE
+    StringF(tempstring,'\d',editedConfBase.bytesDownload)
+  ENDIF
+  set( self.app.strCbDownloadBytes, MUIA_Text_Contents,tempstring)
+
+  IF editedConfBase.bytesUpload=-1
+    formatBCD(editedConfBase.uploadBytesBCD,tempstring)
+  ELSE
+    StringF(tempstring,'\d',editedConfBase.bytesUpload)
+  ENDIF
+  set( self.app.strCbUploadBytes, MUIA_Text_Contents,tempstring)
+
+  StringF(tempstring,'\d',editedConfBase.upload)
+  set( self.app.strCbUploads, MUIA_Text_Contents,tempstring)
+
+  StringF(tempstring,'\d',editedConfBase.downloads)
+  set( self.app.strCbDownloads, MUIA_Text_Contents,tempstring)
+
+  StringF(tempstring,'\d',editedConfBase.ratio)
+  set( self.app.strCbRatio, MUIA_Text_Contents,tempstring)
+   
+  StringF(tempstring,'\d',editedConfBase.messagesPosted)
+  set( self.app.strCbMessages, MUIA_Text_Contents,tempstring)
+
+  ->Set(self.app.cyCbRatioType, MUIA_Cycle_Active,editedConfBase.ratioType)
+
+  self.unsavedChanges:=temp
+ENDPROC
+
+
 PROC saveUser(userId) OF frmEditUser
   DEF fh,flen,tempval,i
   DEF userdatafname[200]:STRING
   DEF userkeysfname[200]:STRING
   DEF usermiscfname[200]:STRING
   DEF tempstring[100]:STRING
+  DEF tempstring2[100]:STRING
   DEF oldUserData:PTR TO user
   DEF oldUserKeys:PTR TO userKeys
   DEF oldUserMisc:PTR TO userMisc
+  DEF oldConfBases
   DEF newUser=FALSE
+  DEF oldConfBase:PTR TO confBase
+  DEF newConfBase:PTR TO confBase
+  DEF editedConfBase:PTR TO confBase
 
   StringF(userdatafname,'\suser.data',self.bbsPath)
   StringF(userkeysfname,'\suser.keys',self.bbsPath)
@@ -746,11 +1042,13 @@ PROC saveUser(userId) OF frmEditUser
   NEW oldUserData
   NEW oldUserKeys
   NEW oldUserMisc
+  oldConfBases:=New(self.confCount*SIZEOF confBase)
   
   IF newUser=FALSE
     CopyMem(self.userData,oldUserData,SIZEOF user)
     CopyMem(self.userKeys,oldUserKeys,SIZEOF userKeys)
     CopyMem(self.userMisc,oldUserMisc,SIZEOF userMisc)
+    CopyMem(self.confDbEntries,oldConfBases,self.confCount*SIZEOF confBase)
   ENDIF
 
   self.loadUserData(userId)
@@ -780,9 +1078,7 @@ PROC saveUser(userId) OF frmEditUser
   IF StrCmp(oldUserMisc.realName,tempval)=FALSE
     AstrCopy(self.userMisc.realName,tempval,ARRAYSIZE oldUserMisc.realName)
   ENDIF
-  
-  //password
-  
+   
   get(self.app.strLocation, MUIA_Text_Contents,{tempval})
   IF StrCmp(oldUserData.location,tempval)=FALSE
     AstrCopy(self.userData.location,tempval,ARRAYSIZE oldUserData.location)
@@ -831,14 +1127,14 @@ PROC saveUser(userId) OF frmEditUser
   get(self.app.strDownloadBytes, MUIA_Text_Contents,{tempval})
   formatBCD(oldUserMisc.downloadBytesBCD,tempstring)
   IF StrCmp(tempstring,tempval)=FALSE
-    convertToBCD(tempval,self.userMisc.downloadBytesBCD)
+    formatBCD(self.userMisc.downloadBytesBCD,tempval)
     self.userData.bytesDownload:=convertFromBCD(self.userMisc.downloadBytesBCD)
   ENDIF
 
   get(self.app.strUploadBytes, MUIA_Text_Contents,{tempval})
   formatBCD(oldUserMisc.uploadBytesBCD,tempstring)
   IF StrCmp(tempstring,tempval)=FALSE
-    convertToBCD(tempval,self.userMisc.uploadBytesBCD)
+    formatBCD(self.userMisc.uploadBytesBCD,tempval)
     self.userData.bytesUpload:=convertFromBCD(self.userMisc.uploadBytesBCD)
   ENDIF
 
@@ -917,6 +1213,58 @@ PROC saveUser(userId) OF frmEditUser
     self.userData.screenType:=tempval
   ENDIF
 
+
+  self.saveCurrentConfBase()
+  
+  FOR i:=0 TO self.confCount-1
+    //only update the ones that are not shared
+    IF self.confDbSharedItems[i]<=0
+      editedConfBase:=self.editedConfDbEntries+(SIZEOF confBase*i)
+      oldConfBase:=oldConfBases+(SIZEOF confBase*i)
+      newConfBase:=self.confDbEntries+(SIZEOF confBase*i)
+
+      IF StrCmp(oldConfBase.handle,editedConfBase.handle)=FALSE
+        AstrCopy(newConfBase.handle,tempval,ARRAYSIZE oldConfBase.handle)
+      ENDIF
+
+      formatBCD(editedConfBase.downloadBytesBCD,tempstring2)
+      formatBCD(oldConfBase.downloadBytesBCD,tempstring)
+      IF StrCmp(tempstring,tempstring2)=FALSE
+        CopyMem(editedConfBase.downloadBytesBCD,newConfBase.downloadBytesBCD,ARRAYSIZE oldConfBase.downloadBytesBCD)
+        newConfBase.bytesDownload:=convertFromBCD(newConfBase.downloadBytesBCD)
+      ENDIF
+
+      formatBCD(editedConfBase.uploadBytesBCD,tempstring2)
+      formatBCD(oldConfBase.uploadBytesBCD,tempstring)
+      IF StrCmp(tempstring,tempstring2)=FALSE
+        CopyMem(editedConfBase.uploadBytesBCD,newConfBase.uploadBytesBCD,ARRAYSIZE oldConfBase.uploadBytesBCD)
+        newConfBase.bytesUpload:=convertFromBCD(newConfBase.uploadBytesBCD)
+      ENDIF
+
+      IF oldConfBase.upload<>editedConfBase.upload
+        newConfBase.upload:=editedConfBase.upload
+      ENDIF
+
+      IF oldConfBase.downloads<>editedConfBase.downloads
+        newConfBase.downloads:=editedConfBase.downloads
+      ENDIF
+
+      IF oldConfBase.ratio<>editedConfBase.ratio
+        newConfBase.ratio:=editedConfBase.ratio
+      ENDIF
+      
+      IF oldConfBase.ratioType<>editedConfBase.ratioType
+        newConfBase.ratioType:=editedConfBase.ratioType
+      ENDIF
+
+      IF oldConfBase.messagesPosted<>editedConfBase.messagesPosted
+        newConfBase.messagesPosted:=editedConfBase.messagesPosted
+      ENDIF
+    ENDIF
+  ENDFOR
+
+
+  self.updatePassword()
    
   userId--
  
@@ -935,6 +1283,19 @@ PROC saveUser(userId) OF frmEditUser
   Seek(fh,userId*SIZEOF userMisc,OFFSET_BEGINNING)
   Fwrite(fh,self.userMisc,SIZEOF userMisc,1)
   Close(fh)
+
+  FOR i:=0 TO self.confCount-1
+    //only save the ones that are not shared
+    IF self.confDbSharedItems[i]<=0
+      fh:=Open(self.confDbList[i],MODE_READWRITE)
+      IF fh
+        Seek(fh,userId*SIZEOF confBase,OFFSET_BEGINNING)
+        Fwrite(fh,self.confDbEntries+(i*SIZEOF confBase),SIZEOF confBase,1)
+        Close(fh)
+      ENDIF
+    ENDIF
+  ENDFOR
+
 
   self.unsavedChanges:=FALSE
 
@@ -1064,6 +1425,8 @@ ENDPROC
 PROC applyPreset(presetNum) OF frmEditUser
   DEF toolTypeFile[200]:STRING
   DEF tempstring[200]:STRING
+  DEF ratio,ratioType
+  DEF cb:PTR TO confBase
   DEF i=0
 
   StringF(toolTypeFile,'\sAccess/PRESET.\d',self.bbsPath,presetNum)
@@ -1082,13 +1445,28 @@ PROC applyPreset(presetNum) OF frmEditUser
   StringF(tempstring,'\d',readToolTypeInt(toolTypeFile,'PRESET.DAILY_BYTE_LIMIT'))
   set( self.app.strByteLimit, MUIA_Text_Contents,tempstring)
   
-  set( self.app.cyRatioType, MUIA_Cycle_Active,readToolTypeInt(toolTypeFile,'PRESET.RATIO_TYPE'))
+  ratioType:=readToolTypeInt(toolTypeFile,'PRESET.RATIO_TYPE')
+  set( self.app.cyRatioType, MUIA_Cycle_Active,ratioType)
 
-  StringF(tempstring,'\d',readToolTypeInt(toolTypeFile,'PRESET.RATIO'))
+  ratio:=readToolTypeInt(toolTypeFile,'PRESET.RATIO')
+  StringF(tempstring,'\d',ratio)
   set( self.app.strRatio, MUIA_Text_Contents,tempstring)
   
   StringF(tempstring,'\d',readToolTypeInt(toolTypeFile,'PRESET.TIME_LIMIT'))
   set( self.app.strTimeLimit, MUIA_Text_Contents,tempstring)
+  
+  FOR i:=0 TO self.confCount-1
+    cb:=self.editedConfDbEntries+(i*SIZEOF confBase)
+
+    cb.ratio:=ratio
+    cb.ratioType:=ratioType
+
+    StringF(tempstring,'\d',ratio)
+    set( self.app.strCbRatio, MUIA_Text_Contents,tempstring)
+
+    set( self.app.cyCbRatioType, MUIA_Cycle_Active,ratioType)
+
+  ENDFOR
 ENDPROC
 
 PROC setupStrControlChangeNotify(control) OF frmEditUser
@@ -1148,6 +1526,14 @@ PROC setupControlChangeNotify() OF frmEditUser
   self.setupCycleControlChangeNotify(self.app.cyNewUser)
   self.setupCycleControlChangeNotify(self.app.cyComputers)
   self.setupCycleControlChangeNotify(self.app.cyScreens)
+
+  self.setupCycleControlChangeNotify(self.app.strCbDownloadBytes)
+  self.setupCycleControlChangeNotify(self.app.strCbUploadBytes)
+  self.setupCycleControlChangeNotify(self.app.strCbUploads)
+  self.setupCycleControlChangeNotify(self.app.strCbDownloads)
+  self.setupCycleControlChangeNotify(self.app.strCbRatio)
+  self.setupCycleControlChangeNotify(self.app.cyCbRatioType)
+  self.setupCycleControlChangeNotify(self.app.strCbMessages)
 ENDPROC
 
 PROC clearStrControlChangeNotify(control) OF frmEditUser
@@ -1193,18 +1579,29 @@ PROC clearControlChangeNotify() OF frmEditUser
   self.clearCycleControlChangeNotify(self.app.cyNewUser)
   self.clearCycleControlChangeNotify(self.app.cyComputers)
   self.clearCycleControlChangeNotify(self.app.cyScreens)
+  
+  self.clearCycleControlChangeNotify(self.app.strCbDownloadBytes)
+  self.clearCycleControlChangeNotify(self.app.strCbUploadBytes)
+  self.clearCycleControlChangeNotify(self.app.strCbUploads)
+  self.clearCycleControlChangeNotify(self.app.strCbDownloads)
+  self.clearCycleControlChangeNotify(self.app.strCbRatio)
+  self.clearCycleControlChangeNotify(self.app.cyCbRatioType)
+  self.clearCycleControlChangeNotify(self.app.strCbMessages)
+  
 ENDPROC
 
 PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
   DEF closeHook:PTR TO hook
   DEF showHook:PTR TO hook
   DEF sliderChangeHook:PTR TO hook
+  DEF confbaseChangeHook:PTR TO hook
   DEF userDataFname[200]:STRING
   DEF res
 
   NEW closeHook
   NEW showHook
   NEW sliderChangeHook
+  NEW confbaseChangeHook
 
   NEW self.userData
   NEW self.userKeys
@@ -1212,6 +1609,10 @@ PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
 
   self.bbsPath:=bbsPath
   self.unsavedChanges:=FALSE
+  self.userId:=userId
+  AstrCopy(self.newPassword,'')
+
+  self.loadBBSSetup()
 
   StringF(userDataFname,'\suser.data',self.bbsPath)
 
@@ -1225,6 +1626,7 @@ PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
 
   set( self.winMain, MUIA_Window_Title,'Edit User')
   set( self.winMain, MUIA_Window_ID, "AXUE")
+  set ( self.winMain,MUIA_Window_ActiveObject,self.app.strUsername)
   
   set ( self.app.headerPanel,MUIA_ShowMe,MUI_TRUE)
   set ( self.app.headerPanel,MUIA_Slider_Min,1)
@@ -1251,6 +1653,13 @@ PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
 		3,
     MUIM_CallHook , self.btnCancelClickHook , self ] )
 
+	domethod( self.app.cyCbConf , [
+		MUIM_Notify , MUIA_Cycle_Active, MUIV_EveryTime,
+		self.app.cyCbConf,
+		3,
+    MUIM_CallHook , confbaseChangeHook , self ] )
+  installhook( confbaseChangeHook, {confbasechanged})
+
   self.makePresetMenuItems()
   self.setupControlChangeNotify()
   
@@ -1260,6 +1669,7 @@ PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
   self.setupButtonClick(self.app.btnSelectUserPrev,self.btnPrevClickHook,{prevbuttonPressed})
   self.setupButtonClick(self.app.btnSelectUserNext,self.btnNextClickHook,{nextbuttonPressed})
   self.setupButtonClick(self.app.btnApply,self.btnApplyClickHook,{applypresetbuttonpressed})
+  self.setupButtonClick(self.app.btnPassword,self.btnSetPasswordClickHook,{setpasswordbuttonpressed})
 
   self.loadUser(userId)
 
@@ -1274,12 +1684,12 @@ PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
   domethod(self.app.btnSelectUserPrev,[MUIM_KillNotify,MUIA_Pressed])
   domethod(self.app.btnSelectUserNext,[MUIM_KillNotify,MUIA_Pressed])
   domethod(self.app.btnApply,[MUIM_KillNotify,MUIA_Pressed])
+  domethod(self.app.btnPassword,[MUIM_KillNotify,MUIA_Pressed])
   
   domethod(self.app.slUserId,[MUIM_KillNotify,MUIA_Slider_Level])
   domethod(self.app.mnlabel2Save,[MUIM_KillNotify,MUIA_Menuitem_Trigger])
   domethod(self.app.mnlabel2Cancel,[MUIM_KillNotify,MUIA_Menuitem_Trigger])
-
-  domethod(self.app.mnlabel2Cancel,[MUIM_KillNotify,MUIA_Menuitem_Trigger])
+  domethod(self.app.cyCbConf,[MUIM_KillNotify,MUIA_Cycle_Active])
 
   self.removePresetMenuItems()
   self.clearControlChangeNotify()
@@ -1287,11 +1697,16 @@ PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
   self.freeList(self.computerList)
   self.freeList(self.screenTypesList)
   self.freeList(self.confNameList)
+  self.freeList(self.confDbList)
+  Dispose(self.confDbEntries)
+  Dispose(self.editedConfDbEntries)
+  Dispose(self.confDbSharedItems)
   self.freeList(self.areaList)
 
   END closeHook
   END showHook
   END sliderChangeHook
+  END confbaseChangeHook
 
   END self.userData
   END self.userKeys
@@ -1301,10 +1716,12 @@ ENDPROC res
 PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
   DEF closeHook:PTR TO hook
   DEF showHook:PTR TO hook
+  DEF confbaseChangeHook:PTR TO hook
   DEF res
 
   NEW closeHook
   NEW showHook
+  NEW confbaseChangeHook
 
   NEW self.userData
   NEW self.userKeys
@@ -1312,6 +1729,10 @@ PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
 
   self.bbsPath:=bbsPath
   self.unsavedChanges:=FALSE
+  self.userId:=-1
+  AstrCopy(self.newPassword,'')
+
+  self.loadBBSSetup()
 
   installhook( closeHook, {canClose})    
   self.closeHook:=closeHook
@@ -1323,7 +1744,8 @@ PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
 
   set( self.winMain, MUIA_Window_Title,'Add New User')
   set( self.winMain, MUIA_Window_ID, "AXUN")
-  
+  set ( self.winMain,MUIA_Window_ActiveObject,self.app.strUsername)
+ 
   set ( self.app.headerPanel,MUIA_ShowMe,FALSE)
   set ( self.app.mainPanel,MUIA_Group_ActivePage,MUIV_Group_ActivePage_First)
 
@@ -1337,7 +1759,14 @@ PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
 		MUIM_Notify , MUIA_Menuitem_Trigger, MUIV_EveryTime,
 		self.app.mnlabel2Cancel,
 		3,
-    MUIM_CallHook , self.btnSaveClickHook , self ] )
+    MUIM_CallHook , self.btnCancelClickHook , self ] )
+
+	domethod( self.app.cyCbConf , [
+		MUIM_Notify , MUIA_Cycle_Active, MUIV_EveryTime,
+		self.app.cyCbConf,
+		3,
+    MUIM_CallHook , confbaseChangeHook , self ] )
+  installhook( confbaseChangeHook, {confbasechanged})
 
   self.makePresetMenuItems()
   
@@ -1346,6 +1775,7 @@ PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
   self.setupButtonClick(self.app.btnSave,self.btnSaveClickHook,{savebuttonPressed})
   self.setupButtonClick(self.app.btnCancel,self.btnCancelClickHook,{cancelbuttonPressed})
   self.setupButtonClick(self.app.btnApply,self.btnApplyClickHook,{applypresetbuttonpressed})
+  self.setupButtonClick(self.app.btnPassword,self.btnSetPasswordClickHook,{setpasswordbuttonpressed})
 
   self.newUser()
 
@@ -1357,17 +1787,24 @@ PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
   domethod(self.app.btnApply,[MUIM_KillNotify,MUIA_Pressed])
   domethod(self.app.mnlabel2Save,[MUIM_KillNotify,MUIA_Menuitem_Trigger])
   domethod(self.app.mnlabel2Cancel,[MUIM_KillNotify,MUIA_Menuitem_Trigger])
-
+  domethod(self.app.btnPassword,[MUIM_KillNotify,MUIA_Pressed])
+  domethod(self.app.cyCbConf,[MUIM_KillNotify,MUIA_Cycle_Active])
+  
   self.removePresetMenuItems()
   self.clearControlChangeNotify()
 
   self.freeList(self.computerList)
   self.freeList(self.screenTypesList)
   self.freeList(self.confNameList)
+  self.freeList(self.confDbList)  
+  Dispose(self.confDbEntries)
+  Dispose(self.editedConfDbEntries)
+  Dispose(self.confDbSharedItems)
   self.freeList(self.areaList)
 
   END closeHook
   END showHook
+  END confbaseChangeHook
 
   END self.userData
   END self.userKeys

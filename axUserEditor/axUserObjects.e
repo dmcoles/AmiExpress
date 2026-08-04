@@ -90,3 +90,25 @@ EXPORT OBJECT userMisc
   ipMask:LONG
   unused[86]:ARRAY OF CHAR
 ENDOBJECT
+
+
+EXPORT OBJECT confBase
+  handle[16]: ARRAY OF CHAR
+  downloadBytesBCD[8]:ARRAY OF CHAR
+  uploadBytesBCD[8]:ARRAY OF CHAR
+  newSinceDate: LONG
+  confRead: LONG
+  confYM: LONG
+  bytesDownload: LONG
+  bytesUpload: LONG
+  uploadTracking: INT
+  unused: INT
+  unused2:LONG  ->dailyBytesDld: LONG
+  upload: INT
+  downloads: INT
+  ratioType: INT
+  ratio: INT
+  messagesPosted: INT
+  access: INT
+  active:INT
+ENDOBJECT

@@ -147,17 +147,17 @@ PROC displayData() OF frmMain
     a[]++:='Location'
   ELSE
     index:=Val(e)-1
-    IF index<self2.userIds.count()
-      a[]++:=self2.userIds.item(index)
+    IF index<self.userIds.count()
+      a[]++:=self.userIds.item(index)
     ELSE
       a[]++:=''
     ENDIF
-    IF index<self2.userNames.count()
+    IF index<self.userNames.count()
       a[]++:=self.userNames.item(index)
     ELSE
       a[]++:=''
     ENDIF
-    IF index<self2.userLocations.count()
+    IF index<self.userLocations.count()
       a[]++:=self.userLocations.item(index)
     ELSE
       a[]++:=''

@@ -49,6 +49,7 @@ EXPORT OBJECT app_obj
 	strRealname             :	PTR TO LONG
 	strLocation             :	PTR TO LONG
 	strPassword             :	PTR TO LONG
+	btnPassword             :	PTR TO LONG
 	strPhone                :	PTR TO LONG
 	slSecLevel              :	PTR TO LONG
 	cySecArea               :	PTR TO LONG
@@ -71,6 +72,14 @@ EXPORT OBJECT app_obj
 	cyPwdReset              :	PTR TO LONG
 	cyAccountLocked         :	PTR TO LONG
 	strInvalidAttempts      :	PTR TO LONG
+	cyCbConf                :	PTR TO LONG
+	strCbUploads            :	PTR TO LONG
+	strCbDownloads          :	PTR TO LONG
+	strCbUploadBytes        :	PTR TO LONG
+	strCbDownloadBytes      :	PTR TO LONG
+	strCbRatio              :	PTR TO LONG
+	cyCbRatioType           :	PTR TO LONG
+	strCbMessages           :	PTR TO LONG
 	cyComputers             :	PTR TO LONG
 	cyScreens               :	PTR TO LONG
 	cyNewUser               :	PTR TO LONG
@@ -81,6 +90,11 @@ EXPORT OBJECT app_obj
 	strLastPwdReset         :	PTR TO LONG
 	btnSave                 :	PTR TO LONG
 	btnCancel               :	PTR TO LONG
+	winSetPassword          :	PTR TO LONG
+	strPassword1            :	PTR TO LONG
+	strPassword2            :	PTR TO LONG
+	btnPwdOk                :	PTR TO LONG
+	btnPwdCancel            :	PTR TO LONG
 	stR_txtUserCount        :	PTR TO CHAR
 	stR_txtSelectUserName   :	PTR TO CHAR
 	cyPresetContent         :	PTR TO LONG
@@ -91,6 +105,8 @@ EXPORT OBJECT app_obj
 	cyRatioTypeContent      :	PTR TO LONG
 	cyPwdResetContent       :	PTR TO LONG
 	cyAccountLockedContent  :	PTR TO LONG
+	cyCbConfContent         :	PTR TO LONG
+	cyCbRatioTypeContent    :	PTR TO LONG
 	cyComputersContent      :	PTR TO LONG
 	cyScreensContent        :	PTR TO LONG
 	cyNewUserContent        :	PTR TO LONG
@@ -106,7 +122,7 @@ PROC create() OF app_obj
 	DEF la_label_40 , gr_grp_0 , mnlabel2Project , mnlabel2Presets
 	DEF grOUP_ROOT_1 , presetPanel , la_label_39 , userDetailsPanel
 	DEF gr_grp_12 , la_label_0 , la_label_37 , la_label_1
-	DEF la_label_2 , la_label_3 , la_label_9 , gr_grp_13
+	DEF la_label_2 , la_label_3 , gr_grp_18 , la_label_9 , gr_grp_13
 	DEF la_label_8 , la_label_7 , la_label_15 , space_11
 	DEF userStatsPanel , la_label_6 , la_label_10 , la_label_11
 	DEF la_label_12 , la_label_13 , la_label_14 , la_label_16
@@ -115,11 +131,16 @@ PROC create() OF app_obj
 	DEF la_label_17 , la_label_20 , la_label_21 , la_label_22
 	DEF la_label_23 , la_label_24 , la_label_31 , la_label_32
 	DEF la_label_33 , space_4 , space_5 , space_19 , space_18
-	DEF space_25C , space_26C , userMiscPanel , gr_grp_15
+	DEF space_25C , space_26C , confAccPanel , gr_grp_23
+	DEF la_label_43 , gr_grp_22 , la_label_12CC , la_label_12C
+	DEF la_label_13C , la_label_14C , la_label_6C , la_label_10C
+	DEF la_label_16C , space_28 , space_29 , space_30 , space_31
+	DEF space_32 , space_33 , userMiscPanel , gr_grp_15
 	DEF la_label_29 , la_label_30 , gr_grp_14 , la_label_25
 	DEF la_label_26 , la_label_35 , la_label_27 , la_label_28
 	DEF la_label_34 , space_7 , space_24 , space_25 , space_6
-	DEF space_26 , footerPanel , space_27
+	DEF space_26 , footerPanel , space_27 , grpSetPassword
+	DEF gr_grp_20 , lblPassword1 , lblPassword2 , gr_grp_19
 
 	self.stR_txtUserCount        := 'Total Users: 5500'
 	self.stR_txtSelectUserName   := 'rebel'
@@ -130,6 +151,7 @@ PROC create() OF app_obj
 		'Details' ,
 		'Stats' ,
 		'Limits & Lockouts' ,
+		'Conf Accounting' ,
 		'Misc' ,
 		NIL ]
 	self.cyActiveContent         := [
@@ -155,11 +177,19 @@ PROC create() OF app_obj
 		'Yes' ,
 		'No' ,
 		NIL ]
+	self.cyCbConfContent         := [
+		'Conf1' ,
+		NIL ]
+	self.cyCbRatioTypeContent    := [
+		'Bytes' ,
+		'Bytes & Files' ,
+		'Files' ,
+		NIL ]
 	self.cyComputersContent      := [
-		'A500' ,
+		'N/A' ,
 		NIL ]
 	self.cyScreensContent        := [
-		'Ansi' ,
+		'N/A' ,
 		NIL ]
 	self.cyNewUserContent        := [
 		'Yes' ,
@@ -402,9 +432,22 @@ PROC create() OF app_obj
 	la_label_3 := Label( 'Password' )
 
 	self.strPassword := StringObject ,
+		MUIA_ShowMe , FALSE ,
+		MUIA_Disabled , MUI_TRUE ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strPassword' ,
+		MUIA_String_Contents , 'abcdefgh' ,
 		MUIA_String_Secret , MUI_TRUE ,
+	End
+
+	self.btnPassword := SimpleButton( 'Set' )
+
+	gr_grp_18 := GroupObject ,
+		MUIA_HelpNode , 'GR_grp_18' ,
+		MUIA_Group_Horiz , MUI_TRUE ,
+		MUIA_Group_HorizSpacing , 0 ,
+		Child , self.strPassword ,
+		Child , self.btnPassword ,
 	End
 
 	la_label_9 := Label( 'Phone Number' )
@@ -427,7 +470,7 @@ PROC create() OF app_obj
 		Child , la_label_2 ,
 		Child , self.strLocation ,
 		Child , la_label_3 ,
-		Child , self.strPassword ,
+		Child , gr_grp_18 ,
 		Child , la_label_9 ,
 		Child , self.strPhone ,
 	End
@@ -722,6 +765,124 @@ PROC create() OF app_obj
 		Child , space_26C ,
 	End
 
+	la_label_43 := Label( 'Conference' )
+
+	self.cyCbConf := CycleObject ,
+		MUIA_HelpNode , 'cyCbConf' ,
+		MUIA_Frame , MUIV_Frame_Button ,
+		MUIA_Cycle_Entries , self.cyCbConfContent ,
+	End
+
+	gr_grp_23 := GroupObject ,
+		MUIA_HelpNode , 'GR_grp_23' ,
+		MUIA_Group_Horiz , MUI_TRUE ,
+		Child , la_label_43 ,
+		Child , self.cyCbConf ,
+	End
+
+	la_label_12CC := Label( 'Uploads' )
+
+	self.strCbUploads := StringObject ,
+		MUIA_Frame , MUIV_Frame_String ,
+		MUIA_HelpNode , 'strCbUploads' ,
+		MUIA_String_Accept , '0123456789' ,
+		MUIA_String_MaxLen , 5 ,
+	End
+
+	la_label_12C := Label( 'Downloads' )
+
+	self.strCbDownloads := StringObject ,
+		MUIA_Frame , MUIV_Frame_String ,
+		MUIA_HelpNode , 'strCbDownloads' ,
+		MUIA_String_Accept , '0123456789' ,
+		MUIA_String_MaxLen , 5 ,
+	End
+
+	la_label_13C := Label( 'Bytes U/L' )
+
+	self.strCbUploadBytes := StringObject ,
+		MUIA_Frame , MUIV_Frame_String ,
+		MUIA_HelpNode , 'strCbUploadBytes' ,
+		MUIA_String_Accept , '0123456789' ,
+		MUIA_String_MaxLen , 16 ,
+	End
+
+	la_label_14C := Label( 'Bytes D/L' )
+
+	self.strCbDownloadBytes := StringObject ,
+		MUIA_Frame , MUIV_Frame_String ,
+		MUIA_HelpNode , 'strCbDownloadBytes' ,
+		MUIA_String_Accept , '0123456789' ,
+		MUIA_String_MaxLen , 16 ,
+	End
+
+	la_label_6C := Label( 'Ratio' )
+
+	self.strCbRatio := StringObject ,
+		MUIA_Frame , MUIV_Frame_String ,
+		MUIA_HelpNode , 'strCbRatio' ,
+	End
+
+	la_label_10C := Label( 'Ratio Type' )
+
+	self.cyCbRatioType := CycleObject ,
+		MUIA_HelpNode , 'cyCbRatioType' ,
+		MUIA_Frame , MUIV_Frame_Button ,
+		MUIA_Cycle_Entries , self.cyCbRatioTypeContent ,
+	End
+
+	la_label_16C := Label( 'Messages Posted' )
+
+	self.strCbMessages := StringObject ,
+		MUIA_Frame , MUIV_Frame_String ,
+		MUIA_HelpNode , 'strCbMessages' ,
+		MUIA_String_Accept , '0123456789' ,
+		MUIA_String_MaxLen , 5 ,
+	End
+
+	space_28 := HVSpace
+
+	space_29 := HVSpace
+
+	space_30 := HVSpace
+
+	space_31 := HVSpace
+
+	space_32 := HVSpace
+
+	space_33 := HVSpace
+
+	gr_grp_22 := GroupObject ,
+		MUIA_HelpNode , 'GR_grp_22' ,
+		MUIA_Group_Columns , 4 ,
+		Child , la_label_12CC ,
+		Child , self.strCbUploads ,
+		Child , la_label_12C ,
+		Child , self.strCbDownloads ,
+		Child , la_label_13C ,
+		Child , self.strCbUploadBytes ,
+		Child , la_label_14C ,
+		Child , self.strCbDownloadBytes ,
+		Child , la_label_6C ,
+		Child , self.strCbRatio ,
+		Child , la_label_10C ,
+		Child , self.cyCbRatioType ,
+		Child , la_label_16C ,
+		Child , self.strCbMessages ,
+		Child , space_28 ,
+		Child , space_29 ,
+		Child , space_30 ,
+		Child , space_31 ,
+		Child , space_32 ,
+		Child , space_33 ,
+	End
+
+	confAccPanel := GroupObject ,
+		MUIA_HelpNode , 'confAccPanel' ,
+		Child , gr_grp_23 ,
+		Child , gr_grp_22 ,
+	End
+
 	la_label_29 := Label( 'Computer Type' )
 
 	self.cyComputers := CycleObject ,
@@ -846,6 +1007,7 @@ PROC create() OF app_obj
 		Child , userDetailsPanel ,
 		Child , userStatsPanel ,
 		Child , userLimitsPanel ,
+		Child , confAccPanel ,
 		Child , userMiscPanel ,
 	End
 
@@ -905,6 +1067,54 @@ PROC create() OF app_obj
 		WindowContents , grOUP_ROOT_1 ,
 	End
 
+	lblPassword1 := Label( 'Enter Password' )
+
+	self.strPassword1 := StringObject ,
+		MUIA_Frame , MUIV_Frame_String ,
+		MUIA_HelpNode , 'strPassword1' ,
+		MUIA_String_Secret , MUI_TRUE ,
+	End
+
+	lblPassword2 := Label( 'Repeat Password' )
+
+	self.strPassword2 := StringObject ,
+		MUIA_Frame , MUIV_Frame_String ,
+		MUIA_HelpNode , 'strPassword2' ,
+		MUIA_String_Secret , MUI_TRUE ,
+	End
+
+	gr_grp_20 := GroupObject ,
+		MUIA_HelpNode , 'GR_grp_20' ,
+		MUIA_Group_Columns , 2 ,
+		Child , lblPassword1 ,
+		Child , self.strPassword1 ,
+		Child , lblPassword2 ,
+		Child , self.strPassword2 ,
+	End
+
+	self.btnPwdOk := SimpleButton( 'Ok' )
+
+	self.btnPwdCancel := SimpleButton( 'Cancel' )
+
+	gr_grp_19 := GroupObject ,
+		MUIA_HelpNode , 'GR_grp_19' ,
+		MUIA_Group_Horiz , MUI_TRUE ,
+		Child , self.btnPwdOk ,
+		Child , self.btnPwdCancel ,
+	End
+
+	grpSetPassword := GroupObject ,
+		MUIA_Group_SameWidth , MUI_TRUE ,
+		Child , gr_grp_20 ,
+		Child , gr_grp_19 ,
+	End
+
+	self.winSetPassword := WindowObject ,
+		MUIA_Window_Title , 'Set Password' ,
+		MUIA_Window_ID , "2WIN" ,
+		WindowContents , grpSetPassword ,
+	End
+
 	self.app := ApplicationObject ,
 		//( IF icon THEN MUIA_Application_DiskObject ELSE TAG_IGNORE ) , icon ,
 		//( IF arexx THEN MUIA_Application_Commands ELSE TAG_IGNORE ) , ( IF arexx THEN arexx.commands ELSE NIL ) ,
@@ -919,6 +1129,7 @@ PROC create() OF app_obj
 		MUIA_Application_HelpFile , 'axsys.guide' ,
 		SubWindow , self.winUserList ,
 		SubWindow , self.winUserDetails ,
+		SubWindow , self.winSetPassword ,
 	End
 
 ENDPROC self.app
@@ -1001,11 +1212,13 @@ PROC init_notifications(  ) OF app_obj
 		self.btnSelectUserNext ,
 		self.cyPreset ,
 		self.btnApply ,
+		self.mainPanel ,
 		self.strUsername ,
 		self.cyActive ,
 		self.strRealname ,
 		self.strLocation ,
 		self.strPassword ,
+		self.btnPassword ,
 		self.strPhone ,
 		self.slSecLevel ,
 		self.cySecArea ,
@@ -1028,6 +1241,14 @@ PROC init_notifications(  ) OF app_obj
 		self.cyPwdReset ,
 		self.cyAccountLocked ,
 		self.strInvalidAttempts ,
+		self.cyCbConf ,
+		self.strCbUploads ,
+		self.strCbDownloads ,
+		self.strCbUploadBytes ,
+		self.strCbDownloadBytes ,
+		self.strCbRatio ,
+		self.cyCbRatioType ,
+		self.strCbMessages ,
 		self.cyComputers ,
 		self.cyScreens ,
 		self.cyNewUser ,
@@ -1040,7 +1261,16 @@ PROC init_notifications(  ) OF app_obj
 		self.btnCancel ,
 		0 ] )
 
+	domethod( self.winSetPassword , [
+		MUIM_Window_SetCycleChain , self.strPassword1 ,
+		self.strPassword2 ,
+		self.btnPwdOk ,
+		self.btnPwdCancel ,
+		0 ] )
+
 	set( self.winUserList ,MUIA_Window_Open , MUI_TRUE )
+
+	set( self.winSetPassword ,MUIA_Window_Open , MUI_TRUE )
 
 ENDPROC
 
