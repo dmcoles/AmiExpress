@@ -524,7 +524,7 @@ PROC loadBBSSetup() OF frmEditUser
   Dispose(self.confDbSharedItems)
 
   self.confNameList:=New((count+1)*4)
-  self.confDbList:=New((count)*4)
+  self.confDbList:=New((count+1)*4)
   self.confDbEntries:=New(count*SIZEOF confBase)
   self.editedConfDbEntries:=New(count*SIZEOF confBase)
   self.confDbSharedItems:=New(count*4)
@@ -1006,7 +1006,7 @@ PROC loadConfBase(firstTime) OF frmEditUser
   StringF(tempstring,'\d',editedConfBase.messagesPosted)
   set( self.app.strCbMessages, MUIA_Text_Contents,tempstring)
 
-  ->Set(self.app.cyCbRatioType, MUIA_Cycle_Active,editedConfBase.ratioType)
+  set(self.app.cyCbRatioType, MUIA_Cycle_Active,editedConfBase.ratioType)
 
   self.unsavedChanges:=temp
 ENDPROC
