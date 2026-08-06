@@ -7650,7 +7650,7 @@ PROC processInputMessage(timeout, extsig = 0,conRawMode=FALSE, allowSer=TRUE, se
     ENDIF
   ENDIF
 
-  IF (state=STATE_AWAIT)
+  IF (state=STATE_AWAIT) AND (nofkeys=FALSE)
     statePtr:=stateData
     IF servercmd=SV_UNICONIFY
       IF scropen THEN expressToFront() ELSE openExpressScreen()
@@ -7710,6 +7710,7 @@ PROC processInputMessage(timeout, extsig = 0,conRawMode=FALSE, allowSer=TRUE, se
         StrCopy(reservedName,'')
       ELSE
         disableNodeMenus(TRUE)
+        nofkeys:=TRUE
         ioFlags[IOFLAG_SER_IN]:=0
         ioFlags[IOFLAG_SER_OUT]:=0
         ioFlags[IOFLAG_SCR_OUT]:=-1
@@ -7723,6 +7724,7 @@ PROC processInputMessage(timeout, extsig = 0,conRawMode=FALSE, allowSer=TRUE, se
         disableNodeMenus(FALSE)
         ioFlags[IOFLAG_SER_IN]:=-1
         ioFlags[IOFLAG_SCR_OUT]:=0
+        nofkeys:=FALSE
         setEnvStat(ENV_RESERVE)
       ENDIF
       IF reqState=REQ_STATE_NONE THEN statePtr.redrawScreen:=TRUE
@@ -7733,6 +7735,7 @@ PROC processInputMessage(timeout, extsig = 0,conRawMode=FALSE, allowSer=TRUE, se
       servercmd:=-1
       ioFlags[IOFLAG_SER_IN]:=0
       ioFlags[IOFLAG_SCR_OUT]:=-1
+      nofkeys:=TRUE
       IF (scropen) THEN expressToFront() ELSE openExpressScreen()
       conCursorOn()
       sendCLS()
@@ -7758,6 +7761,7 @@ PROC processInputMessage(timeout, extsig = 0,conRawMode=FALSE, allowSer=TRUE, se
       loggedOnUserKeys:=NIL
       ioFlags[IOFLAG_SER_IN]:=-1
       ioFlags[IOFLAG_SCR_OUT]:=0
+      nofkeys:=FALSE     
       IF(ioFlags[IOFLAG_FIL_IN]) THEN ioFlags[IOFLAG_FIL_IN]:=0
       disableNodeMenus(FALSE)
       IF reqState=REQ_STATE_NONE THEN statePtr.redrawScreen:=TRUE
@@ -7787,6 +7791,7 @@ PROC processInputMessage(timeout, extsig = 0,conRawMode=FALSE, allowSer=TRUE, se
       servercmd:=-1
       ioFlags[IOFLAG_SER_IN]:=0
       ioFlags[IOFLAG_SCR_OUT]:=-1
+      nofkeys:=TRUE
       intDoReset(sopt.offHook)
       disableNodeMenus(TRUE)
       IF (scropen) THEN expressToFront() ELSE openExpressScreen()
@@ -7816,6 +7821,7 @@ PROC processInputMessage(timeout, extsig = 0,conRawMode=FALSE, allowSer=TRUE, se
       disableNodeMenus(FALSE)
       ioFlags[IOFLAG_SER_IN]:=-1
       ioFlags[IOFLAG_SCR_OUT]:=0
+      nofkeys:=FALSE      
       IF(ioFlags[IOFLAG_FIL_IN]) THEN ioFlags[IOFLAG_FIL_IN]:=0
       IF reqState=REQ_STATE_NONE THEN statePtr.redrawScreen:=TRUE
     ENDIF
@@ -7825,6 +7831,7 @@ PROC processInputMessage(timeout, extsig = 0,conRawMode=FALSE, allowSer=TRUE, se
       servercmd:=-1
       ioFlags[IOFLAG_SER_IN]:=0
       ioFlags[IOFLAG_SCR_OUT]:=-1
+      nofkeys:=TRUE
       intDoReset(sopt.offHook)
       disableNodeMenus(TRUE)
       IF (scropen) THEN expressToFront() ELSE openExpressScreen()
@@ -7850,6 +7857,7 @@ PROC processInputMessage(timeout, extsig = 0,conRawMode=FALSE, allowSer=TRUE, se
       disableNodeMenus(FALSE)
       ioFlags[IOFLAG_SER_IN]:=-1
       ioFlags[IOFLAG_SCR_OUT]:=0
+      nofkeys:=FALSE
       IF(ioFlags[IOFLAG_FIL_IN]) THEN ioFlags[IOFLAG_FIL_IN]:=0
       IF reqState=REQ_STATE_NONE THEN statePtr.redrawScreen:=TRUE
     ENDIF
@@ -9197,6 +9205,7 @@ PROC commentToSYSOP()
     RETURN stat
   ENDIF
 
+
   SELECT confNameType
     CASE NAME_TYPE_USERNAME
       AstrCopy(mailHeader.toName,tempUserKeys.userName,31)
@@ -9284,14 +9293,14 @@ PROC listMSGs(gfh)
     IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS) OR ((stringCompare(mailHeader.toName,'all')=RESULT_SUCCESS) AND (cb.handle[0] AND MAILSCAN_ALL))))
       IF(mailFlag=0)
         aePuts('\b\n\b\n')
-        aePuts('[32mMsg    Type     From                           Subject              \b\n')
-        aePuts('[33m------ -------  -----------------------------  ---------------------\b\n')
+        aePuts('[32mMsg    Type     From            To              Subject                     \b\n')
+        aePuts('[33m------ -------  --------------  --------------  ----------------------------\b\n')
         aePuts('[0m')
         IF(nonStopDisplayFlag=FALSE) THEN lineCount:=lineCount+4
         mailFlag:=1
       ENDIF
       IF (mailHeader.status="P") OR (mailHeader.status="p") THEN StrCopy(mailStatus,'Public ') ELSE StrCopy(mailStatus,'Private')
-      StringF(tempStr,'\z\r\d[6] \s  \l\s[29]  \l\s[21]  [0m\b\n',mailHeader.msgNumb,mailStatus,mailHeader.fromName,mailHeader.subject)
+      StringF(tempStr,'\z\r\d[6] \s  \l\s[14]  \l\s[14]  \l\s[28][0m\b\n',mailHeader.msgNumb,mailStatus,mailHeader.fromName,mailHeader.toName,mailHeader.subject)
       aePuts(tempStr)
 
       IF checkForPause()=RESULT_FAILURE
@@ -21681,7 +21690,9 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
   DEF page=0
   DEF value1,value2
   DEF changes=FALSE
+  DEF oldnofkeys
 
+  oldnofkeys:=nofkeys
   nofkeys:=1
   displayAccount(which,page,hoozer,hoozer2,hoozer3,f6)
   StrCopy(tempStr,hoozer.name)
@@ -22109,7 +22120,7 @@ PROC editInfo(which:LONG, hoozer:PTR TO user, hoozer2:PTR TO userKeys, hoozer3: 
 
     aePuts('[18;1H')
   UNTIL flag
-  nofkeys:=0
+  nofkeys:=oldnofkeys
 
 ENDPROC flag
 
@@ -25702,6 +25713,262 @@ PROC internalCommandJM(params)
   joinConf(currentConf,newMsgBase,FALSE,FALSE)
 ENDPROC RESULT_SUCCESS
 
+PROC filter(msghdr:PTR TO mailHeader,filterfield,filterValue:PTR TO CHAR)
+  DEF cb:PTR TO confBase
+  DEF confMailName[40]:STRING
+  DEF privateFlag=0
+  DEF msgFilename[200]:STRING
+  DEF msgData=0,l,fh
+
+  SELECT confNameType
+    CASE NAME_TYPE_USERNAME
+      StrCopy(confMailName,loggedOnUserKeys.userName,31)
+    CASE NAME_TYPE_REALNAME
+      StrCopy(confMailName,loggedOnUserMisc.realName,26)
+    CASE NAME_TYPE_INTERNETNAME
+      StrCopy(confMailName,loggedOnUserMisc.internetName,10)
+  ENDSELECT
+
+  cb:=confBases.item(getConfIndex(currentConf,currentMsgBase))
+
+  IF(((msghdr.status="R") OR (msghdr.status="p")) AND (Not(checkSecurity(ACS_SYSOP_READ))))
+    IF((stringCompare(msghdr.toName,confMailName)<>RESULT_SUCCESS) AND
+      ((stringCompare(msghdr.toName,'eall')<>RESULT_SUCCESS) OR (Not(checkSecurity(ACS_READ_PRIV_EALL)))) AND
+      ((stringCompare(msghdr.toName,'all')<>RESULT_SUCCESS) OR (Not(checkSecurity(ACS_READ_PRIV_ALL)))) AND
+      (stringCompare(msghdr.fromName,confMailName)<>RESULT_SUCCESS))
+      privateFlag:=1
+    ENDIF
+  ENDIF
+
+
+  IF (filterfield==[4,5])
+    StringF(msgFilename,'\s\d',msgBaseLocation,msghdr.msgNumb)
+    l:=FileLength(msgFilename)
+    IF l
+      msgData:=New(l+1)
+      IF msgData
+        fh:=Open(msgFilename,MODE_OLDFILE)
+        IF fh<>0
+          Read(fh,msgData,l)
+          Close(fh)
+        ENDIF
+      ENDIF
+    ENDIF
+  ENDIF
+
+  IF privateFlag=0
+    SELECT filterfield
+      CASE 0
+        RETURN TRUE
+      CASE 1
+        IF InStri(msghdr.fromName,filterValue)>=0 THEN RETURN TRUE
+      CASE 2
+        IF InStri(msghdr.toName,filterValue)>=0 THEN RETURN TRUE
+      CASE 3
+        IF InStri(msghdr.subject,filterValue)>=0 THEN RETURN TRUE
+      CASE 4
+        IF msgData
+          l:=InStri(msgData,filterValue)
+          Dispose(msgData)
+          IF l>=0 THEN RETURN TRUE
+        ENDIF
+      CASE 5
+        IF msgData
+          l:=InStri(msgData,filterValue)
+          Dispose(msgData)
+          IF l>=0 THEN RETURN TRUE
+        ENDIF
+        IF InStri(msghdr.fromName,filterValue)>=0 THEN RETURN TRUE
+        IF InStri(msghdr.toName,filterValue)>=0 THEN RETURN TRUE
+        IF InStri(msghdr.subject,filterValue)>=0 THEN RETURN TRUE
+    ENDSELECT
+  ENDIF
+  
+ENDPROC FALSE
+
+PROC makepage(pagesize,lastselected,selected,msglist:PTR TO stdlist)
+  DEF msghdr:PTR TO mailHeader
+  DEF tempstr[200]:STRING
+  DEF mailStatus[8]:STRING
+  DEF n=0,i,pagenum,oldpagenum
+
+  oldpagenum:=lastselected/pagesize
+  pagenum:=selected/pagesize
+  conCursorOff()
+  aePuts('[1;1H')
+  IF pagenum=oldpagenum
+      aePuts('\b\n\b\n\b\n\b\n')
+  ELSE
+    StringF(tempstr,'[32mMessages List[33m: [0m\l\s[45][32mPage [33m\d[32m of [33m\d[K\b\n\b\n',getConfName(currentConf),pagenum+1,Div(msglist.count()+pagesize-1,pagesize))
+    aePuts(tempstr)
+
+    aePuts('[32mMsg    Type     From            To              Subject                     [K\b\n')
+    aePuts('[33m------ -------  --------------  --------------  ----------------------------[K\b\n')
+  ENDIF
+ 
+  n:=selected/pagesize*pagesize
+  FOR i:=0 TO pagesize-1
+    IF (msglist.count()=0) AND (i=1) THEN aePuts(' [0mNO MESSAGES TO DISPLAY')
+    
+    IF n<msglist.count()
+      msghdr:=msglist.item(n)
+
+      IF (msghdr.status="P") OR (msghdr.status="p") THEN StrCopy(mailStatus,'Public ') ELSE StrCopy(mailStatus,'Private')
+    
+      IF (pagenum=oldpagenum) AND (n<>selected) AND (n<>lastselected)
+        aePuts('\b\n')
+      ELSE
+        IF n=selected
+          StringF(tempstr,'[36m\z\r\d[6] \s  \l\s[14]  \l\s[14]  \l\s[28][0m[K\b\n',msghdr.msgNumb,mailStatus,msghdr.fromName,msghdr.toName,msghdr.subject)
+          aePuts(tempstr)
+        ELSE
+          StringF(tempstr,'[0m\z\r\d[6] \s  \l\s[14]  \l\s[14]  \l\s[28][K\b\n',msghdr.msgNumb,mailStatus,msghdr.fromName,msghdr.toName,msghdr.subject)
+          aePuts(tempstr)
+        ENDIF
+      ENDIF
+    ELSE
+      aePuts('[K\b\n')
+    ENDIF
+    n++
+  ENDFOR
+  IF pagenum=oldpagenum
+    aePuts('\b\n[76C')
+  ELSE
+    aePuts('[K\b\n[32m([33mCursors[32m)[36m=[32mMOVE [33mF[36m=[32mFILTER [33mC[36m=[32mCLEAR FILTER [33mT[36m=[32mTOP [33mB[36m=[32mBOTTOM [32m[33mQ[36m=[32mQUIT [32m([33mEnter[32m)[36m=[32mVIEW[0m >:[K')
+  ENDIF
+  conCursorOn()
+ENDPROC
+
+PROC findMsgIndex(msgHeaderList:PTR TO stdlist,msgNum)
+  DEF i
+  DEF msgHdr:PTR TO mailHeader
+  FOR i:=0 TO msgHeaderList.count()-1
+    msgHdr:=msgHeaderList.item(i)
+    IF msgHdr.msgNumb=msgNum THEN RETURN i  
+  ENDFOR
+ENDPROC 0
+
+PROC messageListing(reverse)
+  DEF fh
+  DEF msghdr:PTR TO mailHeader
+  DEF mailentries:PTR TO stdlist
+  DEF revmailentries:PTR TO stdlist
+  DEF ch,stat
+  DEF pagesize=25,selected=0,lastselected,i,n,oldid=0
+  DEF headerfile[200]:STRING
+  DEF tempparam[20]:STRING
+  DEF refresh=TRUE
+  DEF filterField,filterValue[200]:STRING
+  DEF str[100]:STRING
+
+  filterField:=0
+  StrCopy(filterValue,'')
+
+  pagesize:=userLineLen-5
+  StringF(headerfile,'\s\s',msgBaseLocation,'HeaderFile')
+  NEW mailentries.stdlist(100)
+
+  aePuts([12,0]:CHAR) 
+  REPEAT
+    IF refresh
+      aePuts('[1;1HBuilding message list...')
+
+      FOR i:=0 TO mailentries.count()-1 
+        msghdr:=mailentries.item(i)
+        IF i=selected THEN oldid:=msghdr.msgNumb
+        END msghdr
+      ENDFOR
+      mailentries.clear()
+
+      fh:=Open(headerfile,MODE_OLDFILE)
+      IF fh<>0
+        NEW msghdr
+        WHILE Fread(fh,msghdr,SIZEOF msghdr,1)=1
+          IF (msghdr.status<>"D")
+            IF filter(msghdr,filterField,filterValue) 
+              mailentries.add(msghdr)
+              NEW msghdr
+            ENDIF
+          ENDIF
+        ENDWHILE
+        Close(fh)
+        END msghdr
+      ENDIF
+      IF (reverse) AND (mailentries.count()>1)
+        NEW revmailentries.stdlist(mailentries.count())
+        FOR i:=mailentries.count()-1 TO 0 STEP -1
+          revmailentries.add(mailentries.item(i))
+        ENDFOR
+        END mailentries
+        mailentries:=revmailentries
+      ENDIF
+      lastselected:=-pagesize
+      selected:=findMsgIndex(mailentries,oldid)
+      refresh:=FALSE
+    ENDIF
+
+    makepage(pagesize,lastselected,selected,mailentries)
+    rawArrow:=TRUE
+    ch:=readChar(INPUT_TIMEOUT)
+    lastselected:=selected
+    rawArrow:=FALSE
+    IF (ch=13)
+      msghdr:=mailentries.item(selected)
+      StringF(tempparam,'\d',msghdr.msgNumb)
+      internalCommandR(tempparam)
+      selected:=findMsgIndex(mailentries,msgNum-1)
+      refresh:=TRUE
+    ENDIF
+    IF (ch="c")
+      filterField:=0
+      StrCopy(filterValue,'')
+      refresh:=TRUE
+    ENDIF
+    IF (ch="f")
+      aePuts('\b\n\b\n[32mSelect filter option[0m\b\n')
+      aePuts('1) Filter on "from" name\b\n')
+      aePuts('2) Filter on "to" name\b\n')
+      aePuts('3) Filter on subject\b\n')
+      aePuts('4) Filter on message body\b\n')
+      aePuts('5) Filter on all of the above\b\n\b\n')
+      
+      stat:=lineInput('[32mEnter your choice[33m:[0m ','',1,INPUT_TIMEOUT,str)
+      IF stat>=0
+        n:=Val(str)
+        IF (n>=1) AND (n<=5)
+          stat:=lineInput('\b\n[32mEnter search string[33m:[0m ','',100,INPUT_TIMEOUT,str)
+          IF (stat>=0) AND (EstrLen(str)>0)
+            filterField:=n
+            StrCopy(filterValue,str)
+            refresh:=TRUE
+          ENDIF       
+        ENDIF
+        lastselected:=-pagesize
+        aePuts([12,0]:CHAR) 
+      ENDIF
+    ENDIF
+    IF (ch="t") THEN selected:=0
+    IF (ch="b") THEN selected:=mailentries.count()-1
+    IF (ch=LEFTARROW) AND (selected>=pagesize) THEN selected-=pagesize
+    IF (ch=RIGHTARROW) AND (selected<(mailentries.count()-pagesize-1)) THEN selected+=pagesize
+    IF (ch=UPARROW) AND (selected>0) THEN selected--
+    IF (ch=DOWNARROW) AND (selected<(mailentries.count()-1)) THEN selected++
+  UNTIL (ch="q") OR (ch=27) OR (ch<0)
+  aePuts('\b\n\b\n')
+  FOR i:=0 TO mailentries.count()-1 
+    msghdr:=mailentries.item(i)
+    END msghdr
+  ENDFOR
+  END mailentries
+ENDPROC
+PROC internalCommandL()
+  messageListing(FALSE)
+ENDPROC RESULT_SUCCESS
+
+PROC internalCommandLR()
+  messageListing(TRUE)
+ENDPROC RESULT_SUCCESS
+
 PROC internalCommandM()
 
   IF(ansiColour)
@@ -28811,6 +29078,10 @@ PROC processInternalCommand(cmdcode,cmdparams,privcmd=FALSE)
     res:=internalCommandE(cmdparams)
   ELSEIF (StrCmp(cmdcode,'H'))
     res:=internalCommandH(cmdparams)
+  ELSEIF (StrCmp(cmdcode,'L'))
+    res:=internalCommandL()
+  ELSEIF (StrCmp(cmdcode,'LR'))
+    res:=internalCommandLR()
   ELSEIF (StrCmp(cmdcode,'M'))
     res:=internalCommandM()
   ELSEIF (StrCmp(cmdcode,'MS'))
