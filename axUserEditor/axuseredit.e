@@ -551,6 +551,7 @@ PROC create() OF app_obj
 	self.strRatio := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strRatio' ,
+		MUIA_String_Accept , '0123456789' ,
 	End
 
 	la_label_10 := Label( 'Ratio Type' )
@@ -682,7 +683,7 @@ PROC create() OF app_obj
 	self.strTimeTotal := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strTimeTotal' ,
-		MUIA_String_Accept , '-0123456789' ,
+		MUIA_String_Accept , '0123456789' ,
 	End
 
 	la_label_21 := Label( 'Time Limit' )
@@ -690,7 +691,7 @@ PROC create() OF app_obj
 	self.strTimeLimit := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strTimeLimit' ,
-		MUIA_String_Accept , '-0123456789' ,
+		MUIA_String_Accept , '0123456789' ,
 	End
 
 	la_label_22 := Label( 'Chat Limit' )
@@ -698,6 +699,7 @@ PROC create() OF app_obj
 	self.strChatLimit := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strChatLimit' ,
+		MUIA_String_Accept , '0123456789' ,
 	End
 
 	la_label_23 := Label( 'Time Used' )
@@ -705,7 +707,7 @@ PROC create() OF app_obj
 	self.strTimeUsed := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strTimeUsed' ,
-		MUIA_String_Accept , '-0123456789' ,
+		MUIA_String_Accept , '0123456789' ,
 	End
 
 	la_label_24 := Label( 'Chat Used' )
@@ -713,7 +715,7 @@ PROC create() OF app_obj
 	self.strChatUsed := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strChatUsed' ,
-		MUIA_String_Accept , '-0123456789' ,
+		MUIA_String_Accept , '0123456789' ,
 	End
 
 	la_label_31 := Label( 'Force Pwd Reset' )
@@ -737,7 +739,7 @@ PROC create() OF app_obj
 	self.strInvalidAttempts := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strInvalidAttempts' ,
-		MUIA_String_Accept , '-0123456789' ,
+		MUIA_String_Accept , '0123456789' ,
 	End
 
 	space_4 := HVSpace
@@ -841,6 +843,7 @@ PROC create() OF app_obj
 	self.strCbRatio := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strCbRatio' ,
+		MUIA_String_Accept , '0123456789' ,
 	End
 
 	la_label_10C := Label( 'Ratio Type' )

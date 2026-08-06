@@ -61,8 +61,9 @@ PROC addbuttonPressed() OF frmMain
   END frmEditUser
   IF res THEN self.loadUsers()
 
+  set ( self.winMain,MUIA_Window_ActiveObject,self.app.lvUsers)
   self.wake()
-  
+
 ENDPROC
 
 PROC editbuttonPressed() OF frmMain
@@ -75,6 +76,7 @@ PROC editbuttonPressed() OF frmMain
   res:=frmEditUser.editUser(self.bbsPath,self.currentSlot)
   END frmEditUser
   IF res THEN self.loadUsers()
+  set ( self.winMain,MUIA_Window_ActiveObject,self.app.lvUsers)
   self.wake()
   
 ENDPROC
@@ -96,20 +98,30 @@ PROC formShow() OF frmMain
 ENDPROC
 
 PROC buildUserDisplayList(filter:PTR TO CHAR) OF frmMain
-  DEF i
+  DEF i,entry,selectedId=-1,n=0
+  
+  get(self.app.lvUsers,MUIA_List_Active,{entry})
+  IF entry>=0 THEN selectedId:=self.userIds.item(entry)
+  entry:=MUIV_List_Active_Off
   
   set(self.app.lvUsers, MUIA_List_Quiet, MUI_TRUE)
   domethod( self.app.lvUsers , [ MUIM_List_Clear] )
   IF StrLen(filter)=0
     FOR i:=0 TO self.userIds.count()-1
       domethod( self.app.lvUsers , [ MUIM_List_InsertSingle , self.userIds.item(i) , MUIV_List_Insert_Bottom ] )
+      IF self.userIds.item(i)=selectedId THEN entry:=i
     ENDFOR  
   ELSE
     FOR i:=0 TO self.userIds.count()-1
-      IF InStri(self.userNames.item(i),filter)>=0 THEN domethod( self.app.lvUsers , [ MUIM_List_InsertSingle , self.userIds.item(i) , MUIV_List_Insert_Bottom ] )
+      IF InStri(self.userNames.item(i),filter)>=0 
+        domethod( self.app.lvUsers , [ MUIM_List_InsertSingle , self.userIds.item(i) , MUIV_List_Insert_Bottom ] )
+        IF self.userIds.item(i)=selectedId THEN entry:=n
+        n++
+      ENDIF
     ENDFOR
   ENDIF
   set(self.app.lvUsers, MUIA_List_Quiet, FALSE)
+  set(self.app.lvUsers,MUIA_List_Active,entry)
 ENDPROC
 
 PROC create(app:PTR TO app_obj) OF frmMain
@@ -318,6 +330,7 @@ PROC doMain() OF frmMain
 
   self.loadUsers()
   
+  set ( self.winMain,MUIA_Window_ActiveObject,self.app.lvUsers)
   self.showModal()
 
   clearDiskObjectCache()
