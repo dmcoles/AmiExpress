@@ -5,7 +5,7 @@ MODULE 'muimaster' , 'libraries/mui'
 MODULE 'tools/boopsi','dos/dos','libraries/asl','dos/var'
 MODULE 'utility/tagitem' , 'utility/hooks', 'tools/installhook','libraries/gadtools'
 
-MODULE '*frmBase','*axuseredit','*frmEditUser','*axuserobjects','*/stringlist'
+MODULE '*frmBase','*axuseredit','*frmEditUser','*axuserobjects','*/stringlist','*helpText','*/axsetuptool/tooltypes'
 
 
 EXPORT OBJECT frmMain OF frmBase
@@ -232,6 +232,8 @@ PROC doMain() OF frmMain
   NEW listChangeHook
   NEW aboutClickHook
 
+  initialiseCache()
+
   AstrCopy(self.bbsPath,'BBS:')
 
   self.userNames:=NEW stringlist.stringlist(1000)
@@ -307,10 +309,19 @@ PROC doMain() OF frmMain
   set(self.app.lvUsers,MUIA_List_DisplayHook,displayHook)
   set(self.app.btnEdit,MUIA_Disabled,MUI_TRUE)
   set(self.app.mnlabel1EditUser,MUIA_Menuitem_Enabled,FALSE)
- 
+
+  set(self.app.btnAdd, MUIA_ShortHelp , getHelpText(HLP_ADD_USER))
+  set(self.app.btnEdit, MUIA_ShortHelp , getHelpText(HLP_EDIT_USER))
+  set(self.app.strFilter, MUIA_ShortHelp , getHelpText(HLP_SET_FILTER))
+  set(self.app.btnApplyFilter, MUIA_ShortHelp , getHelpText(HLP_APPLY_FILTER))
+  set(self.app.btnExit, MUIA_ShortHelp , getHelpText(HLP_EXIT))
+
   self.loadUsers()
   
   self.showModal()
+
+  clearDiskObjectCache()
+  deInitialiseCache()
 
   END self.userNames
   END self.userIds

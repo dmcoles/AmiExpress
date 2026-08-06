@@ -47,6 +47,8 @@ EXPORT OBJECT app_obj
 	strUsername             :	PTR TO LONG
 	cyActive                :	PTR TO LONG
 	strRealname             :	PTR TO LONG
+	strInternetName         :	PTR TO LONG
+	strEmailAddress         :	PTR TO LONG
 	strLocation             :	PTR TO LONG
 	strPassword             :	PTR TO LONG
 	btnPassword             :	PTR TO LONG
@@ -122,20 +124,20 @@ PROC create() OF app_obj
 	DEF la_label_40 , gr_grp_0 , mnlabel2Project , mnlabel2Presets
 	DEF grOUP_ROOT_1 , presetPanel , la_label_39 , userDetailsPanel
 	DEF gr_grp_12 , la_label_0 , la_label_37 , la_label_1
-	DEF la_label_2 , la_label_3 , gr_grp_18 , la_label_9 , gr_grp_13
-	DEF la_label_8 , la_label_7 , la_label_15 , space_11
-	DEF userStatsPanel , la_label_6 , la_label_10 , la_label_11
-	DEF la_label_12 , la_label_13 , la_label_14 , la_label_16
-	DEF la_label_18 , la_label_19 , space_2 , space_3 , space_14
-	DEF space_15 , space_16 , space_17 , userLimitsPanel
-	DEF la_label_17 , la_label_20 , la_label_21 , la_label_22
-	DEF la_label_23 , la_label_24 , la_label_31 , la_label_32
-	DEF la_label_33 , space_4 , space_5 , space_19 , space_18
-	DEF space_25C , space_26C , confAccPanel , gr_grp_23
-	DEF la_label_43 , gr_grp_22 , la_label_12CC , la_label_12C
-	DEF la_label_13C , la_label_14C , la_label_6C , la_label_10C
-	DEF la_label_16C , space_28 , space_29 , space_30 , space_31
-	DEF space_32 , space_33 , userMiscPanel , gr_grp_15
+	DEF la_label_2C , la_label_2 , la_label_1C , la_label_3
+	DEF gr_grp_18 , la_label_9 , la_label_8 , la_label_7 , gr_grp_13
+	DEF la_label_15 , space_11 , userStatsPanel , la_label_6
+	DEF la_label_10 , la_label_11 , la_label_12 , la_label_13
+	DEF la_label_14 , la_label_16 , la_label_18 , la_label_19
+	DEF space_2 , space_3 , space_14 , space_15 , space_16
+	DEF space_17 , userLimitsPanel , la_label_17 , la_label_20
+	DEF la_label_21 , la_label_22 , la_label_23 , la_label_24
+	DEF la_label_31 , la_label_32 , la_label_33 , space_4 , space_5
+	DEF space_19 , space_18 , space_25C , space_26C , confAccPanel
+	DEF gr_grp_23 , la_label_43 , gr_grp_22 , la_label_12CC
+	DEF la_label_12C , la_label_13C , la_label_14C , la_label_6C
+	DEF la_label_10C , la_label_16C , space_28 , space_29 , space_30
+	DEF space_31 , space_32 , space_33 , userMiscPanel , gr_grp_15
 	DEF la_label_29 , la_label_30 , gr_grp_14 , la_label_25
 	DEF la_label_26 , la_label_35 , la_label_27 , la_label_28
 	DEF la_label_34 , space_7 , space_24 , space_25 , space_6
@@ -422,7 +424,21 @@ PROC create() OF app_obj
 		MUIA_HelpNode , 'strRealname' ,
 	End
 
-	la_label_2 := Label( 'Location' )
+	la_label_2C := Label( 'Internet Name' )
+
+	self.strInternetName := StringObject ,
+		MUIA_Frame , MUIV_Frame_String ,
+		MUIA_HelpNode , 'strInternetName' ,
+	End
+
+	la_label_2 := Label( 'Email Address' )
+
+	self.strEmailAddress := StringObject ,
+		MUIA_Frame , MUIV_Frame_String ,
+		MUIA_HelpNode , 'strEmailAddress' ,
+	End
+
+	la_label_1C := Label( 'Location' )
 
 	self.strLocation := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
@@ -457,24 +473,6 @@ PROC create() OF app_obj
 		MUIA_HelpNode , 'strPhone' ,
 	End
 
-	gr_grp_12 := GroupObject ,
-		MUIA_HelpNode , 'GR_grp_12' ,
-		MUIA_Background , MUII_RequesterBack ,
-		MUIA_Group_Columns , 4 ,
-		Child , la_label_0 ,
-		Child , self.strUsername ,
-		Child , la_label_37 ,
-		Child , self.cyActive ,
-		Child , la_label_1 ,
-		Child , self.strRealname ,
-		Child , la_label_2 ,
-		Child , self.strLocation ,
-		Child , la_label_3 ,
-		Child , gr_grp_18 ,
-		Child , la_label_9 ,
-		Child , self.strPhone ,
-	End
-
 	la_label_8 := Label( 'Security Level' )
 
 	self.slSecLevel := SliderObject ,
@@ -493,6 +491,32 @@ PROC create() OF app_obj
 		MUIA_Cycle_Entries , self.cySecAreaContent ,
 	End
 
+	gr_grp_12 := GroupObject ,
+		MUIA_HelpNode , 'GR_grp_12' ,
+		MUIA_Background , MUII_RequesterBack ,
+		MUIA_Group_Columns , 4 ,
+		Child , la_label_0 ,
+		Child , self.strUsername ,
+		Child , la_label_37 ,
+		Child , self.cyActive ,
+		Child , la_label_1 ,
+		Child , self.strRealname ,
+		Child , la_label_2C ,
+		Child , self.strInternetName ,
+		Child , la_label_2 ,
+		Child , self.strEmailAddress ,
+		Child , la_label_1C ,
+		Child , self.strLocation ,
+		Child , la_label_3 ,
+		Child , gr_grp_18 ,
+		Child , la_label_9 ,
+		Child , self.strPhone ,
+		Child , la_label_8 ,
+		Child , self.slSecLevel ,
+		Child , la_label_7 ,
+		Child , self.cySecArea ,
+	End
+
 	la_label_15 := Label( 'Conference' )
 
 	self.cyRejoinConf := CycleObject ,
@@ -506,10 +530,6 @@ PROC create() OF app_obj
 		MUIA_Weight , 0 ,
 		MUIA_Background , MUII_RequesterBack ,
 		MUIA_Group_Columns , 2 ,
-		Child , la_label_8 ,
-		Child , self.slSecLevel ,
-		Child , la_label_7 ,
-		Child , self.cySecArea ,
 		Child , la_label_15 ,
 		Child , self.cyRejoinConf ,
 	End
@@ -1120,9 +1140,9 @@ PROC create() OF app_obj
 		//( IF arexx THEN MUIA_Application_Commands ELSE TAG_IGNORE ) , ( IF arexx THEN arexx.commands ELSE NIL ) ,
 		//( IF arexx THEN MUIA_Application_RexxHook ELSE TAG_IGNORE ) , ( IF arexx THEN arexx.error ELSE NIL ) ,
 		//( IF menu THEN MUIA_Application_Menu ELSE TAG_IGNORE ) , menu ,
-		MUIA_Application_Author , 'NONE' ,
+		MUIA_Application_Author , 'Darren Coles' ,
 		MUIA_Application_Base , 'NONE' ,
-		MUIA_Application_Title , 'NONE' ,
+		MUIA_Application_Title , 'Ami Express User Editor' ,
 		MUIA_Application_Version , '$VER: NONE XX.XX (XX.XX.XX)' ,
 		MUIA_Application_Copyright , 'NOBODY' ,
 		MUIA_Application_Description , 'NONE' ,
@@ -1216,6 +1236,8 @@ PROC init_notifications(  ) OF app_obj
 		self.strUsername ,
 		self.cyActive ,
 		self.strRealname ,
+		self.strInternetName ,
+		self.strEmailAddress ,
 		self.strLocation ,
 		self.strPassword ,
 		self.btnPassword ,

@@ -5,7 +5,7 @@ MODULE 'muimaster' , 'libraries/mui'
 MODULE 'tools/boopsi','dos/dos','libraries/asl','dos/var','dos/datetime'
 MODULE 'utility/tagitem' , 'utility/hooks', 'tools/installhook'
 
-MODULE '*frmBase','*frmSetPassword','*axuseredit','*axuserobjects','*/axSetupTool/tooltypes','*/stringlist','*/axSetupTool/miscfuncs','*/pwdHash','*/sha256'
+MODULE '*frmBase','*frmSetPassword','*axuseredit','*axuserobjects','*/axSetupTool/tooltypes','*/stringlist','*/axSetupTool/miscfuncs','*/pwdHash','*/sha256','*helpText'
 
 ENUM PWD_LEGACY=0, PWD_PBKDF2_5=1, PWD_PBKDF2_50=2, PWD_PBKDF2_100=3,PWD_PBKDF2_1000=4,PWD_PBKDF2_10000=5
 
@@ -211,6 +211,66 @@ EXPORT PROC convertFromBCD(inArray:PTR TO CHAR)
   formatBCD(inArray,bcdStr)
 ENDPROC Val(bcdStr)
 
+PROC setupHelp() OF frmEditUser
+  set(self.app.slUserId, MUIA_ShortHelp , getHelpText(HLP_SELECT_USER))
+  set(self.app.btnSelectUserLoad, MUIA_ShortHelp , getHelpText(HLP_LOAD_USER))
+  set(self.app.cyPreset, MUIA_ShortHelp , getHelpText(HLP_SELECT_PRESET))
+  set(self.app.btnApply, MUIA_ShortHelp , getHelpText(HLP_APPLY_PRESET))
+
+  set(self.app.btnSave, MUIA_ShortHelp , getHelpText(HLP_SAVE))
+  set(self.app.btnCancel, MUIA_ShortHelp , getHelpText(HLP_CANCEL))
+  
+  set(self.app.strUsername, MUIA_ShortHelp , getHelpText(HLP_USERNAME))
+  set(self.app.cyActive, MUIA_ShortHelp , getHelpText(HLP_ACTIVE))
+  set(self.app.strRealname, MUIA_ShortHelp , getHelpText(HLP_REALNAME))
+  set(self.app.strInternetName, MUIA_ShortHelp , getHelpText(HLP_INTERNETNAME))
+  set(self.app.strEmailAddress, MUIA_ShortHelp , getHelpText(HLP_EMAILADDRESS))
+  set(self.app.strLocation, MUIA_ShortHelp , getHelpText(HLP_LOCATION))
+  set(self.app.btnPassword, MUIA_ShortHelp , getHelpText(HLP_SETPASSWORD))
+  set(self.app.strPhone, MUIA_ShortHelp , getHelpText(HLP_PHONENUM))
+  set(self.app.slSecLevel, MUIA_ShortHelp , getHelpText(HLP_SECURITYLEVEL))
+  set(self.app.cySecArea, MUIA_ShortHelp , getHelpText(HLP_SECURITYAREA))
+  set(self.app.cyRejoinConf, MUIA_ShortHelp , getHelpText(HLP_CONFERENCE))
+  set(self.app.strRatio, MUIA_ShortHelp , getHelpText(HLP_RATIO))
+  set(self.app.cyRatioType, MUIA_ShortHelp , getHelpText(HLP_RATIOTYPE))
+  set(self.app.strUploads, MUIA_ShortHelp , getHelpText(HLP_UPLOADS))
+  set(self.app.strDownloads, MUIA_ShortHelp , getHelpText(HLP_DOWNLOADS))
+  set(self.app.strUploadBytes, MUIA_ShortHelp , getHelpText(HLP_UPLOADBYTES))
+  set(self.app.strDownloadBytes, MUIA_ShortHelp , getHelpText(HLP_DOWNLOADBYTES))
+  set(self.app.strMessages, MUIA_ShortHelp , getHelpText(HLP_MESSAGES))
+  set(self.app.strUploadCPS, MUIA_ShortHelp , getHelpText(HLP_CPSUP))
+  set(self.app.strDownloadCPS, MUIA_ShortHelp , getHelpText(HLP_CPSDOWN))
+  
+  set(self.app.strByteLimit, MUIA_ShortHelp , getHelpText(HLP_BYTELIMT))
+  set(self.app.strTimeTotal, MUIA_ShortHelp , getHelpText(HLP_TIMETOTAL))
+  set(self.app.strTimeLimit, MUIA_ShortHelp , getHelpText(HLP_TIMELIMIT))
+  set(self.app.strChatLimit, MUIA_ShortHelp , getHelpText(HLP_CHATLIMIT))
+  set(self.app.strTimeUsed, MUIA_ShortHelp , getHelpText(HLP_TIMEUSED))
+  set(self.app.strChatUsed, MUIA_ShortHelp , getHelpText(HLP_CHATUSED))
+  set(self.app.cyPwdReset, MUIA_ShortHelp , getHelpText(HLP_FORCEPWDRESET))
+  set(self.app.cyAccountLocked, MUIA_ShortHelp , getHelpText(HLP_ACCOUNTLOCKED))
+  set(self.app.strInvalidAttempts, MUIA_ShortHelp , getHelpText(HLP_INVALIDATTEMPTS))
+
+
+  set(self.app.cyCbConf, MUIA_ShortHelp , getHelpText(HLP_CONFACC_CONF))
+  set(self.app.strCbUploads, MUIA_ShortHelp , getHelpText(HLP_CONFACC_UPLOADS))
+  set(self.app.strCbDownloads, MUIA_ShortHelp , getHelpText(HLP_CONFACC_DOWNLOADS))
+  set(self.app.strCbUploadBytes, MUIA_ShortHelp , getHelpText(HLP_CONFACC_UPLOADBYTES))
+  set(self.app.strCbDownloadBytes, MUIA_ShortHelp , getHelpText(HLP_CONFACC_DOWNLOADBYTES))
+  set(self.app.strCbRatio, MUIA_ShortHelp , getHelpText(HLP_CONFACC_RATIO))
+  set(self.app.cyCbRatioType, MUIA_ShortHelp , getHelpText(HLP_CONFACC_RATIOTYPE))
+  set(self.app.strCbMessages, MUIA_ShortHelp , getHelpText(HLP_CONFACC_MESSAGES))
+  
+  set(self.app.cyComputers, MUIA_ShortHelp , getHelpText(HLP_COMPUTERTYPE))
+  set(self.app.cyScreens, MUIA_ShortHelp , getHelpText(HLP_SCREENTYPE))
+  set(self.app.cyNewUser, MUIA_ShortHelp , getHelpText(HLP_NEWUSER))
+  set(self.app.strTotalCalls, MUIA_ShortHelp , getHelpText(HLP_TOTALCALLS))
+  set(self.app.strPwdType, MUIA_ShortHelp , getHelpText(HLP_PASSWORDTYPE))
+  set(self.app.strCallsToday, MUIA_ShortHelp , getHelpText(HLP_CALLSTODAY))
+  set(self.app.strLastCalled, MUIA_ShortHelp , getHelpText(HLP_LASTCALLDATE))
+  set(self.app.strLastPwdReset, MUIA_ShortHelp , getHelpText(HLP_LASTPWDRESETDATE))
+
+ENDPROC
 
 PROC cancelbuttonPressed() OF frmEditUser
   MOVE.L (A1),self
@@ -411,6 +471,8 @@ PROC newUser() OF frmEditUser
 
   set( self.app.cyActive, MUIA_Cycle_Active,0)
   set( self.app.strRealname, MUIA_Text_Contents,'')
+  set( self.app.strInternetName, MUIA_Text_Contents,'')
+  set( self.app.strEmailAddress, MUIA_Text_Contents,'')
   set( self.app.strPassword, MUIA_Text_Contents,'')
   set( self.app.strLocation, MUIA_Text_Contents,'')
   set( self.app.strPhone, MUIA_Text_Contents,'')
@@ -753,8 +815,7 @@ PROC loadUserData(userId) OF frmEditUser
         Close(fh)
       ENDIF
     ENDIF
-  ENDFOR
-  
+  ENDFOR 
 ENDPROC result
 
 PROC loadUser(userId) OF frmEditUser
@@ -766,8 +827,7 @@ PROC loadUser(userId) OF frmEditUser
 
   userId--
 
-  IF result=(3+self.confCount)
-  
+  IF result>3
     CopyMem(self.confDbEntries,self.editedConfDbEntries,SIZEOF confBase*self.confCount)
 
     AstrCopy(self.selectUser,self.userData.name,80)
@@ -775,6 +835,8 @@ PROC loadUser(userId) OF frmEditUser
     set( self.app.strUsername, MUIA_Text_Contents,self.userData.name)
     set( self.app.cyActive, MUIA_Cycle_Active,IF self.userData.slotNumber=0 THEN 1 ELSE 0)
     set( self.app.strRealname, MUIA_Text_Contents,self.userMisc.realName)
+    set( self.app.strInternetName, MUIA_Text_Contents,self.userMisc.internetName)
+    set( self.app.strEmailAddress, MUIA_Text_Contents,self.userMisc.eMail)
     set( self.app.strPassword, MUIA_Text_Contents,'1234567890')
     set( self.app.strLocation, MUIA_Text_Contents,self.userData.location)
     set( self.app.strPhone, MUIA_Text_Contents,self.userData.phoneNumber)
@@ -1225,6 +1287,16 @@ PROC saveUser(userId) OF frmEditUser
     AstrCopy(self.userMisc.realName,tempval,ARRAYSIZE oldUserMisc.realName)
   ENDIF
    
+  get(self.app.strInternetName, MUIA_Text_Contents,{tempval})
+  IF StrCmp(oldUserMisc.internetName,tempval)=FALSE
+    AstrCopy(self.userMisc.internetName,tempval,ARRAYSIZE oldUserMisc.internetName)
+  ENDIF
+
+  get(self.app.strEmailAddress, MUIA_Text_Contents,{tempval})
+  IF StrCmp(oldUserMisc.eMail,tempval)=FALSE
+    AstrCopy(self.userMisc.eMail,tempval,ARRAYSIZE oldUserMisc.eMail)
+  ENDIF
+
   get(self.app.strLocation, MUIA_Text_Contents,{tempval})
   IF StrCmp(oldUserData.location,tempval)=FALSE
     AstrCopy(self.userData.location,tempval,ARRAYSIZE oldUserData.location)
@@ -1646,6 +1718,8 @@ PROC setupControlChangeNotify() OF frmEditUser
   self.setupStrControlChangeNotify(self.app.strUsername)
   self.setupCycleControlChangeNotify(self.app.cyActive)
   self.setupStrControlChangeNotify(self.app.strRealname)
+  self.setupStrControlChangeNotify(self.app.strInternetName)
+  self.setupStrControlChangeNotify(self.app.strEmailAddress)
   self.setupStrControlChangeNotify(self.app.strPassword)
   self.setupStrControlChangeNotify(self.app.strLocation)
   self.setupStrControlChangeNotify(self.app.strPhone)
@@ -1699,6 +1773,8 @@ PROC clearControlChangeNotify() OF frmEditUser
   self.clearStrControlChangeNotify(self.app.strUsername)
   self.clearCycleControlChangeNotify(self.app.cyActive)
   self.clearStrControlChangeNotify(self.app.strRealname)
+  self.clearStrControlChangeNotify(self.app.strInternetName)
+  self.clearStrControlChangeNotify(self.app.strEmailAddress)
   self.clearStrControlChangeNotify(self.app.strPassword)
   self.clearStrControlChangeNotify(self.app.strLocation)
   self.clearStrControlChangeNotify(self.app.strPhone)
@@ -1809,6 +1885,7 @@ PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
 
   self.makePresetMenuItems()
   self.setupControlChangeNotify()
+  self.setupHelp()
   
   self.setupButtonClick(self.app.btnSave,self.btnSaveClickHook,{savebuttonPressed})
   self.setupButtonClick(self.app.btnCancel,self.btnCancelClickHook,{cancelbuttonPressed})
@@ -1919,6 +1996,7 @@ PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
   self.makePresetMenuItems()
   
   self.setupControlChangeNotify()
+  self.setupHelp()
         
   self.setupButtonClick(self.app.btnSave,self.btnSaveClickHook,{savebuttonPressed})
   self.setupButtonClick(self.app.btnCancel,self.btnCancelClickHook,{cancelbuttonPressed})

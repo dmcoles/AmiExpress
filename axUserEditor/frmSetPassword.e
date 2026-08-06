@@ -3,7 +3,7 @@ OPT PREPROCESS
 
 MODULE 'muimaster' , 'libraries/mui'
 MODULE 'tools/boopsi','dos/dos','libraries/asl','dos/var'
-MODULE 'utility/tagitem' , 'utility/hooks', 'tools/installhook','libraries/gadtools'
+MODULE 'utility/tagitem' , 'utility/hooks', 'tools/installhook','libraries/gadtools','*helpText'
 
 MODULE '*frmBase','*axuseredit'
 
@@ -65,6 +65,8 @@ PROC setPassword(newPassword:PTR TO CHAR) OF frmSetPassword
 
   set(self.app.strPassword1, MUIA_Text_Contents,'')
   set(self.app.strPassword2, MUIA_Text_Contents,'')
+  set(self.app.strPassword1, MUIA_ShortHelp , getHelpText(HLP_SET_PASSWORD_1))
+  set(self.app.strPassword2, MUIA_ShortHelp , getHelpText(HLP_SET_PASSWORD_2))
 
   res:=self.showModal()
   IF res

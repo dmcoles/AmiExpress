@@ -15,17 +15,20 @@ all:					axUserEditor
 release:			options=$(releaseoptions)
 release:			axUserEditor
 
-axUserEditor:	axUserEditor.e frmMain.m axUserObjects.m
+axUserEditor:	axUserEditor.e frmMain.m axUserObjects.m helpText.m
 							$(compiler) axUserEditor $(options)
               
-frmMain.m:	frmMain.e frmBase.m frmEditUser.m axuseredit.m axUserObjects.m stringlist.m
+frmMain.m:	frmMain.e frmBase.m frmEditUser.m axuseredit.m axUserObjects.m stringlist.m helpText.m tooltypes.m
 							$(compiler) frmMain $(options)              
 
-frmSetPassword.m:	frmSetPassword.e frmBase.m axuseredit.m
+frmSetPassword.m:	frmSetPassword.e frmBase.m axuseredit.m helpText.m
 							$(compiler) frmSetPassword $(options)              
 
 frmBase.m:	frmBase.e axuseredit.m
 							$(compiler) frmBase $(options)              
+
+helpText.m:	helpText.e
+							$(compiler) helpText $(options)
 
 tooltypes.m:	
 							$(compiler) /axSetupTool/tooltypes $(options)              
@@ -36,7 +39,7 @@ miscfuncs.m:
 axUserObjects.m:	axUserObjects.e
 							$(compiler) axUserObjects $(options)              
 
-frmEditUser.m:	frmEditUser.e frmSetPassword.m frmBase.m axuseredit.m axUserObjects.m tooltypes.m stringlist.m pwdHash.m sha256.m
+frmEditUser.m:	frmEditUser.e frmSetPassword.m frmBase.m axuseredit.m axUserObjects.m tooltypes.m stringlist.m pwdHash.m sha256.m helpText.m
 							$(compiler) frmEditUser $(options)              
 
 stringlist.m:	
@@ -53,4 +56,4 @@ axuseredit.m:			axuseredit.e
 
 
 clean:
-							delete axUserEditor frmMain.m frmBase.m axuseredit.m axUserObjects.m frmEditUser.m
+							delete axUserEditor frmMain.m frmBase.m axuseredit.m axUserObjects.m frmEditUser.m helpText.m

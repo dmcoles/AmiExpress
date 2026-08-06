@@ -1,13 +1,24 @@
 OPT OSVERSION = 37,LARGE,STACK=35000,RUNBG
 OPT PREPROCESS
 
+->consider to add these from user settings
+->lines per screen
+->screen clears
+->transfer protocol
+->editor type
+->zoom type
+->available for chat/olm
+->translator
+->bg file check
+->expert
+
 MODULE 'locale'
 MODULE 'muimaster' , 'libraries/mui'
 MODULE 'utility/tagitem'
 MODULE 'tools/boopsi'
 MODULE 'icon','intuition/classusr'
 
-MODULE '*frmMain','*axuseredit','*/axSetupTool/tooltypes'
+MODULE '*frmMain','*axuseredit','*/axSetupTool/tooltypes','*helpText'
 
 PROC main() HANDLE
   DEF frmMain=NIL: PTR TO frmMain
@@ -17,6 +28,7 @@ PROC main() HANDLE
   IF (iconbase := OpenLibrary( 'icon.library' , 0 )) = NIL THEN Throw( "LIB" , "icon" )
 
   NEW app.create()
+  helpTextInitialise()
   
   /*domethod(app.gr_ax_image,[OM_ADDMEMBER,BodychunkObject,
 		MUIA_Frame , MUIV_Frame_ImageButton ,
@@ -114,6 +126,7 @@ EXCEPT DO
     END app
   ENDIF
   IF frmMain THEN END frmMain
+  helpTextDeinitialise()
 
 	IF iconbase		THEN CloseLibrary( iconbase )
   IF muimasterbase  THEN CloseLibrary( muimasterbase )
