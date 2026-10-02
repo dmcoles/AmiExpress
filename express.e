@@ -4193,6 +4193,8 @@ PROC processXimMsg(msgcmd,msg:PTR TO jhMessage,tooltype,command,privcmd,params,n
       StrCopy(telnetPasswordPrompt,msg.string)
     CASE TELNET_PASSWORD
       StrCopy(telnetPassword,msg.string)
+    CASE IS_FLAGGED
+      msg.data:=IF isInFlaggedList(msg.string,currentConf) THEN 1 ELSE 0
     CASE GET_CMD_TOOLTYPE
       StrCopy(tempstring,'')
       msg.data:=readToolType(tooltype,command,msg.string,tempstring)
