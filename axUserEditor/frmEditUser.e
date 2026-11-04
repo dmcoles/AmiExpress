@@ -41,6 +41,7 @@ EXPORT OBJECT frmEditUser OF frmBase
   passType:INT
   confCount:INT
   currConf:INT
+  autoLoad:CHAR
 ENDOBJECT
 
 ->returns system time converted to c time format and ticks
@@ -288,10 +289,14 @@ PROC savebuttonPressed() OF frmEditUser
 ENDPROC
 
 PROC loadbuttonPressed() OF frmEditUser
-  DEF level
   MOVE.L (A1),self
   GetA4()
 
+  self.doloadbutton()
+ENDPROC
+
+PROC doloadbutton() OF frmEditUser
+  DEF level
   IF self.unsavedChanges
     IF self.unsavedChangesWarning()=0 THEN RETURN
   ENDIF
@@ -359,6 +364,8 @@ PROC sliderchanged() OF frmEditUser
   self.getUserName(level)
   set( self.app.txtSelectUserName, MUIA_Text_Contents,self.selectUser)
   set( self.app.txtSelectUserName, MUIA_Weight,30)
+  
+  IF self.autoLoad THEN self.doloadbutton()
 ENDPROC
 
 PROC confbasechanged() OF frmEditUser
@@ -655,7 +662,7 @@ PROC loadBBSSetup() OF frmEditUser
       StringF(toolname,'LOCATION.\d',i)
       readToolType(toolTypeFile,toolname,toolTypeFile2)
         IF toolTypeFile2[EstrLen(toolTypeFile2)-1]="/" THEN SetStr(toolTypeFile2,EstrLen(toolTypeFile2)-1)
-      StrAdd(toolTypeFile2,'Msgbases')
+      StrAdd(toolTypeFile2,'/Msgbases')
       count2:=readToolTypeInt(toolTypeFile2,'NMSGBASES')
 
       self.confMbCounts[i-1]:=IF count2<=0 THEN 1 ELSE count2
@@ -1209,6 +1216,10 @@ ENDPROC
 
 PROC calculateConfIndex(conf,mbase) OF frmEditUser
   DEF index=0,i
+
+  IF conf<=0 THEN conf:=1
+  IF mbase<=0 THEN mbase:=1
+
   FOR i:=1 TO conf-1
     index+=self.confMbCounts[i-1]
   ENDFOR
@@ -1658,8 +1669,9 @@ PROC applyPreset(presetNum) OF frmEditUser
 
   readToolType(toolTypeFile,'PRESET.AREA',tempstring)
   WHILE self.areaList[i]
-    
-    IF StriCmp(tempstring,self.areaList[i]) THEN set(self.app.cySecArea,MUIA_Cycle_Active,i)
+    IF StriCmp(tempstring,self.areaList[i]) 
+      set(self.app.cySecArea,MUIA_Cycle_Active,i)
+    ENDIF
     i++
   ENDWHILE
   
@@ -1678,6 +1690,8 @@ PROC applyPreset(presetNum) OF frmEditUser
   
   StringF(tempstring,'\d',readToolTypeInt(toolTypeFile,'PRESET.TIME_LIMIT'))
   set( self.app.strTimeLimit, MUIA_String_Contents,tempstring)
+
+  set( self.app.cyNewUser,MUIA_Cycle_Active,1)
   
   FOR i:=0 TO self.confCount-1
     cb:=self.editedConfDbEntries+(i*SIZEOF confBase)
@@ -1818,7 +1832,7 @@ PROC clearControlChangeNotify() OF frmEditUser
   
 ENDPROC
 
-PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
+PROC editUser(bbsPath:PTR TO CHAR, userId,autoLoad) OF frmEditUser
   DEF closeHook:PTR TO hook
   DEF showHook:PTR TO hook
   DEF sliderChangeHook:PTR TO hook
@@ -1838,6 +1852,8 @@ PROC editUser(bbsPath:PTR TO CHAR, userId) OF frmEditUser
   self.bbsPath:=bbsPath
   self.unsavedChanges:=FALSE
   self.userId:=userId
+  self.autoLoad:=autoLoad
+
   AstrCopy(self.newPassword,'')
 
   self.loadBBSSetup()
@@ -1960,6 +1976,7 @@ PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
   self.bbsPath:=bbsPath
   self.unsavedChanges:=FALSE
   self.userId:=-1
+  self.autoLoad:=FALSE
   AstrCopy(self.newPassword,'')
 
   self.loadBBSSetup()

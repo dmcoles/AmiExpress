@@ -23,6 +23,8 @@ EXPORT OBJECT app_obj
 	mnlabel1Exit            :	PTR TO LONG
 	mnlabel1AddUser         :	PTR TO LONG
 	mnlabel1EditUser        :	PTR TO LONG
+	mnlabel1barlabel2       :	PTR TO LONG
+	mnlabel1AutoLoadUser    :	PTR TO LONG
 	strFilter               :	PTR TO LONG
 	btnApplyFilter          :	PTR TO LONG
 	lvUsers                 :	PTR TO LONG
@@ -225,8 +227,8 @@ PROC create() OF app_obj
 
 	self.lvUsers := ListObject ,
 		MUIA_Frame , MUIV_Frame_InputList ,
-		MUIA_List_Title , ',,' ,
-		MUIA_List_Format , 'MAXWIDTH=20,MINWIDTH=40,MINWIDTH=40' ,
+		MUIA_List_Title , ',,,,' ,
+		MUIA_List_Format , 'MAXWIDTH=10,MINWIDTH=25,MINWIDTH=30,MINWIDTH=12,MINWIDTH=10',
 	End
 
 	self.lvUsers := ListviewObject ,
@@ -288,16 +290,30 @@ PROC create() OF app_obj
 
 	self.mnlabel1AddUser := MenuitemObject ,
 		MUIA_Menuitem_Title , 'Add User' ,
+		MUIA_Menuitem_Shortcut , 'A' ,
 	End
 
 	self.mnlabel1EditUser := MenuitemObject ,
 		MUIA_Menuitem_Title , 'Edit User' ,
+		MUIA_Menuitem_Shortcut , 'E' ,
+	End
+
+	self.mnlabel1barlabel2 := MenuitemObject ,
+		MUIA_Menuitem_Title , 'barlabel' ,
+	End
+
+	self.mnlabel1AutoLoadUser := MenuitemObject ,
+		MUIA_Menuitem_Title , 'Auto Load User' ,
+		MUIA_Menuitem_Checkit , MUI_TRUE ,
+		MUIA_Menuitem_Toggle , MUI_TRUE ,
 	End
 
 	mnlabel1Edit := MenuitemObject ,
 		MUIA_Menuitem_Title , 'Edit' ,
 		MUIA_Family_Child , self.mnlabel1AddUser ,
 		MUIA_Family_Child , self.mnlabel1EditUser ,
+		MUIA_Family_Child , self.mnlabel1barlabel2 ,
+		MUIA_Family_Child , self.mnlabel1AutoLoadUser ,
 	End
 
 	self.mn_label_1 := MenustripObject ,
@@ -551,7 +567,6 @@ PROC create() OF app_obj
 	self.strRatio := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strRatio' ,
-		MUIA_String_Accept , '0123456789' ,
 	End
 
 	la_label_10 := Label( 'Ratio Type' )
@@ -683,7 +698,7 @@ PROC create() OF app_obj
 	self.strTimeTotal := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strTimeTotal' ,
-		MUIA_String_Accept , '0123456789' ,
+		MUIA_String_Accept , '-0123456789' ,
 	End
 
 	la_label_21 := Label( 'Time Limit' )
@@ -691,7 +706,7 @@ PROC create() OF app_obj
 	self.strTimeLimit := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strTimeLimit' ,
-		MUIA_String_Accept , '0123456789' ,
+		MUIA_String_Accept , '-0123456789' ,
 	End
 
 	la_label_22 := Label( 'Chat Limit' )
@@ -699,7 +714,6 @@ PROC create() OF app_obj
 	self.strChatLimit := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strChatLimit' ,
-		MUIA_String_Accept , '0123456789' ,
 	End
 
 	la_label_23 := Label( 'Time Used' )
@@ -707,7 +721,7 @@ PROC create() OF app_obj
 	self.strTimeUsed := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strTimeUsed' ,
-		MUIA_String_Accept , '0123456789' ,
+		MUIA_String_Accept , '-0123456789' ,
 	End
 
 	la_label_24 := Label( 'Chat Used' )
@@ -715,7 +729,7 @@ PROC create() OF app_obj
 	self.strChatUsed := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strChatUsed' ,
-		MUIA_String_Accept , '0123456789' ,
+		MUIA_String_Accept , '-0123456789' ,
 	End
 
 	la_label_31 := Label( 'Force Pwd Reset' )
@@ -739,7 +753,7 @@ PROC create() OF app_obj
 	self.strInvalidAttempts := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strInvalidAttempts' ,
-		MUIA_String_Accept , '0123456789' ,
+		MUIA_String_Accept , '-0123456789' ,
 	End
 
 	space_4 := HVSpace
@@ -843,7 +857,6 @@ PROC create() OF app_obj
 	self.strCbRatio := StringObject ,
 		MUIA_Frame , MUIV_Frame_String ,
 		MUIA_HelpNode , 'strCbRatio' ,
-		MUIA_String_Accept , '0123456789' ,
 	End
 
 	la_label_10C := Label( 'Ratio Type' )

@@ -1,8 +1,8 @@
 -> Ami Express 5 
 OPT LARGE,OSVERSION=37,PURE,CANPOOL
 
-#ifndef EVO_3_9_2
-  FATAL 'Ami-Express should only be compiled with E-VO Amiga E Compiler V3.9.2 or higher'
+#ifndef EVO_3_10_0
+  FATAL 'Ami-Express should only be compiled with E-VO Amiga E Compiler V3.10.0 or higher'
 #endif
 
 /*
@@ -420,6 +420,36 @@ RAISE ERR_BRKR IF CxBroker()=NIL,
       ERR_PORT IF CreateMsgPort()=NIL,
       ERR_ASL  IF AllocAslRequest()=NIL
 
+PROC fixedCloseSocket(sockid)
+  DEF sb
+  
+  sb:=OpenLibrary('bsdsocket.library', 2)
+  IF sb
+    MOVEM.L D1-D7/A0-A6,-(A7)
+    MOVE.L socketbase,A6
+    MOVE.L sockid,D0
+    MOVE.L #UNIQUE_ID,D1
+    JSR -$96(A6)   ->ReleaseSocket(fd,id)
+
+    MOVEM.L (A7),D1-D7/A0-A6    ->restore registers so we can safely grab sb
+
+    ->id already in d0
+    MOVE.L sb,A6
+    MOVE.L #PF_INET,D1
+    MOVE.L #SOCK_STREAM,D2
+    MOVE.L #IPPROTO_TCP,D3
+    
+    JSR -$90(A6)   ->ObtainSocket(id,domain,type,protocol)
+
+    ->id already in d0
+    JSR -$78(A6)   ->CloseSocket(s)
+    MOVEM.L (A7)+,D1-D7/A0-A6
+    CloseLibrary(sb)
+  ELSE
+    CloseSocket(sockid)
+  ENDIF
+ENDPROC
+
 PROC calcEfficiency(cps,baud)
   DEF res
   IF cps>21474836
@@ -490,10 +520,10 @@ PROC modemOffHook()
   DEF ni:PTR TO nodeInfo2
   offHookFlag:=TRUE
   IF (telnetSocket>=0)
-    CloseSocket(telnetSocket)
-    CloseLibrary(socketbase)
-    socketbase:=NIL
-    waitSocketLib(TRUE)
+    fixedCloseSocket(telnetSocket)
+    //CloseLibrary(socketbase)
+    //socketbase:=NIL
+    //waitSocketLib(TRUE)
     telnetSocket:=-1
     IF sopt.toggles[TOGGLES_MULTICOM]
       ObtainSemaphore(masterNode)
@@ -501,6 +531,7 @@ PROC modemOffHook()
       ni.netSocket:=-1
       ni.netIP:=0
       ni.offHook:=TRUE
+
       ReleaseSemaphore(masterNode)
     ENDIF   
     ioFlags[IOFLAG_SER_IN]:=0
@@ -806,10 +837,10 @@ ENDPROC
 PROC dropDTR()
   DEF ni:PTR TO nodeInfo2
   IF telnetSocket>=0
-    CloseSocket(telnetSocket)
-    CloseLibrary(socketbase)
-    socketbase:=NIL
-    waitSocketLib(TRUE)
+    fixedCloseSocket(telnetSocket)
+    //CloseLibrary(socketbase)
+    //socketbase:=NIL
+    //waitSocketLib(TRUE)
     telnetSocket:=-1
     IF sopt.toggles[TOGGLES_MULTICOM]
       ObtainSemaphore(masterNode)
@@ -837,7 +868,7 @@ PROC dropDTR()
   offHookFlag:=FALSE
   IF sopt.toggles[TOGGLES_MULTICOM]
     ObtainSemaphore(masterNode)
-    ni:=(masterNode.myNode[node])
+    ni:=(masterNode.myNode2[node])
     ni.offHook:=FALSE
     ReleaseSemaphore(masterNode)
   ENDIF
@@ -864,10 +895,10 @@ PROC resetSystem()
   ioFlags[IOFLAG_SER_OUT]:=-1
   
   IF (telnetSocket>=0)
-    CloseSocket(telnetSocket)
-    CloseLibrary(socketbase)
-    socketbase:=NIL
-    waitSocketLib(TRUE)
+    fixedCloseSocket(telnetSocket)
+    //CloseLibrary(socketbase)
+    //socketbase:=NIL
+    //waitSocketLib(TRUE)
     telnetSocket:=-1
     IF sopt.toggles[TOGGLES_MULTICOM]
       ObtainSemaphore(masterNode)
@@ -912,8 +943,9 @@ PROC resetSystem()
   offHookFlag:=FALSE
   IF sopt.toggles[TOGGLES_MULTICOM]
     ObtainSemaphore(masterNode)
-    ni:=(masterNode.myNode[node])
+    ni:=(masterNode.myNode2[node])
     ni.offHook:=FALSE
+    
     ReleaseSemaphore(masterNode)
   ENDIF
 ENDPROC
@@ -1042,10 +1074,10 @@ PROC acceptIncomingConnection(sock,ftp)
     telnetSocket:=ObtainSocket(sock,PF_INET,SOCK_STREAM,IPPROTO_TCP)
 
     IF checkCarrier()=FALSE 
-      CloseSocket(telnetSocket)
-      CloseLibrary(socketbase)
-      socketbase:=NIL
-      waitSocketLib(TRUE)
+      fixedCloseSocket(telnetSocket)
+      //CloseLibrary(socketbase)
+      //socketbase:=NIL
+      //waitSocketLib(TRUE)
       telnetSocket:=-1
     ENDIF
 
@@ -1067,14 +1099,15 @@ PROC acceptIncomingConnection(sock,ftp)
       IF ftpGData ANDALSO ftpGData.extraSockets ANDALSO (ftpGData.extraSockets.count()<ftpGData.extraSockets.maxSize())
         ftpGData.extraSockets.add(socket)
       ELSE 
-        CloseSocket(socket)
+        telnetSend(socket, '530 too many connections\b\n')
+        fixedCloseSocket(socket)
       ENDIF
       RETURN
     ENDIF
   ENDIF
   IF sopt.toggles[TOGGLES_MULTICOM]
     ObtainSemaphore(masterNode)
-    ni:=(masterNode.myNode[node])
+    ni:=(masterNode.myNode2[node])
     IF ni.netSocket=-2 
       ni.netSocket:=telnetSocket
       ni.netIP:=0
@@ -1086,6 +1119,16 @@ PROC acceptIncomingConnection(sock,ftp)
       ENDIF
     ENDIF
     ReleaseSemaphore(masterNode)
+  ENDIF
+ENDPROC
+
+PROC acceptIncomingDataConnection(sock)
+  DEF socket
+  IF ftpGData ANDALSO ftpGData.dataSockets ANDALSO (ftpGData.dataSockets.count()<ftpGData.dataSockets.maxSize())
+    ftpGData.dataSockets.add(sock)
+  ELSE 
+    socket:=ObtainSocket(sock,PF_INET,SOCK_STREAM,IPPROTO_TCP)   
+    fixedCloseSocket(socket)
   ENDIF
 ENDPROC
 
@@ -1522,6 +1565,8 @@ PROC checkDoorMsg(mode)
         acceptIncomingConnection(servermsg.data,FALSE)
       CASE INCOMING_FTP
         acceptIncomingConnection(servermsg.data,TRUE)
+      CASE INCOMING_FTP_DATA
+        acceptIncomingDataConnection(servermsg.data)
       CASE SV_CONFMAINT
         servercmd:=SV_CONFMAINT
       CASE SV_VIEWLOGS
@@ -1983,10 +2028,14 @@ PROC checkCarrier()
 
   IF telnetSocket>=0
     stat2:=Recv(telnetSocket,temp,1,MSG_PEEK)
-    IF stat2<>1
+    IF stat2=0
+      stat:=1
+    ELSEIF stat2<>1
       stat:=0
       stat2:=Errno()
-      IF (stat2 <> EINTR) AND (stat2<>EWOULDBLOCK1) AND (stat2<>EWOULDBLOCK2) AND (stat2) THEN stat:=1
+      IF (stat2 <> EINTR) AND (stat2<>EWOULDBLOCK1) AND (stat2<>EWOULDBLOCK2) AND (stat2)
+        stat:=1
+      ENDIF
     ELSE
       stat:=0
     ENDIF
@@ -3183,7 +3232,7 @@ PROC telnetConnect(host:PTR TO CHAR,port)
  
   IF (n<=0)
     END sa
-    CloseSocket(s)
+    fixedCloseSocket(s)
     StringF(tempstr,'Unable to connect to \s, timed outa fter \d seconds.\b\n',host,timeout)
     aePuts(tempstr)
     IF socketLibWasOpen=FALSE 
@@ -3351,7 +3400,7 @@ PROC telnetConnect(host:PTR TO CHAR,port)
   Dispose(readBuffer)
   Dispose(ibuf)
   
-  CloseSocket(s)
+  fixedCloseSocket(s)
   IF socketLibWasOpen=FALSE 
     CloseLibrary(socketbase)
     socketbase:=NIL
@@ -13640,6 +13689,7 @@ jumpIn:
             aePuts(str)
             aePuts('\b\n\b\n')
           ENDIF
+          Dispose(patternBuf)
           callersLog(str)
           RETURN RESULT_FAILURE
         ENDIF
@@ -13648,6 +13698,7 @@ jumpIn:
         FreeDosObject(DOS_FIB,fBlock)
         myError(1)
         UnLock(fLock)
+        Dispose(patternBuf)
         RETURN RESULT_FAILURE
       ENDIF
 
@@ -13702,6 +13753,7 @@ gotit:
                 FreeDosObject(DOS_FIB,fBlock)
                 UnLock(fLock)
                 IF ft<>0 THEN Close(ft)
+                Dispose(patternBuf)
                 RETURN 11
               ENDIF
             ENDIF
@@ -13711,6 +13763,7 @@ gotit:
               FreeDosObject(DOS_FIB,fBlock)
               UnLock(fLock)
               IF ft<>0 THEN Close(ft)
+              Dispose(patternBuf)
               IF(dp<>NIL) THEN RETURN RESULT_FAILURE ELSE RETURN RESULT_SUCCESS
             ENDIF
           ENDIF
@@ -13723,6 +13776,7 @@ gotit:
               FreeDosObject(DOS_FIB,fBlock)
               UnLock(fLock)
               IF ft<>0 THEN Close(ft)
+              Dispose(patternBuf)
               RETURN RESULT_NO_CARRIER
             ENDIF
             SELECT stat
@@ -13732,6 +13786,7 @@ gotit:
                   FreeDosObject(DOS_FIB,fBlock)
                   UnLock(fLock)
                   IF ft<>0 THEN Close(ft)
+                  Dispose(patternBuf)
                   RETURN RESULT_NO_CARRIER
                 ENDIF
               CASE 3 /* ^C */
@@ -13739,6 +13794,7 @@ gotit:
                 FreeDosObject(DOS_FIB,fBlock)
                 UnLock(fLock)
                 IF ft<>0 THEN Close(ft)
+                Dispose(patternBuf)
                 RETURN 10
             ENDSELECT
           ENDIF
@@ -15542,12 +15598,12 @@ PROC makeCpsText(cps,outstr:PTR TO CHAR)
     d1:=Shr(cps,20) AND $3FF
     d2:=Shr(cps,15) AND $1f
     d2:=Shr(Mul(d2,10),5)
-    IF d1>100 THEN StringF(outstr,'\r\d[3]m/s',d1) ELSE StringF(outstr,'\r\d[2].\d[1]m/s',d1,d2)
+    IF d1>99 THEN StringF(outstr,'\r\d[3]m/s',d1) ELSE StringF(outstr,'\r\d[2].\d[1]m/s',d1,d2)
   ELSEIF cps>900
     d1:=Shr(cps,10) AND $3FF
     d2:=Shr(cps,5) AND $1f
     d2:=Shr(Mul(d2,10),5)
-    IF d1>100 THEN StringF(outstr,'\r\d[3]k/s',d1) ELSE StringF(outstr,'\r\d[2].\d[1]k/s',d1,d2)
+    IF d1>99 THEN StringF(outstr,'\r\d[3]k/s',d1) ELSE StringF(outstr,'\r\d[2].\d[1]k/s',d1,d2)
   ELSE
     StringF(outstr,'\r\d[4]cps',cps)
   ENDIF
@@ -15793,6 +15849,7 @@ ENDPROC
 PROC ftpUploadFileStart(lzModemInfo:PTR TO zModem, fileName:PTR TO CHAR,resumefrom)
   DEF t1,t2
 
+  setEnvStat(ENV_UPLOADING)
   IF lzModemInfo=0 THEN lzModemInfo:=zModemInfo
 
   sendMasterUpload(FilePart(fileName))
@@ -15845,6 +15902,7 @@ PROC ftpDownloadFileStart(lzModemInfo:PTR TO zModem, fileName:PTR TO CHAR,filele
   DEF fn:PTR TO CHAR
   DEF i,t1,t2
   
+  setEnvStat(ENV_DOWNLOADING)
   IF lzModemInfo=0 THEN lzModemInfo:=zModemInfo
 
   t1,t2:=getSystemTime()
@@ -15956,6 +16014,7 @@ PROC ftpStartFileCheck(filename:PTR TO CHAR,success)
       msg.command:=BG_CHECKFILE_THEN_QUIT
       AstrCopy(msg.string,FilePart(filename),200)
       msg.msg.length:=SIZEOF jhMessage
+      msg.msg.ln.type:=NT_FREEMSG
       ->signal background checking to check the file
       PutMsg(bgCheckPort,msg)
     ENDIF
@@ -16120,7 +16179,7 @@ PROC ftpDupeCheck(fileName:PTR TO CHAR)
   ENDIF    
 ENDPROC dup
 
-PROC ftpCheckRatio(lzm:PTR TO zModem, fileName:PTR TO CHAR,flen,errormsg:PTR TO CHAR)
+PROC ftpCheckRatio(fileName:PTR TO CHAR,flen,errormsg:PTR TO CHAR)
   DEF res,min,size,cnt,i
   DEF tfsizes:PTR TO stdlist
   DEF freeDFlags:PTR TO stdlist
@@ -16128,8 +16187,6 @@ PROC ftpCheckRatio(lzm:PTR TO zModem, fileName:PTR TO CHAR,flen,errormsg:PTR TO 
   DEF fileItem:PTR TO flagFileItem
   DEF estDlCPS  
  
-  IF lzm=0 THEN lzm:=zModemInfo
-
   IF loggedOnUserMisc.lastDlCPS<>0
     estDlCPS:=loggedOnUserMisc.lastDlCPS
   ELSE
@@ -16149,22 +16206,8 @@ PROC ftpCheckRatio(lzm:PTR TO zModem, fileName:PTR TO CHAR,flen,errormsg:PTR TO 
     ENDIF
   ENDFOR
 
-  fileList:=NEW fileList.stdlist(1)
-  lzm.fileList:=fileList
-  fileItem:=NEW fileItem
-  fileItem.confNum:=currentConf
-  fileItem.fileName:=String(StrLen(fileName))
-  StrCopy(fileItem.fileName,fileName)
-  fileList.add(fileItem)
-
   res:=checkRatiosAndTime({min},{size},{cnt},errormsg,estDlCPS,tfsizes,freeDFlags)
-  
-  IF res=FALSE
-    END fileItem
-    END fileList
-    lzm.fileList:=NIL
-  ENDIF
-  
+ 
   END tfsizes
   END freeDFlags
 ENDPROC res<>0
@@ -16269,6 +16312,7 @@ PROC ftpUpload(uploadFolder:PTR TO CHAR,ftpPorts,ftpDataPorts)
   ftpData.processMessages:={processMessages}
   ftpData.getSigs:={getSigs}
   ftpData.extraSockets:=NIL
+  ftpData.dataSockets:=NIL
   ftpData.maxConnections:=1
 
   doftp(ftpData,tempstr,ftpPorts,ftpDataPorts,NIL,uploadFolder,cmds.acLvl[LVL_CAPITOLS_in_FILE]<>0,TRUE)
@@ -16322,6 +16366,7 @@ PROC ftpDownload(fileList: PTR TO stdlist, updateDownloadStats,ftpPorts,ftpDataP
   ftpData.processMessages:={processMessages}
   ftpData.getSigs:={getSigs}
   ftpData.extraSockets:=NIL
+  ftpData.dataSockets:=NIL
   ftpData.maxConnections:=1
 
   doftp(ftpData,tempstr,ftpPorts,ftpDataPorts,fileList,'',cmds.acLvl[LVL_CAPITOLS_in_FILE]<>0,FALSE)
@@ -19273,17 +19318,17 @@ PROC backgroundFileCheckThread()
             exit:=TRUE
             ReplyMsg(msg)
             type:=msg.msg.ln.type
-            IF type=NT_FREEMSG THEN FreeMem(msg,msg.msg.length)
+            IF type=NT_FREEMSG THEN Dispose(msg)
           CASE BG_CHECKFILE
             doBackgroundCheck(msg.string)
             ReplyMsg(msg)
             type:=msg.msg.ln.type
-            IF type=NT_FREEMSG THEN FreeMem(msg,msg.msg.length)
+            IF type=NT_FREEMSG THEN Dispose(msg)
           CASE BG_CHECKFILE_THEN_QUIT
             doBackgroundCheck(msg.string)
             ReplyMsg(msg)
             type:=msg.msg.ln.type
-            IF type=NT_FREEMSG THEN FreeMem(msg,msg.msg.length)
+            IF type=NT_FREEMSG THEN Dispose(msg)
             exit:=TRUE
         ENDSELECT
       ENDWHILE
@@ -19421,6 +19466,7 @@ PROC testFile(str: PTR TO CHAR, path: PTR TO CHAR)
         x2++
       UNTIL temp[x+x2+1]=0
       temp2[x2]:=0
+      SetStr(temp2)
       UpperStr(temp2)
       IF(EstrLen(temp2)=3)
         StrCopy(temp4,path)
@@ -25157,7 +25203,7 @@ PROC sendOlmPacket(nodenum,msg:PTR TO CHAR,last)
   StringF(nodeserverport,'AEServer.\d',nodenum)
   IF (np:=FindPort(nodeserverport))=NIL THEN RETURN RESULT_FAILURE
 
-  IF(olmMsg:=NewR(256))
+  IF(olmMsg:=olmMsg:=AllocMem(256,MEMF_ANY OR MEMF_CLEAR))
     olmMsg.command:=SV_INCOMING_MSG
     olmMsg.nodeID:=node
     olmMsg.msg.length:=256
@@ -25173,6 +25219,7 @@ PROC sendOlmPacket(nodenum,msg:PTR TO CHAR,last)
     RETURN RESULT_FAILURE
   ENDIF
 ENDPROC RESULT_SUCCESS
+
 
 PROC internalCommandGreets()
   aePuts('\b\nIn memory of those who came before us...\b\n\b\n')
@@ -29934,6 +29981,7 @@ PROC processFtpLoggedOnUser()
   DEF res
   DEF socketList:PTR TO stdlist
   DEF maxConnections
+  DEF ni:PTR TO nodeInfo2
 
   blockOLM:=TRUE
   
@@ -30073,11 +30121,28 @@ PROC processFtpLoggedOnUser()
     ftpGData.confNums:=cnums
     ftpGData.confULBlock:=confULBlock
     ftpGData.maxConnections:=maxConnections
+
+    ftpGData.globalDataPort:=-1
+    IF sopt.toggles[TOGGLES_MULTICOM]
+      ObtainSemaphore(masterNode)
+      ni:=(masterNode.myNode2[node])
+      IF ni
+        ftpGData.globalDataPort:=ni.ftpDataPort
+      ENDIF
+      ReleaseSemaphore(masterNode)
+    ENDIF
+    
     
     NEW socketList.stdlist(maxConnections) 
     ftpGData.extraSockets:=socketList
+    
+    NEW socketList.stdlist(maxConnections) 
+    ftpGData.dataSockets:=socketList
+    
     ftpServerMode(ftpGData,telnetSocket,tempstr,uploadPath,ftpDataPorts,cmds.acLvl[LVL_CAPITOLS_in_FILE]<>0)
-    END socketList
+    END ftpGData.extraSockets
+    END ftpGData.dataSockets
+    
     END ftpGData
     ftpGData:=0
   ENDIF
@@ -30087,7 +30152,7 @@ PROC processFtpLoggedOnUser()
   END cnums
   END confULBlock
   
-  ->CloseSocket(telnetSocket)
+  ->fixedCloseSocket(telnetSocket)
   ->telnetSocket:=-1
  
   IF reqState=REQ_STATE_NONE THEN reqState:=REQ_STATE_LOGOFF
@@ -30998,6 +31063,8 @@ PROC processAwait()
     subState.redrawScreen:=FALSE
     ioFlags[IOFLAG_SCR_OUT]:=-1
     ioFlags[IOFLAG_SER_OUT]:=0
+    StrCopy(hostName,'')
+    StrCopy(hostIP,'')
     setEnvStat(ENV_AWAITCONNECT)
     statPrintUser(NIL,NIL,NIL)
     IF dStatBar THEN clearStatusPane()
@@ -33194,7 +33261,13 @@ PROC main() HANDLE
   END historyBuf
   END msgBuf
 
+  FOR i:=0 TO confBases.count()-1 
+    cb:=confBases.item(i)
+    END cb
+  ENDFOR
   END confBases
+
+  END confBaseOffsets
 
   IF flagFilesList
     clearFlagItems(flagFilesList)

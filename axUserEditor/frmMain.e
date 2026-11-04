@@ -21,6 +21,8 @@ EXPORT OBJECT frmMain OF frmBase
   userNames:PTR TO stringlist
   userIds:PTR TO stringlist
   userLocations:PTR TO stringlist
+  userSecLevels:PTR TO stringlist
+  userNew:PTR TO stdlist
 ENDOBJECT
 
 DEF self2:PTR TO frmMain
@@ -57,6 +59,7 @@ PROC addbuttonPressed() OF frmMain
 
   self.sleep()
   NEW frmEditUser.create(self.app)
+
   res:=frmEditUser.addUser(self.bbsPath)
   END frmEditUser
   IF res THEN self.loadUsers()
@@ -67,13 +70,14 @@ PROC addbuttonPressed() OF frmMain
 ENDPROC
 
 PROC editbuttonPressed() OF frmMain
-  DEF frmEditUser:PTR TO frmEditUser,res
+  DEF frmEditUser:PTR TO frmEditUser,res,v
   MOVE.L (A1),self
   GetA4()
 
   self.sleep()
   NEW frmEditUser.create(self.app)
-  res:=frmEditUser.editUser(self.bbsPath,self.currentSlot)
+  get (self.app.mnlabel1AutoLoadUser, MUIA_Menuitem_Checked,{v})
+  res:=frmEditUser.editUser(self.bbsPath,self.currentSlot,v)
   END frmEditUser
   IF res THEN self.loadUsers()
   set ( self.winMain,MUIA_Window_ActiveObject,self.app.lvUsers)
@@ -157,6 +161,8 @@ PROC displayData() OF frmMain
     a[]++:='Slot'
     a[]++:='Username'
     a[]++:='Location'
+    a[]++:='Level'
+    a[]++:='New'
   ELSE
     index:=Val(e)-1
     IF index<self.userIds.count()
@@ -171,6 +177,16 @@ PROC displayData() OF frmMain
     ENDIF
     IF index<self.userLocations.count()
       a[]++:=self.userLocations.item(index)
+    ELSE
+      a[]++:=''
+    ENDIF
+    IF index<self.userSecLevels.count()
+      a[]++:=self.userSecLevels.item(index)
+    ELSE
+      a[]++:=''
+    ENDIF
+    IF index<self.userNew.count()
+      a[]++:=IF self.userNew.item(index) THEN 'Yes' ELSE 'No'
     ELSE
       a[]++:=''
     ENDIF
@@ -207,6 +223,8 @@ PROC loadUsers() OF frmMain
   self.userNames.clear()
   self.userIds.clear()
   self.userLocations.clear()
+  self.userSecLevels.clear()
+  self.userNew.clear()
   
   StringF(fname,'\suser.data',self.bbsPath)
   fh:=Open(fname,MODE_OLDFILE)
@@ -218,6 +236,9 @@ PROC loadUsers() OF frmMain
         self.userLocations.add(userData.location)
         StringF(tempStr,'\d',totalUserCount+1)
         self.userIds.add(tempStr)
+        StringF(tempStr,'\d',userData.secStatus)
+        self.userSecLevels.add(tempStr)
+        self.userNew.add(userData.newUser)
         totalUserCount++
       ENDIF
     UNTIL f=0
@@ -237,20 +258,31 @@ PROC doMain() OF frmMain
   DEF displayHook:PTR TO hook
   DEF listChangeHook:PTR TO hook
   DEF aboutClickHook:PTR TO hook
+  DEF tempStr[255]:STRING
+  DEF v
 
   NEW closeHook
   NEW showHook
   NEW displayHook
   NEW listChangeHook
   NEW aboutClickHook
+  
 
   initialiseCache()
 
   AstrCopy(self.bbsPath,'BBS:')
 
+  GetVar('axUSerEditor_prefs',tempStr,200,0)
+  SetStr(tempStr)
+  IF (EstrLen(tempStr)>0) THEN v:=tempStr[0]-48 ELSE v:=0
+  IF v THEN set (self.app.mnlabel1AutoLoadUser, MUIA_Menuitem_Checked, MUI_TRUE)
+
+
   self.userNames:=NEW stringlist.stringlist(1000)
   self.userIds:=NEW stringlist.stringlist(1000)
   self.userLocations:=NEW stringlist.stringlist(1000)
+  self.userSecLevels:=NEW stringlist.stringlist(1000)
+  self.userNew:=NEW stdlist.stdlist(1000)
  
   installhook( closeHook, {canClose})    
   self.closeHook:=closeHook
@@ -316,6 +348,7 @@ PROC doMain() OF frmMain
   installhook( self.mnuAboutMuiClickHook, {aboutMui})
 
   set(self.app.mnlabel1barlabel,MUIA_Menuitem_Title,NM_BARLABEL)
+  set(self.app.mnlabel1barlabel2,MUIA_Menuitem_Title,NM_BARLABEL)
   
   set(self.app.lvUsers,MUIA_List_Title,MUI_TRUE)
   set(self.app.lvUsers,MUIA_List_DisplayHook,displayHook)
@@ -333,12 +366,25 @@ PROC doMain() OF frmMain
   set ( self.winMain,MUIA_Window_ActiveObject,self.app.lvUsers)
   self.showModal()
 
+  StrCopy(tempStr,'')
+  get (self.app.mnlabel1AutoLoadUser, MUIA_Menuitem_Checked,{v})
+  IF v
+    StrAdd(tempStr,'1')
+  ELSE
+    StrAdd(tempStr,'0')
+  ENDIF
+
+  SetVar('axUserEditor_prefs',tempStr,-1,GVF_SAVE_VAR OR GVF_GLOBAL_ONLY)
+  IF KickVersion(39)=FALSE THEN Execute('Copy env:axUserEditor_prefs envarc:',0,0)
+
   clearDiskObjectCache()
   deInitialiseCache()
 
   END self.userNames
   END self.userIds
   END self.userLocations
+  END self.userSecLevels
+  END self.userNew
 
   END closeHook
   END showHook
