@@ -203,6 +203,16 @@ PROC waitSelect(sb,s,readfds,writefds,exceptfds,timeout,signals)
   MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
+PROC getPeerName(sb,s,ap,np)
+  MOVEM.L D1-D7/A0-A6,-(A7)
+  MOVE.L sb,A6
+  MOVE.L s,D0
+  MOVE.L ap,A0
+  MOVE.L np,A1
+  JSR -$6c(A6)
+  MOVEM.L (A7)+,D1-D7/A0-A6
+ENDPROC D0
+
 PROC ioctlSocket(sb,s,v,tags)
   MOVEM.L D1-D7/A0-A6,-(A7)
   MOVE.L sb,A6
@@ -563,21 +573,41 @@ PROC waitFileCheck(ftpData:PTR TO ftpData,filename,timeout)
   ENDIF
 ENDPROC res
 
-PROC waitDataConnect(connection:PTR TO ftpConnection)
+PROC waitDataConnect(sb,connection:PTR TO ftpConnection)
   DEF tv:timeval
-  DEF fds,res
-  tv.secs:=20->TIMEOUT
+  DEF fds,res,data_c,n
+  DEF peeraddr1: sockaddr_in
+  DEF peeraddr2: sockaddr_in
+  DEF count=0
+  tv.secs:=1->TIMEOUT
   tv.micro:=0
 
-  fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
+  getPeerName(sb,connection.socket,peeraddr2,{n})
+  REPEAT
+    fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
 
-  setFDS(fds,connection.server_s)
-  res:=waitSelect(connection.sbase,connection.server_s+1,fds,NIL,NIL,tv,0)
-  END fds[32]
+    setFDS(fds,connection.server_s)
+    res:=waitSelect(connection.sbase,connection.server_s+1,fds,NIL,NIL,tv,0)
+    END fds[32]
 
-  ioctlSocket(connection.sbase,connection.server_s,FIONBIO,[1])
-  connection.data_c:=accept(connection.sbase,connection.server_s, NIL, NIL)
+    ioctlSocket(connection.sbase,connection.server_s,FIONBIO,[1])
+    data_c:=accept(connection.sbase,connection.server_s, NIL, NIL)
+
+    IF data_c>=0
+      n:=SIZEOF sockaddr_in
+      getPeerName(connection.sbase,data_c,peeraddr1,{n})
+
+      ->check ip on data connection matches the one from the command connection
+      IF peeraddr1.sin_addr<>peeraddr2.sin_addr
+        closeSocket(connection.sbase,data_c)
+        data_c:=-1
+      ENDIF
+    ENDIF
+
+    count++
+  UNTIL (data_c>=0) OR (count=20)
   closeSocket(connection.sbase,connection.server_s)
+  connection.data_c:=data_c
   connection.server_s:=-1
 ENDPROC
 
@@ -811,14 +841,15 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData, connection:
   DEF addr: LONG
   DEF hostEnt: PTR TO hostent
   DEF r,data_c,data_s
-  DEF i,port,count
+  DEF i,port,count,n
   DEF sb2
   DEF fds
   DEF tv:timeval
   DEF sigs=0
   DEF sigsPtr=0
   DEF waittime
-  
+  DEF peeraddr1: sockaddr_in
+  DEF peeraddr2: sockaddr_in
 
   sb2:=OpenLibrary('bsdsocket.library',2)
 
@@ -910,10 +941,19 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData, connection:
 
   ioctlSocket(sb2,data_s,FIONBIO,[1])
   IF((data_c:=accept(sb2,data_s, NIL, NIL) ) >= 0)
-    closeSocket(sb2,data_s)
-    connection.data_c:=data_c
-    connection.sbase:=sb2
-    RETURN
+    n:=SIZEOF sockaddr_in
+    getPeerName(sb2,data_c,peeraddr1,{n})
+    getPeerName(sb,connection.socket,peeraddr2,{n})
+
+    ->check ip on data connection matches the one from the command connection
+    IF peeraddr1.sin_addr=peeraddr2.sin_addr
+      closeSocket(sb2,data_s)
+      connection.data_c:=data_c
+      connection.sbase:=sb2
+      RETURN
+    ELSE
+      closeSocket(sb2,data_c)
+    ENDIF
   ENDIF      
 
   connection.server_s:=data_s
@@ -1764,7 +1804,7 @@ PROC cmdStor(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData,connection:PTR
 
 
   IF (connection.data_c=-1) AND (connection.server_s>=0)
-    waitDataConnect(connection)
+    waitDataConnect(sb,connection)
   ENDIF
 
   IF (connection.data_c>=0)
@@ -1943,7 +1983,7 @@ PROC cmdRetr(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData,connection:PTR
   ENDIF
 
   IF (connection.data_c=-1) AND (connection.server_s>=0)
-    waitDataConnect(connection)
+    waitDataConnect(sb,connection)
   ENDIF
 
   IF (connection.data_c>=0)
@@ -2105,7 +2145,7 @@ PROC cmdMlsd(sb,ftp_c,params:PTR TO CHAR,ftpData:PTR TO ftpData,connection:PTR T
   DEF ftpDir
 
   IF (connection.data_c=-1) AND (connection.server_s>=0)
-    waitDataConnect(connection)
+    waitDataConnect(sb,connection)
   ENDIF
 
   IF connection.data_c>=0
@@ -2149,7 +2189,7 @@ PROC cmdList(sb,ftp_c,ftpData:PTR TO ftpData,connection:PTR TO ftpConnection,cmd
   DEF ftpDir
 
   IF (connection.data_c=-1) AND (connection.server_s>=0)
-    waitDataConnect(connection)
+    waitDataConnect(sb,connection)
   ENDIF
 
   IF (connection.data_c>=0)  
@@ -2195,6 +2235,8 @@ PROC mainFtpLoop(sb,ftp_c,ftpData:PTR TO ftpData,uploadPath:PTR TO CHAR,workingP
   DEF zmi:PTR TO zModem
   DEF data_c
   DEF systime
+  DEF peeraddr1: sockaddr_in
+  DEF peeraddr2: sockaddr_in
 
   InitSemaphore(ftpData.semi)
 
@@ -2222,6 +2264,9 @@ PROC mainFtpLoop(sb,ftp_c,ftpData:PTR TO ftpData,uploadPath:PTR TO CHAR,workingP
       ENDIF
       
       IF (connection.server_s>=0)
+        ->move server socket to sb
+        connection.server_s:=releaseSocket(connection.sbase,connection.server_s,UNIQUE_ID)
+        connection.server_s:=obtainSocket(sb,connection.server_s,AF_INET,SOCK_STREAM,0)
         setFDS(fds,connection.server_s)
         n:=Max(connection.server_s,n)
       ENDIF
@@ -2236,6 +2281,17 @@ PROC mainFtpLoop(sb,ftp_c,ftpData:PTR TO ftpData,uploadPath:PTR TO CHAR,workingP
       Delay(60)
       res:=0
     ENDIF
+
+    FOR i:=0 TO connectionList.count()-1
+      connection:=connectionList.item(i)
+
+      IF (connection.server_s>=0)
+        ->move server socket back to sbase
+        connection.server_s:=releaseSocket(sb,connection.server_s,UNIQUE_ID)
+        connection.server_s:=obtainSocket(connection.sbase,connection.server_s,AF_INET,SOCK_STREAM,0)
+      ENDIF
+    ENDFOR
+
     IF ftpData THEN processMessages(ftpData)
     IF ftpData.extraSockets
       WHILE ftpData.extraSockets.count()>0
@@ -2268,9 +2324,19 @@ PROC mainFtpLoop(sb,ftp_c,ftpData:PTR TO ftpData,uploadPath:PTR TO CHAR,workingP
       IF (connection.server_s>=0)
         ioctlSocket(connection.sbase,connection.server_s,FIONBIO,[1])
         IF((data_c:=accept(connection.sbase,connection.server_s, NIL, NIL) )>=0)
-          closeSocket(connection.sbase,connection.server_s)
-          connection.server_s:=-1
-          connection.data_c:=data_c
+          
+          n:=SIZEOF sockaddr_in
+          getPeerName(connection.sbase,data_c,peeraddr1,{n})
+          getPeerName(sb,connection.socket,peeraddr2,{n})
+    
+          ->check ip on data connection matches the one from the command connection
+          IF peeraddr1.sin_addr=peeraddr2.sin_addr
+            closeSocket(connection.sbase,connection.server_s)
+            connection.server_s:=-1
+            connection.data_c:=data_c
+          ELSE
+            closeSocket(connection.sbase,data_c)
+          ENDIF
         ENDIF
       
         IF (connection.waitTime+60<getSystemTime())
