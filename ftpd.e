@@ -371,14 +371,15 @@ PROC setSockOpt(sb,s,level,optname,optval,optlen )
   MOVEM.L (A7)+,D1-D7/A0-A6
 ENDPROC D0
 
-PROC checkDownloadRatio(ftpData:PTR TO ftpData,fn,flen,res:PTR TO CHAR)
+PROC checkDownloadRatio(zm:PTR TO zModem,ftpData:PTR TO ftpData,fn,flen,res:PTR TO CHAR)
   DEF cdr
   cdr:=ftpData.checkDownloadRatio
+  MOVE.L zm,-(A7)
   MOVE.L fn,-(A7)
   MOVE.L flen,-(A7)
   MOVE.L res,-(A7)
   cdr()
-  ADD.L #12,A7
+  ADD.L #16,A7
 ENDPROC D0
 
 PROC uploadFileStart(zm:PTR TO zModem,ftpData:PTR TO ftpData,fn,resumepos)
@@ -810,7 +811,7 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData, connection:
   DEF addr: LONG
   DEF hostEnt: PTR TO hostent
   DEF r,data_c,data_s
-  DEF i,port
+  DEF i,port,count
   DEF sb2
   DEF fds
   DEF tv:timeval
@@ -830,13 +831,18 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData, connection:
   ENDIF
 
   IF ftpData.globalDataPort=-1
-  i:=0
-  r:=0
-  REPEAT
-    port:=ftpData.dataPorts[i]
-    r,data_s:=openSocket(sb2,port,1,ftpData)
-    i++
-  UNTIL (r OR (i>=ListLen(ftpData.dataPorts)))
+    count:=0
+    REPEAT
+      i:=0
+      r:=0
+      REPEAT
+        port:=ftpData.dataPorts[i]
+        r,data_s:=openSocket(sb2,port,1,ftpData)
+        i++
+      UNTIL (r OR (i>=ListLen(ftpData.dataPorts)))
+      count++
+      IF r=0 THEN Delay(10)
+    UNTIL r OR (count>=30)
   ELSE
     port:=ftpData.globalDataPort
     r:=TRUE
@@ -844,7 +850,11 @@ PROC cmdPasv(sb,ftp_c,serverHost:PTR TO CHAR,ftpData:PTR TO ftpData, connection:
   
 
   IF r=FALSE 
-    IF ftpData.callersLog THEN callersLog(ftpData,'\t/XFTP: unable to find free data port.')
+    IF ftpData.callersLog 
+      ObtainSemaphore(ftpData.semi)
+      callersLog(ftpData,'\t/XFTP: unable to find free data port.')
+      ReleaseSemaphore(ftpData.semi)
+    ENDIF
     writeLineEx(sb,ftp_c, '425 Can''t open data connection\b\n')
     connection.data_c:=-1
     CloseLibrary(sb2)
@@ -1023,7 +1033,9 @@ PROC fullDir(ftpData:PTR TO ftpData,connection:PTR TO ftpConnection, cmdType)
   ENDIF
 
   IF ftpData.callersLog      
+    ObtainSemaphore(ftpData.semi)
     callersLog(ftpData,'\tDirectory Scan via ftp')
+    ReleaseSemaphore(ftpData.semi)
   ENDIF
   
   makeConfFileList(ftpData,connection,cmdType)
@@ -1644,9 +1656,11 @@ PROC cmdStor(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData,connection:PTR
     ENDIF
     
     IF ftpData.callersLog      
+      ObtainSemaphore(ftpData.semi)
       callersLog(ftpData,'\tUpload Failed..')
       StringF(temp,'\tInvalid filename \s',filename)
       callersLog(ftpData,temp)
+      ReleaseSemaphore(ftpData.semi)
     ENDIF
 
     CloseLibrary(connection.sbase)
@@ -1671,9 +1685,11 @@ PROC cmdStor(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData,connection:PTR
       ENDIF
       
       IF ftpData.callersLog      
+        ObtainSemaphore(ftpData.semi)
         callersLog(ftpData,'\tUpload Failed..')
         StringF(temp,'\tSkipped \s',filename)
         callersLog(ftpData,temp)
+        ReleaseSemaphore(ftpData.semi)
       ENDIF
 
       CloseLibrary(connection.sbase)
@@ -1948,7 +1964,7 @@ PROC cmdRetr(sb,ftp_c,filename:PTR TO CHAR,ftpData:PTR TO ftpData,connection:PTR
 
       IF (ftpData.downloadFileStart) OR (ftpData.checkDownloadRatio)       
         pos:=connection.restPos
-        IF (ftpData.checkDownloadRatio) ANDALSO (checkDownloadRatio(ftpData,fn,flen,res)=FALSE)
+        IF (ftpData.checkDownloadRatio) ANDALSO (checkDownloadRatio(connection.zModemInfo,ftpData,fn,flen,res)=FALSE)
           StringF(temp,'550 \s\b\n',res)
           writeLineEx(sb,ftp_c,temp)
           candl:=FALSE       
@@ -2258,7 +2274,11 @@ PROC mainFtpLoop(sb,ftp_c,ftpData:PTR TO ftpData,uploadPath:PTR TO CHAR,workingP
         ENDIF
       
         IF (connection.waitTime+60<getSystemTime())
-          IF ftpData.callersLog THEN callersLog(ftpData,'\t/XFTP: Timed out waiting for data connection')
+          IF ftpData.callersLog 
+            ObtainSemaphore(ftpData.semi)
+            callersLog(ftpData,'\t/XFTP: Timed out waiting for data connection')
+            ReleaseSemaphore(ftpData.semi)
+          ENDIF
           closeSocket(connection.sbase,connection.server_s)
           CloseLibrary(connection.sbase)
           writeLineEx(sb,connection.socket, '425 Timed out waiting for data connection\b\n')
@@ -2269,7 +2289,11 @@ PROC mainFtpLoop(sb,ftp_c,ftpData:PTR TO ftpData,uploadPath:PTR TO CHAR,workingP
       ENDIF
 
       IF (connection.server_s=-2) AND (connection.waitTime+60<getSystemTime())
-        IF ftpData.callersLog THEN callersLog(ftpData,'\t/XFTP: Timed out waiting for data connection')
+        IF ftpData.callersLog 
+          ObtainSemaphore(ftpData.semi)
+          callersLog(ftpData,'\t/XFTP: Timed out waiting for data connection')
+          ReleaseSemaphore(ftpData.semi)
+        ENDIF
         writeLineEx(sb,connection.socket, '425 Timed out waiting for data connection\b\n')
         connection.server_s:=-1
         connection.data_c:=-1
@@ -2322,7 +2346,9 @@ PROC mainFtpLoop(sb,ftp_c,ftpData:PTR TO ftpData,uploadPath:PTR TO CHAR,workingP
 
               StringF(string,'\tFTP Command >: \s',request)
               IF ftpData.callersLog
+                ObtainSemaphore(ftpData.semi)
                 callersLog(ftpData,string)    
+                ReleaseSemaphore(ftpData.semi)
               ENDIF
               StrAdd(string,'\b\n')
               IF ftpData.conPuts THEN conPuts(ftpData,string)

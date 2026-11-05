@@ -15935,7 +15935,7 @@ PROC ftpDownloadFileStart(lzModemInfo:PTR TO zModem, fileName:PTR TO CHAR,filele
   lzModemInfo.tTCPS:=0
   updateZDisplay(lzModemInfo)
 
-  logUDFile(lzModemInfo,TRUE)
+  ->logUDFile(lzModemInfo,TRUE)
 ENDPROC
 
 PROC ftpDownloadFileEnd(lzModemInfo:PTR TO zModem, fileName:PTR TO CHAR, result)
@@ -15948,6 +15948,8 @@ PROC ftpDownloadFileEnd(lzModemInfo:PTR TO zModem, fileName:PTR TO CHAR, result)
   DEF t1,t2
   
   IF lzModemInfo=0 THEN lzModemInfo:=zModemInfo
+
+  logUDFile(lzModemInfo,TRUE)
 
   IF ftpConn THEN lzModemInfo.dlTTTM:=0
 
@@ -15990,10 +15992,16 @@ PROC ftpDownloadFileEnd(lzModemInfo:PTR TO zModem, fileName:PTR TO CHAR, result)
   IF (result)
     removeFlagFromList(FilePart(fileItem.fileName),fileItem.confNum)
   ENDIF
-  
+
+    
   IF ftpConn
     fileList:=lzModemInfo.fileList
     IF fileList
+      FOR i:=0 TO fileList.count()-1
+        fileItem:=fileList.item(i)
+        DisposeLink(fileItem.fileName)
+        END fileItem
+      ENDFOR
       END fileList
       lzModemInfo.fileList:=NIL
     ENDIF
@@ -16179,7 +16187,7 @@ PROC ftpDupeCheck(fileName:PTR TO CHAR)
   ENDIF    
 ENDPROC dup
 
-PROC ftpCheckRatio(fileName:PTR TO CHAR,flen,errormsg:PTR TO CHAR)
+PROC ftpCheckRatio(lzm:PTR TO zModem, fileName:PTR TO CHAR,flen,errormsg:PTR TO CHAR)
   DEF res,min,size,cnt,i
   DEF tfsizes:PTR TO stdlist
   DEF freeDFlags:PTR TO stdlist
@@ -16187,6 +16195,8 @@ PROC ftpCheckRatio(fileName:PTR TO CHAR,flen,errormsg:PTR TO CHAR)
   DEF fileItem:PTR TO flagFileItem
   DEF estDlCPS  
  
+  IF lzm=0 THEN lzm:=zModemInfo
+
   IF loggedOnUserMisc.lastDlCPS<>0
     estDlCPS:=loggedOnUserMisc.lastDlCPS
   ELSE
@@ -16206,8 +16216,23 @@ PROC ftpCheckRatio(fileName:PTR TO CHAR,flen,errormsg:PTR TO CHAR)
     ENDIF
   ENDFOR
 
+  fileList:=NEW fileList.stdlist(1)
+  lzm.fileList:=fileList
+  fileItem:=NEW fileItem
+  fileItem.confNum:=currentConf
+  fileItem.fileName:=String(StrLen(fileName))
+  StrCopy(fileItem.fileName,fileName)
+  fileList.add(fileItem)
+
   res:=checkRatiosAndTime({min},{size},{cnt},errormsg,estDlCPS,tfsizes,freeDFlags)
  
+  IF res=FALSE
+    DisposeLink(fileItem.fileName)
+    END fileItem
+    END fileList
+    lzm.fileList:=NIL
+  ENDIF
+  
   END tfsizes
   END freeDFlags
 ENDPROC res<>0
