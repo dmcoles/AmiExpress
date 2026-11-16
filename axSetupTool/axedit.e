@@ -738,7 +738,7 @@ PROC create( display : PTR TO app_display ) OF app_obj
 
 	self.btnSaveConf := SimpleButton( 'Save' )
 
-	self.btnCancelConf := SimpleButton( 'Close' )
+	self.btnCancelConf := SimpleButton( 'Cancel' )
 
 	gr_save := GroupObject ,
 		MUIA_HelpNode , 'GR_save' ,
@@ -1338,7 +1338,7 @@ PROC create( display : PTR TO app_display ) OF app_obj
 
 	self.btnNodeSave := SimpleButton( 'Save' )
 
-	self.btnNodeCancel := SimpleButton( 'Close' )
+	self.btnNodeCancel := SimpleButton( 'Cancel' )
 
 	gr_nodesave := GroupObject ,
 		MUIA_HelpNode , 'GR_nodesave' ,
@@ -1424,7 +1424,7 @@ PROC create( display : PTR TO app_display ) OF app_obj
 
 	self.btnListSave := SimpleButton( 'Save' )
 
-	self.btnListCancel := SimpleButton( 'Close' )
+	self.btnListCancel := SimpleButton( 'Cancel' )
 
 	gr_grp_28 := GroupObject ,
 		MUIA_HelpNode , 'GR_grp_28' ,
@@ -1474,7 +1474,7 @@ PROC create( display : PTR TO app_display ) OF app_obj
 
 	self.btnSettingsSave := SimpleButton( 'Save' )
 
-	self.btnSettingsCancel := SimpleButton( 'Close' )
+	self.btnSettingsCancel := SimpleButton( 'Cancel' )
 
 	gr_settingsSaveCancel := GroupObject ,
 		MUIA_HelpNode , 'GR_settingsSaveCancel' ,
@@ -1569,7 +1569,7 @@ PROC create( display : PTR TO app_display ) OF app_obj
 
 	self.btnPresetSave := SimpleButton( 'Save' )
 
-	self.btnPresetClose := SimpleButton( 'Close' )
+	self.btnPresetClose := SimpleButton( 'Cancel' )
 
 	gr_grp_38 := GroupObject ,
 		MUIA_HelpNode , 'GR_grp_38' ,

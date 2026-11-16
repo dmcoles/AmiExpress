@@ -81,6 +81,8 @@ PROC showModal() OF frmBase
       CASE ID_SAVE
         IF self.saveHook 
           callHookA(self.saveHook,0,{self})
+          running := FALSE
+          result:=TRUE
         ELSE
           IF self.canSaveHook
             IF callHookA(self.canSaveHook,0,{self})
