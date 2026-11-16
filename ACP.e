@@ -449,6 +449,40 @@ DEF ftpPort=-1
 DEF ftpDataPort=-1
 DEF fds=0:PTR TO LONG
 
+PROC fixedCloseSocket(sockid)
+  DEF sb
+  
+  sb:=OpenLibrary('bsdsocket.library', 2)
+  IF sb
+    MOVEM.L D1-D7/A0-A6,-(A7)
+    MOVE.L socketbase,A6
+    MOVE.L sockid,D0
+    MOVE.L #UNIQUE_ID,D1
+    JSR -$96(A6)   ->ReleaseSocket(fd,id)
+
+    MOVEM.L (A7),D1-D7/A0-A6    ->restore registers so we can safely grab sb
+
+    ->id already in d0
+    MOVE.L sb,A6
+    MOVE.L #PF_INET,D1
+    MOVE.L #SOCK_STREAM,D2
+    MOVE.L #IPPROTO_TCP,D3
+    
+    JSR -$90(A6)   ->ObtainSocket(id,domain,type,protocol)
+
+    ->id already in d0
+    JSR -$78(A6)   ->CloseSocket(s)
+    MOVEM.L (A7)+,D1-D7/A0-A6
+    CloseLibrary(sb)
+  ELSE
+    MOVEM.L D1-D7/A0-A6,-(A7)
+    MOVE.L socketbase,A6
+    MOVE.L sockid,D0
+    JSR -$78(A6)   ->CloseSocket(s)
+    MOVEM.L (A7)+,D1-D7/A0-A6
+  ENDIF
+ENDPROC
+
 PROC init() OF itemsList  ->constructor
   self.lastUsers[0]:=String(36)
   self.lastUsers[1]:=String(36)
@@ -640,7 +674,7 @@ PROC openListenSocket(port)
   IF(Bind(server_s, servaddr, SIZEOF sockaddr_in) < 0)
     ->StringF(tempStr,'/X Telnet: Error calling bind() for port \d, error=\d\b\n',port,Errno());
     ->aePuts(tempStr)
-    CloseSocket(server_s)
+    fixedCloseSocket(server_s)
     END servaddr
     RETURN -1
   ENDIF
@@ -648,7 +682,7 @@ PROC openListenSocket(port)
   IF(Listen(server_s, LISTENQ) < 0)
     ->StringF(tempStr,'/X Telnet: Error calling listen() for port \d, error=\d\b\n',port,Errno());
     ->aePuts(tempStr)
-    CloseSocket(server_s)
+    fixedCloseSocket(server_s)
     END servaddr
     RETURN -1
   ENDIF
@@ -965,7 +999,7 @@ PROC callNode(node,code,data=1)
   IF(FindPort(response))=FALSE
     IF(EstrLen(startNode[node])>0)
       ->ActiveNodeCount +=1; Down[node]=FALSE;
-      IF(startProcess(startNode[node],bbsStack))
+      IF(startProcess(startNode[node],bbsStack,node))
         activeNodeCount++
         activeNodes[node]:=TRUE
         down[node]:=FALSE
@@ -2165,7 +2199,7 @@ PROC checkMasterSig(signals)
       ELSEIF(cpymsg.command=SV_STARTNODE)
         StringF(temp,'AmiExpress_Node.\d',cpymsg.node)
         IF(FindPort(temp))=FALSE
-          IF(startProcess(startNode[cpymsg.node],bbsStack))
+          IF(startProcess(startNode[cpymsg.node],bbsStack,cpymsg.node))
             IF activeNodes[cpymsg.node]=FALSE
               activeNodeCount++
               activeNodes[cpymsg.node]:=TRUE
@@ -3232,10 +3266,15 @@ PROC do_appicon(myport: PTR TO mp)
   ENDIF
 ENDPROC
 
-PROC startProcess(s:PTR TO CHAR,stack)
+PROC startProcess(s:PTR TO CHAR,stack,node)
   DEF err
+  DEF processName[50]:STRING
+  
+  StringF(processName,'AmiExpress - Node \d',node)
   
   tags[7]:=stack
+  tags[11]:=processName
+  
   
   err:=SystemTagList(s,tags)
   IF(err=-1)
@@ -3705,7 +3744,7 @@ PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
               StringF(tempstr,'530 Your ip address has been blocked for another \d minutes\b\n',num)
               telnetSend(ftpSocket,tempstr)
             ENDIF
-            CloseSocket(ftpSocket)
+            fixedCloseSocket(ftpSocket)
             ftpSocket:=-1
           ELSE
             n++
@@ -3722,7 +3761,7 @@ PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
           StringF(tempstr,'530 Your ip address has been blocked for \d minutes\b\n',dosBanTime)
           telnetSend(ftpSocket,tempstr)
         ENDIF
-        CloseSocket(ftpSocket)
+        fixedCloseSocket(ftpSocket)
         ftpSocket:=-1
       ENDIF
 
@@ -3805,7 +3844,7 @@ PROC acceptFTP(ftpServerSocket,connectionList:PTR TO stdlist)
       ENDIF
         
       IF ftpSocket<>-1
-        CloseSocket(ftpSocket)
+        fixedCloseSocket(ftpSocket)
         ftpSocket:=-1
       ENDIF
     ENDIF
@@ -3853,7 +3892,7 @@ PROC acceptFTPData(ftpDataSocket)
     UNTIL (i=MAX_NODES) OR (i=-1)
       
     IF ftpSocket<>-1
-      CloseSocket(ftpSocket)
+      fixedCloseSocket(ftpSocket)
       ftpSocket:=-1
     ENDIF
   ENDIF
@@ -3893,7 +3932,7 @@ PROC acceptTelnet(telnetServerSocket,connectionList:PTR TO stdlist)
               StringF(tempstr,'\b\n/X Native Telnet:  Your ip address has been blocked for another \d minutes\b\n',num)
               telnetSend(telnetSocket,tempstr)
             ENDIF
-            CloseSocket(telnetSocket)
+            fixedCloseSocket(telnetSocket)
             telnetSocket:=-1
           ELSE
             n++
@@ -3912,7 +3951,7 @@ PROC acceptTelnet(telnetServerSocket,connectionList:PTR TO stdlist)
           StringF(tempstr,'\b\n/X Native Telnet:  Your ip address has been blocked for \d minutes\b\n',dosBanTime)
           telnetSend(telnetSocket,tempstr)
         ENDIF
-        CloseSocket(telnetSocket)
+        fixedCloseSocket(telnetSocket)
         telnetSocket:=-1
       ENDIF
 
@@ -3984,7 +4023,7 @@ PROC acceptTelnet(telnetServerSocket,connectionList:PTR TO stdlist)
       ENDIF
         
       IF telnetSocket<>-1
-        CloseSocket(telnetSocket)
+        fixedCloseSocket(telnetSocket)
         telnetSocket:=-1
       ENDIF
     ENDIF
@@ -4019,6 +4058,7 @@ PROC main() HANDLE
   DEF b:PTR TO button
   DEF connectionList: PTR TO stdlist
   DEF connItem: PTR TO connectionItem
+  DEF tempList:PTR TO itemsList
 
   DEF sopt:PTR TO startOption
 
@@ -4041,7 +4081,7 @@ PROC main() HANDLE
   dim:=[1,1,1,1]:INT  /*** Dimensions of ZIP window default ***/
   zim:=[10,100]:INT
 
-  tags:=[SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NP_STACKSIZE,0,NP_PRIORITY,0,TAG_END,0]
+  tags:=[SYS_INPUT,0,SYS_OUTPUT,0,SYS_ASYNCH,TRUE,NP_STACKSIZE,0,NP_PRIORITY,0,NP_NAME,0,TAG_END,0]
 
   StrCopy(portName,'AE.Master')
   StrCopy(multiName,'AEMulti')
@@ -4334,7 +4374,7 @@ PROC main() HANDLE
               sopt:=sopts[i]
               IF sopt THEN sopt.acpWindow:=eWin
               IF(nodeIdle[i])=FALSE
-                IF(startProcess(startNode[i],bbsStack))
+                IF(startProcess(startNode[i],bbsStack,i))
                   activeNodeCount++
                   activeNodes[i]:=TRUE
                 ENDIF
@@ -4513,9 +4553,12 @@ EXCEPT DO
 
   FOR i:=0 TO MAX_NODES-1
     DisposeLink(startNode[i])
-    END ndUser[i]
-    END ndDownloads[i]
-    END ndUploads[i]
+    tempList:=ndUser[i]
+    END tempList
+    tempList:=ndDownloads[i]
+    END tempList
+    tempList:=ndUploads[i]
+    END tempList
   ENDFOR
 
   FOR i:=0 TO connectionList.count()-1
@@ -4524,9 +4567,9 @@ EXCEPT DO
   ENDFOR
   END connectionList
 
-  IF (telnetServerSocket>=0) THEN CloseSocket(telnetServerSocket)
-  IF (ftpServerSocket>=0) THEN CloseSocket(ftpServerSocket)
-  IF (ftpDataSocket>=0) THEN CloseSocket(ftpDataSocket)
+  IF (telnetServerSocket>=0) THEN fixedCloseSocket(telnetServerSocket)
+  IF (ftpServerSocket>=0) THEN fixedCloseSocket(ftpServerSocket)
+  IF (ftpDataSocket>=0) THEN fixedCloseSocket(ftpDataSocket)
   
   IF broker THEN DeleteCxObj(broker)
   IF broker_mp
