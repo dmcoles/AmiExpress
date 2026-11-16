@@ -27,6 +27,8 @@ ENDOBJECT
 
 DEF self2:PTR TO frmMain
 
+DEF autoLoadUser
+
 PROC aboutMui() OF frmMain
   MOVE.L (A1),self
   GetA4()
@@ -70,14 +72,13 @@ PROC addbuttonPressed() OF frmMain
 ENDPROC
 
 PROC editbuttonPressed() OF frmMain
-  DEF frmEditUser:PTR TO frmEditUser,res,v
+  DEF frmEditUser:PTR TO frmEditUser,res
   MOVE.L (A1),self
   GetA4()
 
   self.sleep()
   NEW frmEditUser.create(self.app)
-  get (self.app.mnlabel1AutoLoadUser, MUIA_Menuitem_Checked,{v})
-  res:=frmEditUser.editUser(self.bbsPath,self.currentSlot,v)
+  res:=frmEditUser.editUser(self.bbsPath,self.currentSlot,{autoLoadUser})
   END frmEditUser
   IF res THEN self.loadUsers()
   set ( self.winMain,MUIA_Window_ActiveObject,self.app.lvUsers)
@@ -259,7 +260,6 @@ PROC doMain() OF frmMain
   DEF listChangeHook:PTR TO hook
   DEF aboutClickHook:PTR TO hook
   DEF tempStr[255]:STRING
-  DEF v
 
   NEW closeHook
   NEW showHook
@@ -274,10 +274,8 @@ PROC doMain() OF frmMain
 
   GetVar('axUSerEditor_prefs',tempStr,200,0)
   SetStr(tempStr)
-  IF (EstrLen(tempStr)>0) THEN v:=tempStr[0]-48 ELSE v:=0
-  IF v THEN set (self.app.mnlabel1AutoLoadUser, MUIA_Menuitem_Checked, MUI_TRUE)
-
-
+  IF (EstrLen(tempStr)>0) THEN autoLoadUser:=((tempStr[0]-48)<>0)
+ 
   self.userNames:=NEW stringlist.stringlist(1000)
   self.userIds:=NEW stringlist.stringlist(1000)
   self.userLocations:=NEW stringlist.stringlist(1000)
@@ -348,7 +346,6 @@ PROC doMain() OF frmMain
   installhook( self.mnuAboutMuiClickHook, {aboutMui})
 
   set(self.app.mnlabel1barlabel,MUIA_Menuitem_Title,NM_BARLABEL)
-  set(self.app.mnlabel1barlabel2,MUIA_Menuitem_Title,NM_BARLABEL)
   
   set(self.app.lvUsers,MUIA_List_Title,MUI_TRUE)
   set(self.app.lvUsers,MUIA_List_DisplayHook,displayHook)
@@ -367,8 +364,7 @@ PROC doMain() OF frmMain
   self.showModal()
 
   StrCopy(tempStr,'')
-  get (self.app.mnlabel1AutoLoadUser, MUIA_Menuitem_Checked,{v})
-  IF v
+  IF autoLoadUser
     StrAdd(tempStr,'1')
   ELSE
     StrAdd(tempStr,'0')

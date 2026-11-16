@@ -9,6 +9,7 @@ MODULE '*frmBase','*frmSetPassword','*axuseredit','*axuserobjects','*/axSetupToo
 
 ENUM PWD_LEGACY=0, PWD_PBKDF2_5=1, PWD_PBKDF2_50=2, PWD_PBKDF2_100=3,PWD_PBKDF2_1000=4,PWD_PBKDF2_10000=5
 
+
 EXPORT OBJECT frmEditUser OF frmBase
   bbsPath:PTR TO CHAR
   aboutwin:LONG
@@ -41,7 +42,7 @@ EXPORT OBJECT frmEditUser OF frmBase
   passType:INT
   confCount:INT
   currConf:INT
-  autoLoad:CHAR
+  autoLoadUser:LONG
 ENDOBJECT
 
 ->returns system time converted to c time format and ticks
@@ -365,7 +366,8 @@ PROC sliderchanged() OF frmEditUser
   set( self.app.txtSelectUserName, MUIA_Text_Contents,self.selectUser)
   set( self.app.txtSelectUserName, MUIA_Weight,30)
   
-  IF self.autoLoad THEN self.doloadbutton()
+  self.refreshAutoLoad()
+  IF self.autoLoadUser THEN self.doloadbutton()
 ENDPROC
 
 PROC confbasechanged() OF frmEditUser
@@ -1833,7 +1835,14 @@ PROC clearControlChangeNotify() OF frmEditUser
   
 ENDPROC
 
-PROC editUser(bbsPath:PTR TO CHAR, userId,autoLoad) OF frmEditUser
+PROC refreshAutoLoad() OF frmEditUser
+  DEF tmp
+  get( self.app.mnuEditUserAutoLoadUser, MUIA_Menuitem_Checked,{tmp})
+  self.autoLoadUser:=(tmp<>0)
+ENDPROC
+
+
+PROC editUser(bbsPath:PTR TO CHAR, userId,autoLoadUser:PTR TO LONG) OF frmEditUser
   DEF closeHook:PTR TO hook
   DEF showHook:PTR TO hook
   DEF sliderChangeHook:PTR TO hook
@@ -1853,7 +1862,10 @@ PROC editUser(bbsPath:PTR TO CHAR, userId,autoLoad) OF frmEditUser
   self.bbsPath:=bbsPath
   self.unsavedChanges:=FALSE
   self.userId:=userId
-  self.autoLoad:=autoLoad
+  self.autoLoadUser:=autoLoadUser[]
+
+  set (self.app.mnuEditUserAutoLoadUser, MUIA_Menuitem_Checked, IF self.autoLoadUser THEN MUI_TRUE ELSE FALSE)
+  set (self.app.mnuEditUserAutoLoadUser, MUIA_Menuitem_Enabled, MUI_TRUE)
 
   AstrCopy(self.newPassword,'')
 
@@ -1924,6 +1936,10 @@ PROC editUser(bbsPath:PTR TO CHAR, userId,autoLoad) OF frmEditUser
     self.saveUser(userId)
   ENDIF
 
+  self.refreshAutoLoad()
+  autoLoadUser[]:=self.autoLoadUser
+    
+    
   domethod(self.app.btnCancel,[MUIM_KillNotify,MUIA_Pressed])
   domethod(self.app.btnSave,[MUIM_KillNotify,MUIA_Pressed])
   domethod(self.app.btnSelectUserLoad,[MUIM_KillNotify,MUIA_Pressed])
@@ -1977,7 +1993,7 @@ PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
   self.bbsPath:=bbsPath
   self.unsavedChanges:=FALSE
   self.userId:=-1
-  self.autoLoad:=FALSE
+
   AstrCopy(self.newPassword,'')
 
   self.loadBBSSetup()
@@ -2025,6 +2041,9 @@ PROC addUser(bbsPath:PTR TO CHAR) OF frmEditUser
   self.setupButtonClick(self.app.btnCancel,self.btnCancelClickHook,{cancelbuttonPressed})
   self.setupButtonClick(self.app.btnApply,self.btnApplyClickHook,{applypresetbuttonpressed})
   self.setupButtonClick(self.app.btnPassword,self.btnSetPasswordClickHook,{setpasswordbuttonpressed})
+
+  set (self.app.mnuEditUserAutoLoadUser, MUIA_Menuitem_Checked, IF self.autoLoadUser THEN MUI_TRUE ELSE FALSE)
+  set (self.app.mnuEditUserAutoLoadUser, MUIA_Menuitem_Enabled, FALSE)
 
   self.newUser()
 

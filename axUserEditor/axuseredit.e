@@ -14,106 +14,105 @@ MODULE 'utility/tagitem'
 ->//////////////////////////////////////////////////// Object definitions /////
 ->/////////////////////////////////////////////////////////////////////////////
 EXPORT OBJECT app_obj
-	app                     :	PTR TO LONG
-	winUserList             :	PTR TO LONG
-	mn_label_1              :	PTR TO LONG
-	mnlabel1About           :	PTR TO LONG
-	mnlabel1AboutMui        :	PTR TO LONG
-	mnlabel1barlabel        :	PTR TO LONG
-	mnlabel1Exit            :	PTR TO LONG
-	mnlabel1AddUser         :	PTR TO LONG
-	mnlabel1EditUser        :	PTR TO LONG
-	mnlabel1barlabel2       :	PTR TO LONG
-	mnlabel1AutoLoadUser    :	PTR TO LONG
-	strFilter               :	PTR TO LONG
-	btnApplyFilter          :	PTR TO LONG
-	lvUsers                 :	PTR TO LONG
-	txtUserCount            :	PTR TO LONG
-	btnAdd                  :	PTR TO LONG
-	btnEdit                 :	PTR TO LONG
-	btnExit                 :	PTR TO LONG
-	winUserDetails          :	PTR TO LONG
-	mnuEditUser             :	PTR TO LONG
-	mnlabel2Save            :	PTR TO LONG
-	mnlabel2Cancel          :	PTR TO LONG
-	mnlabel2ApplyPreset     :	PTR TO LONG
-	headerPanel             :	PTR TO LONG
-	btnSelectUserPrev       :	PTR TO LONG
-	btnSelectUserLoad       :	PTR TO LONG
-	txtSelectUserName       :	PTR TO LONG
-	slUserId                :	PTR TO LONG
-	btnSelectUserNext       :	PTR TO LONG
-	cyPreset                :	PTR TO LONG
-	btnApply                :	PTR TO LONG
-	mainPanel               :	PTR TO LONG
-	strUsername             :	PTR TO LONG
-	cyActive                :	PTR TO LONG
-	strRealname             :	PTR TO LONG
-	strInternetName         :	PTR TO LONG
-	strEmailAddress         :	PTR TO LONG
-	strLocation             :	PTR TO LONG
-	strPassword             :	PTR TO LONG
-	btnPassword             :	PTR TO LONG
-	strPhone                :	PTR TO LONG
-	slSecLevel              :	PTR TO LONG
-	cySecArea               :	PTR TO LONG
-	cyRejoinConf            :	PTR TO LONG
-	strRatio                :	PTR TO LONG
-	cyRatioType             :	PTR TO LONG
-	strUploads              :	PTR TO LONG
-	strDownloads            :	PTR TO LONG
-	strUploadBytes          :	PTR TO LONG
-	strDownloadBytes        :	PTR TO LONG
-	strMessages             :	PTR TO LONG
-	strUploadCPS            :	PTR TO LONG
-	strDownloadCPS          :	PTR TO LONG
-	strByteLimit            :	PTR TO LONG
-	strTimeTotal            :	PTR TO LONG
-	strTimeLimit            :	PTR TO LONG
-	strChatLimit            :	PTR TO LONG
-	strTimeUsed             :	PTR TO LONG
-	strChatUsed             :	PTR TO LONG
-	cyPwdReset              :	PTR TO LONG
-	cyAccountLocked         :	PTR TO LONG
-	strInvalidAttempts      :	PTR TO LONG
-	cyCbConf                :	PTR TO LONG
-	strCbUploads            :	PTR TO LONG
-	strCbDownloads          :	PTR TO LONG
-	strCbUploadBytes        :	PTR TO LONG
-	strCbDownloadBytes      :	PTR TO LONG
-	strCbRatio              :	PTR TO LONG
-	cyCbRatioType           :	PTR TO LONG
-	strCbMessages           :	PTR TO LONG
-	cyComputers             :	PTR TO LONG
-	cyScreens               :	PTR TO LONG
-	cyNewUser               :	PTR TO LONG
-	strTotalCalls           :	PTR TO LONG
-	strPwdType              :	PTR TO LONG
-	strCallsToday           :	PTR TO LONG
-	strLastCalled           :	PTR TO LONG
-	strLastPwdReset         :	PTR TO LONG
-	btnSave                 :	PTR TO LONG
-	btnCancel               :	PTR TO LONG
-	winSetPassword          :	PTR TO LONG
-	strPassword1            :	PTR TO LONG
-	strPassword2            :	PTR TO LONG
-	btnPwdOk                :	PTR TO LONG
-	btnPwdCancel            :	PTR TO LONG
-	stR_txtUserCount        :	PTR TO CHAR
-	stR_txtSelectUserName   :	PTR TO CHAR
-	cyPresetContent         :	PTR TO LONG
-	stR_mainPanel           :	PTR TO LONG
-	cyActiveContent         :	PTR TO LONG
-	cySecAreaContent        :	PTR TO LONG
-	cyRejoinConfContent     :	PTR TO LONG
-	cyRatioTypeContent      :	PTR TO LONG
-	cyPwdResetContent       :	PTR TO LONG
-	cyAccountLockedContent  :	PTR TO LONG
-	cyCbConfContent         :	PTR TO LONG
-	cyCbRatioTypeContent    :	PTR TO LONG
-	cyComputersContent      :	PTR TO LONG
-	cyScreensContent        :	PTR TO LONG
-	cyNewUserContent        :	PTR TO LONG
+	app                      :	PTR TO LONG
+	winUserList              :	PTR TO LONG
+	mn_label_1               :	PTR TO LONG
+	mnlabel1About            :	PTR TO LONG
+	mnlabel1AboutMui         :	PTR TO LONG
+	mnlabel1barlabel         :	PTR TO LONG
+	mnlabel1Exit             :	PTR TO LONG
+	mnlabel1AddUser          :	PTR TO LONG
+	mnlabel1EditUser         :	PTR TO LONG
+	strFilter                :	PTR TO LONG
+	btnApplyFilter           :	PTR TO LONG
+	lvUsers                  :	PTR TO LONG
+	txtUserCount             :	PTR TO LONG
+	btnAdd                   :	PTR TO LONG
+	btnEdit                  :	PTR TO LONG
+	btnExit                  :	PTR TO LONG
+	winUserDetails           :	PTR TO LONG
+	mnuEditUser              :	PTR TO LONG
+	mnlabel2Save             :	PTR TO LONG
+	mnlabel2Cancel           :	PTR TO LONG
+	mnlabel2ApplyPreset      :	PTR TO LONG
+	mnuEditUserAutoLoadUser  :	PTR TO LONG
+	headerPanel              :	PTR TO LONG
+	btnSelectUserPrev        :	PTR TO LONG
+	btnSelectUserLoad        :	PTR TO LONG
+	txtSelectUserName        :	PTR TO LONG
+	slUserId                 :	PTR TO LONG
+	btnSelectUserNext        :	PTR TO LONG
+	cyPreset                 :	PTR TO LONG
+	btnApply                 :	PTR TO LONG
+	mainPanel                :	PTR TO LONG
+	strUsername              :	PTR TO LONG
+	cyActive                 :	PTR TO LONG
+	strRealname              :	PTR TO LONG
+	strInternetName          :	PTR TO LONG
+	strEmailAddress          :	PTR TO LONG
+	strLocation              :	PTR TO LONG
+	strPassword              :	PTR TO LONG
+	btnPassword              :	PTR TO LONG
+	strPhone                 :	PTR TO LONG
+	slSecLevel               :	PTR TO LONG
+	cySecArea                :	PTR TO LONG
+	cyRejoinConf             :	PTR TO LONG
+	strRatio                 :	PTR TO LONG
+	cyRatioType              :	PTR TO LONG
+	strUploads               :	PTR TO LONG
+	strDownloads             :	PTR TO LONG
+	strUploadBytes           :	PTR TO LONG
+	strDownloadBytes         :	PTR TO LONG
+	strMessages              :	PTR TO LONG
+	strUploadCPS             :	PTR TO LONG
+	strDownloadCPS           :	PTR TO LONG
+	strByteLimit             :	PTR TO LONG
+	strTimeTotal             :	PTR TO LONG
+	strTimeLimit             :	PTR TO LONG
+	strChatLimit             :	PTR TO LONG
+	strTimeUsed              :	PTR TO LONG
+	strChatUsed              :	PTR TO LONG
+	cyPwdReset               :	PTR TO LONG
+	cyAccountLocked          :	PTR TO LONG
+	strInvalidAttempts       :	PTR TO LONG
+	cyCbConf                 :	PTR TO LONG
+	strCbUploads             :	PTR TO LONG
+	strCbDownloads           :	PTR TO LONG
+	strCbUploadBytes         :	PTR TO LONG
+	strCbDownloadBytes       :	PTR TO LONG
+	strCbRatio               :	PTR TO LONG
+	cyCbRatioType            :	PTR TO LONG
+	strCbMessages            :	PTR TO LONG
+	cyComputers              :	PTR TO LONG
+	cyScreens                :	PTR TO LONG
+	cyNewUser                :	PTR TO LONG
+	strTotalCalls            :	PTR TO LONG
+	strPwdType               :	PTR TO LONG
+	strCallsToday            :	PTR TO LONG
+	strLastCalled            :	PTR TO LONG
+	strLastPwdReset          :	PTR TO LONG
+	btnSave                  :	PTR TO LONG
+	btnCancel                :	PTR TO LONG
+	winSetPassword           :	PTR TO LONG
+	strPassword1             :	PTR TO LONG
+	strPassword2             :	PTR TO LONG
+	btnPwdOk                 :	PTR TO LONG
+	btnPwdCancel             :	PTR TO LONG
+	stR_txtUserCount         :	PTR TO CHAR
+	stR_txtSelectUserName    :	PTR TO CHAR
+	cyPresetContent          :	PTR TO LONG
+	stR_mainPanel            :	PTR TO LONG
+	cyActiveContent          :	PTR TO LONG
+	cySecAreaContent         :	PTR TO LONG
+	cyRejoinConfContent      :	PTR TO LONG
+	cyRatioTypeContent       :	PTR TO LONG
+	cyPwdResetContent        :	PTR TO LONG
+	cyAccountLockedContent   :	PTR TO LONG
+	cyCbConfContent          :	PTR TO LONG
+	cyCbRatioTypeContent     :	PTR TO LONG
+	cyComputersContent       :	PTR TO LONG
+	cyScreensContent         :	PTR TO LONG
+	cyNewUserContent         :	PTR TO LONG
 ENDOBJECT
 
 
@@ -146,56 +145,56 @@ PROC create() OF app_obj
 	DEF space_26 , footerPanel , space_27 , grpSetPassword
 	DEF gr_grp_20 , lblPassword1 , lblPassword2 , gr_grp_19
 
-	self.stR_txtUserCount        := 'Total Users: 5500'
-	self.stR_txtSelectUserName   := 'rebel'
-	self.cyPresetContent         := [
+	self.stR_txtUserCount         := 'Total Users: 5500'
+	self.stR_txtSelectUserName    := 'rebel'
+	self.cyPresetContent          := [
 		'1' ,
 		NIL ]
-	self.stR_mainPanel           := [
+	self.stR_mainPanel            := [
 		'Details' ,
 		'Stats' ,
 		'Limits & Lockouts' ,
 		'Conf Accounting' ,
 		'Misc' ,
 		NIL ]
-	self.cyActiveContent         := [
+	self.cyActiveContent          := [
 		'Yes' ,
 		'No' ,
 		NIL ]
-	self.cySecAreaContent        := [
+	self.cySecAreaContent         := [
 		'NewUser' ,
 		NIL ]
-	self.cyRejoinConfContent     := [
+	self.cyRejoinConfContent      := [
 		'Conf1' ,
 		NIL ]
-	self.cyRatioTypeContent      := [
+	self.cyRatioTypeContent       := [
 		'Bytes' ,
 		'Bytes & Files' ,
 		'Files' ,
 		NIL ]
-	self.cyPwdResetContent       := [
+	self.cyPwdResetContent        := [
 		'Yes' ,
 		'No' ,
 		NIL ]
-	self.cyAccountLockedContent  := [
+	self.cyAccountLockedContent   := [
 		'Yes' ,
 		'No' ,
 		NIL ]
-	self.cyCbConfContent         := [
+	self.cyCbConfContent          := [
 		'Conf1' ,
 		NIL ]
-	self.cyCbRatioTypeContent    := [
+	self.cyCbRatioTypeContent     := [
 		'Bytes' ,
 		'Bytes & Files' ,
 		'Files' ,
 		NIL ]
-	self.cyComputersContent      := [
+	self.cyComputersContent       := [
 		'N/A' ,
 		NIL ]
-	self.cyScreensContent        := [
+	self.cyScreensContent         := [
 		'N/A' ,
 		NIL ]
-	self.cyNewUserContent        := [
+	self.cyNewUserContent         := [
 		'Yes' ,
 		'No' ,
 		NIL ]
@@ -228,7 +227,7 @@ PROC create() OF app_obj
 	self.lvUsers := ListObject ,
 		MUIA_Frame , MUIV_Frame_InputList ,
 		MUIA_List_Title , ',,,,' ,
-		MUIA_List_Format , 'MAXWIDTH=10,MINWIDTH=25,MINWIDTH=30,MINWIDTH=12,MINWIDTH=10',
+		MUIA_List_Format , 'MAXWIDTH=20,MINWIDTH=25,MINWIDTH=25,MINWIDTH=15,MINWIDTH=15' ,
 	End
 
 	self.lvUsers := ListviewObject ,
@@ -298,22 +297,10 @@ PROC create() OF app_obj
 		MUIA_Menuitem_Shortcut , 'E' ,
 	End
 
-	self.mnlabel1barlabel2 := MenuitemObject ,
-		MUIA_Menuitem_Title , 'barlabel' ,
-	End
-
-	self.mnlabel1AutoLoadUser := MenuitemObject ,
-		MUIA_Menuitem_Title , 'Auto Load User' ,
-		MUIA_Menuitem_Checkit , MUI_TRUE ,
-		MUIA_Menuitem_Toggle , MUI_TRUE ,
-	End
-
 	mnlabel1Edit := MenuitemObject ,
 		MUIA_Menuitem_Title , 'Edit' ,
 		MUIA_Family_Child , self.mnlabel1AddUser ,
 		MUIA_Family_Child , self.mnlabel1EditUser ,
-		MUIA_Family_Child , self.mnlabel1barlabel2 ,
-		MUIA_Family_Child , self.mnlabel1AutoLoadUser ,
 	End
 
 	self.mn_label_1 := MenustripObject ,
@@ -1086,9 +1073,16 @@ PROC create() OF app_obj
 		MUIA_Menuitem_Title , 'Apply Preset' ,
 	End
 
+	self.mnuEditUserAutoLoadUser := MenuitemObject ,
+		MUIA_Menuitem_Title , 'Auto Load User' ,
+		MUIA_Menuitem_Checkit , MUI_TRUE ,
+		MUIA_Menuitem_Toggle , MUI_TRUE ,
+	End
+
 	mnlabel2Presets := MenuitemObject ,
 		MUIA_Menuitem_Title , 'Edit' ,
 		MUIA_Family_Child , self.mnlabel2ApplyPreset ,
+		MUIA_Family_Child , self.mnuEditUserAutoLoadUser ,
 	End
 
 	self.mnuEditUser := MenustripObject ,
