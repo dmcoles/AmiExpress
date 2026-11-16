@@ -327,7 +327,7 @@ PROC addSystemControls() OF frmSettingsEdit
 
   self.controlList:=[self.paBBSPath,self.strBBSName,self.strBBSLocation,self.strSysopName,self.intMinPasswordLen,
                     self.cycMinPasswordStrength,self.cycPasswordEncryption,self.intMaxPasswordFails,self.intPasswordExpiry,
-                    self.cycStrictPasswordPolicy,self.strRegKey,self.cyNewAccounts,self.strDefaultMenu,
+                    self.cycStrictPasswordPolicy,self.strRegKey,self.cyNewAccounts,self.boolTimeoutLc, self.strDefaultMenu,
                     self.paLocalULPath,self.intAutoValPreset,self.intAutoValDelay,self.strAutoValPassword,self.cyLanguage,
                     self.strSmtpHost,self.intSmtpPort,self.strSmtpUsername,self.strSmtpPassword,self.boolSmtpSSL,self.strSysopEmail,
                     self.strBbsEmail,self.paLanguageBase,self.paHistory,self.paUserNotes,self.intHoldAccess,

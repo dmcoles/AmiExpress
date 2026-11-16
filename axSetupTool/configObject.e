@@ -188,6 +188,7 @@ ENDPROC
 
 EXPORT PROC end() OF area
   DisposeLink(self.filename)
+  DisposeLink(self.confList)
 ENDPROC
 
 

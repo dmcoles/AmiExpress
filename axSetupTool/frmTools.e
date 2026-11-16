@@ -63,7 +63,7 @@ PROC acpShutdown() OF frmTools
     WaitPort(serverRP)
     GetMsg(serverRP)
   ENDIF
-  
+  deletePort(serverRP)
   retry:=0
   WHILE (retry<20) AND (FindPort('AE.Master'))
     Delay(30)
