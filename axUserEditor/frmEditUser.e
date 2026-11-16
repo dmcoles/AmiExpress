@@ -1538,6 +1538,7 @@ PROC saveUser(userId) OF frmEditUser
   END oldUserData
   END oldUserKeys
   END oldUserMisc
+  Dispose(oldConfBases)
 ENDPROC
 
 PROC makePresetMenuItems() OF frmEditUser
