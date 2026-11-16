@@ -446,7 +446,11 @@ PROC fixedCloseSocket(sockid)
     MOVEM.L (A7)+,D1-D7/A0-A6
     CloseLibrary(sb)
   ELSE
-    CloseSocket(sockid)
+    MOVEM.L D1-D7/A0-A6,-(A7)
+    MOVE.L socketbase,A6
+    MOVE.L sockid,D0
+    JSR -$78(A6)   ->CloseSocket(s)
+    MOVEM.L (A7)+,D1-D7/A0-A6
   ENDIF
 ENDPROC
 
@@ -25246,6 +25250,89 @@ PROC sendOlmPacket(nodenum,msg:PTR TO CHAR,last)
 ENDPROC RESULT_SUCCESS
 
 
+PROC internalCommandDbg()
+  DEF i,j
+  DEF singles[MAXNODES]:ARRAY OF LONG
+  DEF tempStr[255]:STRING
+  DEF s:PTR TO singlePort
+  DEF status
+  DEF ni:PTR TO nodeInfo2
+  DEF ftpGData:PTR TO ftpData
+  DEF connection:PTR TO ftpConnection
+
+
+  ObtainSemaphore(masterNode)
+  FOR i:=0 TO MAXNODES-1
+    singles[i]:=(masterNode.myNode[i].s)
+  ENDFOR
+  ReleaseSemaphore(masterNode)
+
+  FOR i:=0 TO MAX_NODES-1
+    s:=singles[i]
+
+    ni:=0
+    IF sopt.toggles[TOGGLES_MULTICOM]
+      ObtainSemaphore(masterNode)
+      ni:=(masterNode.myNode2[i])
+      ftpGData:=ni.debugInfo
+      ReleaseSemaphore(masterNode)
+    ENDIF
+
+    ObtainSemaphore(s)
+
+    status:=s.status
+    IF(status>=0)
+      StringF(tempStr,'node \d - status \d\n',i,status)
+      aePuts(tempStr)
+      IF ni
+        StringF(tempStr,'  ni.netSocket: \d\n',ni.netSocket)
+        aePuts(tempStr)
+        StringF(tempStr,'  ni.netIP: \d\n',ni.netIP)
+        aePuts(tempStr)
+      ENDIF
+
+      IF ftpGData
+        aePuts('  node FTP active\n')
+        StringF(tempStr,'  connection count: \d\n',ftpGData.connectionList.count())
+        aePuts(tempStr)
+        StringF(tempStr,'  systemtime: \d\n',getSystemTime())
+        aePuts(tempStr)
+        StringF(tempStr,'  ftpdata timeout: \d\n',ftpGData.timeout)
+        aePuts(tempStr)
+
+        StringF(tempStr,'  ftp main thread state: \d\n',ftpGData.mainstate)
+        aePuts(tempStr)
+        
+        FOR j:=0 TO ftpGData.connectionList.count()-1
+          StringF(tempStr,'  connection \d:',j)
+          aePuts(tempStr)
+
+          connection:=ftpGData.connectionList.item(j)
+          StringF(tempStr,'    socket: \d\n',connection.socket)
+          aePuts(tempStr)
+          StringF(tempStr,'    data_c: \d\n',connection.data_c)
+          aePuts(tempStr)
+          StringF(tempStr,'    server_s: \d\n',connection.server_s)
+          aePuts(tempStr)
+          StringF(tempStr,'    sbase: \d\n',connection.sbase)
+          aePuts(tempStr)
+          StringF(tempStr,'    thread active: \d\n',connection.threadActive)
+          aePuts(tempStr)
+          StringF(tempStr,'    completedFlag: \d\n',connection.completedFlag)
+          aePuts(tempStr)
+          StringF(tempStr,'    waitTime: \d\n',connection.waitTime)
+          aePuts(tempStr)
+        ENDFOR
+        
+      ELSE  
+        aePuts('  node FTP not active\n')
+      ENDIF
+    ENDIF
+    
+    ReleaseSemaphore(s)
+  ENDFOR
+ENDPROC
+
 PROC internalCommandGreets()
   aePuts('\b\nIn memory of those who came before us...\b\n\b\n')
 
@@ -29517,6 +29604,8 @@ PROC processInternalCommand(cmdcode,cmdparams,privcmd=FALSE)
     res:=internalCommandZ(cmdparams)
   ELSEIF (StrCmp(cmdcode,'ZOOM'))
     res:=internalCommandZOOM()
+  ELSEIF (StrCmp(cmdcode,'DBG'))
+    res:=internalCommandDbg()
   ELSEIF (StrCmp(cmdcode,'?'))
     res:=internalCommandQuestionMark()
   ELSEIF (StrCmp(cmdcode,'^'))
@@ -30148,11 +30237,13 @@ PROC processFtpLoggedOnUser()
     ftpGData.maxConnections:=maxConnections
 
     ftpGData.globalDataPort:=-1
+    ni:=0
     IF sopt.toggles[TOGGLES_MULTICOM]
       ObtainSemaphore(masterNode)
       ni:=(masterNode.myNode2[node])
       IF ni
         ftpGData.globalDataPort:=ni.ftpDataPort
+        ni.debugInfo:=ftpGData
       ENDIF
       ReleaseSemaphore(masterNode)
     ENDIF
@@ -30170,6 +30261,7 @@ PROC processFtpLoggedOnUser()
     
     END ftpGData
     ftpGData:=0
+    IF ni THEN ni.debugInfo:=0
   ENDIF
 
   END cnames

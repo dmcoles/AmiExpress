@@ -590,6 +590,7 @@ EXPORT OBJECT nodeInfo2
   offHook:LONG
   netIP:LONG
   ftpDataPort:LONG
+  debugInfo:LONG
 ENDOBJECT
 
 EXPORT OBJECT multiPort
