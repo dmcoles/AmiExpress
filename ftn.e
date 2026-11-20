@@ -1,4 +1,4 @@
-
+  OPT LARGE
   MODULE 'dos/dos','dos/dostags','dos/datetime'
   MODULE '*stringlist','*axobjects'
 

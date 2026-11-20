@@ -33378,11 +33378,13 @@ PROC main() HANDLE
   END historyBuf
   END msgBuf
 
-  FOR i:=0 TO confBases.count()-1 
-    cb:=confBases.item(i)
-    END cb
-  ENDFOR
-  END confBases
+  IF confBases
+    FOR i:=0 TO confBases.count()-1 
+      cb:=confBases.item(i)
+      END cb
+    ENDFOR
+    END confBases
+  ENDIF
 
   END confBaseOffsets
 
