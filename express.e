@@ -7727,7 +7727,9 @@ PROC processInputMessage(timeout, extsig = 0,conRawMode=FALSE, allowSer=TRUE, se
         ENDIF
       UNTIL signals OR (checkCarrier()=FALSE)
     ELSE
-      signals:=Wait(SIGBREAKF_CTRL_C OR consolesig OR windowsig OR cxsigflag OR doorsig OR rexxsig OR serialsig OR timersig OR extsig)
+      IF (telnetSocket>=0) OR (serialReadMP<>0) OR (logonType<LOGON_TYPE_REMOTE)
+        signals:=Wait(SIGBREAKF_CTRL_C OR consolesig OR windowsig OR cxsigflag OR doorsig OR rexxsig OR serialsig OR timersig OR extsig)
+      ENDIF
     ENDIF
     timedout:=(timersig<>0) AND ((signals AND timersig)<>0)
     IF timedout THEN waitTime()
@@ -7755,7 +7757,7 @@ PROC processInputMessage(timeout, extsig = 0,conRawMode=FALSE, allowSer=TRUE, se
 
   IF (extsig<>0) AND ((signals AND extsig)<>0) THEN RETURN TRUE,RESULT_SIGNALLED
 
-  IF (timedout)
+  IF (timedout) OR ((telnetSocket=-1) AND (serialReadMP=0) AND (logonType>=LOGON_TYPE_REMOTE))
     RETURN TRUE,RESULT_TIMEOUT
   ENDIF
 
@@ -14058,14 +14060,18 @@ PROC getBaudText(baudText:PTR TO CHAR)
   IF loggedOnUser<>NIL
     IF (telnetSocket<>-1)
       IF ftpConn
-        StrCopy(baudText,'FTP   ')
+        StrCopy(baudText,'FTP    ')
       ELSE
-        StrCopy(baudText,'TELNET')
+        StrCopy(baudText,'TELNET ')
       ENDIF
       
     ELSE
       IF (StrLen(cmds.serDev)=0)
-        StrCopy(baudText,'LOCAL')
+        IF logonType>=LOGON_TYPE_REMOTE
+          StrCopy(baudText,'DISCNCT')
+        ELSE
+          StrCopy(baudText,'LOCAL  ')
+        ENDIF
       ELSE
         StringF(baudText,'\r\d[7]',onlineBaud)
       ENDIF
@@ -14075,11 +14081,11 @@ PROC getBaudText(baudText:PTR TO CHAR)
       IF nativeTelnet AND nativeFtp
         StrCopy(baudText,'FTP/TEL')
       ELSEIF nativeTelnet
-        StrCopy(baudText,'TELNET')
+        StrCopy(baudText,'TELNET ')
       ELSEIF nativeFtp
-        StrCopy(baudText,'FTP   ')
+        StrCopy(baudText,'FTP    ')
       ELSE
-        StrCopy(baudText,'LOCAL')
+        StrCopy(baudText,'LOCAL  ')
       ENDIF
     ELSE
       StringF(baudText,'\r\d[7]',cmds.openingBaud)
@@ -14171,13 +14177,17 @@ PROC sendMaster()
     AstrCopy(masterMsg2.location,loggedOnUser.location)
     IF (telnetSocket<>-1)
       IF ftpConn
-        StrCopy(temp,'FTP')
+        StrCopy(temp,'FTP    ')
       ELSE
-        StrCopy(temp,'TELNET')
+        StrCopy(temp,'TELNET ')
       ENDIF
     ELSE
       IF (StrLen(cmds.serDev)=0)
-        StrCopy(temp,'LOCAL')
+        IF logonType>=LOGON_TYPE_REMOTE
+          StrCopy(temp,'DISCNCT')
+        ELSE
+          StrCopy(temp,'LOCAL ')
+        ENDIF
       ELSE
         StringF(temp,'\r\d[7]',onlineBaud)
       ENDIF
@@ -14189,11 +14199,11 @@ PROC sendMaster()
       IF nativeTelnet AND nativeFtp
         StrCopy(temp,'FTP/TEL')
       ELSEIF nativeTelnet
-        StrCopy(temp,'TELNET')
+        StrCopy(temp,'TELNET ')
       ELSEIF nativeFtp
-        StrCopy(temp,'FTP')
+        StrCopy(temp,'FTP    ')
       ELSE
-        StrCopy(temp,'LOCAL')
+        StrCopy(temp,'LOCAL  ')
       ENDIF
     ELSE
       StringF(temp,'\r\d[7]',cmds.openingBaud)
